@@ -19,14 +19,16 @@
 //! ```
 //!
 //! Os módulos também podem ser usados separadamente: [`core`], [`input`],
-//! [`render`], [`audio`], [`script`] (Lua) e [`app`].
+//! [`render`], [`audio`], [`physics`], [`tilemap`], [`script`] (Lua) e [`app`].
 
 pub use nn_app as app;
 pub use nn_audio as audio;
 pub use nn_core as core;
 pub use nn_input as input;
+pub use nn_physics as physics;
 pub use nn_render as render;
 pub use nn_script as script;
+pub use nn_tilemap as tilemap;
 
 pub use glam as math;
 

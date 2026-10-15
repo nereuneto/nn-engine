@@ -1,0 +1,24 @@
+[package]
+name = "nn-tilemap"
+description = "Tilemaps da nn-engine: camadas, tilesets, objetos e importação do editor Tiled."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+nn-core.workspace = true
+nn-render.workspace = true
+nn-physics.workspace = true
+glam.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
+image.workspace = true
+
+[lints]
+workspace = true

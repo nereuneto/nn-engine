@@ -1,0 +1,2 @@
+{ "name": "decoracao", "image": "../imagens/decoracao.png", "imagewidth": 48, "imageheight": 16,
+  "tilewidth": 16, "tileheight": 16, "columns": 3, "tilecount": 3, "margin": 0, "spacing": 0 }

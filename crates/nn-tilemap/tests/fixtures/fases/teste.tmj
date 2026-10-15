@@ -1,0 +1,32 @@
+{
+  "type": "map", "version": "1.10", "orientation": "orthogonal", "renderorder": "right-down",
+  "width": 4, "height": 3, "tilewidth": 16, "tileheight": 16, "infinite": false,
+  "properties": [{ "name": "musica", "type": "string", "value": "fase1.ogg" }],
+  "tilesets": [
+    { "firstgid": 1, "name": "terreno", "image": "../imagens/terreno.png", "imagewidth": 32, "imageheight": 32,
+      "tilewidth": 16, "tileheight": 16, "columns": 2, "tilecount": 4, "margin": 0, "spacing": 0,
+      "tiles": [
+        { "id": 0, "properties": [{ "name": "solid", "type": "bool", "value": true }] },
+        { "id": 1, "properties": [{ "name": "one_way", "type": "bool", "value": true }] }
+      ] },
+    { "firstgid": 5, "source": "../tilesets/decoracao.tsj" }
+  ],
+  "layers": [
+    { "type": "tilelayer", "name": "fundo", "width": 4, "height": 3, "opacity": 0.5, "visible": true,
+      "data": [5, 0, 0, 2147483654, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { "type": "group", "name": "grupo", "visible": true, "layers": [
+      { "type": "tilelayer", "name": "chao", "width": 4, "height": 3, "visible": true,
+        "data": [0, 0, 0, 0, 0, 2, 2, 0, 1, 1, 1, 1] }
+    ] },
+    { "type": "tilelayer", "name": "paredes_invisiveis", "width": 4, "height": 3, "visible": false,
+      "properties": [{ "name": "collision", "type": "bool", "value": true }],
+      "data": [7, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0] },
+    { "type": "objectgroup", "name": "objetos", "visible": true, "objects": [
+      { "id": 1, "name": "inicio", "type": "", "x": 8, "y": 24, "width": 0, "height": 0, "point": true },
+      { "id": 2, "name": "", "class": "moeda", "x": 32, "y": 0, "width": 16, "height": 16,
+        "properties": [{ "name": "valor", "type": "int", "value": 5 }] },
+      { "id": 3, "name": "bau", "type": "item", "gid": 3, "x": 48, "y": 48, "width": 16, "height": 16 }
+    ] },
+    { "type": "imagelayer", "name": "ceu", "image": "ceu.png" }
+  ]
+}

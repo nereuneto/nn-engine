@@ -14,13 +14,14 @@ Pré-requisito: Rust 1.88 ou mais recente, instalado pelo [rustup](https://rustu
 
 A primeira compilação demora alguns minutos (o wgpu é grande); as seguintes são rápidas.
 
-### Jogo de demonstração em Lua
+### Jogos de demonstração em Lua
 
 ```sh
-cargo nn jogos/demo
+cargo nn jogos/plataforma   # plataforma: mapa do Tiled, física, plataformas móveis
+cargo nn jogos/demo         # menu, coletar moedas e pausa
 ```
 
-Menu, jogo e pausa, todos em Lua (`jogos/demo`). Com o jogo aberto, edite qualquer arquivo de `jogos/demo/cenas/` e salve: a mudança aparece na hora. A referência completa da API Lua está em **[docs/lua.md](docs/lua.md)**.
+Os dois são feitos inteiramente em Lua. Com o jogo aberto, edite qualquer arquivo de `jogos/demo/cenas/` e salve: a mudança aparece na hora. A referência completa da API Lua está em **[docs/lua.md](docs/lua.md)**.
 
 ### Exemplos em Rust
 
@@ -103,6 +104,8 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-render` | GPU, texturas, câmera 2D, sprites em lote, spritesheets, animação e texto |
 | `nn-audio` | Efeitos sonoros e música (sobre o [kira](https://github.com/tesselode/kira)), sintetizador simples |
 | `nn-app` | Janela, loop principal, trait `Game`, cenas, pasta de assets e modo sem janela (`Headless`) para testes |
+| `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, raycast |
+| `nn-tilemap` | Tilemaps com camadas, tilesets e objetos; importação do editor Tiled (JSON) |
 | `nn-script` | Scripting em Lua: API `nn.*`, cenas em Lua, recarga ao salvar, tela de erro |
 | `nn-run` | Executável `nn`, que roda um projeto Lua (`cargo nn <pasta>`) |
 | `nn-engine` (raiz) | Fachada que reexporta tudo, com `prelude` |
@@ -181,6 +184,27 @@ nn_engine::run(AppConfig::new("Jogo"), |ctx| SceneStack::new(ctx, Menu))
 ```
 
 Transições: `Push` (abre por cima), `Pop` (volta), `Replace` (troca a atual), `Switch` (fecha todas e abre uma) e `Quit`. Em Lua, o mesmo vale com `nn.scene.push/pop/replace/switch`.
+
+## Física e tilemaps
+
+```rust,ignore
+use nn_engine::physics::{Body, Shape, World};
+use nn_engine::tilemap::{load_tiled, read_from};
+
+let mut mapa = load_tiled("fases/fase1.tmj".as_ref(), read_from("assets"), 3.0)?;
+mapa.load_textures(|p| ctx.load_texture(p, TextureOptions::PIXEL_ART))?;
+
+let mut mundo = World::new(Vec2::new(0.0, -2400.0));
+mundo.add_grid(mapa.collision_grid());
+let heroi = mundo.add(Body::dynamic(Shape::rect(30.0, 42.0)).at(Vec2::new(100.0, 300.0)));
+
+// fixed_update:
+for evento in mundo.step(ctx.fixed_dt()) { /* sensores: Enter / Exit */ }
+// render:
+mapa.draw(&mut ctx.renderer, &ctx.camera, ctx.viewport().as_vec2());
+```
+
+A física é do tipo "arcade": corpos não giram, a resolução é por eixo (sem enroscar na junção de tiles), o chão é detectado direto (`on_ground`) e há subpassos para objetos rápidos não atravessarem paredes. Corpos cinemáticos carregam quem está em cima. Mapas do Tiled devem ser salvos em JSON (`.tmj`) com camadas no formato CSV; a referência completa está em [docs/lua.md](docs/lua.md#nntilemap).
 
 ## Assets e recarga ao salvar
 

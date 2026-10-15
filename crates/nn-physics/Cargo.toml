@@ -1,0 +1,13 @@
+[package]
+name = "nn-physics"
+description = "Física arcade 2D da nn-engine: colisões de retângulos e círculos, tiles, sensores e raycast."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+glam.workspace = true
+
+[lints]
+workspace = true

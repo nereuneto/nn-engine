@@ -5,7 +5,8 @@ A nn-engine roda jogos escritos inteiramente em Lua (5.4). Não é preciso insta
 ## Começando
 
 ```sh
-cargo nn jogos/demo
+cargo nn jogos/demo         # menu, coletar moedas, pausa
+cargo nn jogos/plataforma   # plataforma com mapa do Tiled e física
 ```
 
 `cargo nn <pasta>` roda o projeto Lua da pasta. Durante o desenvolvimento, **salve qualquer `.lua`, imagem ou som e o jogo atualiza na hora**, sem fechar a janela e sem perder o estado. Se um script tiver erro, ele aparece na própria janela com o arquivo e a linha; corrija, salve e o jogo continua.
@@ -107,6 +108,7 @@ As duas tabelas têm as mesmas funções; muda só o espaço.
 | `sprite(img, x, y, opts)` | Desenha uma imagem ou um quadro de spritesheet. |
 | `rect(x, y, w, h, cor)` | Retângulo de cor sólida. |
 | `text(texto, x, y, opts)` | Texto. |
+| `circle(x, y, raio, cor)` | Círculo de cor sólida (`x, y` é o centro nos dois espaços). |
 
 Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`.
 
@@ -167,6 +169,101 @@ nn.draw.sprite(sheet, x, y, { frame = anim:frame() })
 ```
 
 O animador tem `:frame()`, `:finished()`, `:restart()` e os campos `speed` (multiplicador) e `time`. A animação tem `duration`, `length` e `mode`.
+
+### nn.physics
+
+Física arcade: corpos não giram, as colisões são previsíveis e o chão é detectado direto. Ideal para plataforma, top-down e afins.
+
+```lua
+local mundo = nn.physics.world({ gravity = -2400 })   -- gravidade em Y (negativa = cai)
+
+local chao = mundo:body({ type = "static", x = 0, y = -10, w = 800, h = 20 })
+local heroi = mundo:body({ x = 0, y = 100, w = 30, h = 42, tag = "heroi" })
+local moeda = mundo:body({ type = "static", x = 200, y = 40, radius = 16, sensor = true, tag = "moeda" })
+
+function cena:fixed_update(dt)
+  heroi.vx = nn.input.axis("left", "right") * 300
+  if heroi.on_ground and nn.input.down("space") then heroi.vy = 900 end
+
+  for _, e in ipairs(mundo:step(dt)) do      -- avança a física e devolve os eventos
+    if e.type == "enter" and e.a.tag == "moeda" and e.b == heroi then
+      e.a:remove()
+    end
+  end
+end
+
+function cena:draw()
+  mundo:debug_draw()                          -- mostra os corpos (ótimo para ajustar colisões)
+end
+```
+
+Opções de `mundo:body`:
+
+| Opção | Descrição |
+|---|---|
+| `type` | `"dynamic"` (padrão: cai e colide), `"static"` (parede, chão) ou `"kinematic"` (move-se pela velocidade e carrega quem está em cima: plataformas móveis, elevadores). |
+| `x`, `y` | Centro do corpo. |
+| `w`, `h` ou `radius` | Retângulo ou círculo. |
+| `vx`, `vy` | Velocidade inicial. |
+| `gravity_scale` | Multiplicador da gravidade (0 = flutua). |
+| `sensor` | Não colide, só avisa quando algo entra ou sai (moedas, espinhos, portas). |
+| `one_way` | Plataforma de mão única: só bloqueia quem vem de cima. |
+| `bounce` | 0 = para ao bater, 1 = quica sem perder velocidade. |
+| `layer`, `mask` | Camadas (bits): dois corpos interagem se a camada de um estiver na máscara do outro. |
+| `tag` | Rótulo livre. |
+
+O corpo tem os campos `x`, `y`, `vx`, `vy`, `gravity_scale`, `bounce`, `sensor`, `layer`, `mask` e `tag` (leitura e escrita), `id`, `type`, `width`, `height`, `radius`, `alive`, `on_ground`, `touching_left`, `touching_right`, `touching_top`, `touching_bottom` e `ground` (o corpo em que está apoiado). Métodos: `:set_position(x, y)`, `:set_velocity(x, y)`, `:overlaps()` (corpos encostando agora) e `:remove()`. Dá para comparar corpos com `==`.
+
+O mundo tem `:step(dt)` (chame em `fixed_update`), `:body(opts)`, `:add_tilemap(mapa)`, `:raycast(x, y, dx, dy, distancia, mascara)` (devolve `{ x, y, nx, ny, distance, body }` ou `nil`), `:query_point(x, y)`, `:query_rect(x, y, w, h)`, `:bodies(tag)`, `:debug_draw()` e os campos `gravity_x`, `gravity_y` e `count`.
+
+Os eventos de `step` são tabelas `{ type = "enter" | "exit", a = corpo, b = corpo }`. Pelo menos um dos dois é sensor; se só um for, ele vem em `a`.
+
+### nn.tilemap
+
+Mapas de tiles, feitos no editor [Tiled](https://www.mapeditor.org) ou escritos direto em Lua.
+
+**Do Tiled** (salve como JSON, `.tmj`; tilesets embutidos ou `.tsj`):
+
+```lua
+local mapa = nn.tilemap.load("fases/fase1.tmj", { scale = 3 })   -- tiles de 16 px viram 48
+mundo:add_tilemap(mapa)                                            -- colisão dos tiles
+
+local inicio = mapa:object("inicio")                               -- objeto pelo nome
+for _, m in ipairs(mapa:objects("moeda")) do ... end               -- objetos pelo tipo/classe
+
+function cena:draw()
+  mapa:draw()                     -- todas as camadas visíveis
+  -- ou camada por camada, para desenhar coisas entre elas:
+  mapa:draw_layer("fundo")
+end
+```
+
+No Tiled, marque nos tiles do tileset a propriedade booleana `solid` (bloqueia) ou `one_way` (plataforma de mão única). Uma camada com a propriedade `collision = true` torna todos os seus tiles sólidos (bom para uma camada invisível só de colisão). Objetos trazem `name`, `type` (o tipo ou a classe), `x`, `y` (centro, já em coordenadas do mundo), `w`, `h`, `point`, `layer` e `properties`.
+
+Opções de `load`: `scale`, `x`, `y` (posição do canto inferior esquerdo do mapa) e `pixel_art` (padrão `true`).
+
+**Em Lua**, com uma linha de texto por fileira:
+
+```lua
+local mapa = nn.tilemap.new({
+  sheet = nn.assets.sheet("assets/tiles.png", 16, 16, { pixel_art = true }),
+  tile_size = 48,
+  rows = {
+    "..........",
+    "..C....C..",
+    ".J..====..",
+    "##########",
+  },
+  legend = {
+    ["#"] = { tile = 1, solid = true },
+    ["="] = { tile = 4, one_way = true },
+    ["C"] = { object = "moeda" },
+    ["J"] = { object = "jogador" },
+  },
+})
+```
+
+Outros métodos e campos: `width`, `height` (em tiles), `tile_width`, `tile_height`, `world_width`, `world_height`, `layers`, `properties`, `:tile(col, lin, camada)`, `:set_tile(col, lin, tile, camada)` (a colisão acompanha: ótimo para blocos quebráveis), `:set_solid(col, lin, "solid" | "one_way" | nil)`, `:solid(col, lin)`, `:cell_at(x, y)` e `:cell_center(col, lin)`. Colunas e linhas começam em 1, com a linha 1 no topo, como no editor.
 
 ### nn.camera
 

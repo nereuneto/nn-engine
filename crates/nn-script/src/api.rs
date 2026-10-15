@@ -216,6 +216,22 @@ fn draw_table(lua: &Lua, space: Space) -> Result<Table> {
         )?,
     )?;
 
+    t.set(
+        "circle",
+        lua.create_function(move |lua, (x, y, r, col): (f32, f32, f32, Value)| {
+            let col = color(&col)?;
+            with_ctx(lua, |c| {
+                match space {
+                    Space::World => c.renderer.draw_circle(Vec2::new(x, y), r, col),
+                    Space::Screen => {
+                        c.renderer.screen().draw_circle(Vec2::new(x, y), r, col);
+                    }
+                }
+                Ok(())
+            })
+        })?,
+    )?;
+
     Ok(t)
 }
 
@@ -631,6 +647,9 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         "quit",
         lua.create_function(|lua, ()| request(lua, SceneRequest::Quit))?,
     )?;
+
+    nn.set("physics", crate::physics::table(lua)?)?;
+    nn.set("tilemap", crate::tilemap::table(lua)?)?;
 
     lua.globals().set("nn", nn)?;
 
