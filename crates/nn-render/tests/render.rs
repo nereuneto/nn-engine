@@ -222,3 +222,161 @@ fn carrega_png() {
         .unwrap();
     assert_eq!(h.renderer.texture_size(tex), UVec2::new(3, 2));
 }
+
+// ----------------------------------------------------------------------
+// Sprint 2: espaço da tela, spritesheets e texto
+// ----------------------------------------------------------------------
+
+use nn_render::{Anchor, Text};
+
+impl Image {
+    /// Conta pixels "acesos" (diferentes do fundo preto) numa região.
+    fn lit_in(&self, x0: u32, y0: u32, x1: u32, y1: u32) -> u32 {
+        let mut n = 0;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let [r, g, b, _] = self.pixel(x, y);
+                if u32::from(r) + u32::from(g) + u32::from(b) > 60 {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+}
+
+#[test]
+fn tela_usa_canto_superior_esquerdo() {
+    let Some(mut h) = Harness::new() else { return };
+    h.renderer
+        .screen()
+        .draw_rect(Vec2::new(0.0, 0.0), Vec2::new(16.0, 8.0), Color::RED);
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_color(img.pixel(0, 0), RED, "canto superior esquerdo");
+    assert_color(img.pixel(15, 7), RED, "fim do retângulo");
+    assert_color(img.pixel(16, 0), BLACK, "à direita");
+    assert_color(img.pixel(0, 8), BLACK, "abaixo");
+}
+
+#[test]
+fn tela_ignora_a_camera_e_fica_por_cima() {
+    let Some(mut h) = Harness::new() else { return };
+    let camera = Camera2D {
+        position: Vec2::new(500.0, 500.0),
+        zoom: 3.0,
+        ..Default::default()
+    };
+    // O mundo inteiro coberto de azul...
+    h.renderer
+        .draw_rect(camera.position, Vec2::splat(1000.0), Color::BLUE);
+    // ...e a tela, que deve ficar por cima mesmo sendo um retângulo pequeno.
+    h.renderer
+        .screen()
+        .draw_rect(Vec2::new(32.0, 32.0), Vec2::splat(8.0), Color::GREEN);
+    let img = h.render(&camera, Color::BLACK);
+    assert_color(img.pixel(35, 35), GREEN, "HUD por cima");
+    assert_color(img.pixel(10, 10), BLUE, "mundo ao redor");
+}
+
+#[test]
+fn textura_na_tela_tem_a_mesma_orientacao() {
+    let Some(mut h) = Harness::new() else { return };
+    let tex = checker(&mut h);
+    h.renderer.screen().draw(
+        &Sprite::new(tex)
+            .at(Vec2::ZERO)
+            .origin(Vec2::ZERO)
+            .size(Vec2::splat(64.0)),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_color(img.pixel(16, 16), RED, "superior esquerdo");
+    assert_color(img.pixel(48, 16), GREEN, "superior direito");
+    assert_color(img.pixel(16, 48), BLUE, "inferior esquerdo");
+    assert_color(img.pixel(48, 48), WHITE, "inferior direito");
+}
+
+#[test]
+fn quadro_da_spritesheet() {
+    let Some(mut h) = Harness::new() else { return };
+    let tex = checker(&mut h);
+    let sheet = h.renderer.sprite_sheet(tex, UVec2::ONE);
+    assert_eq!(sheet.frame_count(), 4);
+    // Quadro 2 = pixel inferior esquerdo da textura (azul).
+    h.renderer.draw(&sheet.sprite(2).size(Vec2::splat(64.0)));
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_color(img.pixel(32, 32), BLUE, "quadro 2");
+}
+
+#[test]
+fn texto_na_tela_acende_pixels_onde_deveria() {
+    let Some(mut h) = Harness::new() else { return };
+    h.renderer
+        .screen()
+        .draw_text(&Text::new("HI").at(Vec2::new(4.0, 4.0)).size(24.0));
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    let dentro = img.lit_in(4, 4, 40, 32);
+    assert!(
+        dentro > 40,
+        "texto deveria acender pixels, acendeu {dentro}"
+    );
+    assert_eq!(img.lit_in(0, 40, 64, 64), 0, "nada abaixo do texto");
+    assert_eq!(img.lit_in(44, 0, 64, 64), 0, "nada à direita do texto");
+    assert_eq!(h.renderer.glyph_atlas_pages(), 1);
+}
+
+#[test]
+fn texto_respeita_a_ancora_e_a_cor() {
+    let Some(mut h) = Harness::new() else { return };
+    let text = Text::new("O")
+        .at(Vec2::new(32.0, 32.0))
+        .size(32.0)
+        .color(Color::GREEN)
+        .anchor(Anchor::Center);
+    let tamanho = h.renderer.measure_text(&text);
+    h.renderer.screen().draw_text(&text);
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    // O "O" centralizado é simétrico: metades esquerda e direita parecidas.
+    let esquerda = img.lit_in(0, 0, 32, 64);
+    let direita = img.lit_in(32, 0, 64, 64);
+    assert!(esquerda > 20 && direita > 20);
+    let diff = (esquerda as i32 - direita as i32).abs();
+    assert!(diff < esquerda as i32 / 3, "esq {esquerda} dir {direita}");
+    // Só verde.
+    for y in 0..64 {
+        for x in 0..64 {
+            let [r, _, b, _] = img.pixel(x, y);
+            assert!(r < 3 && b < 3);
+        }
+    }
+    assert!(tamanho.x > 10.0 && tamanho.y > 30.0);
+}
+
+#[test]
+fn texto_no_mundo_acompanha_a_camera() {
+    let Some(mut h) = Harness::new() else { return };
+    let text = Text::new("X").size(20.0).anchor(Anchor::Center);
+    // Câmera deslocada: o texto na origem deve aparecer à esquerda do centro.
+    h.renderer.draw_text(&text);
+    let img = h.render(&Camera2D::new(Vec2::new(20.0, 0.0)), Color::BLACK);
+    let esquerda = img.lit_in(0, 0, 24, 64);
+    let direita = img.lit_in(24, 0, 64, 64);
+    assert!(
+        esquerda > 10 && direita == 0,
+        "esq {esquerda} dir {direita}"
+    );
+}
+
+#[test]
+fn glifos_sao_reaproveitados_entre_frames() {
+    let Some(mut h) = Harness::new() else { return };
+    for _ in 0..3 {
+        h.renderer
+            .screen()
+            .draw_text(&Text::new("abcabc").size(18.0));
+        h.render(&Camera2D::default(), Color::BLACK);
+    }
+    // 6 letras, mas tudo numa página só e em uma chamada de desenho.
+    assert_eq!(h.renderer.last_stats().sprites, 6);
+    assert_eq!(h.renderer.last_stats().draw_calls, 1);
+    assert_eq!(h.renderer.glyph_atlas_pages(), 1);
+}

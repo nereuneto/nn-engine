@@ -10,6 +10,7 @@ repository.workspace = true
 nn-core.workspace = true
 nn-input.workspace = true
 nn-render.workspace = true
+nn-audio.workspace = true
 wgpu.workspace = true
 winit.workspace = true
 glam.workspace = true

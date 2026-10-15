@@ -14,6 +14,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use glam::{UVec2, Vec2};
+use nn_audio::Audio;
 use nn_core::{Color, FixedTimestep, Time};
 use nn_input::Input;
 use nn_render::{Camera2D, GpuContext, RenderError, Renderer};
@@ -95,6 +96,8 @@ pub struct Context {
     pub time: Time,
     /// Renderer: crie texturas e desenhe sprites por aqui.
     pub renderer: Renderer,
+    /// Efeitos sonoros e música.
+    pub audio: Audio,
     /// Câmera usada para desenhar o frame.
     pub camera: Camera2D,
     /// Cor de fundo.
@@ -256,6 +259,7 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
             input: Input::new(),
             time: Time::default(),
             renderer,
+            audio: Audio::new(),
             camera: Camera2D::default(),
             clear_color: self.config.clear_color,
             timestep: FixedTimestep::from_hz(self.config.fixed_hz),
