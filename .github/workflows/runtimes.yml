@@ -1,0 +1,53 @@
+name: Runtimes
+
+# Compila o `nn` (ferramenta) e o `nn-jogo` (executável dos jogos) otimizados
+# para Windows e Linux. Com eles, dá para exportar jogos para os dois sistemas
+# a partir de qualquer um: `nn exportar <pasta> --runtime nn-jogo.exe`.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux
+          - os: windows-latest
+            name: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: ALSA
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      - name: Build
+        run: cargo build --release -p nn-run --bins
+
+      - name: Empacotar (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf nn-linux.tar.gz -C target/release nn nn-jogo
+      - name: Empacotar (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path target/release/nn.exe, target/release/nn-jogo.exe -DestinationPath nn-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nn-${{ matrix.name }}
+          path: nn-${{ matrix.name }}.*
+
+      - name: Anexar à release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: nn-${{ matrix.name }}.*

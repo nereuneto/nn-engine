@@ -748,3 +748,156 @@ fn plataforma_roda_sem_erros() {
     assert!(x > 150.0, "x = {x}");
     assert!(corpo.get::<bool>("on_ground").unwrap());
 }
+
+// ----------------------------------------------------------------------
+// Sprint 5: jogos empacotados
+// ----------------------------------------------------------------------
+
+/// Monta um pacote com todos os arquivos de uma pasta.
+fn empacotar(dir: &Path) -> nn_app::Pack {
+    let files: Vec<(String, Vec<u8>)> = nn_app::list_dir(dir)
+        .into_iter()
+        .map(|(rel, full)| (rel, std::fs::read(full).unwrap()))
+        .collect();
+    let bytes = nn_app::Pack::build(files.iter().map(|(p, d)| (p.as_str(), d.as_slice())));
+    nn_app::Pack::parse(bytes).unwrap()
+}
+
+#[test]
+fn projeto_roda_a_partir_do_pacote() {
+    let mut png = Vec::new();
+    image::RgbaImage::from_pixel(1, 1, image::Rgba([0, 0, 255, 255]))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let dir = projeto(
+        "pacote",
+        &[
+            (
+                "config.lua",
+                "return { title = 'Empacotado', start = 'cenas/inicio.lua' }",
+            ),
+            ("lib/cores.lua", "return { fundo = '#00FF00' }"),
+            (
+                "cenas/inicio.lua",
+                r##"
+                local cores = require("lib.cores")
+                local c = {}
+                function c:enter() self.img = nn.assets.texture("img/azul.png") end
+                function c:draw()
+                  nn.draw.rect(0, 0, 64, 64, cores.fundo)
+                  nn.draw.sprite(self.img, 0, 0, { w = 16, h = 16 })
+                end
+                return c
+                "##,
+            ),
+        ],
+    );
+    std::fs::create_dir_all(dir.join("img")).unwrap();
+    std::fs::write(dir.join("img/azul.png"), png).unwrap();
+
+    let pack = std::sync::Arc::new(empacotar(&dir));
+    // Apaga a pasta: tudo tem que vir do pacote.
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let project = nn_script::Project::from_source(pack.clone(), "padrao").unwrap();
+    assert_eq!(project.config.title, "Empacotado");
+    assert_eq!(project.start, "cenas/inicio.lua");
+    let rt = ScriptRuntime::with_source(project.source()).unwrap();
+    assert!(rt.check_syntax().is_empty());
+
+    let config = project.config.clone().size(64, 64);
+    let start = project.start.clone();
+    let h = Headless::new(config, |ctx| {
+        assert!(!ctx.assets.hot_reload(), "pacote não recarrega");
+        let mut s = rt.scene(start);
+        s.enter(ctx);
+        Uma(s)
+    });
+    let Ok(mut h) = h else {
+        if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+            panic!("GPU obrigatória");
+        }
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(pixel(&h, 2, 2), [0, 255, 0, 255]);
+    assert_eq!(pixel(&h, 32, 32), [0, 0, 255, 255]);
+}
+
+#[test]
+fn verificacao_de_sintaxe_aponta_arquivo_e_linha() {
+    let dir = projeto(
+        "sintaxe-geral",
+        &[
+            ("main.lua", "return {}"),
+            ("cenas/quebrada.lua", "local x = \nreturn x"),
+        ],
+    );
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let erros = rt.check_syntax();
+    assert_eq!(erros.len(), 1, "{erros:?}");
+    assert!(erros[0].contains("cenas/quebrada.lua:2"), "{erros:?}");
+}
+
+#[test]
+fn particulas_em_lua() {
+    let dir = projeto(
+        "particulas",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              self.fx = nn.particles({
+                lifetime = { 0.5, 0.5 }, speed = 0, size = 30,
+                colors = { "#FF0000" }, blend = "add", emitting = false,
+              })
+              self.chuva = nn.particles({ rate = 60, lifetime = 10, speed = { 10, 20 },
+                gravity = -100, area = { w = 100, h = 10 }, color = "#00FF00" })
+              self.fx:burst(5, 0, 0)
+            end
+            function c:update(dt)
+              self.fx:update(dt)
+              self.chuva:update(dt)
+              self.vivas = self.fx.count
+              self.chovendo = self.chuva.count
+            end
+            function c:draw() self.fx:draw() end
+            return c
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<i64>("vivas"), Some(5));
+    let [r, g, b, _] = pixel(&h, 32, 32);
+    assert!(r > 250 && g < 5 && b < 5);
+    h.run_frames(60);
+    assert_eq!(h.game.0.field::<i64>("vivas"), Some(0));
+    let n = h.game.0.field::<i64>("chovendo").unwrap();
+    assert!((59..=61).contains(&n), "{n}");
+}
+
+#[test]
+fn particulas_com_opcao_invalida_dao_erro_claro() {
+    let dir = projeto(
+        "particulas-erro",
+        &[(
+            "main.lua",
+            "local c = {}\nfunction c:enter()\n  nn.particles({ blend = 'brilho' })\nend\nreturn c",
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    let e = h.game.0.error().unwrap().to_string();
+    assert!(
+        e.contains("mistura inválida") && e.contains("main.lua:3"),
+        "{e}"
+    );
+}

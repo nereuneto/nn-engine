@@ -21,7 +21,15 @@ cargo nn jogos/plataforma   # plataforma: mapa do Tiled, física, plataformas m�
 cargo nn jogos/demo         # menu, coletar moedas e pausa
 ```
 
-Os dois são feitos inteiramente em Lua. Com o jogo aberto, edite qualquer arquivo de `jogos/demo/cenas/` e salve: a mudança aparece na hora. A referência completa da API Lua está em **[docs/lua.md](docs/lua.md)**.
+Os dois são feitos inteiramente em Lua.
+
+### Exportar um jogo
+
+```sh
+cargo nn exportar jogos/plataforma
+```
+
+Gera um **executável único** em `dist/`, com a engine e todos os arquivos do jogo dentro, pronto para distribuir: quem for jogar não precisa de Rust nem da pasta do projeto. Detalhes em [docs/lua.md](docs/lua.md#distribuindo-o-jogo). Com o jogo aberto, edite qualquer arquivo de `jogos/demo/cenas/` e salve: a mudança aparece na hora. A referência completa da API Lua está em **[docs/lua.md](docs/lua.md)**.
 
 ### Exemplos em Rust
 
@@ -107,7 +115,7 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, raycast |
 | `nn-tilemap` | Tilemaps com camadas, tilesets e objetos; importação do editor Tiled (JSON) |
 | `nn-script` | Scripting em Lua: API `nn.*`, cenas em Lua, recarga ao salvar, tela de erro |
-| `nn-run` | Executável `nn`, que roda um projeto Lua (`cargo nn <pasta>`) |
+| `nn-run` | Ferramenta `nn` (roda e exporta projetos Lua) e `nn-jogo`, o executável dos jogos exportados |
 | `nn-engine` (raiz) | Fachada que reexporta tudo, com `prelude` |
 
 ### Loop principal
@@ -206,6 +214,25 @@ mapa.draw(&mut ctx.renderer, &ctx.camera, ctx.viewport().as_vec2());
 
 A física é do tipo "arcade": corpos não giram, a resolução é por eixo (sem enroscar na junção de tiles), o chão é detectado direto (`on_ground`) e há subpassos para objetos rápidos não atravessarem paredes. Corpos cinemáticos carregam quem está em cima. Mapas do Tiled devem ser salvos em JSON (`.tmj`) com camadas no formato CSV; a referência completa está em [docs/lua.md](docs/lua.md#nntilemap).
 
+## Partículas
+
+```rust,ignore
+let mut faiscas = ParticleEmitter::new(ParticleConfig {
+    lifetime: (0.3, 0.6),
+    speed: (120.0, 280.0),
+    drag: 4.0,
+    size: (14.0, 0.0),
+    colors: vec![Color::WHITE, Color::hex(0xFFE27A), Color::hex(0xFF9A30).with_alpha(0.0)],
+    blend: Blend::Add,
+    ..Default::default()
+});
+faiscas.burst_at(18, posicao);
+faiscas.update(dt);
+faiscas.draw(&mut ctx.renderer);
+```
+
+Qualquer sprite pode usar `Blend::Add` (mistura aditiva) para efeitos de luz.
+
 ## Assets e recarga ao salvar
 
 Assets ficam numa pasta (`assets/` por padrão, configurável em `AppConfig::assets_dir`), procurada a partir da pasta atual e depois ao lado do executável.
@@ -215,7 +242,7 @@ let heroi = ctx.load_texture("imagens/heroi.png", TextureOptions::PIXEL_ART)?;
 let pulo = ctx.load_sound("sons/pulo.ogg")?;
 ```
 
-Cada arquivo é carregado uma vez (pedir de novo devolve o mesmo id). Em builds de desenvolvimento, imagens, sons e scripts Lua alterados no disco são recarregados sozinhos, mantendo os ids. Para desligar: `AppConfig::hot_reload(false)`.
+Cada arquivo é carregado uma vez (pedir de novo devolve o mesmo id). Num jogo exportado, os mesmos caminhos são lidos do pacote dentro do executável, sem mudar nada no código. Em builds de desenvolvimento, imagens, sons e scripts Lua alterados no disco são recarregados sozinhos, mantendo os ids. Para desligar: `AppConfig::hot_reload(false)`.
 
 ## Áudio
 

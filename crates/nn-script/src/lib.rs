@@ -28,19 +28,21 @@
 
 mod api;
 mod convert;
+mod particles;
 mod physics;
 mod tilemap;
 mod types;
 
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use glam::Vec2;
 use mlua::{Function, IntoLuaMulti, Lua, RegistryKey, Table, Value};
-use nn_app::{Context, Scene, Transition};
+use nn_app::{AssetSource, Context, DiskSource, Scene, Transition};
 use nn_core::Color;
 use nn_render::Text;
 
@@ -75,7 +77,7 @@ pub struct ScriptRuntime {
 
 struct Inner {
     lua: Lua,
-    root: PathBuf,
+    source: Arc<dyn AssetSource>,
     /// Módulos padrão do Lua, que nunca são descarregados na recarga.
     builtin_modules: HashSet<String>,
     generation: Cell<u64>,
@@ -84,14 +86,14 @@ struct Inner {
 
 #[derive(Default)]
 struct Watch {
-    files: HashMap<PathBuf, SystemTime>,
+    files: Vec<(String, Option<SystemTime>)>,
     last_poll: Option<Instant>,
 }
 
 impl std::fmt::Debug for ScriptRuntime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ScriptRuntime")
-            .field("root", &self.inner.root)
+            .field("source", &self.inner.source)
             .finish()
     }
 }
@@ -100,19 +102,19 @@ impl ScriptRuntime {
     /// Intervalo entre verificações de scripts alterados.
     pub const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
-    /// Cria o ambiente com os scripts procurados em `root` (geralmente a
-    /// mesma pasta dos assets). `require "modulo"` busca `root/modulo.lua`.
+    /// Cria o ambiente com os scripts lidos da pasta `root` (geralmente a
+    /// mesma dos assets). `require "lib.util"` busca `root/lib/util.lua`.
     pub fn new(root: impl Into<PathBuf>) -> Result<Self, ScriptError> {
-        let root = root.into();
+        Self::with_source(Arc::new(DiskSource::new(root)))
+    }
+
+    /// Cria o ambiente com os scripts lidos de `source` (pasta ou pacote).
+    pub fn with_source(source: Arc<dyn AssetSource>) -> Result<Self, ScriptError> {
         let lua = Lua::new();
         api::install(&lua)?;
+        install_require(&lua, source.clone())?;
 
-        let package: Table = lua.globals().get("package")?;
-        let base = root.to_string_lossy().replace('\\', "/");
-        let current: String = package.get("path")?;
-        package.set("path", format!("{base}/?.lua;{base}/?/init.lua;{current}"))?;
-
-        let loaded: Table = package.get("loaded")?;
+        let loaded: Table = lua.globals().get::<Table>("package")?.get("loaded")?;
         let builtin_modules = loaded
             .pairs::<String, Value>()
             .filter_map(|p| p.ok().map(|(k, _)| k))
@@ -121,7 +123,7 @@ impl ScriptRuntime {
         let runtime = Self {
             inner: Rc::new(Inner {
                 lua,
-                root,
+                source,
                 builtin_modules,
                 generation: Cell::new(0),
                 watch: RefCell::new(Watch::default()),
@@ -133,9 +135,9 @@ impl ScriptRuntime {
         Ok(runtime)
     }
 
-    /// Pasta dos scripts.
-    pub fn root(&self) -> &Path {
-        &self.inner.root
+    /// De onde vêm os scripts.
+    pub fn source(&self) -> &Arc<dyn AssetSource> {
+        &self.inner.source
     }
 
     /// O estado Lua, para quem quiser registrar funções próprias.
@@ -146,6 +148,32 @@ impl ScriptRuntime {
     /// Cria uma cena a partir de um arquivo, relativo à pasta dos scripts.
     pub fn scene(&self, path: impl Into<String>) -> LuaScene {
         LuaScene::new(self.clone(), path, None)
+    }
+
+    /// Verifica a sintaxe de todos os `.lua`, sem executar nada.
+    /// Devolve as mensagens de erro (vazio se tudo estiver certo).
+    pub fn check_syntax(&self) -> Vec<String> {
+        let mut errors = Vec::new();
+        for (path, _) in self.inner.source.files("lua") {
+            let result = self
+                .inner
+                .source
+                .read(Path::new(&path))
+                .map_err(|e| e.to_string())
+                .and_then(|bytes| {
+                    self.inner
+                        .lua
+                        .load(&bytes)
+                        .set_name(format!("@{path}"))
+                        .into_function()
+                        .map(|_| ())
+                        .map_err(|e| format_error(&e))
+                });
+            if let Err(e) = result {
+                errors.push(e);
+            }
+        }
+        errors
     }
 
     /// Executa `f` com o contexto da engine disponível para as funções `nn.*`.
@@ -173,12 +201,14 @@ impl ScriptRuntime {
 
     /// Carrega (executa) o arquivo de uma cena e devolve a tabela que ele retorna.
     fn load_module(&self, ctx: &mut Context, path: &str) -> mlua::Result<Table> {
-        let full = self.inner.root.join(path);
-        let source = std::fs::read_to_string(&full).map_err(|e| {
-            mlua::Error::RuntimeError(format!("não foi possível ler {}: {e}", full.display()))
+        let bytes = self.inner.source.read(Path::new(path)).map_err(|e| {
+            mlua::Error::RuntimeError(format!(
+                "não foi possível ler {}: {e}",
+                self.inner.source.describe(Path::new(path)).display()
+            ))
         })?;
         let value: Value = self.with_ctx(ctx, |lua| {
-            lua.load(&source).set_name(format!("@{path}")).eval()
+            lua.load(&bytes).set_name(format!("@{path}")).eval()
         })?;
         match value {
             Value::Table(t) => Ok(t),
@@ -208,16 +238,19 @@ impl ScriptRuntime {
         Ok(())
     }
 
-    fn scan(&self) -> HashMap<PathBuf, SystemTime> {
-        let mut files = HashMap::new();
-        scan_dir(&self.inner.root, 0, &mut files);
+    fn scan(&self) -> Vec<(String, Option<SystemTime>)> {
+        if self.inner.source.is_packed() {
+            return Vec::new();
+        }
+        let mut files = self.inner.source.files("lua");
+        files.sort();
         files
     }
 
     /// Verifica se algum `.lua` mudou. Devolve a geração atual; ela aumenta a
     /// cada mudança detectada.
     fn poll(&self, hot_reload: bool) -> u64 {
-        if hot_reload {
+        if hot_reload && !self.inner.source.is_packed() {
             let now = Instant::now();
             let due = {
                 let mut w = self.inner.watch.borrow_mut();
@@ -235,8 +268,8 @@ impl ScriptRuntime {
                 if files != w.files {
                     let changed: Vec<_> = files
                         .iter()
-                        .filter(|(p, t)| w.files.get(*p) != Some(*t))
-                        .map(|(p, _)| p.display().to_string())
+                        .filter(|f| !w.files.contains(f))
+                        .map(|(p, _)| p.clone())
                         .collect();
                     log::info!("scripts alterados: {}", changed.join(", "));
                     w.files = files;
@@ -248,29 +281,41 @@ impl ScriptRuntime {
     }
 }
 
-fn scan_dir(dir: &Path, depth: u32, out: &mut HashMap<PathBuf, SystemTime>) {
-    if depth > 8 {
-        return;
-    }
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with('.') || name == "target" {
-            continue;
+/// Troca a busca de módulos do `require` por uma que lê da mesma origem dos
+/// assets (pasta ou pacote): `require "lib.util"` procura `lib/util.lua` e
+/// `lib/util/init.lua`.
+fn install_require(lua: &Lua, source: Arc<dyn AssetSource>) -> mlua::Result<()> {
+    let package: Table = lua.globals().get("package")?;
+    let searchers: Table = package.get("searchers")?;
+    let preload: Value = searchers.get(1)?;
+    let searcher = lua.create_function(move |lua, name: String| {
+        let base = name.replace('.', "/");
+        let candidates = [format!("{base}.lua"), format!("{base}/init.lua")];
+        for path in &candidates {
+            if let Ok(bytes) = source.read(Path::new(path)) {
+                let chunk = lua
+                    .load(&bytes)
+                    .set_name(format!("@{path}"))
+                    .into_function()?;
+                return Ok((
+                    Value::Function(chunk),
+                    Value::String(lua.create_string(path)?),
+                ));
+            }
         }
-        let Ok(meta) = entry.metadata() else { continue };
-        if meta.is_dir() {
-            scan_dir(&path, depth + 1, out);
-        } else if path.extension().is_some_and(|e| e == "lua")
-            && let Ok(modified) = meta.modified()
-        {
-            out.insert(path, modified);
-        }
-    }
+        let tried: String = candidates
+            .iter()
+            .map(|c| format!("\n\tarquivo '{c}' não encontrado"))
+            .collect();
+        Ok((Value::String(lua.create_string(&tried)?), Value::Nil))
+    })?;
+    let list = lua.create_table()?;
+    list.push(preload)?;
+    list.push(searcher)?;
+    package.set("searchers", list)?;
+    package.set("path", "")?;
+    package.set("cpath", "")?;
+    Ok(())
 }
 
 /// Uma cena escrita em Lua.
@@ -534,13 +579,13 @@ fn root_cause(e: &mlua::Error) -> String {
     }
 }
 
-/// Um projeto de jogo em Lua: uma pasta com `main.lua` (ou a cena indicada em
-/// `config.lua`) e os assets.
+/// Um projeto de jogo em Lua: uma pasta (ou pacote) com `main.lua` (ou a
+/// cena indicada em `config.lua`) e os assets.
 #[derive(Debug, Clone)]
 pub struct Project {
     /// Configuração da janela e da engine.
     pub config: nn_app::AppConfig,
-    /// Cena inicial, relativa à pasta do projeto.
+    /// Cena inicial, relativa à raiz do projeto.
     pub start: String,
 }
 
@@ -556,73 +601,94 @@ impl Project {
                 dir.display()
             )));
         }
-        let mut config = nn_app::AppConfig::new(
-            dir.canonicalize()
-                .ok()
-                .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
-                .unwrap_or_else(|| "nn-engine".into()),
-        )
-        .assets_dir(dir);
+        let title = dir
+            .canonicalize()
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| "nn-engine".into());
+        let mut project = Self::from_source(Arc::new(DiskSource::new(dir)), &title)?;
+        project.config.assets_dir = dir.to_path_buf();
+        Ok(project)
+    }
+
+    /// Lê o projeto de uma origem qualquer (pasta ou pacote de um jogo exportado).
+    pub fn from_source(
+        source: Arc<dyn AssetSource>,
+        default_title: &str,
+    ) -> Result<Self, ScriptError> {
+        let mut config = nn_app::AppConfig::new(default_title).asset_source(source.clone());
         let mut start = "main.lua".to_string();
 
-        let config_file = dir.join("config.lua");
-        if config_file.exists() {
-            let source = std::fs::read_to_string(&config_file)
-                .map_err(|e| ScriptError(format!("{}: {e}", config_file.display())))?;
-            let lua = Lua::new();
-            let t: Table = lua
-                .load(&source)
-                .set_name("@config.lua")
-                .eval()
-                .map_err(|e| ScriptError(format_error(&e)))?;
-            let get = |k: &str| -> Result<Value, ScriptError> {
-                t.get(k)
-                    .map_err(|e| ScriptError(format!("config.lua: {k}: {e}")))
-            };
-            let num = |v: &Value| v.as_f64().map(|n| n as u32);
-            if let Value::String(s) = get("title")? {
-                config.title = s.to_string_lossy();
+        match source.read(Path::new("config.lua")) {
+            Ok(bytes) => {
+                let lua = Lua::new();
+                let t: Table = lua
+                    .load(&bytes)
+                    .set_name("@config.lua")
+                    .eval()
+                    .map_err(|e| ScriptError(format_error(&e)))?;
+                let get = |k: &str| -> Result<Value, ScriptError> {
+                    t.get(k)
+                        .map_err(|e| ScriptError(format!("config.lua: {k}: {e}")))
+                };
+                let num = |v: &Value| v.as_f64().map(|n| n as u32);
+                if let Value::String(s) = get("title")? {
+                    config.title = s.to_string_lossy();
+                }
+                if let (Some(w), Some(h)) = (num(&get("width")?), num(&get("height")?)) {
+                    config.size = (w, h);
+                }
+                if let Some(b) = get("vsync")?.as_boolean() {
+                    config.vsync = b;
+                }
+                if let Some(b) = get("resizable")?.as_boolean() {
+                    config.resizable = b;
+                }
+                if let Some(b) = get("hot_reload")?.as_boolean() {
+                    config.hot_reload = b;
+                }
+                if let Some(hz) = num(&get("fixed_hz")?) {
+                    config.fixed_hz = hz.max(1);
+                }
+                let clear = get("clear_color")?;
+                if !clear.is_nil() {
+                    config.clear_color = convert::color(&clear)
+                        .map_err(|e| ScriptError(format!("config.lua: clear_color: {e}")))?;
+                }
+                if let Value::String(s) = get("start")? {
+                    start = s.to_string_lossy();
+                }
             }
-            if let (Some(w), Some(h)) = (num(&get("width")?), num(&get("height")?)) {
-                config.size = (w, h);
-            }
-            if let Some(b) = get("vsync")?.as_boolean() {
-                config.vsync = b;
-            }
-            if let Some(b) = get("resizable")?.as_boolean() {
-                config.resizable = b;
-            }
-            if let Some(b) = get("hot_reload")?.as_boolean() {
-                config.hot_reload = b;
-            }
-            if let Some(hz) = num(&get("fixed_hz")?) {
-                config.fixed_hz = hz.max(1);
-            }
-            let clear = get("clear_color")?;
-            if !clear.is_nil() {
-                config.clear_color = convert::color(&clear)
-                    .map_err(|e| ScriptError(format!("config.lua: clear_color: {e}")))?;
-            }
-            if let Value::String(s) = get("start")? {
-                start = s.to_string_lossy();
-            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(ScriptError(format!("config.lua: {e}"))),
         }
 
-        if !dir.join(&start).exists() {
+        if source.read(Path::new(&start)).is_err() {
             return Err(ScriptError(format!(
                 "cena inicial não encontrada: {}",
-                dir.join(&start).display()
+                source.describe(Path::new(&start)).display()
             )));
         }
         Ok(Self { config, start })
+    }
+
+    /// Origem dos arquivos do projeto.
+    pub fn source(&self) -> Arc<dyn AssetSource> {
+        self.config
+            .asset_source
+            .clone()
+            .unwrap_or_else(|| Arc::new(DiskSource::new(&self.config.assets_dir)))
     }
 }
 
 /// Abre a janela e roda o projeto Lua da pasta `dir`.
 pub fn run_project(dir: impl AsRef<Path>) -> Result<(), Box<dyn std::error::Error>> {
-    let project = Project::open(dir.as_ref())?;
-    let root = project.config.assets_dir.clone();
-    let runtime = ScriptRuntime::new(root)?;
+    run(Project::open(dir.as_ref())?)
+}
+
+/// Abre a janela e roda um projeto já aberto (de pasta ou pacote).
+pub fn run(project: Project) -> Result<(), Box<dyn std::error::Error>> {
+    let runtime = ScriptRuntime::with_source(project.source())?;
     let start = project.start.clone();
     nn_app::run(project.config, move |ctx| {
         nn_app::SceneStack::new(ctx, runtime.scene(start))

@@ -1,6 +1,7 @@
 //! Configuração inicial da aplicação.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use nn_core::Color;
 
@@ -24,6 +25,9 @@ pub struct AppConfig {
     /// Recarrega imagens, sons e scripts quando o arquivo é salvo.
     /// Ligado por padrão em builds de desenvolvimento (debug).
     pub hot_reload: bool,
+    /// Origem dos assets. `None` usa a pasta [`AppConfig::assets_dir`] no disco;
+    /// jogos exportados usam o pacote dentro do executável.
+    pub asset_source: Option<Arc<dyn crate::AssetSource>>,
 }
 
 impl Default for AppConfig {
@@ -37,6 +41,7 @@ impl Default for AppConfig {
             clear_color: Color::hex(0x1E1E28),
             assets_dir: PathBuf::from("assets"),
             hot_reload: cfg!(debug_assertions),
+            asset_source: None,
         }
     }
 }
@@ -76,6 +81,11 @@ impl AppConfig {
 
     pub fn assets_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.assets_dir = dir.into();
+        self
+    }
+
+    pub fn asset_source(mut self, source: Arc<dyn crate::AssetSource>) -> Self {
+        self.asset_source = Some(source);
         self
     }
 

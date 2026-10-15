@@ -1410,6 +1410,7 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "log",
+ "nn-app",
  "nn-script",
 ]
 

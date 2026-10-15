@@ -4,6 +4,7 @@
 //! - [`Renderer`]: desenha [`Sprite`]s e [`Text`]os em lote, agrupando por
 //!   textura, no espaço do mundo ou da tela (HUD).
 //! - [`SpriteSheet`], [`Animation`] e [`AnimationPlayer`]: animação quadro a quadro.
+//! - [`ParticleEmitter`]: partículas (poeira, faíscas, explosões).
 //! - [`Camera2D`]: câmera ortográfica com Y para cima.
 //! - [`OffscreenTarget`]: renderiza em memória (testes e capturas).
 
@@ -11,6 +12,7 @@ mod animation;
 mod camera;
 mod context;
 mod offscreen;
+mod particles;
 mod renderer;
 mod sprite;
 mod text;
@@ -20,8 +22,9 @@ pub use animation::{Animation, AnimationPlayer, Playback, SpriteSheet};
 pub use camera::Camera2D;
 pub use context::GpuContext;
 pub use offscreen::OffscreenTarget;
+pub use particles::{EmitArea, ParticleConfig, ParticleEmitter};
 pub use renderer::{RenderStats, Renderer, ScreenPainter};
-pub use sprite::{Rect, Sprite};
+pub use sprite::{Blend, Rect, Sprite};
 pub use text::{Align, Anchor, FontId, Text};
 pub use texture::{Filter, TextureId, TextureOptions};
 

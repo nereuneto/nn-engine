@@ -19,7 +19,7 @@ end
 function vitoria:draw()
   local w, h = nn.window.size()
   local k = math.min(self.t / 0.4, 1)
-  nn.screen.rect(0, 0, w, h, { 0.03, 0.05, 0.1, 0.6 * k })
+  nn.screen.rect(0, 0, w, h, { 0.03, 0.05, 0.1, 0.45 * k })
   local y = h * 0.3
   util.texto_sombra("Fase completa!", w / 2, y, { size = 72, anchor = "center", color = "#FFE27A", alpha = k })
   local linhas = {

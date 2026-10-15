@@ -18,6 +18,7 @@ mod config;
 mod context;
 mod headless;
 mod scene;
+mod source;
 mod window;
 
 pub use assets::{AssetError, Assets};
@@ -25,4 +26,5 @@ pub use config::AppConfig;
 pub use context::{Context, Game};
 pub use headless::Headless;
 pub use scene::{Scene, SceneStack, Transition};
+pub use source::{AssetSource, DiskSource, Pack, PackError, list_dir, normalize};
 pub use window::{AppError, run};

@@ -45,7 +45,10 @@ impl Context {
             time: Time::default(),
             renderer,
             audio,
-            assets: Assets::new(Assets::locate(&config.assets_dir), config.hot_reload),
+            assets: match &config.asset_source {
+                Some(source) => Assets::new(source.clone(), config.hot_reload),
+                None => Assets::from_dir(Assets::locate(&config.assets_dir), config.hot_reload),
+            },
             camera: Camera2D::default(),
             clear_color: config.clear_color,
             timestep: FixedTimestep::from_hz(config.fixed_hz),
