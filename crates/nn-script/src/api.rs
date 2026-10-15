@@ -264,7 +264,54 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     let nn = lua.create_table()?;
     nn.set("version", env!("CARGO_PKG_VERSION"))?;
 
-    nn.set("draw", draw_table(lua, Space::World)?)?;
+    let draw = draw_table(lua, Space::World)?;
+    draw.set(
+        "parallax",
+        lua.create_function(|lua, (img, opts): (Value, Option<Table>)| {
+            let texture = expect::<LTexture>(&img, "uma imagem (nn.assets.texture)")?.0;
+            let o = opts.as_ref();
+            let scale = opt::<f32>(o, "scale")?.unwrap_or(1.0);
+            let f = opt::<f32>(o, "factor")?.unwrap_or(0.5);
+            let factor = Vec2::new(
+                opt::<f32>(o, "factor_x")?.unwrap_or(f),
+                opt::<f32>(o, "factor_y")?.unwrap_or(f),
+            );
+            let origin = Vec2::new(
+                opt::<f32>(o, "x")?.unwrap_or(0.0),
+                opt::<f32>(o, "y")?.unwrap_or(0.0),
+            );
+            let speed = Vec2::new(
+                opt::<f32>(o, "scroll_x")?.unwrap_or(0.0),
+                opt::<f32>(o, "scroll_y")?.unwrap_or(0.0),
+            );
+            let repeat_x = opt::<bool>(o, "repeat_x")?.unwrap_or(true);
+            let repeat_y = opt::<bool>(o, "repeat_y")?.unwrap_or(false);
+            let mut color = opt_color(o, "color")?.unwrap_or(nn_core::Color::WHITE);
+            if let Some(a) = opt::<f32>(o, "alpha")? {
+                color.a *= a;
+            }
+            let w = opt::<f32>(o, "w")?;
+            let h = opt::<f32>(o, "h")?;
+            with_ctx(lua, |c| {
+                let natural = c.renderer.texture_size(texture).as_vec2();
+                let size = Vec2::new(
+                    w.unwrap_or(natural.x * scale),
+                    h.unwrap_or(natural.y * scale),
+                );
+                let layer = nn_render::Parallax::new(texture, size)
+                    .factor(factor)
+                    .at(origin)
+                    .scroll(speed * c.time.elapsed_secs())
+                    .repeat(repeat_x, repeat_y)
+                    .color(color);
+                let camera = c.camera;
+                let viewport = c.viewport().as_vec2();
+                layer.draw(&mut c.renderer, &camera, viewport);
+                Ok(())
+            })
+        })?,
+    )?;
+    nn.set("draw", draw)?;
     let screen = draw_table(lua, Space::Screen)?;
     screen.set(
         "flash",
@@ -345,6 +392,53 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
             with_ctx(lua, |c| {
                 c.camera.zoom = z;
                 Ok(())
+            })
+        })?,
+    )?;
+    camera.set(
+        "follow",
+        lua.create_function(|lua, (x, y, opts): (f32, f32, Option<Table>)| {
+            let o = opts.as_ref();
+            let mut follow = nn_render::Follow::default();
+            if let Some(s) = opt::<f32>(o, "smooth")? {
+                follow.smoothing = s.max(0.0);
+            }
+            follow.deadzone = Vec2::new(
+                opt::<f32>(o, "deadzone_w")?.unwrap_or(0.0),
+                opt::<f32>(o, "deadzone_h")?.unwrap_or(0.0),
+            );
+            follow.offset = Vec2::new(
+                opt::<f32>(o, "offset_x")?.unwrap_or(0.0),
+                opt::<f32>(o, "offset_y")?.unwrap_or(0.0),
+            );
+            if let Some(b) = opt::<Value>(o, "bounds")?.filter(|v| !v.is_nil()) {
+                follow.bounds = Some(bounds(&b)?);
+            }
+            with_ctx(lua, |c| {
+                let dt = c.time.delta_secs();
+                let viewport = c.viewport().as_vec2();
+                c.camera.follow(Vec2::new(x, y), &follow, dt, viewport);
+                Ok(())
+            })
+        })?,
+    )?;
+    camera.set(
+        "clamp",
+        lua.create_function(|lua, b: Value| {
+            let b = bounds(&b)?;
+            with_ctx(lua, |c| {
+                let viewport = c.viewport().as_vec2();
+                c.camera.clamp_to(b, viewport);
+                Ok(())
+            })
+        })?,
+    )?;
+    camera.set(
+        "view",
+        lua.create_function(|lua, ()| {
+            with_ctx(lua, |c| {
+                let b = c.camera.view_bounds(c.viewport().as_vec2());
+                Ok((b.min.x, b.min.y, b.max.x, b.max.y))
             })
         })?,
     )?;
@@ -658,6 +752,33 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     })?;
     lua.globals().set("print", print)?;
     Ok(())
+}
+
+/// Limite da câmera: um mapa (nn.tilemap) ou `{ x =, y =, w =, h = }`
+/// (canto inferior esquerdo e tamanho).
+fn bounds(v: &Value) -> Result<nn_render::Bounds> {
+    match v {
+        Value::UserData(ud) if ud.is::<crate::tilemap::LTileMap>() => {
+            Ok(ud.borrow::<crate::tilemap::LTileMap>()?.bounds())
+        }
+        Value::Table(t) => {
+            let get = |k: &str| -> Result<f32> {
+                t.get::<Option<f32>>(k)?.ok_or_else(|| {
+                    err(format!(
+                        "limite sem \"{k}\": use {{ x =, y =, w =, h = }} ou um mapa"
+                    ))
+                })
+            };
+            Ok(nn_render::Bounds::from_size(
+                Vec2::new(get("x")?, get("y")?),
+                Vec2::new(get("w")?, get("h")?),
+            ))
+        }
+        other => Err(err(format!(
+            "limite da câmera inválido: use um mapa (nn.tilemap) ou {{ x =, y =, w =, h = }}, recebeu {}",
+            other.type_name()
+        ))),
+    }
 }
 
 fn texture_options(opts: Option<&Table>) -> Result<TextureOptions> {

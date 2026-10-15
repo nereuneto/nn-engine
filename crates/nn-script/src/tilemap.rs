@@ -26,6 +26,11 @@ struct MapState {
 pub(crate) struct LTileMap(Rc<RefCell<MapState>>);
 
 impl LTileMap {
+    /// Retângulo do mapa no mundo.
+    pub(crate) fn bounds(&self) -> nn_render::Bounds {
+        self.0.borrow().map.bounds()
+    }
+
     fn new(map: TileMap) -> Self {
         Self(Rc::new(RefCell::new(MapState {
             map,
@@ -127,8 +132,10 @@ impl UserData for LTileMap {
 
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
         m.add_method("draw", |lua, this, ()| {
-            let state = this.0.borrow();
+            let mut state = this.0.borrow_mut();
             with_ctx(lua, |c| {
+                // Tiles animados acompanham o relógio do jogo.
+                state.map.time = c.time.elapsed_secs();
                 let camera = c.camera;
                 let viewport = c.viewport().as_vec2();
                 state.map.draw(&mut c.renderer, &camera, viewport);
@@ -137,9 +144,10 @@ impl UserData for LTileMap {
         });
 
         m.add_method("draw_layer", |lua, this, layer: Value| {
-            let state = this.0.borrow();
+            let mut state = this.0.borrow_mut();
             let index = Self::layer_index(&state.map, &layer)?;
             with_ctx(lua, |c| {
+                state.map.time = c.time.elapsed_secs();
                 let camera = c.camera;
                 let viewport = c.viewport().as_vec2();
                 state
@@ -148,6 +156,21 @@ impl UserData for LTileMap {
                 Ok(())
             })
         });
+
+        m.add_method(
+            "animate",
+            |_, this, (tile, frames, fps): (u32, Vec<u32>, Option<f32>)| {
+                let mut state = this.0.borrow_mut();
+                if state.map.animate(tile, &frames, fps.unwrap_or(8.0)) {
+                    Ok(())
+                } else {
+                    Err(err(format!(
+                        "não foi possível animar o tile {tile}: os quadros precisam ser tiles \
+                         do mesmo tileset que ele"
+                    )))
+                }
+            },
+        );
 
         m.add_method("objects", |lua, this, kind: Option<String>| {
             let state = this.0.borrow();

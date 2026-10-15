@@ -19,6 +19,11 @@ end
 function titulo:draw()
   local w, h = nn.window.size()
   local s = util.escala()
+  -- Paisagem andando devagar ao fundo: a câmera vai para a direita.
+  nn.camera.set_zoom(s)
+  nn.camera.set_position(nn.time.elapsed() * 70, 360)
+  jogo.desenhar_fundo()
+
   local chao = h * 0.8
   nn.screen.rect(0, chao, w, h - chao, "#5CAA46")
   nn.screen.rect(0, chao, w, 10 * s, "#84CC60")

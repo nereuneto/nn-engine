@@ -45,9 +45,9 @@ pub mod prelude {
     pub use nn_core::{Color, Time};
     pub use nn_input::{AxisDir, Binding, Device, Input, KeyCode, MouseButton, PadAxis, PadButton};
     pub use nn_render::{
-        Align, Anchor, Animation, AnimationPlayer, Blend, Camera2D, EmitArea, Filter, FontId,
-        ParticleConfig, ParticleEmitter, Playback, Rect, Sprite, SpriteSheet, Text, TextureId,
-        TextureOptions,
+        Align, Anchor, Animation, AnimationPlayer, Blend, Bounds, Camera2D, EmitArea, Filter,
+        Follow, FontId, Parallax, ParticleConfig, ParticleEmitter, Playback, Rect, Sprite,
+        SpriteSheet, Text, TextureId, TextureOptions,
     };
 }
 

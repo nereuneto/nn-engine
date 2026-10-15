@@ -8,7 +8,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::{
-    Layer, MapObject, Properties, Property, TileMap, TilemapError, Tileset, join_normalized,
+    Layer, MapObject, Properties, Property, TileAnimation, TileMap, TilemapError, Tileset,
+    join_normalized,
 };
 
 #[derive(Deserialize)]
@@ -116,6 +117,15 @@ struct JTile {
     id: u32,
     #[serde(default)]
     properties: Vec<JProperty>,
+    #[serde(default)]
+    animation: Vec<JFrame>,
+}
+
+#[derive(Deserialize)]
+struct JFrame {
+    tileid: u32,
+    /// Milissegundos.
+    duration: u32,
 }
 
 #[derive(Deserialize)]
@@ -271,6 +281,19 @@ pub fn load_tiled(
                 .filter(|tile| !tile.properties.is_empty())
                 .map(|tile| (tile.id, properties(&tile.properties)))
                 .collect::<BTreeMap<_, _>>(),
+            animations: t
+                .tiles
+                .iter()
+                .filter(|tile| !tile.animation.is_empty())
+                .map(|tile| {
+                    let frames = tile
+                        .animation
+                        .iter()
+                        .map(|f| (f.tileid, f.duration as f32 / 1000.0))
+                        .collect();
+                    (tile.id, TileAnimation { frames })
+                })
+                .collect(),
             texture: None,
         });
     }
@@ -286,6 +309,7 @@ pub fn load_tiled(
         tilesets,
         objects: Vec::new(),
         properties: properties(&j.properties),
+        time: 0.0,
     };
 
     let height_px = (j.height * j.tileheight) as f32;

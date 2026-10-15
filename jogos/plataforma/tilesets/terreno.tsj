@@ -2,11 +2,11 @@
  "name": "terreno",
  "image": "../assets/imagens/tiles.png",
  "imagewidth": 128,
- "imageheight": 32,
+ "imageheight": 48,
  "tilewidth": 16,
  "tileheight": 16,
  "columns": 8,
- "tilecount": 16,
+ "tilecount": 24,
  "margin": 0,
  "spacing": 0,
  "tiles": [
@@ -47,6 +47,48 @@
      "name": "one_way",
      "type": "bool",
      "value": true
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "animation": [
+    {
+     "tileid": 6,
+     "duration": 160
+    },
+    {
+     "tileid": 16,
+     "duration": 160
+    },
+    {
+     "tileid": 17,
+     "duration": 160
+    },
+    {
+     "tileid": 18,
+     "duration": 160
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "animation": [
+    {
+     "tileid": 11,
+     "duration": 180
+    },
+    {
+     "tileid": 12,
+     "duration": 180
+    },
+    {
+     "tileid": 13,
+     "duration": 180
+    },
+    {
+     "tileid": 14,
+     "duration": 180
     }
    ]
   }
