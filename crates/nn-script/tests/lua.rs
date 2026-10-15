@@ -1355,11 +1355,12 @@ fn plataforma_guarda_recordes() {
         .unwrap();
     };
     let save_dir = projeto("plataforma-recordes", &[]);
-    let recordes = || {
+    let salvo = || {
         let json = std::fs::read_to_string(save_dir.join("save.json")).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        v["recordes"].clone()
+        serde_json::from_str::<serde_json::Value>(&json).unwrap()
     };
+    // Recordes por fase, com a chave em texto ("1", "2"...).
+    let recordes = || salvo()["recordes"]["1"].clone();
 
     terminar(50.0, 7);
     let Some(mut h) = plataforma_completo(&dir, "cenas/teste.lua", &save_dir) else {
@@ -1371,6 +1372,7 @@ fn plataforma_guarda_recordes() {
     assert_eq!(recordes()["tempo"], 50.0);
     assert_eq!(recordes()["moedas"], 7);
     assert_eq!(recordes()["vitorias"], 1);
+    assert_eq!(salvo()["liberadas"], 2, "completar a fase 1 libera a 2");
 
     // Mais rápido, mas com menos moedas: só o tempo melhora.
     terminar(41.5, 5);
@@ -1378,13 +1380,13 @@ fn plataforma_guarda_recordes() {
         return;
     };
     h.run_frames(3);
-    // O menu só aparece depois de um tempo; então "Jogar de novo" volta à fase.
+    // O menu só aparece depois de um tempo; então "Próxima fase" abre a fase 2.
     toque(&mut h, KeyCode::Enter);
     assert_eq!(h.game.len(), 2, "menu ainda não apareceu");
     h.run_frames(60);
     toque(&mut h, KeyCode::Enter);
     h.run_frames(40);
-    assert_eq!(h.game.len(), 1, "voltou para a fase");
+    assert_eq!(h.game.len(), 1, "foi para a próxima fase");
     drop(h);
     assert_eq!(recordes()["tempo"], 41.5);
     assert_eq!(recordes()["moedas"], 7);
@@ -1643,4 +1645,160 @@ fn tiles_animados_em_lua() {
             .unwrap()
             .contains("mesmo tileset")
     );
+}
+
+// ----------------------------------------------------------------------
+// Sprint 9: inimigos e segunda fase
+// ----------------------------------------------------------------------
+
+#[test]
+fn corpos_que_se_atravessam_detectam_o_contato() {
+    let dir = projeto(
+        "intersects",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              local mundo = nn.physics.world({ gravity = 0 })
+              local a = mundo:body({ x = 0, y = 0, w = 20, h = 20 })
+              local b = mundo:body({ x = 15, y = 0, radius = 8 })
+              a.layer, b.layer, b.mask = 2, 4, 1   -- não se empurram
+              mundo:step(1 / 60)
+              self.toca = a:intersects(b)
+              self.bx = b.x
+              b.x = 40
+              self.longe = a:intersects(b)
+              local outro = nn.physics.world():body({ x = 0, y = 0, w = 5, h = 5 })
+              self.ok, self.erro = pcall(a.intersects, a, outro)
+              self.erro = tostring(self.erro)
+            end
+            return c
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    let s = &h.game.0;
+    assert_eq!(s.error(), None);
+    assert_eq!(s.field::<bool>("toca"), Some(true));
+    assert_eq!(s.field::<f64>("bx"), Some(15.0), "não foi empurrado");
+    assert_eq!(s.field::<bool>("longe"), Some(false));
+    assert_eq!(s.field::<bool>("ok"), Some(false));
+    assert!(s.field::<String>("erro").unwrap().contains("mesmo mundo"));
+}
+
+/// Primeiro inimigo do tipo pedido na fase (tabela Lua do inimigo).
+fn inimigo(h: &Headless<Uma>, tipo: &str) -> mlua::Table {
+    let lista: mlua::Table = h.game.0.field("inimigos").unwrap();
+    lista
+        .sequence_values::<mlua::Table>()
+        .map(Result::unwrap)
+        .find(|e| e.get::<String>("tipo").unwrap() == tipo)
+        .expect("inimigo na fase")
+}
+
+#[test]
+fn plataforma_pisar_no_inimigo_derrota_e_encostar_derruba() {
+    use mlua::ObjectLike;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/plataforma");
+    let Some(mut h) = cena(&dir, "cenas/fase.lua") else {
+        return;
+    };
+    h.run_frames(30);
+    assert_eq!(h.game.0.error(), None);
+    let jogador: mlua::AnyUserData = h.game.0.field("jogador").unwrap();
+
+    // A lesma patrulha: anda e não cai da plataforma.
+    let lesma = inimigo(&h, "lesma");
+    let corpo: mlua::AnyUserData = lesma.get("corpo").unwrap();
+    let x0: f32 = corpo.get("x").unwrap();
+    h.run_frames(30);
+    let x1: f32 = corpo.get("x").unwrap();
+    assert!((x1 - x0).abs() > 20.0, "andou: {x0} → {x1}");
+    assert!(corpo.get::<bool>("on_ground").unwrap());
+
+    // Pisar: cai em cima dela.
+    let (lx, ly): (f32, f32) = (corpo.get("x").unwrap(), corpo.get("y").unwrap());
+    jogador
+        .call_method::<()>("set_position", (lx, ly + 50.0))
+        .unwrap();
+    jogador
+        .call_method::<()>("set_velocity", (0.0, -400.0))
+        .unwrap();
+    h.run_frames(4);
+    assert_eq!(h.game.0.error(), None);
+    assert!(!lesma.get::<bool>("vivo").unwrap(), "derrotada");
+    assert!(jogador.get::<f32>("vy").unwrap() > 0.0, "quicou");
+    assert_eq!(h.game.0.field::<i64>("mortes"), Some(0));
+    assert_eq!(h.game.0.field::<i64>("derrotados"), Some(1));
+
+    // Encostar de lado no morcego derruba o jogador.
+    h.run_frames(60);
+    let morcego = inimigo(&h, "morcego");
+    let corpo: mlua::AnyUserData = morcego.get("corpo").unwrap();
+    let (mx, my): (f32, f32) = (corpo.get("x").unwrap(), corpo.get("y").unwrap());
+    jogador
+        .call_method::<()>("set_position", (mx - 20.0, my))
+        .unwrap();
+    jogador
+        .call_method::<()>("set_velocity", (0.0, 0.0))
+        .unwrap();
+    h.run_frames(2);
+    assert_eq!(h.game.0.field::<i64>("mortes"), Some(1));
+    assert!(morcego.get::<bool>("vivo").unwrap());
+}
+
+#[test]
+fn plataforma_segunda_fase_roda_com_elevador_e_camera_vertical() {
+    use mlua::ObjectLike;
+    let original = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/plataforma");
+    let dir = std::env::temp_dir().join(format!("nn-lua-{}-plataforma-fase2", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    copiar_pasta(&original, &dir);
+    // Cena de teste: a fase de verdade, aberta com { fase = 2 }.
+    std::fs::write(
+        dir.join("cenas/teste_fase2.lua"),
+        "local base = require('cenas.fase')\nlocal c = setmetatable({}, { __index = base })\n\
+         function c:enter() base.enter(self, { fase = 2 }) end\nreturn c",
+    )
+    .unwrap();
+    let Some(mut h) = cena(&dir, "cenas/teste_fase2.lua") else {
+        return;
+    };
+    h.run_frames(5);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<i64>("n"), Some(2));
+    let inimigos: mlua::Table = h.game.0.field("inimigos").unwrap();
+    assert_eq!(inimigos.raw_len(), 5, "3 lesmas e 2 morcegos");
+
+    // O elevador anda na vertical.
+    let plataformas: mlua::Table = h.game.0.field("plataformas").unwrap();
+    let elevador: mlua::Table = plataformas.get(1).unwrap();
+    assert!(elevador.get::<bool>("vertical").unwrap());
+    let corpo: mlua::AnyUserData = elevador.get("corpo").unwrap();
+    let y0: f32 = corpo.get("y").unwrap();
+    h.ctx.input.press_key(KeyCode::KeyD);
+    h.run_frames(90);
+    h.ctx.input.release_key(KeyCode::KeyD);
+    assert_eq!(h.game.0.error(), None);
+    let y1: f32 = corpo.get("y").unwrap();
+    assert!((y1 - y0).abs() > 50.0, "elevador: {y0} → {y1}");
+
+    // A fase é mais alta que a tela: no caminho de cima, a câmera sobe.
+    let camera_embaixo = h.ctx.camera.position.y;
+    let jogador: mlua::AnyUserData = h.game.0.field("jogador").unwrap();
+    jogador
+        .call_method::<()>("set_position", (45.0 * 48.0, 16.0 * 48.0))
+        .unwrap();
+    h.run_frames(90);
+    assert_eq!(h.game.0.error(), None);
+    assert!(
+        h.ctx.camera.position.y > camera_embaixo + 100.0,
+        "{camera_embaixo} → {}",
+        h.ctx.camera.position.y
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
 }

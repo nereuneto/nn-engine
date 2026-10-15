@@ -298,7 +298,27 @@ Opções de `mundo:body`:
 | `layer`, `mask` | Camadas (bits): dois corpos interagem se a camada de um estiver na máscara do outro. |
 | `tag` | Rótulo livre. |
 
-O corpo tem os campos `x`, `y`, `vx`, `vy`, `gravity_scale`, `bounce`, `sensor`, `layer`, `mask` e `tag` (leitura e escrita), `id`, `type`, `width`, `height`, `radius`, `alive`, `on_ground`, `touching_left`, `touching_right`, `touching_top`, `touching_bottom` e `ground` (o corpo em que está apoiado). Métodos: `:set_position(x, y)`, `:set_velocity(x, y)`, `:overlaps()` (corpos encostando agora) e `:remove()`. Dá para comparar corpos com `==`.
+O corpo tem os campos `x`, `y`, `vx`, `vy`, `gravity_scale`, `bounce`, `sensor`, `layer`, `mask` e `tag` (leitura e escrita), `id`, `type`, `width`, `height`, `radius`, `alive`, `on_ground`, `touching_left`, `touching_right`, `touching_top`, `touching_bottom` e `ground` (o corpo em que está apoiado). Métodos: `:set_position(x, y)`, `:set_velocity(x, y)`, `:overlaps()` (corpos encostando agora, respeitando camadas e máscaras), `:intersects(outro)` (os dois se sobrepõem? ignora camadas) e `:remove()`. Dá para comparar corpos com `==`.
+
+**Inimigos que atravessam o jogador:** para o jogador e os inimigos não se empurrarem, ponha-os em camadas que não interagem e confira o contato com `:intersects`. Pisar em cima é o jogador caindo com os pés acima do centro do inimigo:
+
+```lua
+jogador.layer = 2
+inimigo.layer, inimigo.mask = 4, 1     -- inimigo só colide com o cenário
+
+-- no fixed_update, depois de mundo:step(dt):
+if jogador:intersects(inimigo) then
+  local pes = jogador.y - jogador.height / 2
+  if jogador.vy < 0 and pes > inimigo.y then
+    inimigo:remove()                   -- pisou
+    jogador.vy = 640                   -- quica
+  else
+    perder_vida()                      -- encostou de lado
+  end
+end
+```
+
+O jogo de plataforma (`jogos/plataforma/lib/inimigos.lua`) tem uma lesma que patrulha (vira na parede com `touching_left`/`touching_right` e na beirada com `mapa:solid`) e um morcego que persegue o jogador quando ele chega perto.
 
 O mundo tem `:step(dt)` (chame em `fixed_update`), `:body(opts)`, `:add_tilemap(mapa)`, `:raycast(x, y, dx, dy, distancia, mascara)` (devolve `{ x, y, nx, ny, distance, body }` ou `nil`), `:query_point(x, y)`, `:query_rect(x, y, w, h)`, `:bodies(tag)`, `:debug_draw()` e os campos `gravity_x`, `gravity_y` e `count`.
 

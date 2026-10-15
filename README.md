@@ -26,11 +26,11 @@ O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado 
 ### Jogos de demonstração em Lua
 
 ```sh
-cargo nn jogos/plataforma   # plataforma: mapa do Tiled, física, fundo em camadas, menus, recordes
+cargo nn jogos/plataforma   # plataforma: 2 fases do Tiled, inimigos, fundo em camadas, menus, recordes
 cargo nn jogos/demo         # menu, coletar moedas e pausa
 ```
 
-Os dois são feitos inteiramente em Lua. O de plataforma funciona com teclado, mouse (nos menus) e **controle** (Xbox, PlayStation, Switch Pro e genéricos), e guarda as opções e os recordes entre uma partida e outra.
+Os dois são feitos inteiramente em Lua. O de plataforma tem duas fases (a segunda é liberada ao completar a primeira), inimigos que patrulham e perseguem (pise em cima para derrotar), funciona com teclado, mouse (nos menus) e **controle** (Xbox, PlayStation, Switch Pro e genéricos), e guarda as opções, as fases liberadas e os recordes de cada fase.
 
 ### Exportar um jogo
 
@@ -122,7 +122,7 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-render` | GPU, texturas, câmera 2D, sprites em lote, spritesheets, animação e texto |
 | `nn-audio` | Efeitos sonoros e música (sobre o [kira](https://github.com/tesselode/kira)) com volume por canal, sintetizador simples |
 | `nn-app` | Janela, loop principal, trait `Game`, cenas, assets, interface (menus), dados salvos, leitura dos controles ([gilrs](https://gitlab.com/gilrs-project/gilrs)) e modo sem janela (`Headless`) para testes |
-| `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, raycast |
+| `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, camadas, raycast |
 | `nn-tilemap` | Tilemaps com camadas, tilesets e objetos; importação do editor Tiled (JSON) |
 | `nn-script` | Scripting em Lua: API `nn.*`, cenas em Lua, recarga ao salvar, tela de erro |
 | `nn-run` | Ferramenta `nn` (cria, roda e exporta projetos Lua, com os modelos de `nn novo`) e `nn-jogo`, o executável dos jogos exportados |
@@ -287,6 +287,8 @@ mapa.draw(&mut ctx.renderer, &ctx.camera, ctx.viewport().as_vec2());
 ```
 
 Tiles animados (água, lava, bandeiras) feitos no editor de animação do Tiled vêm junto ao carregar o mapa; em Rust, avance o relógio deles com `mapa.update(dt)` uma vez por frame (em Lua é automático). Em mapas feitos por código, `mapa.animate(gid, &[quadros], fps)`.
+
+Para inimigos que atravessam o jogador sem empurrá-lo, use camadas que não interagem (`Body::with_layer`) e confira o contato com `mundo.intersects(a, b)`, que ignora camadas.
 
 A física é do tipo "arcade": corpos não giram, a resolução é por eixo (sem enroscar na junção de tiles), o chão é detectado direto (`on_ground`) e há subpassos para objetos rápidos não atravessarem paredes. Corpos cinemáticos carregam quem está em cima. Mapas do Tiled devem ser salvos em JSON (`.tmj`) com camadas no formato CSV; a referência completa está em [docs/lua.md](docs/lua.md#nntilemap).
 

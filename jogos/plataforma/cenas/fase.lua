@@ -1,6 +1,8 @@
--- A fase: mapa feito no Tiled (fases/fase1.tmj), física e colisões.
+-- Uma fase: mapa feito no Tiled (lista em lib/jogo.lua), física, inimigos.
+-- Abra com nn.scene.switch("cenas/fase.lua", { fase = 2 }); sem argumentos, é a fase 1.
 local util = require("lib.util")
 local jogo = require("lib.jogo")
+local inimigos = require("lib.inimigos")
 
 local fase = {}
 
@@ -15,9 +17,11 @@ local COYOTE = 0.1          -- ainda dá para pular logo depois de sair da beira
 local BUFFER = 0.12         -- apertar o pulo um pouco antes de tocar o chão também vale
 local TAM_SPRITE = 48
 
-function fase:enter()
+function fase:enter(args)
   jogo.preparar()
-  self.mapa = nn.tilemap.load("fases/fase1.tmj", { scale = ESCALA })
+  self.n = (args and args.fase) or 1
+  self.info = jogo.FASES[self.n]
+  self.mapa = nn.tilemap.load(self.info.arquivo, { scale = ESCALA })
   self.mundo = nn.physics.world({ gravity = GRAVIDADE })
   self.mundo:add_tilemap(self.mapa)
 
@@ -44,6 +48,7 @@ function fase:enter()
   local inicio = self.mapa:object("inicio")
   self.inicio = { x = inicio.x, y = inicio.y }
   self.jogador = self.mundo:body({ x = inicio.x, y = inicio.y, w = 30, h = 42, tag = "jogador" })
+  self.jogador.layer = inimigos.CAMADA_JOGADOR
 
   self.moedas = {}
   for _, o in ipairs(self.mapa:objects("moeda")) do
@@ -59,14 +64,18 @@ function fase:enter()
     self.mundo:body({ type = "static", x = o.x, y = o.y, w = o.w, h = o.h, sensor = true, tag = "chegada" })
   end
 
+  -- Plataformas móveis: na horizontal ou, com a propriedade eixo = "y", na vertical.
   self.plataformas = {}
   for _, o in ipairs(self.mapa:objects("plataforma")) do
     local vel = (o.properties.velocidade or 60) * ESCALA
+    local vertical = o.properties.eixo == "y"
     local corpo = self.mundo:body({
-      type = "kinematic", x = o.x, y = o.y, w = o.w, h = o.h, one_way = true, vx = vel, tag = "plataforma",
+      type = "kinematic", x = o.x, y = o.y, w = o.w, h = o.h, one_way = true, tag = "plataforma",
+      vx = vertical and 0 or vel, vy = vertical and vel or 0,
     })
     table.insert(self.plataformas, {
-      corpo = corpo, x0 = o.x, distancia = (o.properties.distancia or 64) * ESCALA, vel = vel,
+      corpo = corpo, x0 = o.x, y0 = o.y, vertical = vertical,
+      distancia = (o.properties.distancia or 64) * ESCALA, vel = vel,
     })
   end
 
@@ -77,8 +86,11 @@ function fase:enter()
   self.popups = {}
   self.venceu = false
   self.debug = false
+  self.derrotados = 0
+  self.banner = 2.5
   self.ax, self.ay = inicio.x, inicio.y
   nn.camera.set_position(inicio.x, inicio.y)
+  inimigos.criar(self)
 end
 
 -- Partículas. Todas as cores com "00" no fim somem aos poucos.
@@ -124,10 +136,11 @@ function fase:fixed_update(dt)
 
   -- Plataformas móveis vão e voltam.
   for _, p in ipairs(self.plataformas) do
-    if p.corpo.x > p.x0 + p.distancia then
-      p.corpo.vx = -p.vel
-    elseif p.corpo.x < p.x0 - p.distancia then
-      p.corpo.vx = p.vel
+    local c = p.corpo
+    if p.vertical then
+      if c.y > p.y0 + p.distancia then c.vy = -p.vel elseif c.y < p.y0 - p.distancia then c.vy = p.vel end
+    else
+      if c.x > p.x0 + p.distancia then c.vx = -p.vel elseif c.x < p.x0 - p.distancia then c.vx = p.vel end
     end
   end
 
@@ -161,6 +174,8 @@ function fase:fixed_update(dt)
       end
     end
   end
+
+  if not self.venceu then inimigos.atualizar(self, dt) end
 
   -- Pousou depois de uma queda: poeira (e um tranco se a queda foi alta).
   if no_ar_antes and j.on_ground and queda < -500 then
@@ -205,12 +220,13 @@ function fase:vencer()
   nn.audio.play(self.sons.vitoria)
   nn.screen.flash("#FFFFFF55", 0.4)
   nn.scene.push("cenas/vitoria.lua", {
-    moedas = self.pegas, total = self.total, tempo = self.tempo, mortes = self.mortes,
+    fase = self.n, moedas = self.pegas, total = self.total, tempo = self.tempo,
+    mortes = self.mortes, derrotados = self.derrotados,
   })
 end
 
 function fase:update(dt)
-  if nn.input.action_pressed("pausa") then nn.scene.push("cenas/pausa.lua") end
+  if nn.input.action_pressed("pausa") then nn.scene.push("cenas/pausa.lua", { fase = self.n }) end
   if nn.input.pressed("f1") then self.debug = not self.debug end
 
   if nn.input.action_pressed("pular") then
@@ -230,7 +246,9 @@ function fase:update(dt)
   end
   self.anim:update(dt)
   self.giro:update(dt)
+  inimigos.animar(self, dt)
   self.piscar = math.max(0, self.piscar - dt)
+  self.banner = math.max(0, self.banner - dt)
 
   for i = #self.popups, 1, -1 do
     local p = self.popups[i]
@@ -249,7 +267,8 @@ function fase:draw()
   -- da fase, só que maior.
   nn.camera.set_zoom(util.escala())
   nn.camera.follow(x, y, {
-    offset_x = self.esquerda and -90 or 90, offset_y = 80, smooth = 5, bounds = self.mapa,
+    offset_x = self.esquerda and -90 or 90, offset_y = 60, deadzone_h = 140, smooth = 5,
+    bounds = self.mapa,
   })
 
   jogo.desenhar_fundo()
@@ -272,6 +291,8 @@ function fase:draw()
       frame = self.anim:frame(), w = TAM_SPRITE, h = TAM_SPRITE, flip_x = self.esquerda,
     })
   end
+
+  inimigos.desenhar(self)
 
   -- A água fica na frente do personagem: ele afunda nela.
   self.mapa:draw_layer("agua")
@@ -320,6 +341,14 @@ function fase:hud()
   if self.debug then
     nn.screen.text("F1: esconder colisões", 20 * s, h - 20 * s,
       { size = 16 * s, anchor = "bottomleft", color = "#FFFFFF" })
+  end
+  -- Nome da fase no começo, sumindo aos poucos.
+  if self.banner > 0 then
+    local k = math.min(self.banner / 0.6, 1)
+    util.texto_sombra(("Fase %d"):format(self.n), w / 2, h * 0.3,
+      { size = 30 * s, anchor = "center", color = "#FFE27A", alpha = k })
+    util.texto_sombra(self.info.nome, w / 2, h * 0.3 + 44 * s,
+      { size = 52 * s, anchor = "center", alpha = k })
   end
 end
 

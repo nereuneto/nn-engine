@@ -9,6 +9,8 @@ local ESPERA_MENU = 0.8
 
 function vitoria:enter(r)
   self.r = r
+  self.n = r.fase or 1
+  self.ultima = self.n >= #jogo.FASES
   self.t = 0
   self.novo, self.recordes = jogo.registrar(r)
   nn.ui.set_focus("vitoria", 1)
@@ -25,7 +27,8 @@ function vitoria:draw()
   nn.screen.rect(0, 0, w, h, { 0.03, 0.05, 0.1, 0.45 * k })
 
   local y = h * 0.16
-  util.texto_sombra("Fase completa!", w / 2, y, { size = 72 * s, anchor = "center", color = "#FFE27A", alpha = k })
+  local titulo = self.ultima and "Você terminou o jogo!" or "Fase completa!"
+  util.texto_sombra(titulo, w / 2, y, { size = 72 * s, anchor = "center", color = "#FFE27A", alpha = k })
   local r, rec, novo = self.r, self.recordes, self.novo
   local linhas = {
     { ("Moedas: %d de %d"):format(r.moedas, r.total), novo.moedas },
@@ -42,8 +45,11 @@ function vitoria:draw()
     w / 2, y + 220 * s, { size = 22 * s, anchor = "center", alpha = k, color = "#DDE4DE" })
 
   if self.t > ESPERA_MENU then
-    local ui = nn.ui.panel("vitoria", { x = w / 2, y = h * 0.74, width = 340 })
-    if ui:button("Jogar de novo") then nn.scene.switch("cenas/fase.lua", nil, { fade = 0.5 }) end
+    local ui = nn.ui.panel("vitoria", { x = w / 2, y = h * 0.76, width = 340 })
+    if not self.ultima and ui:button("Próxima fase") then
+      nn.scene.switch("cenas/fase.lua", { fase = self.n + 1 }, { fade = 0.6 })
+    end
+    if ui:button("Jogar de novo") then nn.scene.switch("cenas/fase.lua", { fase = self.n }, { fade = 0.5 }) end
     if ui:button("Título") then nn.scene.switch("cenas/titulo.lua", nil, { fade = 0.6 }) end
     ui:finish()
   end
