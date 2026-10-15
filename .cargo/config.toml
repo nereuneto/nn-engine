@@ -1,0 +1,3 @@
+[alias]
+# `cargo nn jogos/demo` roda um projeto Lua.
+nn = "run -p nn-run --"

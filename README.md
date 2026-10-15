@@ -1,6 +1,6 @@
 # nn-engine
 
-Engine de jogos 2D em Rust, construída sobre [wgpu](https://wgpu.rs) e [winit](https://github.com/rust-windowing/winit).
+Engine de jogos 2D em Rust, construída sobre [wgpu](https://wgpu.rs) e [winit](https://github.com/rust-windowing/winit). Os jogos podem ser escritos em **Lua** ou em **Rust**.
 
 Plataformas suportadas: **Windows** e **Linux**.
 
@@ -14,7 +14,15 @@ Pré-requisito: Rust 1.88 ou mais recente, instalado pelo [rustup](https://rustu
 
 A primeira compilação demora alguns minutos (o wgpu é grande); as seguintes são rápidas.
 
-### Exemplos
+### Jogo de demonstração em Lua
+
+```sh
+cargo nn jogos/demo
+```
+
+Menu, jogo e pausa, todos em Lua (`jogos/demo`). Com o jogo aberto, edite qualquer arquivo de `jogos/demo/cenas/` e salve: a mudança aparece na hora. A referência completa da API Lua está em **[docs/lua.md](docs/lua.md)**.
+
+### Exemplos em Rust
 
 ```sh
 cargo run --example coletor      # moedas, animação, texto e áudio
@@ -28,7 +36,34 @@ cargo run --example movimento    # o básico: andar com WASD
 
 Use `RUST_LOG=debug` para ver mais detalhes no terminal (GPU escolhida, avisos do wgpu).
 
-## Um jogo mínimo
+## Um jogo mínimo em Lua
+
+Crie uma pasta com um `main.lua`:
+
+```lua
+local cena = {}
+
+function cena:enter()
+  self.x, self.y = 0, 0
+end
+
+function cena:fixed_update(dt)
+  local dx, dy = nn.input.wasd()
+  self.x = self.x + dx * 200 * dt
+  self.y = self.y + dy * 200 * dt
+end
+
+function cena:draw()
+  nn.draw.rect(self.x, self.y, 50, 50, "#3FA7D6")
+  nn.screen.text("Use WASD", 16, 16)
+end
+
+return cena
+```
+
+E rode com `cargo nn caminho/da/pasta`.
+
+## Um jogo mínimo em Rust
 
 ```rust,no_run
 use nn_engine::prelude::*;
@@ -67,7 +102,9 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-input` | Estado de teclado e mouse (`key_down`, `key_pressed`, `wasd()`...) |
 | `nn-render` | GPU, texturas, câmera 2D, sprites em lote, spritesheets, animação e texto |
 | `nn-audio` | Efeitos sonoros e música (sobre o [kira](https://github.com/tesselode/kira)), sintetizador simples |
-| `nn-app` | Janela, loop principal e a trait `Game` |
+| `nn-app` | Janela, loop principal, trait `Game`, cenas, pasta de assets e modo sem janela (`Headless`) para testes |
+| `nn-script` | Scripting em Lua: API `nn.*`, cenas em Lua, recarga ao salvar, tela de erro |
+| `nn-run` | Executável `nn`, que roda um projeto Lua (`cargo nn <pasta>`) |
 | `nn-engine` (raiz) | Fachada que reexporta tudo, com `prelude` |
 
 ### Loop principal
@@ -123,6 +160,38 @@ let tamanho = ctx.renderer.measure_text(&Text::new("Pausado").size(48.0));
 ```
 
 A fonte padrão é a Poppins (licença SIL OFL 1.1, em `crates/nn-render/assets/fonts`). Outras fontes .ttf/.otf podem ser carregadas com `ctx.renderer.load_font(caminho)`. Cada letra é rasterizada uma vez por tamanho e reaproveitada, então texto que muda todo frame (como um placar) é barato.
+
+## Cenas
+
+Jogos com várias telas usam uma pilha de cenas. Só a cena do topo recebe `update`; cenas marcadas como overlay deixam a de baixo visível (pausa, janelas).
+
+```rust,ignore
+struct Menu;
+impl Scene for Menu {
+    fn update(&mut self, ctx: &mut Context) -> Transition {
+        if ctx.input.key_pressed(KeyCode::Enter) {
+            return Transition::Replace(Box::new(Fase::new(ctx)));
+        }
+        Transition::None
+    }
+    fn render(&mut self, ctx: &mut Context) { /* ... */ }
+}
+
+nn_engine::run(AppConfig::new("Jogo"), |ctx| SceneStack::new(ctx, Menu))
+```
+
+Transições: `Push` (abre por cima), `Pop` (volta), `Replace` (troca a atual), `Switch` (fecha todas e abre uma) e `Quit`. Em Lua, o mesmo vale com `nn.scene.push/pop/replace/switch`.
+
+## Assets e recarga ao salvar
+
+Assets ficam numa pasta (`assets/` por padrão, configurável em `AppConfig::assets_dir`), procurada a partir da pasta atual e depois ao lado do executável.
+
+```rust,ignore
+let heroi = ctx.load_texture("imagens/heroi.png", TextureOptions::PIXEL_ART)?;
+let pulo = ctx.load_sound("sons/pulo.ogg")?;
+```
+
+Cada arquivo é carregado uma vez (pedir de novo devolve o mesmo id). Em builds de desenvolvimento, imagens, sons e scripts Lua alterados no disco são recarregados sozinhos, mantendo os ids. Para desligar: `AppConfig::hot_reload(false)`.
 
 ## Áudio
 

@@ -333,6 +333,49 @@ impl Renderer {
         texture.write(&self.queue, origin, size, rgba);
     }
 
+    /// Troca todo o conteúdo de uma textura (inclusive o tamanho), mantendo o
+    /// mesmo [`TextureId`]. Quem já usa o id passa a desenhar a imagem nova.
+    /// É assim que funciona a recarga de imagens ao salvar o arquivo.
+    ///
+    /// # Panics
+    /// Nas mesmas condições de [`Renderer::create_texture`].
+    pub fn replace_texture(
+        &mut self,
+        id: TextureId,
+        size: UVec2,
+        rgba: &[u8],
+        options: TextureOptions,
+    ) {
+        assert!(size.x > 0 && size.y > 0, "textura com tamanho zero");
+        assert_eq!(rgba.len(), (size.x * size.y * 4) as usize);
+        self.textures[id.0 as usize] = GpuTexture::from_rgba8(
+            &self.device,
+            &self.queue,
+            &self.texture_layout,
+            size,
+            rgba,
+            options,
+            None,
+        );
+    }
+
+    /// Versão de [`Renderer::replace_texture`] que decodifica um arquivo de imagem.
+    pub fn replace_texture_bytes(
+        &mut self,
+        id: TextureId,
+        bytes: &[u8],
+        options: TextureOptions,
+    ) -> Result<(), RenderError> {
+        let img = image::load_from_memory(bytes)?.into_rgba8();
+        self.replace_texture(
+            id,
+            UVec2::new(img.width(), img.height()),
+            img.as_raw(),
+            options,
+        );
+        Ok(())
+    }
+
     /// Cria uma textura a partir de um arquivo de imagem em memória (PNG).
     pub fn load_texture_bytes(
         &mut self,

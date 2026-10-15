@@ -243,6 +243,18 @@ impl Audio {
         })
     }
 
+    /// Troca o conteúdo de um som já carregado, mantendo o mesmo [`SoundId`].
+    /// Sons que já estão tocando continuam com a versão antiga.
+    pub fn replace_bytes(
+        &mut self,
+        id: SoundId,
+        bytes: impl Into<Vec<u8>>,
+    ) -> Result<(), AudioError> {
+        let data = StaticSoundData::from_cursor(Cursor::new(bytes.into()))?;
+        self.sounds[id.0 as usize] = data;
+        Ok(())
+    }
+
     fn add(&mut self, data: StaticSoundData) -> SoundId {
         self.sounds.push(data);
         SoundId(self.sounds.len() as u32 - 1)

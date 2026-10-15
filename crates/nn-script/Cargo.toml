@@ -1,0 +1,23 @@
+[package]
+name = "nn-script"
+description = "Scripting em Lua para a nn-engine: cenas em Lua com recarga ao salvar."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+nn-core.workspace = true
+nn-input.workspace = true
+nn-render.workspace = true
+nn-audio.workspace = true
+nn-app.workspace = true
+glam.workspace = true
+log.workspace = true
+mlua.workspace = true
+
+[dev-dependencies]
+image.workspace = true
+
+[lints]
+workspace = true

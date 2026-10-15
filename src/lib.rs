@@ -19,13 +19,14 @@
 //! ```
 //!
 //! Os módulos também podem ser usados separadamente: [`core`], [`input`],
-//! [`render`], [`audio`] e [`app`].
+//! [`render`], [`audio`], [`script`] (Lua) e [`app`].
 
 pub use nn_app as app;
 pub use nn_audio as audio;
 pub use nn_core as core;
 pub use nn_input as input;
 pub use nn_render as render;
+pub use nn_script as script;
 
 pub use glam as math;
 
@@ -34,7 +35,7 @@ pub use nn_app::{AppConfig, AppError, Context, Game, run};
 /// Importa de uma vez os tipos mais usados.
 pub mod prelude {
     pub use glam::{UVec2, Vec2};
-    pub use nn_app::{AppConfig, AppError, Context, Game};
+    pub use nn_app::{AppConfig, AppError, Context, Game, Scene, SceneStack, Transition};
     pub use nn_audio::{Audio, PlayOptions, Sound, SoundId};
     pub use nn_core::{Color, Time};
     pub use nn_input::{Input, KeyCode, MouseButton};
