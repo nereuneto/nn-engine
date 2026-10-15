@@ -7,7 +7,7 @@ use glam::UVec2;
 pub struct TextureId(pub(crate) u32);
 
 /// Como a textura é amostrada quando aparece maior ou menor que o original.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Filter {
     /// Suave. Bom para arte desenhada e fotos.
     #[default]
@@ -26,7 +26,7 @@ impl From<Filter> for wgpu::FilterMode {
 }
 
 /// Opções de criação de textura.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TextureOptions {
     pub filter: Filter,
 }

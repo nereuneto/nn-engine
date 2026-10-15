@@ -1,0 +1,225 @@
+//! Janela e loop principal.
+
+use std::sync::Arc;
+use std::time::Instant;
+
+use glam::UVec2;
+use nn_audio::Audio;
+use nn_render::{GpuContext, RenderError, Renderer};
+use winit::application::ApplicationHandler;
+use winit::dpi::LogicalSize;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::window::{Window, WindowId};
+
+use crate::context::{draw, simulate};
+use crate::{AppConfig, Context, Game};
+
+/// Erros fatais da aplicação.
+#[derive(Debug, thiserror::Error)]
+pub enum AppError {
+    #[error("falha no loop de eventos: {0}")]
+    EventLoop(#[from] winit::error::EventLoopError),
+    #[error("falha ao criar a janela: {0}")]
+    Window(#[from] winit::error::OsError),
+    #[error("falha ao criar a superfície de desenho: {0}")]
+    Surface(#[from] nn_render::wgpu::CreateSurfaceError),
+    #[error(transparent)]
+    Render(#[from] RenderError),
+    #[error("a GPU não suporta desenhar nesta janela")]
+    UnsupportedSurface,
+}
+
+/// Abre a janela e roda o jogo até o usuário fechar ou [`Context::exit`] ser chamado.
+///
+/// `create` é chamada uma vez, com a GPU pronta, e devolve o jogo. Carregue
+/// texturas e prepare o estado inicial nela.
+pub fn run<G, F>(config: AppConfig, create: F) -> Result<(), AppError>
+where
+    G: Game,
+    F: FnOnce(&mut Context) -> G,
+{
+    let event_loop = EventLoop::new()?;
+    event_loop.set_control_flow(ControlFlow::Poll);
+    let instance = nn_render::wgpu::Instance::new(
+        nn_render::wgpu::InstanceDescriptor::new_with_display_handle_from_env(Box::new(
+            event_loop.owned_display_handle(),
+        )),
+    );
+    let mut app = App {
+        config,
+        create: Some(create),
+        game: None,
+        instance: Some(instance),
+        state: None,
+        error: None,
+    };
+    event_loop.run_app(&mut app)?;
+    match app.error {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
+}
+
+struct App<G, F> {
+    config: AppConfig,
+    create: Option<F>,
+    game: Option<G>,
+    instance: Option<nn_render::wgpu::Instance>,
+    state: Option<State>,
+    error: Option<AppError>,
+}
+
+struct State {
+    window: Arc<Window>,
+    surface: nn_render::wgpu::Surface<'static>,
+    surface_config: nn_render::wgpu::SurfaceConfiguration,
+    gpu: GpuContext,
+    ctx: Context,
+    last_frame: Instant,
+}
+
+impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
+    fn init(&mut self, event_loop: &ActiveEventLoop) -> Result<(), AppError> {
+        use nn_render::wgpu;
+
+        let instance = self
+            .instance
+            .take()
+            .expect("init só roda uma vez por execução");
+        let attrs = Window::default_attributes()
+            .with_title(self.config.title.clone())
+            .with_inner_size(LogicalSize::new(self.config.size.0, self.config.size.1))
+            .with_resizable(self.config.resizable);
+        let window = Arc::new(event_loop.create_window(attrs)?);
+        let surface = instance.create_surface(window.clone())?;
+        let gpu = pollster::block_on(GpuContext::new(instance, Some(&surface)))?;
+
+        let caps = surface.get_capabilities(&gpu.adapter);
+        // Formato sRGB: as cores saem iguais às do editor de imagem.
+        let format = caps
+            .formats
+            .iter()
+            .copied()
+            .find(wgpu::TextureFormat::is_srgb)
+            .or_else(|| caps.formats.first().copied())
+            .ok_or(AppError::UnsupportedSurface)?;
+        let size = window.inner_size();
+        let mut surface_config = surface
+            .get_default_config(&gpu.adapter, size.width.max(1), size.height.max(1))
+            .ok_or(AppError::UnsupportedSurface)?;
+        surface_config.format = format;
+        surface_config.present_mode = if self.config.vsync {
+            wgpu::PresentMode::AutoVsync
+        } else {
+            wgpu::PresentMode::AutoNoVsync
+        };
+        surface.configure(&gpu.device, &surface_config);
+
+        let renderer = Renderer::new(&gpu, format);
+        let viewport = UVec2::new(surface_config.width, surface_config.height);
+        let mut ctx = Context::new(&self.config, renderer, Audio::new(), viewport);
+        log::info!("pasta de assets: {}", ctx.assets.root().display());
+        let create = self.create.take().expect("o jogo só é criado uma vez");
+        self.game = Some(create(&mut ctx));
+
+        self.state = Some(State {
+            window,
+            surface,
+            surface_config,
+            gpu,
+            ctx,
+            last_frame: Instant::now(),
+        });
+        Ok(())
+    }
+}
+
+impl State {
+    fn resize(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            // Janela minimizada: mantém a última configuração.
+            return;
+        }
+        self.surface_config.width = width;
+        self.surface_config.height = height;
+        self.surface
+            .configure(&self.gpu.device, &self.surface_config);
+        self.ctx.viewport = UVec2::new(width, height);
+    }
+
+    fn frame<G: Game>(&mut self, game: &mut G) {
+        use nn_render::wgpu::CurrentSurfaceTexture;
+
+        let now = Instant::now();
+        let dt = now - self.last_frame;
+        self.last_frame = now;
+        simulate(&mut self.ctx, game, dt);
+
+        let size = self.window.inner_size();
+        if size.width > 0 && size.height > 0 {
+            let (texture, reconfigure) = match self.surface.get_current_texture() {
+                CurrentSurfaceTexture::Success(t) => (Some(t), false),
+                CurrentSurfaceTexture::Suboptimal(t) => (Some(t), true),
+                CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Lost => (None, true),
+                CurrentSurfaceTexture::Timeout | CurrentSurfaceTexture::Occluded => (None, false),
+                other => {
+                    log::error!("falha ao obter a imagem da janela: {other:?}");
+                    (None, false)
+                }
+            };
+
+            if let Some(texture) = texture {
+                let view = texture
+                    .texture
+                    .create_view(&nn_render::wgpu::TextureViewDescriptor::default());
+                draw(&mut self.ctx, game, &view);
+                self.window.pre_present_notify();
+                self.gpu.queue.present(texture);
+            }
+            if reconfigure {
+                self.resize(size.width, size.height);
+            }
+        }
+
+        self.ctx.input.end_frame();
+    }
+}
+
+impl<G: Game, F: FnOnce(&mut Context) -> G> ApplicationHandler for App<G, F> {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.state.is_some() || self.error.is_some() {
+            return;
+        }
+        if let Err(e) = self.init(event_loop) {
+            log::error!("{e}");
+            self.error = Some(e);
+            event_loop.exit();
+        }
+    }
+
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        let (Some(state), Some(game)) = (self.state.as_mut(), self.game.as_mut()) else {
+            return;
+        };
+        state.ctx.input.process_event(&event);
+
+        match event {
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::Resized(size) => state.resize(size.width, size.height),
+            WindowEvent::RedrawRequested => {
+                state.frame(game);
+                if state.ctx.exit_requested {
+                    event_loop.exit();
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(state) = &self.state {
+            state.window.request_redraw();
+        }
+    }
+}

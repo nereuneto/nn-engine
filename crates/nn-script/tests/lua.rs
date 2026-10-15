@@ -1,0 +1,523 @@
+//! Testes das cenas em Lua, rodando a engine sem janela.
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use mlua::Value;
+use nn_app::{AppConfig, Context, Game, Headless, Scene, SceneStack};
+use nn_input::KeyCode;
+use nn_script::{LuaScene, ScriptRuntime};
+
+/// Pasta de projeto temporária com os arquivos dados.
+fn projeto(name: &str, files: &[(&str, &str)]) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!("nn-lua-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    for (path, content) in files {
+        let full = dir.join(path);
+        std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+        std::fs::write(full, content).unwrap();
+    }
+    dir
+}
+
+fn config(dir: &Path) -> AppConfig {
+    AppConfig::default()
+        .size(64, 64)
+        .assets_dir(dir)
+        .hot_reload(true)
+        .clear_color(nn_core::Color::BLACK)
+}
+
+/// Uma cena só, para inspecionar o estado.
+struct Uma(LuaScene);
+impl Game for Uma {
+    fn fixed_update(&mut self, ctx: &mut Context) {
+        self.0.fixed_update(ctx);
+    }
+    fn update(&mut self, ctx: &mut Context) {
+        let _ = self.0.update(ctx);
+    }
+    fn render(&mut self, ctx: &mut Context) {
+        self.0.render(ctx);
+    }
+}
+
+fn headless<G: Game>(dir: &Path, create: impl FnOnce(&mut Context) -> G) -> Option<Headless<G>> {
+    match Headless::new(config(dir), create) {
+        Ok(h) => Some(h),
+        Err(e) => {
+            if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+                panic!("GPU obrigatória mas indisponível: {e}");
+            }
+            eprintln!("pulando teste: {e}");
+            None
+        }
+    }
+}
+
+fn cena(dir: &Path, path: &str) -> Option<Headless<Uma>> {
+    let rt = ScriptRuntime::new(dir).unwrap();
+    headless(dir, |ctx| {
+        let mut s = rt.scene(path);
+        s.enter(ctx);
+        Uma(s)
+    })
+}
+
+fn pixel(h: &Headless<impl Game>, x: u32, y: u32) -> [u8; 4] {
+    let p = h.pixels().unwrap();
+    let i = ((y * 64 + x) * 4) as usize;
+    p[i..i + 4].try_into().unwrap()
+}
+
+fn global<T: mlua::FromLua>(rt: &ScriptRuntime, name: &str) -> T {
+    rt.lua().globals().get(name).unwrap()
+}
+
+/// Espera o suficiente para o sistema de arquivos registrar outro horário de modificação.
+fn espera_relogio_do_disco() {
+    std::thread::sleep(Duration::from_millis(1100));
+}
+
+#[test]
+fn ciclo_de_vida_e_estado() {
+    let dir = projeto(
+        "ciclo",
+        &[(
+            "main.lua",
+            r##"
+            local cena = {}
+            function cena:enter(args) self.frames = 0; self.passos = 0 end
+            function cena:fixed_update(dt) self.passos = self.passos + 1 end
+            function cena:update(dt) self.frames = self.frames + 1 end
+            function cena:draw() nn.draw.rect(0, 0, 32, 32, "#FF0000") end
+            return cena
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(10);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<i64>("frames"), Some(10));
+    assert!(h.game.0.field::<i64>("passos").unwrap() >= 9);
+    assert_eq!(pixel(&h, 32, 32), [255, 0, 0, 255]);
+    assert_eq!(pixel(&h, 2, 2), [0, 0, 0, 255]);
+}
+
+#[test]
+fn entrada_move_o_jogador() {
+    let dir = projeto(
+        "entrada",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter() self.x = 0; self.pulos = 0 end
+            function c:fixed_update(dt)
+              local dx, dy = nn.input.wasd()
+              self.x = self.x + dx * 60 * dt
+            end
+            function c:update(dt)
+              if nn.input.pressed("space") then self.pulos = self.pulos + 1 end
+              self.shift = nn.input.down("shift")
+            end
+            return c
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.ctx.input.press_key(KeyCode::KeyD);
+    h.ctx.input.press_key(KeyCode::Space);
+    h.ctx.input.press_key(KeyCode::ShiftRight);
+    h.run_frames(60);
+    let x: f64 = h.game.0.field("x").unwrap();
+    assert!((x - 60.0).abs() < 2.0, "x = {x}");
+    assert_eq!(h.game.0.field::<i64>("pulos"), Some(1));
+    assert_eq!(h.game.0.field::<bool>("shift"), Some(true));
+}
+
+#[test]
+fn erro_de_sintaxe_mostra_tela_de_erro() {
+    let dir = projeto(
+        "sintaxe",
+        &[("main.lua", "local c = {\nfunction c:draw( end\nreturn c")],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    let erro = h.game.0.error().expect("deveria haver erro").to_string();
+    assert!(erro.contains("main.lua:2"), "{erro}");
+    // Faixa vermelha no topo da tela de erro.
+    let [r, g, _, _] = pixel(&h, 10, 2);
+    assert!(r > 200 && g < 100);
+}
+
+#[test]
+fn erro_em_tempo_de_execucao_aponta_a_linha() {
+    let dir = projeto(
+        "execucao",
+        &[(
+            "main.lua",
+            "local c = {}\nfunction c:update(dt)\n  local t = nil\n  return t.campo\nend\nreturn c",
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    let erro = h.game.0.error().unwrap().to_string();
+    assert!(erro.contains("main.lua:4"), "{erro}");
+}
+
+#[test]
+fn argumento_errado_da_mensagem_clara() {
+    let dir = projeto(
+        "argumento",
+        &[(
+            "main.lua",
+            "local c = {}\nfunction c:draw()\n  nn.draw.rect(0, 0, 10, 10, '#XYZ')\nend\nreturn c",
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    let erro = h.game.0.error().unwrap().to_string();
+    assert!(erro.contains("cor inválida"), "{erro}");
+    assert!(erro.contains("main.lua:3"), "{erro}");
+}
+
+#[test]
+fn recarga_mantem_o_estado_e_troca_o_codigo() {
+    let dir = projeto(
+        "recarga",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter() self.contador = 0 end
+            function c:update(dt) self.contador = self.contador + 1 end
+            function c:draw() nn.draw.rect(0, 0, 64, 64, "#FF0000") end
+            return c
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(5);
+    assert_eq!(pixel(&h, 5, 5), [255, 0, 0, 255]);
+
+    espera_relogio_do_disco();
+    std::fs::write(
+        dir.join("main.lua"),
+        r##"
+        local c = {}
+        function c:enter() self.contador = 0 end
+        function c:update(dt) self.contador = self.contador + 100 end
+        function c:reload() self.recarregou = true end
+        function c:draw() nn.draw.rect(0, 0, 64, 64, "#0000FF") end
+        return c
+        "##,
+    )
+    .unwrap();
+    std::thread::sleep(ScriptRuntime::POLL_INTERVAL);
+    h.run_frames(1);
+
+    assert_eq!(pixel(&h, 5, 5), [0, 0, 255, 255]);
+    assert_eq!(h.game.0.field::<bool>("recarregou"), Some(true));
+    // 5 do código antigo + 100 do novo: o estado continuou.
+    assert_eq!(h.game.0.field::<i64>("contador"), Some(105));
+}
+
+#[test]
+fn corrigir_o_erro_e_salvar_recupera_a_cena() {
+    let dir = projeto("recupera", &[("main.lua", "isto não é lua")]);
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    assert!(h.game.0.error().is_some());
+
+    espera_relogio_do_disco();
+    std::fs::write(
+        dir.join("main.lua"),
+        "local c = {}\nfunction c:enter() self.ok = true end\nreturn c",
+    )
+    .unwrap();
+    std::thread::sleep(ScriptRuntime::POLL_INTERVAL);
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<bool>("ok"), Some(true));
+}
+
+#[test]
+fn transicoes_entre_cenas_com_argumentos() {
+    let dir = projeto(
+        "transicoes",
+        &[
+            (
+                "menu.lua",
+                r##"
+                local m = {}
+                function m:enter() log = (log or "") .. "menu.enter;" end
+                function m:resume() log = log .. "menu.resume;" end
+                function m:update()
+                  if nn.input.pressed("enter") then nn.scene.push("jogo.lua", { fase = 3 }) end
+                end
+                return m
+                "##,
+            ),
+            (
+                "jogo.lua",
+                r##"
+                local j = {}
+                function j:enter(args) log = log .. "jogo.enter(" .. args.fase .. ");" end
+                function j:exit() log = log .. "jogo.exit;" end
+                function j:update()
+                  if nn.input.pressed("p") then nn.scene.push("pausa.lua") end
+                  if nn.input.pressed("escape") then nn.scene.pop() end
+                end
+                function j:draw() nn.draw.rect(0, 0, 64, 64, "#00FF00") end
+                return j
+                "##,
+            ),
+            (
+                "pausa.lua",
+                r##"
+                local p = { overlay = true }
+                function p:enter() log = log .. "pausa.enter;" end
+                function p:update() if nn.input.pressed("p") then nn.scene.pop() end end
+                function p:draw() nn.screen.rect(0, 0, 8, 8, "#FFFFFF") end
+                return p
+                "##,
+            ),
+        ],
+    );
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let r = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| SceneStack::new(ctx, r.scene("menu.lua"))) else {
+        return;
+    };
+    let tap = |h: &mut Headless<SceneStack>, k: KeyCode| {
+        h.ctx.input.press_key(k);
+        h.run_frames(1);
+        h.ctx.input.release_key(k);
+        h.run_frames(1);
+    };
+
+    tap(&mut h, KeyCode::Enter);
+    assert_eq!(h.game.len(), 2);
+    tap(&mut h, KeyCode::KeyP);
+    assert_eq!(h.game.len(), 3);
+    // Pausa é overlay: o jogo (verde) continua desenhado por baixo do quadrado branco.
+    assert_eq!(pixel(&h, 2, 2), [255, 255, 255, 255]);
+    assert_eq!(pixel(&h, 30, 30), [0, 255, 0, 255]);
+    tap(&mut h, KeyCode::KeyP);
+    tap(&mut h, KeyCode::Escape);
+    assert_eq!(h.game.len(), 1);
+
+    let log: String = global(&rt, "log");
+    assert_eq!(
+        log,
+        "menu.enter;jogo.enter(3);pausa.enter;jogo.exit;menu.resume;"
+    );
+}
+
+#[test]
+fn require_de_modulos_do_projeto() {
+    let dir = projeto(
+        "require",
+        &[
+            (
+                "util/matematica.lua",
+                "return { dobro = function(x) return 2 * x end }",
+            ),
+            (
+                "main.lua",
+                "local m = require('util.matematica')\nlocal c = {}\nfunction c:enter() self.v = m.dobro(21) end\nreturn c",
+            ),
+        ],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<i64>("v"), Some(42));
+}
+
+#[test]
+fn imagens_spritesheets_e_animacao() {
+    // Imagem 2x1: quadro 1 vermelho, quadro 2 azul.
+    let mut png = Vec::new();
+    let mut img = image::RgbaImage::new(2, 1);
+    img.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+    img.put_pixel(1, 0, image::Rgba([0, 0, 255, 255]));
+    img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let dir = projeto(
+        "imagens",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              self.img = nn.assets.texture("cores.png", { pixel_art = true })
+              self.sheet = nn.assets.sheet("cores.png", 1, 1, { pixel_art = true })
+              self.anim = nn.animator(nn.animation({ 1, 2 }, 1))
+              largura, quadros = self.img.width, self.sheet.count
+            end
+            function c:update(dt) self.anim:update(dt) end
+            function c:draw()
+              nn.draw.sprite(self.sheet, 0, 0, { frame = self.anim:frame(), w = 64, h = 64 })
+            end
+            return c
+            "##,
+        )],
+    );
+    std::fs::write(dir.join("cores.png"), png).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let r = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| {
+        let mut s = r.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(global::<i64>(&rt, "largura"), 2);
+    assert_eq!(global::<i64>(&rt, "quadros"), 2);
+    assert_eq!(pixel(&h, 32, 32), [255, 0, 0, 255]);
+    h.run_frames(60); // 1 s a 1 fps: segundo quadro
+    assert_eq!(pixel(&h, 32, 32), [0, 0, 255, 255]);
+}
+
+#[test]
+fn asset_inexistente_vira_erro_na_tela() {
+    let dir = projeto(
+        "faltando",
+        &[(
+            "main.lua",
+            "local c = {}\nfunction c:enter()\n  self.t = nn.assets.texture('sumiu.png')\nend\nreturn c",
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    let erro = h.game.0.error().unwrap().to_string();
+    assert!(
+        erro.contains("sumiu.png") && erro.contains("main.lua:3"),
+        "{erro}"
+    );
+}
+
+#[test]
+fn texto_e_medidas() {
+    let dir = projeto(
+        "texto",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:draw()
+              largura, altura = nn.text_size("Olá", { size = 20 })
+              nn.screen.text("HI", 2, 2, { size = 30, color = "#00FF00" })
+            end
+            return c
+            "##,
+        )],
+    );
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let r = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| {
+        let mut s = r.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    let w: f64 = global(&rt, "largura");
+    let a: f64 = global(&rt, "altura");
+    assert!(w > 20.0 && a > 18.0, "{w} x {a}");
+    let pixels = h.pixels().unwrap();
+    let verdes = pixels.chunks(4).filter(|p| p[1] > 128 && p[0] < 50).count();
+    assert!(verdes > 30, "{verdes}");
+}
+
+#[test]
+fn nn_fora_da_cena_da_erro_claro() {
+    let dir = projeto("fora", &[]);
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let err = rt
+        .lua()
+        .load("nn.time.delta()")
+        .exec()
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("durante a execução da cena"), "{err}");
+    let _: Value = rt.lua().load("return nn.version").eval().unwrap();
+}
+
+#[test]
+fn exemplo_minimo_do_readme() {
+    let dir = projeto(
+        "readme",
+        &[(
+            "main.lua",
+            r##"
+            local cena = {}
+
+            function cena:enter()
+              self.x, self.y = 0, 0
+            end
+
+            function cena:fixed_update(dt)
+              local dx, dy = nn.input.wasd()
+              self.x = self.x + dx * 200 * dt
+              self.y = self.y + dy * 200 * dt
+            end
+
+            function cena:draw()
+              nn.draw.rect(self.x, self.y, 50, 50, "#3FA7D6")
+              nn.screen.text("Use WASD", 16, 16)
+            end
+
+            return cena
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.ctx.input.press_key(KeyCode::KeyW);
+    h.run_frames(30);
+    assert_eq!(h.game.0.error(), None);
+    assert!(h.game.0.field::<f64>("y").unwrap() > 90.0);
+}
+
+/// As cenas do jogo de demonstração carregam e rodam sem erro.
+#[test]
+fn demo_roda_sem_erros() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/demo");
+    let project = nn_script::Project::open(&dir).unwrap();
+    assert_eq!(project.start, "cenas/menu.lua");
+    for cena_path in ["cenas/menu.lua", "cenas/jogo.lua", "cenas/pausa.lua"] {
+        let Some(mut h) = cena(&dir, cena_path) else {
+            return;
+        };
+        h.ctx.input.press_key(KeyCode::KeyD);
+        h.run_frames(20);
+        assert_eq!(h.game.0.error(), None, "{cena_path}");
+    }
+}

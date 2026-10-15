@@ -1,0 +1,19 @@
+[package]
+name = "nn-run"
+description = "Executa um projeto de jogo em Lua da nn-engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "nn"
+path = "src/main.rs"
+
+[dependencies]
+nn-script.workspace = true
+env_logger.workspace = true
+log.workspace = true
+
+[lints]
+workspace = true
