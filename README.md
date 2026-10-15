@@ -6,11 +6,17 @@ Plataformas suportadas: **Windows** e **Linux**.
 
 ## Começando
 
-Pré-requisito: Rust 1.88 ou mais recente ([rustup.rs](https://rustup.rs)).
+Pré-requisito: Rust 1.88 ou mais recente, instalado pelo [rustup](https://rustup.rs).
+
+**Windows:** baixe e rode o `rustup-init.exe` do site acima. Se o instalador avisar que faltam as ferramentas de build do Visual Studio (o compilador C++ da Microsoft), escolha a opção de instalação rápida que ele oferece. Depois **abra um terminal novo** para o `cargo` aparecer no PATH e confira com `cargo --version`.
+
+**Linux:** `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 
 ```sh
 cargo run --example movimento
 ```
+
+A primeira compilação demora alguns minutos (o wgpu é grande); as seguintes são rápidas.
 
 Controles do exemplo: **WASD** ou setas para andar, **Shift** para correr, **roda do mouse** para zoom, **Esc** para sair.
 
