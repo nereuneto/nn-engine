@@ -43,7 +43,12 @@ impl<G: Game> Headless<G> {
         let size = UVec2::new(config.size.0.max(1), config.size.1.max(1));
         let renderer = Renderer::new(&gpu, OffscreenTarget::FORMAT);
         let target = OffscreenTarget::new(&gpu, size);
-        let mut ctx = Context::new(&config, renderer, Audio::disabled(), size);
+        // Sem `save_dir`, nada é gravado: testes não mexem nos dados do usuário.
+        let save = match &config.save_dir {
+            Some(_) => config.open_storage(),
+            None => crate::Storage::in_memory(),
+        };
+        let mut ctx = Context::new(&config, renderer, Audio::disabled(), size, save);
         let game = create(&mut ctx);
         Ok(Self {
             ctx,
@@ -57,6 +62,10 @@ impl<G: Game> Headless<G> {
     pub fn frame(&mut self, dt: Duration) {
         simulate(&mut self.ctx, &mut self.game, dt);
         draw(&mut self.ctx, &mut self.game, self.target.view());
+        if let Some(fullscreen) = self.ctx.fullscreen_request.take() {
+            self.ctx.fullscreen = fullscreen;
+        }
+        self.ctx.save.auto_flush();
         self.ctx.input.end_frame();
     }
 

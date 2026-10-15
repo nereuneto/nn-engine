@@ -5,7 +5,7 @@ use mlua::{AnyUserData, Function, Lua, RegistryKey, Result, Table, Value, Variad
 use nn_app::Context;
 use nn_render::{Sprite, Text, TextureOptions};
 
-use crate::convert::{align, anchor, color, err, keys, mouse_button, opt, opt_color};
+use crate::convert::{align, anchor, channel, color, err, opt, opt_color};
 use crate::types::{LAnimation, LAnimator, LFont, LSheet, LSoundData, LTexture, expect, play};
 
 /// Chave do registro do Lua onde fica o contexto durante um callback.
@@ -282,111 +282,7 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     )?;
     nn.set("time", time)?;
 
-    // --- Entrada ---
-    let input = lua.create_table()?;
-    input.set(
-        "down",
-        lua.create_function(|lua, name: String| {
-            let ks = keys(&name)?;
-            with_ctx(lua, |c| Ok(ks.iter().any(|k| c.input.key_down(*k))))
-        })?,
-    )?;
-    input.set(
-        "pressed",
-        lua.create_function(|lua, name: String| {
-            let ks = keys(&name)?;
-            with_ctx(lua, |c| Ok(ks.iter().any(|k| c.input.key_pressed(*k))))
-        })?,
-    )?;
-    input.set(
-        "released",
-        lua.create_function(|lua, name: String| {
-            let ks = keys(&name)?;
-            with_ctx(lua, |c| Ok(ks.iter().any(|k| c.input.key_released(*k))))
-        })?,
-    )?;
-    input.set(
-        "axis",
-        lua.create_function(|lua, (neg, pos): (String, String)| {
-            let (n, p) = (keys(&neg)?, keys(&pos)?);
-            with_ctx(lua, |c| {
-                let down = |ks: &[nn_input::KeyCode]| ks.iter().any(|k| c.input.key_down(*k));
-                Ok(f32::from(i8::from(down(p)) - i8::from(down(n))))
-            })
-        })?,
-    )?;
-    input.set(
-        "wasd",
-        lua.create_function(|lua, ()| {
-            with_ctx(lua, |c| {
-                let v = c.input.wasd();
-                Ok((v.x, v.y))
-            })
-        })?,
-    )?;
-    input.set(
-        "arrows",
-        lua.create_function(|lua, ()| {
-            with_ctx(lua, |c| {
-                use nn_input::KeyCode::*;
-                let v = c.input.direction(ArrowLeft, ArrowRight, ArrowDown, ArrowUp);
-                Ok((v.x, v.y))
-            })
-        })?,
-    )?;
-    input.set(
-        "mouse_down",
-        lua.create_function(|lua, name: Option<String>| {
-            let b = mouse_button(name.as_deref().unwrap_or("left"))?;
-            with_ctx(lua, |c| Ok(c.input.mouse_down(b)))
-        })?,
-    )?;
-    input.set(
-        "mouse_pressed",
-        lua.create_function(|lua, name: Option<String>| {
-            let b = mouse_button(name.as_deref().unwrap_or("left"))?;
-            with_ctx(lua, |c| Ok(c.input.mouse_pressed(b)))
-        })?,
-    )?;
-    input.set(
-        "mouse_released",
-        lua.create_function(|lua, name: Option<String>| {
-            let b = mouse_button(name.as_deref().unwrap_or("left"))?;
-            with_ctx(lua, |c| Ok(c.input.mouse_released(b)))
-        })?,
-    )?;
-    input.set(
-        "mouse",
-        lua.create_function(|lua, ()| {
-            with_ctx(lua, |c| {
-                Ok(match c.input.cursor_position() {
-                    Some(p) => (Some(p.x), Some(p.y)),
-                    None => (None, None),
-                })
-            })
-        })?,
-    )?;
-    input.set(
-        "mouse_world",
-        lua.create_function(|lua, ()| {
-            with_ctx(lua, |c| {
-                Ok(match c.cursor_world() {
-                    Some(p) => (Some(p.x), Some(p.y)),
-                    None => (None, None),
-                })
-            })
-        })?,
-    )?;
-    input.set(
-        "scroll",
-        lua.create_function(|lua, ()| {
-            with_ctx(lua, |c| {
-                let s = c.input.scroll();
-                Ok((s.x, s.y))
-            })
-        })?,
-    )?;
-    nn.set("input", input)?;
+    nn.set("input", crate::input::table(lua)?)?;
 
     // --- Câmera ---
     let camera = lua.create_table()?;
@@ -466,6 +362,29 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
             with_ctx(lua, |c| {
                 let v = c.viewport();
                 Ok((v.x, v.y))
+            })
+        })?,
+    )?;
+    window.set(
+        "fullscreen",
+        lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.is_fullscreen())))?,
+    )?;
+    window.set(
+        "set_fullscreen",
+        lua.create_function(|lua, on: bool| {
+            with_ctx(lua, |c| {
+                c.set_fullscreen(on);
+                Ok(())
+            })
+        })?,
+    )?;
+    window.set(
+        "toggle_fullscreen",
+        lua.create_function(|lua, ()| {
+            with_ctx(lua, |c| {
+                let on = !c.is_fullscreen();
+                c.set_fullscreen(on);
+                Ok(on)
             })
         })?,
     )?;
@@ -571,13 +490,25 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     )?;
     audio.set(
         "volume",
-        lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.audio.master_volume())))?,
+        lua.create_function(|lua, ch: Option<String>| {
+            let ch = ch.as_deref().map(channel).transpose()?;
+            with_ctx(lua, |c| {
+                Ok(match ch {
+                    Some(ch) => c.audio.channel_volume(ch),
+                    None => c.audio.master_volume(),
+                })
+            })
+        })?,
     )?;
     audio.set(
         "set_volume",
-        lua.create_function(|lua, v: f32| {
+        lua.create_function(|lua, (v, ch): (f32, Option<String>)| {
+            let ch = ch.as_deref().map(channel).transpose()?;
             with_ctx(lua, |c| {
-                c.audio.set_master_volume(v);
+                match ch {
+                    Some(ch) => c.audio.set_channel_volume(ch, v),
+                    None => c.audio.set_master_volume(v),
+                }
                 Ok(())
             })
         })?,
@@ -651,6 +582,8 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     nn.set("physics", crate::physics::table(lua)?)?;
     nn.set("particles", crate::particles::constructor(lua)?)?;
     nn.set("tilemap", crate::tilemap::table(lua)?)?;
+    nn.set("ui", crate::ui::table(lua)?)?;
+    nn.set("save", crate::save::table(lua)?)?;
 
     lua.globals().set("nn", nn)?;
 

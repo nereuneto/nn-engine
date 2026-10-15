@@ -10,7 +10,7 @@ use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::window::{Window, WindowId};
+use winit::window::{Fullscreen, Window, WindowId};
 
 use crate::context::{draw, simulate};
 use crate::{AppConfig, Context, Game};
@@ -77,6 +77,9 @@ struct State {
     gpu: GpuContext,
     ctx: Context,
     last_frame: Instant,
+    focused: bool,
+    #[cfg(feature = "gamepad")]
+    gamepads: crate::gamepad::Gamepads,
 }
 
 impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
@@ -90,7 +93,12 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
         let attrs = Window::default_attributes()
             .with_title(self.config.title.clone())
             .with_inner_size(LogicalSize::new(self.config.size.0, self.config.size.1))
-            .with_resizable(self.config.resizable);
+            .with_resizable(self.config.resizable)
+            .with_fullscreen(
+                self.config
+                    .fullscreen
+                    .then_some(Fullscreen::Borderless(None)),
+            );
         let window = Arc::new(event_loop.create_window(attrs)?);
         let surface = instance.create_surface(window.clone())?;
         let gpu = pollster::block_on(GpuContext::new(instance, Some(&surface)))?;
@@ -118,8 +126,14 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
 
         let renderer = Renderer::new(&gpu, format);
         let viewport = UVec2::new(surface_config.width, surface_config.height);
-        let mut ctx = Context::new(&self.config, renderer, Audio::new(), viewport);
+        let save = self.config.open_storage();
+        if let Some(path) = save.path() {
+            log::info!("dados salvos em: {}", path.display());
+        }
+        let mut ctx = Context::new(&self.config, renderer, Audio::new(), viewport, save);
         log::info!("pasta de assets: {}", ctx.assets.root().display());
+        #[cfg(feature = "gamepad")]
+        let gamepads = crate::gamepad::Gamepads::new(&mut ctx.input);
         let create = self.create.take().expect("o jogo só é criado uma vez");
         self.game = Some(create(&mut ctx));
 
@@ -130,6 +144,9 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
             gpu,
             ctx,
             last_frame: Instant::now(),
+            focused: true,
+            #[cfg(feature = "gamepad")]
+            gamepads,
         });
         Ok(())
     }
@@ -154,6 +171,8 @@ impl State {
         let now = Instant::now();
         let dt = now - self.last_frame;
         self.last_frame = now;
+        #[cfg(feature = "gamepad")]
+        self.gamepads.poll(&mut self.ctx.input, self.focused);
         simulate(&mut self.ctx, game, dt);
 
         let size = self.window.inner_size();
@@ -182,6 +201,12 @@ impl State {
             }
         }
 
+        if let Some(fullscreen) = self.ctx.fullscreen_request.take() {
+            self.window
+                .set_fullscreen(fullscreen.then_some(Fullscreen::Borderless(None)));
+        }
+        self.ctx.fullscreen = self.window.fullscreen().is_some();
+        self.ctx.save.auto_flush();
         self.ctx.input.end_frame();
     }
 }
@@ -205,11 +230,16 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> ApplicationHandler for App<G, F> {
         state.ctx.input.process_event(&event);
 
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                state.ctx.save.flush_logged();
+                event_loop.exit();
+            }
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
+            WindowEvent::Focused(focused) => state.focused = focused,
             WindowEvent::RedrawRequested => {
                 state.frame(game);
                 if state.ctx.exit_requested {
+                    state.ctx.save.flush_logged();
                     event_loop.exit();
                 }
             }

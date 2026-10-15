@@ -1,6 +1,6 @@
 [package]
 name = "nn-input"
-description = "Estado de teclado e mouse da nn-engine."
+description = "Estado de teclado, mouse e controles da nn-engine."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

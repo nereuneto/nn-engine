@@ -34,8 +34,10 @@ Todos os caminhos (`nn.assets.*`, `nn.scene.*`, `require`) são relativos à pas
 ```lua
 return {
   title = "Meu jogo",
+  id = "meu-jogo",        -- nome da pasta onde o progresso é salvo (padrão: o título)
   width = 1280,           -- tamanho inicial da janela
   height = 720,
+  fullscreen = false,     -- começar em tela cheia
   start = "main.lua",     -- cena inicial
   clear_color = "#1A1F1C",
   vsync = true,
@@ -105,7 +107,7 @@ Coloque `overlay = true` na tabela para a cena de baixo continuar desenhada por 
 local pausa = { overlay = true }
 ```
 
-**Dica:** use `nn.input.down` (tecla segurada) em `fixed_update` e `nn.input.pressed` (apertou agora) em `update`. O `fixed_update` pode rodar zero ou várias vezes no mesmo frame.
+**Dica:** use `nn.input.down` (tecla segurada) em `fixed_update` e `nn.input.pressed` (apertou agora) em `update`. O `fixed_update` pode rodar zero ou várias vezes no mesmo frame. Para o jogo funcionar com teclado e controle ao mesmo tempo, use [ações](#ações).
 
 **Recarga:** ao salvar, as funções da cena são trocadas mas `self` é mantido. O `enter` não roda de novo; se precisar refazer algo, use `reload`.
 
@@ -155,6 +157,57 @@ Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `f
 
 Nomes de teclas: `"a"` a `"z"`, `"0"` a `"9"`, `"space"`, `"enter"`, `"escape"`, `"tab"`, `"backspace"`, `"delete"`, `"shift"`, `"ctrl"`, `"alt"`, `"left"`, `"right"`, `"up"`, `"down"`, `"f1"` a `"f12"`.
 
+| Função | Descrição |
+|---|---|
+| `move()` | Direção de movimento `dx, dy` juntando WASD, setas, direcional e analógico esquerdo. Comprimento de 0 a 1 (o analógico permite andar devagar). |
+| `any_pressed()` | Alguma tecla, botão do mouse ou botão do controle foi apertado neste frame ("aperte qualquer tecla"). |
+| `last_device()` | Último dispositivo usado: `"keyboard"`, `"mouse"` ou `"gamepad"`. Útil para mostrar "aperte Enter" ou "aperte A". |
+
+#### Controles
+
+Controles (gamepads) funcionam sem configuração: Xbox, PlayStation, Switch Pro e a maioria dos genéricos. Podem ser conectados e desconectados com o jogo aberto.
+
+| Função | Descrição |
+|---|---|
+| `pad_down(botão, n)` | Botão segurado. Sem `n`, vale qualquer controle; com `n`, só o controle `n` (1, 2...). |
+| `pad_pressed(botão, n)`, `pad_released(botão, n)` | Apertou / soltou neste frame. |
+| `pad_axis(eixo, n)` | Valor de um eixo, já com zona morta. |
+| `stick(lado, n)` | Analógico `"left"` (padrão) ou `"right"` como `x, y` (Y para cima), com zona morta. |
+| `pads()` | Lista dos controles conectados: `{ { slot = 1, name = "Xbox Controller" }, ... }`. |
+| `pad_count()` | Quantos controles estão conectados. |
+| `set_deadzone(v)` | Zona morta dos analógicos (padrão 0.2). |
+
+Botões, pela posição (nomes do Xbox): `"a"` (baixo), `"b"` (direita), `"x"` (esquerda), `"y"` (cima), `"lb"`, `"rb"`, `"lt"`, `"rt"`, `"back"`, `"start"`, `"ls"`, `"rs"` (apertar os analógicos) e o direcional `"up"`, `"down"`, `"left"`, `"right"`. No controle de PlayStation, `"a"` é o X (cruz); no do Switch, é o B.
+
+Eixos: `"leftx"`, `"lefty"`, `"rightx"`, `"righty"` (de -1 a 1, Y para cima) e os gatilhos `"lt"`, `"rt"` (de 0 a 1).
+
+#### Ações
+
+Uma ação dá nome a algo que o jogador faz e liga várias entradas a ela. O jogo pergunta pela ação, não pela tecla, e funciona igual no teclado e no controle:
+
+```lua
+nn.input.bind("pular", { "space", "w", "pad:a" })
+nn.input.bind("esquerda", { "left", "a", "pad:left", "pad:leftx-" })
+nn.input.bind("direita", { "right", "d", "pad:right", "pad:leftx+" })
+
+-- no update:
+if nn.input.action_pressed("pular") then pular() end
+-- no fixed_update (com o analógico, inclinar pouco anda devagar):
+local dir = nn.input.action_axis("esquerda", "direita")
+```
+
+Entradas: nomes de teclas, `"mouse:left"` (ou `right`, `middle`), `"pad:<botão>"` e `"pad:<eixo>+"` / `"pad:<eixo>-"` (o eixo conta como apertado a partir da metade).
+
+| Função | Descrição |
+|---|---|
+| `bind(ação, entradas)` | Cria ou redefine a ação. As ações valem para todas as cenas. |
+| `action(ação)` | Alguma entrada da ação está segurada. |
+| `action_pressed(ação)`, `action_released(ação)` | A ação começou / terminou neste frame. Segurar uma segunda entrada da mesma ação não conta como novo aperto. |
+| `action_value(ação)` | Intensidade de 0 a 1: 1 para teclas e botões, o quanto o eixo está inclinado. |
+| `action_axis(neg, pos)` | Eixo de -1 a 1 a partir de duas ações. |
+
+Usar uma ação que não foi criada com `bind` é um erro (para pegar erros de digitação).
+
 ### nn.assets
 
 | Função | Devolve |
@@ -169,11 +222,11 @@ Cada arquivo é carregado uma vez; pedir de novo devolve o mesmo. Imagens e sons
 
 ### nn.audio
 
-`nn.audio.play(som, opts)` toca e devolve o som tocando. Opções: `volume` (1 = normal), `speed` (2 = uma oitava acima), `pan` (-1 esquerda a 1 direita), `loop`.
+`nn.audio.play(som, opts)` toca e devolve o som tocando. Opções: `volume` (1 = normal), `speed` (2 = uma oitava acima), `pan` (-1 esquerda a 1 direita), `loop` e `channel` (`"effects"`, o padrão, ou `"music"`).
 
 O som tocando tem `:stop()`, `:fade_out(segundos)`, `:pause()`, `:resume()`, `:set_volume(v)`, `:set_speed(v)`, `:set_pan(v)` e `:playing()`.
 
-`nn.audio.set_volume(v)` e `nn.audio.volume()` controlam o volume geral.
+`nn.audio.set_volume(v)` e `nn.audio.volume()` controlam o volume geral. Com um canal, controlam só ele, inclusive os sons que já estão tocando: `nn.audio.set_volume(0.5, "music")`. É o que uma tela de opções precisa para separar música e efeitos.
 
 ### Animação
 
@@ -324,6 +377,71 @@ function cena:draw() brilho:draw(); fumaca:draw() end
 
 O emissor tem `x`, `y`, `emitting` e `rate` (leitura e escrita), `count` e `finished`, e os métodos `:burst(n, x, y)`, `:set_position(x, y)`, `:update(dt)`, `:draw()`, `:draw_screen()` e `:clear()`.
 
+### nn.ui
+
+Menus com botões, opções e barras de volume. Funcionam com **mouse, teclado e controle** sem nenhum código extra: setas, WASD, direcional ou analógico mudam o foco (cima e baixo) e o valor (esquerda e direita); Enter, Espaço ou o botão A confirmam; o mouse foca ao passar por cima e confirma com clique.
+
+A interface é montada **a cada frame, dentro do `draw`**, e cada item já devolve o resultado:
+
+```lua
+function menu:draw()
+  local ui = nn.ui.panel("principal", { title = "Meu jogo" })
+  if ui:button("Jogar") then nn.scene.switch("cenas/fase.lua") end
+  self.volume = ui:slider("Volume", self.volume)
+  self.tela_cheia = ui:toggle("Tela cheia", self.tela_cheia)
+  if ui:button("Sair") then nn.quit() end
+  ui:finish()
+end
+```
+
+`nn.ui.panel(nome, opts)` abre um painel. O `nome` faz o painel lembrar qual item estava com foco. Opções: `title`, `width`, `x` e `y` (ponto da tela; padrão: centro), `anchor` (que ponto do painel fica em `x, y`; padrão `"center"`), `background` (cor).
+
+| Método | Devolve |
+|---|---|
+| `ui:button(texto)` | `true` no frame em que foi acionado. |
+| `ui:toggle(texto, valor, opts)` | `novo_valor, mudou`. Mostra "Sim"/"Não"; mude com `{ on = "Ligado", off = "Desligado" }`. |
+| `ui:slider(texto, valor, opts)` | `novo_valor, mudou`. Opções `min` (0), `max` (1) e `step` (um décimo do intervalo). De 0 a 1 aparece em porcentagem. Também dá para clicar e arrastar a barra. |
+| `ui:choice(texto, opções, índice)` | `novo_índice, mudou`. Escolhe entre textos com esquerda e direita: `ui:choice("Dificuldade", { "Fácil", "Normal" }, self.dif)`. |
+| `ui:label(texto, opts)` | Texto informativo, sem foco. Opções `color` e `size` (multiplica o tamanho do tema). |
+| `ui:space(altura)` | Espaço vazio. |
+| `ui:back()` | `true` se o jogador pediu para voltar (Esc, Backspace ou o botão B do controle). |
+| `ui:focus()` | Número do item com foco (1, 2...). |
+| `ui:finish()` | Desenha o painel. Se esquecer, a engine desenha sozinha no fim do `draw`. |
+
+Detalhes que já vêm resolvidos:
+
+- **Só a cena do topo responde.** Numa pausa por cima do jogo, o menu de baixo continua aparecendo, mas só o de cima recebe teclas e cliques.
+- **O aperto que abriu o painel não conta.** O Esc que abriu a pausa não aciona o "Voltar" da pausa no mesmo frame.
+- **Trocar de cena num botão** (`nn.scene.*` dentro do `draw`) acontece no frame seguinte.
+- **Escala:** a interface acompanha a altura da janela (pensada para 720 pixels), então fica do mesmo tamanho relativo em tela cheia.
+
+`nn.ui.theme(opts)` muda a aparência de todos os painéis. Opções: `font`, `text_size`, `title_size`, cores `text_color`, `label_color`, `panel_color`, `button_color`, `focus_color`, `focus_text_color`, `accent_color` (barras), medidas `width`, `padding`, `spacing`, `row_height`, `scale` (número ou `"auto"`), textos `on_text`, `off_text` e sons `move_sound` (mudar foco ou valor) e `confirm_sound` (`false` remove).
+
+`nn.ui.set_focus(nome, n)` põe o foco no item `n` de um painel (ex.: "Continuar" ao abrir a pausa); `nn.ui.reset(nome)` esquece o foco.
+
+### nn.save
+
+Dados que continuam existindo depois de fechar o jogo: recordes, opções, progresso.
+
+```lua
+local recorde = nn.save.get("recorde", 0)    -- 0 se ainda não existe
+if pontos > recorde then nn.save.set("recorde", pontos) end
+
+nn.save.set("opcoes", { musica = 0.7, tela_cheia = true })
+local opcoes = nn.save.get("opcoes", {})
+```
+
+| Função | Descrição |
+|---|---|
+| `get(chave, padrão)` | Valor salvo, ou `padrão` se não existir. |
+| `set(chave, valor)` | Guarda números, textos, booleanos e tabelas com eles. `nil` apaga. |
+| `remove(chave)`, `clear()` | Apaga uma chave / tudo. |
+| `keys()` | Lista das chaves salvas. |
+| `flush()` | Grava no disco agora. Normalmente não é preciso: a engine grava sozinha (no máximo uma vez por segundo) e ao fechar o jogo. |
+| `path()` | Onde fica o arquivo. |
+
+O arquivo é um `save.json` legível em `~/.local/share/<id>/` no Linux e em `%APPDATA%\<id>\data\` no Windows, onde `<id>` vem do `id` do `config.lua` (ou do título). Defina o `id` para o progresso não se perder se o título mudar. A gravação é segura: se o computador desligar no meio, o arquivo anterior continua inteiro.
+
 ### nn.camera
 
 `position()`, `set_position(x, y)`, `zoom()`, `set_zoom(z)`, `rotation()`, `set_rotation(r)`, `to_world(sx, sy)`, `to_screen(wx, wy)`.
@@ -338,13 +456,15 @@ O emissor tem `x`, `y`, `emitting` e `rate` (leitura e escrita), `count` e `fini
 | `switch(caminho, args)` | Fecha todas e abre esta (ex.: voltar ao menu). |
 | `nn.quit()` | Fecha o jogo. |
 
-A troca acontece ao final do `update`.
+A troca acontece ao final do `update`. Pedidos feitos no `draw` (como num botão de menu) valem no frame seguinte.
 
 ### nn.time e nn.window
 
 `nn.time.delta()`, `elapsed()`, `fixed_delta()`, `alpha()` (fração entre passos fixos, para interpolar posições no `draw`), `frame()`.
 
 `nn.window.size()` devolve `largura, altura`; `nn.window.set_clear_color(cor)` muda a cor de fundo.
+
+`nn.window.fullscreen()` diz se está em tela cheia; `nn.window.set_fullscreen(true/false)` e `nn.window.toggle_fullscreen()` mudam (no fim do frame). A janela muda de tamanho, então use `nn.window.size()` a cada frame em vez de guardar o tamanho.
 
 ### Outros
 

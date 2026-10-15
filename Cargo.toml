@@ -53,8 +53,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 fontdue = "0.9"
 # Lua 5.4 compilada junto (vendored): não precisa instalar nada.
-mlua = { version = "0.12", features = ["lua54", "vendored"] }
+mlua = { version = "0.12", features = ["lua54", "vendored", "serialize"] }
 kira = { version = "0.12", default-features = false, features = ["cpal", "wav", "pcm", "ogg", "vorbis", "mp3"] }
+# Controles. No Linux, compilar precisa do pacote libudev-dev.
+gilrs = "0.11"
+# Pasta de dados do usuário em cada sistema (para salvar o progresso).
+directories = "6"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

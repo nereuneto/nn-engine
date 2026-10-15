@@ -37,10 +37,13 @@ pub use nn_app::{AppConfig, AppError, Context, Game, run};
 /// Importa de uma vez os tipos mais usados.
 pub mod prelude {
     pub use glam::{UVec2, Vec2};
-    pub use nn_app::{AppConfig, AppError, Context, Game, Scene, SceneStack, Transition};
-    pub use nn_audio::{Audio, PlayOptions, Sound, SoundId};
+    pub use nn_app::{
+        AppConfig, AppError, Context, Game, Panel, PanelOptions, Scene, SceneStack, Storage, Theme,
+        Transition,
+    };
+    pub use nn_audio::{Audio, Channel, PlayOptions, Sound, SoundId};
     pub use nn_core::{Color, Time};
-    pub use nn_input::{Input, KeyCode, MouseButton};
+    pub use nn_input::{AxisDir, Binding, Device, Input, KeyCode, MouseButton, PadAxis, PadButton};
     pub use nn_render::{
         Align, Anchor, Animation, AnimationPlayer, Blend, Camera2D, EmitArea, Filter, FontId,
         ParticleConfig, ParticleEmitter, Playback, Rect, Sprite, SpriteSheet, Text, TextureId,

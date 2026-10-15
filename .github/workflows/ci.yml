@@ -35,11 +35,11 @@ jobs:
 
       # Driver Vulkan por software (lavapipe): permite rodar os testes de
       # renderização de verdade no CI, sem GPU física.
-      - name: Driver de GPU por software e ALSA
+      - name: Driver de GPU por software, ALSA e udev
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers libasound2-dev
+          sudo apt-get install -y mesa-vulkan-drivers libasound2-dev libudev-dev
           echo "NN_REQUIRE_GPU=1" >> "$GITHUB_ENV"
 
       - name: Clippy
@@ -61,5 +61,5 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.88
       - uses: Swatinem/rust-cache@v2
       - name: ALSA
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - run: cargo check --workspace --all-targets
