@@ -1,0 +1,15 @@
+[package]
+name = "nn-audio"
+description = "Áudio da nn-engine: efeitos sonoros e música, com kira."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+kira.workspace = true
+log.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
