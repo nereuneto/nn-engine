@@ -32,9 +32,9 @@ function titulo:draw()
 
   -- O menu: funciona com mouse, teclado e controle.
   local ui = nn.ui.panel("titulo", { x = w / 2, y = h * 0.48, width = 360 })
-  if ui:button("Jogar") then nn.scene.switch("cenas/fase.lua") end
+  if ui:button("Jogar") then nn.scene.switch("cenas/fase.lua", nil, { fade = 0.6 }) end
   if ui:button("Opções") then nn.scene.push("cenas/opcoes.lua") end
-  if ui:button("Sair") then nn.quit() end
+  if ui:button("Sair") then nn.quit({ fade = 0.4 }) end
   local rec = jogo.recordes()
   if rec.tempo then
     ui:label(("Recorde: %s  ·  %d moedas"):format(util.tempo(rec.tempo), rec.moedas or 0), { size = 0.8 })

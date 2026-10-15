@@ -43,8 +43,8 @@ function vitoria:draw()
 
   if self.t > ESPERA_MENU then
     local ui = nn.ui.panel("vitoria", { x = w / 2, y = h * 0.74, width = 340 })
-    if ui:button("Jogar de novo") then nn.scene.switch("cenas/fase.lua") end
-    if ui:button("Título") then nn.scene.switch("cenas/titulo.lua") end
+    if ui:button("Jogar de novo") then nn.scene.switch("cenas/fase.lua", nil, { fade = 0.5 }) end
+    if ui:button("Título") then nn.scene.switch("cenas/titulo.lua", nil, { fade = 0.6 }) end
     ui:finish()
   end
 end

@@ -14,6 +14,15 @@ Pré-requisito: Rust 1.88 ou mais recente, instalado pelo [rustup](https://rustu
 
 A primeira compilação demora alguns minutos (o wgpu é grande); as seguintes são rápidas.
 
+### Criar um jogo novo
+
+```sh
+cargo nn novo ../meu-jogo   # cria um jogo pequeno e completo, pronto para mudar
+cargo nn ../meu-jogo        # joga
+```
+
+O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado do jeito recomendado (cenas, ações de controle, menus). `--titulo "Meu Jogo"` escolhe o título e `--modelo minimo` cria só uma cena. Detalhes em [docs/lua.md](docs/lua.md#começando).
+
 ### Jogos de demonstração em Lua
 
 ```sh
@@ -116,7 +125,7 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, raycast |
 | `nn-tilemap` | Tilemaps com camadas, tilesets e objetos; importação do editor Tiled (JSON) |
 | `nn-script` | Scripting em Lua: API `nn.*`, cenas em Lua, recarga ao salvar, tela de erro |
-| `nn-run` | Ferramenta `nn` (roda e exporta projetos Lua) e `nn-jogo`, o executável dos jogos exportados |
+| `nn-run` | Ferramenta `nn` (cria, roda e exporta projetos Lua, com os modelos de `nn novo`) e `nn-jogo`, o executável dos jogos exportados |
 | `nn-engine` (raiz) | Fachada que reexporta tudo, com `prelude` |
 
 ### Loop principal
@@ -193,6 +202,17 @@ nn_engine::run(AppConfig::new("Jogo"), |ctx| SceneStack::new(ctx, Menu))
 ```
 
 Transições: `Push` (abre por cima), `Pop` (volta), `Replace` (troca a atual), `Switch` (fecha todas e abre uma) e `Quit`. Em Lua, o mesmo vale com `nn.scene.push/pop/replace/switch`.
+
+Qualquer transição pode escurecer a tela, trocar com ela coberta e clarear de novo: `Transition::Switch(Box::new(Fase::new(ctx))).fade(0.6)` (ou `.fade_with(segundos, cor)`). Enquanto escurece, a cena que sai fica parada e os menus não respondem.
+
+## Efeitos de tela
+
+```rust,ignore
+ctx.shake(16.0, 0.4);                                  // tremor: pixels, segundos
+ctx.flash(Color::hex(0xFF3030).with_alpha(0.4), 0.3);  // flash que some aos poucos
+```
+
+O tremor só move o mundo (o HUD e os menus ficam parados) e não muda `ctx.camera.position`. Vários tremores somam e diminuem até parar.
 
 ## Controles e ações
 

@@ -24,7 +24,8 @@ pub(crate) enum SceneRequest {
 /// Dados compartilhados guardados no estado Lua.
 #[derive(Debug, Default)]
 pub(crate) struct Shared {
-    pub request: Option<SceneRequest>,
+    /// Troca de cena pedida e o escurecimento (se houver).
+    pub request: Option<(SceneRequest, Option<nn_app::Fade>)>,
 }
 
 /// Acessa o contexto da engine. Só funciona dentro dos callbacks da cena.
@@ -38,12 +39,31 @@ pub(crate) fn with_ctx<R>(lua: &Lua, f: impl FnOnce(&mut Context) -> Result<R>) 
     ud.borrow_mut_scoped::<Context, _>(f)?
 }
 
-fn request(lua: &Lua, r: SceneRequest) -> Result<()> {
+fn request(lua: &Lua, r: SceneRequest, opts: Option<&Table>) -> Result<()> {
+    let fade = fade_options(opts)?;
     let mut shared = lua
         .app_data_mut::<Shared>()
         .ok_or_else(|| err("estado interno do script ausente"))?;
-    shared.request = Some(r);
+    shared.request = Some((r, fade));
     Ok(())
+}
+
+/// Opções de troca de cena: `{ fade = segundos, color = cor }`.
+fn fade_options(opts: Option<&Table>) -> Result<Option<nn_app::Fade>> {
+    let duration = match opt::<Value>(opts, "fade")? {
+        None | Some(Value::Nil) | Some(Value::Boolean(false)) => return Ok(None),
+        Some(Value::Boolean(true)) => 0.5,
+        Some(v) => match v.as_f64() {
+            Some(s) if s >= 0.0 => s as f32,
+            _ => {
+                return Err(err(
+                    "fade: use a duração em segundos (ex.: fade = 0.5) ou true",
+                ));
+            }
+        },
+    };
+    let color = opt_color(opts, "color")?.unwrap_or(nn_core::Color::BLACK);
+    Ok(Some(nn_app::Fade { duration, color }))
 }
 
 fn args_key(lua: &Lua, args: Value) -> Result<Option<RegistryKey>> {
@@ -245,7 +265,18 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     nn.set("version", env!("CARGO_PKG_VERSION"))?;
 
     nn.set("draw", draw_table(lua, Space::World)?)?;
-    nn.set("screen", draw_table(lua, Space::Screen)?)?;
+    let screen = draw_table(lua, Space::Screen)?;
+    screen.set(
+        "flash",
+        lua.create_function(|lua, (col, seconds): (Value, Option<f32>)| {
+            let col = color(&col)?;
+            with_ctx(lua, |c| {
+                c.flash(col, seconds.unwrap_or(0.3));
+                Ok(())
+            })
+        })?,
+    )?;
+    nn.set("screen", screen)?;
 
     nn.set(
         "text_size",
@@ -313,6 +344,24 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
             }
             with_ctx(lua, |c| {
                 c.camera.zoom = z;
+                Ok(())
+            })
+        })?,
+    )?;
+    camera.set(
+        "shake",
+        lua.create_function(|lua, (strength, seconds): (f32, Option<f32>)| {
+            with_ctx(lua, |c| {
+                c.shake(strength, seconds.unwrap_or(0.3));
+                Ok(())
+            })
+        })?,
+    )?;
+    camera.set(
+        "stop_shake",
+        lua.create_function(|lua, ()| {
+            with_ctx(lua, |c| {
+                c.stop_shake();
                 Ok(())
             })
         })?,
@@ -550,33 +599,37 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     let scene = lua.create_table()?;
     scene.set(
         "push",
-        lua.create_function(|lua, (path, args): (String, Value)| {
+        lua.create_function(|lua, (path, args, opts): (String, Value, Option<Table>)| {
             let key = args_key(lua, args)?;
-            request(lua, SceneRequest::Push(path, key))
+            request(lua, SceneRequest::Push(path, key), opts.as_ref())
         })?,
     )?;
     scene.set(
         "replace",
-        lua.create_function(|lua, (path, args): (String, Value)| {
+        lua.create_function(|lua, (path, args, opts): (String, Value, Option<Table>)| {
             let key = args_key(lua, args)?;
-            request(lua, SceneRequest::Replace(path, key))
+            request(lua, SceneRequest::Replace(path, key), opts.as_ref())
         })?,
     )?;
     scene.set(
         "switch",
-        lua.create_function(|lua, (path, args): (String, Value)| {
+        lua.create_function(|lua, (path, args, opts): (String, Value, Option<Table>)| {
             let key = args_key(lua, args)?;
-            request(lua, SceneRequest::Switch(path, key))
+            request(lua, SceneRequest::Switch(path, key), opts.as_ref())
         })?,
     )?;
     scene.set(
         "pop",
-        lua.create_function(|lua, ()| request(lua, SceneRequest::Pop))?,
+        lua.create_function(|lua, opts: Option<Table>| {
+            request(lua, SceneRequest::Pop, opts.as_ref())
+        })?,
     )?;
     nn.set("scene", scene)?;
     nn.set(
         "quit",
-        lua.create_function(|lua, ()| request(lua, SceneRequest::Quit))?,
+        lua.create_function(|lua, opts: Option<Table>| {
+            request(lua, SceneRequest::Quit, opts.as_ref())
+        })?,
     )?;
 
     nn.set("physics", crate::physics::table(lua)?)?;

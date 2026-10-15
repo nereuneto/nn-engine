@@ -38,8 +38,8 @@ pub use nn_app::{AppConfig, AppError, Context, Game, run};
 pub mod prelude {
     pub use glam::{UVec2, Vec2};
     pub use nn_app::{
-        AppConfig, AppError, Context, Game, Panel, PanelOptions, Scene, SceneStack, Storage, Theme,
-        Transition,
+        AppConfig, AppError, Context, Fade, Game, Panel, PanelOptions, Scene, SceneStack, Storage,
+        Theme, Transition,
     };
     pub use nn_audio::{Audio, Channel, PlayOptions, Sound, SoundId};
     pub use nn_core::{Color, Time};

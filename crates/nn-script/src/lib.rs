@@ -195,7 +195,7 @@ impl ScriptRuntime {
         })
     }
 
-    fn take_request(&self) -> Option<SceneRequest> {
+    fn take_request(&self) -> Option<(SceneRequest, Option<nn_app::Fade>)> {
         self.inner
             .lua
             .app_data_mut::<Shared>()
@@ -525,19 +525,20 @@ impl Scene for LuaScene {
             return Transition::Quit;
         }
 
-        match self.runtime.take_request() {
-            None => Transition::None,
-            Some(SceneRequest::Pop) => Transition::Pop,
-            Some(SceneRequest::Quit) => Transition::Quit,
-            Some(SceneRequest::Push(path, args)) => {
-                Transition::Push(Box::new(LuaScene::new(self.runtime.clone(), path, args)))
-            }
-            Some(SceneRequest::Replace(path, args)) => {
-                Transition::Replace(Box::new(LuaScene::new(self.runtime.clone(), path, args)))
-            }
-            Some(SceneRequest::Switch(path, args)) => {
-                Transition::Switch(Box::new(LuaScene::new(self.runtime.clone(), path, args)))
-            }
+        let Some((request, fade)) = self.runtime.take_request() else {
+            return Transition::None;
+        };
+        let scene = |path, args| Box::new(LuaScene::new(self.runtime.clone(), path, args));
+        let transition = match request {
+            SceneRequest::Pop => Transition::Pop,
+            SceneRequest::Quit => Transition::Quit,
+            SceneRequest::Push(path, args) => Transition::Push(scene(path, args)),
+            SceneRequest::Replace(path, args) => Transition::Replace(scene(path, args)),
+            SceneRequest::Switch(path, args) => Transition::Switch(scene(path, args)),
+        };
+        match fade {
+            Some(f) => transition.fade_with(f.duration, f.color),
+            None => transition,
         }
     }
 

@@ -4,6 +4,17 @@ A nn-engine roda jogos escritos inteiramente em Lua (5.4). Não é preciso insta
 
 ## Começando
 
+Para criar um jogo novo, pronto para rodar:
+
+```sh
+cargo nn novo ../meu-jogo     # cria a pasta com um jogo pequeno e completo
+cargo nn ../meu-jogo          # joga
+```
+
+O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"` e `--modelo minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
+
+Para ver jogos prontos:
+
 ```sh
 cargo nn jogos/demo         # menu, coletar moedas, pausa
 cargo nn jogos/plataforma   # plataforma com mapa do Tiled e física
@@ -139,6 +150,8 @@ Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `f
 `align` alinha as linhas de um texto com `\n`: `left`, `center`, `right`.
 
 `nn.text_size(texto, opts)` devolve `largura, altura` sem desenhar.
+
+`nn.screen.flash(cor, duração)` pinta a tela inteira com a cor, sumindo aos poucos (padrão 0,3 s). Use uma cor com transparência para um efeito mais leve: `nn.screen.flash("#FF000066", 0.25)` ao levar dano.
 
 ### nn.input
 
@@ -446,17 +459,29 @@ O arquivo é um `save.json` legível em `~/.local/share/<id>/` no Linux e em `%A
 
 `position()`, `set_position(x, y)`, `zoom()`, `set_zoom(z)`, `rotation()`, `set_rotation(r)`, `to_world(sx, sy)`, `to_screen(wx, wy)`.
 
+`nn.camera.shake(força, duração)` faz a câmera tremer: `força` é o deslocamento máximo em pixels da tela e o tremor diminui até parar em `duração` segundos (padrão 0,3). Tremores somam; `nn.camera.stop_shake()` para na hora. Só o mundo treme: o que é desenhado com `nn.screen` (HUD, menus) fica parado, e `nn.camera.position()` continua devolvendo a posição sem o tremor.
+
 ### nn.scene
 
 | Função | Efeito |
 |---|---|
-| `push(caminho, args)` | Abre a cena por cima da atual. |
-| `pop()` | Fecha a cena atual e volta para a de baixo. |
-| `replace(caminho, args)` | Troca a cena atual. |
-| `switch(caminho, args)` | Fecha todas e abre esta (ex.: voltar ao menu). |
-| `nn.quit()` | Fecha o jogo. |
+| `push(caminho, args, opts)` | Abre a cena por cima da atual. |
+| `pop(opts)` | Fecha a cena atual e volta para a de baixo. |
+| `replace(caminho, args, opts)` | Troca a cena atual. |
+| `switch(caminho, args, opts)` | Fecha todas e abre esta (ex.: voltar ao menu). |
+| `nn.quit(opts)` | Fecha o jogo. |
 
 A troca acontece ao final do `update`. Pedidos feitos no `draw` (como num botão de menu) valem no frame seguinte.
+
+**Escurecer e clarear:** com `opts = { fade = segundos }`, a tela escurece, a cena troca com a tela coberta e a tela clareia de novo (metade do tempo para cada lado). `color` muda a cor (padrão preto); `fade = true` usa 0,5 s.
+
+```lua
+nn.scene.switch("cenas/fase.lua", nil, { fade = 0.6 })
+nn.scene.switch("cenas/titulo.lua", nil, { fade = 1, color = "#FFFFFF" })
+nn.quit({ fade = 0.4 })
+```
+
+Enquanto a tela escurece, a cena que está saindo continua desenhada mas fica parada (sem `update`) e os menus não respondem, então um segundo aperto não dispara outra troca. A cena nova já roda enquanto a tela clareia.
 
 ### nn.time e nn.window
 
