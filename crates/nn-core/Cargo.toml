@@ -1,0 +1,13 @@
+[package]
+name = "nn-core"
+description = "Tipos fundamentais da nn-engine: tempo, timestep fixo e cores."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+bytemuck.workspace = true
+
+[lints]
+workspace = true

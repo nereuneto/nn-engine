@@ -1,0 +1,21 @@
+[package]
+name = "nn-app"
+description = "Janela, loop principal e integração entre os módulos da nn-engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+nn-core.workspace = true
+nn-input.workspace = true
+nn-render.workspace = true
+wgpu.workspace = true
+winit.workspace = true
+glam.workspace = true
+pollster.workspace = true
+log.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
