@@ -247,19 +247,12 @@ function fase:draw()
   -- Câmera: segue olhando um pouco à frente, sem sair do mapa. O zoom
   -- acompanha a altura da janela, então a tela cheia mostra o mesmo pedaço
   -- da fase, só que maior.
-  local w, h = nn.window.size()
   nn.camera.set_zoom(util.escala())
-  local zoom = nn.camera.zoom()
-  local vw, vh = w / zoom, h / zoom
-  local cx, cy = nn.camera.position()
-  local t = 1 - math.exp(-5 * nn.time.delta())
-  cx = util.lerp(cx, x + (self.esquerda and -90 or 90), t)
-  cy = util.lerp(cy, y + 80, t)
-  cx = util.clamp(cx, vw / 2, math.max(vw / 2, self.mapa.world_width - vw / 2))
-  cy = util.clamp(cy, vh / 2, math.max(vh / 2, self.mapa.world_height - vh / 2))
-  nn.camera.set_position(cx, cy)
+  nn.camera.follow(x, y, {
+    offset_x = self.esquerda and -90 or 90, offset_y = 80, smooth = 5, bounds = self.mapa,
+  })
 
-  self.mapa:draw_layer("ceu")
+  jogo.desenhar_fundo()
   self.mapa:draw_layer("decoracao")
   for _, p in ipairs(self.plataformas) do
     nn.draw.sprite(self.img_plataforma, p.corpo.x, p.corpo.y, { w = p.corpo.width, h = p.corpo.height })
@@ -279,6 +272,9 @@ function fase:draw()
       frame = self.anim:frame(), w = TAM_SPRITE, h = TAM_SPRITE, flip_x = self.esquerda,
     })
   end
+
+  -- A água fica na frente do personagem: ele afunda nela.
+  self.mapa:draw_layer("agua")
 
   self:atualizar_efeitos()
   for _, efeito in pairs(self.efeitos) do efeito:draw() end

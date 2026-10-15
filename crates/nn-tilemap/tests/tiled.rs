@@ -116,3 +116,16 @@ fn erros_explicam_o_que_fazer() {
     let faltando = load_tiled(Path::new("nao_existe.tmj"), read_from(fixtures()), 1.0).unwrap_err();
     assert!(matches!(faltando, TilemapError::Io { .. }));
 }
+
+#[test]
+fn tiles_animados_do_tiled() {
+    let m = carregar();
+    let deco = &m.tilesets[1];
+    let anim = deco.animations.get(&1).expect("tile 1 animado");
+    assert_eq!(anim.frames, [(1, 0.15), (2, 0.35)]);
+    assert!((anim.duration() - 0.5).abs() < 1e-6);
+    assert_eq!(anim.frame_at(0.0), Some(1));
+    assert_eq!(anim.frame_at(0.2), Some(2));
+    assert_eq!(anim.frame_at(0.55), Some(1), "repete");
+    assert!(!deco.animations.contains_key(&0));
+}

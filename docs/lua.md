@@ -351,6 +351,8 @@ local mapa = nn.tilemap.new({
 
 Outros métodos e campos: `width`, `height` (em tiles), `tile_width`, `tile_height`, `world_width`, `world_height`, `layers`, `properties`, `:tile(col, lin, camada)`, `:set_tile(col, lin, tile, camada)` (a colisão acompanha: ótimo para blocos quebráveis), `:set_solid(col, lin, "solid" | "one_way" | nil)`, `:solid(col, lin)`, `:cell_at(x, y)` e `:cell_center(col, lin)`. Colunas e linhas começam em 1, com a linha 1 no topo, como no editor.
 
+**Tiles animados** (água, lava, tochas, bandeiras): no Tiled, abra o tileset, escolha o tile e use o *Editor de Animação de Tiles* para montar a sequência de quadros. Ao carregar o mapa, a animação vem junto e roda sozinha, no ritmo do jogo. Em mapas feitos em Lua, use `mapa:animate(tile, { quadros }, fps)`: onde aparecer `tile`, os `quadros` se revezam (`mapa:animate(5, { 5, 6, 7, 8 }, 6)`). Os quadros precisam ser do mesmo tileset que o tile.
+
 ### nn.particles
 
 ```lua
@@ -455,9 +457,49 @@ local opcoes = nn.save.get("opcoes", {})
 
 O arquivo é um `save.json` legível em `~/.local/share/<id>/` no Linux e em `%APPDATA%\<id>\data\` no Windows, onde `<id>` vem do `id` do `config.lua` (ou do título). Defina o `id` para o progresso não se perder se o título mudar. A gravação é segura: se o computador desligar no meio, o arquivo anterior continua inteiro.
 
+### Fundos em camadas (parallax)
+
+`nn.draw.parallax(imagem, opts)` desenha uma imagem repetida que acompanha a câmera mais devagar que o mundo, dando profundidade: montanhas ao longe andam pouco, colinas mais perto andam mais. Chame no `draw`, **depois de posicionar a câmera** e antes do resto do mundo, do mais longe para o mais perto:
+
+```lua
+nn.draw.parallax(self.nuvens, { factor_x = 0.1, y = 560, scroll_x = 12 })
+nn.draw.parallax(self.montanhas, { factor_x = 0.2, factor_y = 1, y = 280, scale = 4 })
+nn.draw.parallax(self.colinas, { factor_x = 0.5, factor_y = 1, y = 210, scale = 4 })
+```
+
+| Opção | Descrição |
+|---|---|
+| `factor` | Quanto acompanha a câmera, nos dois eixos: 0 = parada na tela (céu), 1 = junto com o mundo. Padrão 0.5. `factor_x` e `factor_y` mudam um eixo só. |
+| `x`, `y` | Centro da imagem quando a câmera está em (0, 0). |
+| `scale`, `w`, `h` | Tamanho no mundo (padrão: o da imagem). |
+| `repeat_x`, `repeat_y` | Repetir na horizontal (padrão `true`) e na vertical (padrão `false`). |
+| `scroll_x`, `scroll_y` | Velocidade de rolagem sozinha, em unidades por segundo (nuvens, neblina). |
+| `color`, `alpha` | Tinge e deixa transparente. |
+
+Para a imagem emendar sem costura, a borda esquerda dela deve continuar na direita.
+
 ### nn.camera
 
 `position()`, `set_position(x, y)`, `zoom()`, `set_zoom(z)`, `rotation()`, `set_rotation(r)`, `to_world(sx, sy)`, `to_screen(wx, wy)`.
+
+**Seguir o jogador:** `nn.camera.follow(x, y, opts)`, chamado uma vez por frame (no `update` ou no `draw`), leva a câmera até o alvo de forma suave, igual em qualquer taxa de quadros.
+
+```lua
+nn.camera.follow(jogador.x, jogador.y, {
+  bounds = mapa,                          -- não mostra nada fora do mapa
+  offset_x = olhando_esquerda and -90 or 90, -- olha um pouco à frente
+  deadzone_h = 120,                       -- pular não balança a tela
+})
+```
+
+| Opção | Descrição |
+|---|---|
+| `smooth` | Rapidez para alcançar o alvo (padrão 6: ~95% do caminho em meio segundo). 0 vai direto. |
+| `deadzone_w`, `deadzone_h` | Zona morta: o alvo anda livre dentro dela sem a câmera se mexer. |
+| `offset_x`, `offset_y` | Somado ao alvo. |
+| `bounds` | Limite: um mapa (`nn.tilemap`) ou `{ x =, y =, w =, h = }` (canto inferior esquerdo e tamanho). Se o limite for menor que a tela num eixo, a câmera fica no centro dele. |
+
+`nn.camera.clamp(limite)` só aplica o limite, sem seguir nada. `nn.camera.view()` devolve a área visível no mundo: `x0, y0, x1, y1` (útil para saber o que está na tela).
 
 `nn.camera.shake(força, duração)` faz a câmera tremer: `força` é o deslocamento máximo em pixels da tela e o tremor diminui até parar em `duração` segundos (padrão 0,3). Tremores somam; `nn.camera.stop_shake()` para na hora. Só o mundo treme: o que é desenhado com `nn.screen` (HUD, menus) fica parado, e `nn.camera.position()` continua devolvendo a posição sem o tremor.
 

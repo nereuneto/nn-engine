@@ -1476,3 +1476,171 @@ fn opcao_de_fade_invalida_da_erro_claro() {
         "{e}"
     );
 }
+
+// ----------------------------------------------------------------------
+// Sprint 8: câmera que segue, parallax e tiles animados
+// ----------------------------------------------------------------------
+
+/// PNG de uma cor só.
+fn png_cor(w: u32, h: u32, cor: [u8; 4]) -> Vec<u8> {
+    let mut png = Vec::new();
+    image::RgbaImage::from_pixel(w, h, image::Rgba(cor))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    png
+}
+
+#[test]
+fn camera_segue_com_limites_do_mapa() {
+    let dir = projeto(
+        "seguir",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              self.mapa = nn.tilemap.new({ tile_size = 16, rows = { "..........", ".........." }, legend = {} })
+              self.x, self.y = 10, 10
+            end
+            function c:update()
+              nn.camera.follow(self.x, self.y, { smooth = 0, bounds = self.mapa })
+              self.cx, self.cy = nn.camera.position()
+              self.x0, self.y0, self.x1, self.y1 = nn.camera.view()
+            end
+            return c
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    let s = &h.game.0;
+    assert_eq!(s.error(), None);
+    // Mapa de 160x32 numa tela de 64x64: no X encosta na borda esquerda
+    // (centro em 32), no Y o mapa é menor que a tela e fica centralizado.
+    assert_eq!(s.field::<f64>("cx"), Some(32.0));
+    assert_eq!(s.field::<f64>("cy"), Some(16.0));
+    assert_eq!(s.field::<f64>("x0"), Some(0.0));
+    assert_eq!(s.field::<f64>("x1"), Some(64.0));
+    assert_eq!(s.field::<f64>("y0"), Some(-16.0));
+}
+
+#[test]
+fn seguir_suave_zona_morta_e_limite_invalido() {
+    let dir = projeto(
+        "seguir2",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:update()
+              nn.camera.follow(300, 0, { deadzone_w = 100, offset_x = 50 })
+              self.cx = nn.camera.position()
+              self.ok, self.erro = pcall(nn.camera.follow, 0, 0, { bounds = { x = 0, y = 0 } })
+              self.erro = tostring(self.erro)
+            end
+            return c
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(30);
+    let s = &h.game.0;
+    assert_eq!(s.error(), None);
+    // Alvo em 350 com zona morta de 100: a câmera para em 300, chegando aos poucos.
+    let cx = s.field::<f64>("cx").unwrap();
+    assert!(cx > 270.0 && cx < 300.0, "{cx}");
+    assert_eq!(s.field::<bool>("ok"), Some(false));
+    assert!(
+        s.field::<String>("erro")
+            .unwrap()
+            .contains("limite sem \"w\"")
+    );
+}
+
+#[test]
+fn parallax_cobre_a_tela_e_anda_mais_devagar() {
+    let dir = projeto(
+        "parallax",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              self.fundo = nn.assets.texture("fundo.png")
+              self.cx = 0
+            end
+            function c:update() nn.camera.set_position(self.cx, 0) end
+            function c:draw()
+              -- Imagem de 20x20 repetida: cobre a tela de 64x64 em qualquer posição.
+              nn.draw.parallax(self.fundo, { factor_x = 0.5, factor_y = 0, repeat_y = true })
+            end
+            return c
+            "##,
+        )],
+    );
+    std::fs::write(dir.join("fundo.png"), png_cor(20, 20, [0, 200, 0, 255])).unwrap();
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    for (x, y) in [(0, 0), (63, 63), (32, 10), (5, 50)] {
+        assert_eq!(pixel(&h, x, y), [0, 200, 0, 255], "({x}, {y})");
+    }
+}
+
+#[test]
+fn tiles_animados_em_lua() {
+    let dir = projeto(
+        "agua",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              local sheet = nn.assets.sheet("tiles.png", 1, 1, { pixel_art = true })
+              self.mapa = nn.tilemap.new({
+                sheet = sheet, tile_size = 64, rows = { "~" },
+                legend = { ["~"] = { tile = 1 } },
+              })
+              self.mapa:animate(1, { 2, 3 }, 2)
+              self.ok, self.erro = pcall(self.mapa.animate, self.mapa, 1, { 9 }, 2)
+              self.erro = tostring(self.erro)
+              nn.camera.set_position(32, 32)
+            end
+            function c:draw() self.mapa:draw() end
+            return c
+            "##,
+        )],
+    );
+    // Tiles: vermelho, verde, azul.
+    let mut img = image::RgbaImage::new(3, 1);
+    img.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+    img.put_pixel(1, 0, image::Rgba([0, 255, 0, 255]));
+    img.put_pixel(2, 0, image::Rgba([0, 0, 255, 255]));
+    let mut png = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    std::fs::write(dir.join("tiles.png"), png).unwrap();
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(pixel(&h, 32, 32), [0, 255, 0, 255]);
+    // 2 quadros por segundo: depois de ~0,6 s é o segundo quadro.
+    h.run_frames(36);
+    assert_eq!(pixel(&h, 32, 32), [0, 0, 255, 255]);
+    assert_eq!(h.game.0.field::<bool>("ok"), Some(false));
+    assert!(
+        h.game
+            .0
+            .field::<String>("erro")
+            .unwrap()
+            .contains("mesmo tileset")
+    );
+}

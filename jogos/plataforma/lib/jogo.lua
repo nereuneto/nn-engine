@@ -23,7 +23,23 @@ function jogo.preparar()
     confirm_sound = nn.assets.sound("assets/sons/confirmar.wav"),
   })
 
+  jogo.fundos = {
+    nuvens = nn.assets.texture("assets/imagens/nuvens.png", { pixel_art = true }),
+    montanhas = nn.assets.texture("assets/imagens/montanhas.png", { pixel_art = true }),
+    colinas = nn.assets.texture("assets/imagens/colinas.png", { pixel_art = true }),
+  }
+
   jogo.aplicar_opcoes(jogo.opcoes())
+end
+
+-- Fundo em camadas (parallax): quanto mais longe, mais devagar acompanha a
+-- câmera. Chame depois de posicionar a câmera e antes do resto do mundo.
+-- O chão da fase fica em y = 144, então as camadas terminam um pouco abaixo.
+function jogo.desenhar_fundo()
+  local f = jogo.fundos
+  nn.draw.parallax(f.nuvens, { scale = 3, factor_x = 0.08, factor_y = 1, y = 560, scroll_x = 12 })
+  nn.draw.parallax(f.montanhas, { scale = 4, factor_x = 0.2, factor_y = 1, y = 276 })
+  nn.draw.parallax(f.colinas, { scale = 4, factor_x = 0.45, factor_y = 1, y = 212 })
 end
 
 -- Opções salvas, com os valores padrão no que faltar.

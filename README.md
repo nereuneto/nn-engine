@@ -26,7 +26,7 @@ O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado 
 ### Jogos de demonstração em Lua
 
 ```sh
-cargo nn jogos/plataforma   # plataforma: mapa do Tiled, física, menus, opções, recordes
+cargo nn jogos/plataforma   # plataforma: mapa do Tiled, física, fundo em camadas, menus, recordes
 cargo nn jogos/demo         # menu, coletar moedas e pausa
 ```
 
@@ -286,7 +286,30 @@ for evento in mundo.step(ctx.fixed_dt()) { /* sensores: Enter / Exit */ }
 mapa.draw(&mut ctx.renderer, &ctx.camera, ctx.viewport().as_vec2());
 ```
 
+Tiles animados (água, lava, bandeiras) feitos no editor de animação do Tiled vêm junto ao carregar o mapa; em Rust, avance o relógio deles com `mapa.update(dt)` uma vez por frame (em Lua é automático). Em mapas feitos por código, `mapa.animate(gid, &[quadros], fps)`.
+
 A física é do tipo "arcade": corpos não giram, a resolução é por eixo (sem enroscar na junção de tiles), o chão é detectado direto (`on_ground`) e há subpassos para objetos rápidos não atravessarem paredes. Corpos cinemáticos carregam quem está em cima. Mapas do Tiled devem ser salvos em JSON (`.tmj`) com camadas no formato CSV; a referência completa está em [docs/lua.md](docs/lua.md#nntilemap).
+
+## Câmera e fundos em camadas
+
+```rust,ignore
+// Uma vez por frame: segue o jogador, suave e sem sair do mapa.
+let seguir = Follow {
+    offset: Vec2::new(90.0, 80.0),        // olha um pouco à frente
+    deadzone: Vec2::new(0.0, 120.0),      // pular não balança a tela
+    bounds: Some(mapa.bounds()),
+    ..Default::default()
+};
+ctx.camera.follow(jogador, &seguir, ctx.time.delta_secs(), ctx.viewport().as_vec2());
+
+// Fundo: montanhas que andam a 20% da velocidade do mundo, repetidas sem fim.
+let montanhas = Parallax::new(textura, Vec2::new(1024.0, 384.0))
+    .factor(Vec2::new(0.2, 1.0))
+    .at(Vec2::new(0.0, 280.0));
+montanhas.draw(&mut ctx.renderer, &ctx.camera, ctx.viewport().as_vec2());
+```
+
+A suavização da câmera é igual em qualquer taxa de quadros. Num eixo em que o mapa é menor que a tela, a câmera fica centralizada nele. Em Lua: `nn.camera.follow` e `nn.draw.parallax` ([docs/lua.md](docs/lua.md#fundos-em-camadas-parallax)).
 
 ## Partículas
 

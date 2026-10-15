@@ -69,6 +69,44 @@ impl Property {
 /// Propriedades personalizadas (nome → valor).
 pub type Properties = BTreeMap<String, Property>;
 
+/// Animação de um tile: a sequência de tiles (ids locais do mesmo tileset)
+/// e quanto tempo cada um fica na tela.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TileAnimation {
+    /// (id local do tile, duração em segundos).
+    pub frames: Vec<(u32, f32)>,
+}
+
+impl TileAnimation {
+    /// Quadros com a mesma duração.
+    pub fn uniform(frames: &[u32], seconds_each: f32) -> Self {
+        Self {
+            frames: frames.iter().map(|&f| (f, seconds_each)).collect(),
+        }
+    }
+
+    /// Duração de uma volta completa.
+    pub fn duration(&self) -> f32 {
+        self.frames.iter().map(|(_, d)| d.max(0.0)).sum()
+    }
+
+    /// Tile que aparece no instante `time` (em segundos, repetindo).
+    pub fn frame_at(&self, time: f32) -> Option<u32> {
+        let total = self.duration();
+        if total <= 0.0 {
+            return self.frames.first().map(|(f, _)| *f);
+        }
+        let mut t = time.rem_euclid(total);
+        for &(frame, d) in &self.frames {
+            if t < d {
+                return Some(frame);
+            }
+            t -= d.max(0.0);
+        }
+        self.frames.last().map(|(f, _)| *f)
+    }
+}
+
 /// Uma imagem dividida em tiles.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tileset {
@@ -85,6 +123,8 @@ pub struct Tileset {
     pub spacing: u32,
     /// Propriedades por tile (id local, a partir de 0).
     pub tile_properties: BTreeMap<u32, Properties>,
+    /// Tiles animados (id local → animação). Vem do Tiled ou de [`TileMap::animate`].
+    pub animations: BTreeMap<u32, TileAnimation>,
     /// Textura carregada (veja [`TileMap::load_textures`]).
     pub texture: Option<TextureId>,
 }
@@ -104,6 +144,7 @@ impl Tileset {
             margin: 0,
             spacing: 0,
             tile_properties: BTreeMap::new(),
+            animations: BTreeMap::new(),
             texture: Some(sheet.texture()),
         }
     }
@@ -176,6 +217,8 @@ pub struct TileMap {
     pub tilesets: Vec<Tileset>,
     pub objects: Vec<MapObject>,
     pub properties: Properties,
+    /// Relógio dos tiles animados, em segundos (veja [`TileMap::update`]).
+    pub time: f32,
 }
 
 /// Definição de um caractere em [`TileMap::from_ascii`].
@@ -208,7 +251,31 @@ impl TileMap {
             tilesets: Vec::new(),
             objects: Vec::new(),
             properties: Properties::new(),
+            time: 0.0,
         }
+    }
+
+    /// Avança o relógio dos tiles animados. Chame uma vez por frame.
+    pub fn update(&mut self, dt: f32) {
+        self.time += dt;
+    }
+
+    /// Anima um tile: onde aparecer o tile `gid`, os tiles `frames` (ids
+    /// globais do mesmo tileset) se revezam, `fps` por segundo.
+    /// Devolve falso se algum id não for do tileset de `gid`.
+    pub fn animate(&mut self, gid: u32, frames: &[u32], fps: f32) -> bool {
+        let gid = gid & !FLIP_MASK;
+        let Some(ts) = self.tilesets.iter_mut().rev().find(|t| t.contains(gid)) else {
+            return false;
+        };
+        if frames.is_empty() || !frames.iter().all(|f| ts.contains(*f)) {
+            return false;
+        }
+        let local: Vec<u32> = frames.iter().map(|f| f - ts.first_gid).collect();
+        let seconds = if fps > 0.0 { 1.0 / fps } else { f32::INFINITY };
+        ts.animations
+            .insert(gid - ts.first_gid, TileAnimation::uniform(&local, seconds));
+        true
     }
 
     /// Monta um mapa a partir de linhas de texto. Cada caractere é procurado
@@ -304,6 +371,11 @@ impl TileMap {
     /// Tamanho do mapa no mundo.
     pub fn world_size(&self) -> Vec2 {
         Vec2::new(self.width as f32, self.height as f32) * self.tile_size
+    }
+
+    /// Retângulo que o mapa ocupa no mundo (bom limite para a câmera).
+    pub fn bounds(&self) -> nn_render::Bounds {
+        nn_render::Bounds::from_size(self.origin, self.world_size())
     }
 
     /// Centro da célula (coluna e linha a partir de 0, linha 0 em cima).
@@ -474,6 +546,14 @@ impl TileMap {
                     continue;
                 };
                 let Some(texture) = ts.texture else { continue };
+                let mut local = gid - ts.first_gid;
+                if let Some(frame) = ts
+                    .animations
+                    .get(&local)
+                    .and_then(|a| a.frame_at(self.time))
+                {
+                    local = frame;
+                }
                 let size = ts.tile_size.as_vec2() * self.scale();
                 let mut sprite_size = size;
                 if raw & FLIP_H != 0 {
@@ -489,7 +569,7 @@ impl TileMap {
                     &Sprite::new(texture)
                         .at(bottom_left + size / 2.0)
                         .size(sprite_size)
-                        .region(ts.region(gid - ts.first_gid))
+                        .region(ts.region(local))
                         .color(tint),
                 );
             }

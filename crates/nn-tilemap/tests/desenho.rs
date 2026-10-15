@@ -79,3 +79,38 @@ fn desenha_tiles_na_posicao_certa() {
     // Tiles dividem a mesma textura: uma única chamada de desenho.
     assert_eq!(renderer.last_stats().draw_calls, 1);
 }
+
+#[test]
+fn tiles_animados_trocam_com_o_tempo() {
+    let Some(gpu) = gpu() else { return };
+    let mut renderer = Renderer::new(&gpu, OffscreenTarget::FORMAT);
+    let target = OffscreenTarget::new(&gpu, UVec2::splat(32));
+
+    // Três tiles de 1 pixel: vermelho, verde, azul.
+    let px = [255u8, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255];
+    let tex = renderer.create_texture(UVec2::new(3, 1), &px, TextureOptions::PIXEL_ART);
+    let sheet = renderer.sprite_sheet(tex, UVec2::new(1, 1));
+    let mut mapa = TileMap::from_ascii(&["~"], Vec2::splat(32.0), |c| {
+        (c == '~').then_some(AsciiTile::Tile {
+            frame: 0,
+            cell: Cell::Empty,
+        })
+    });
+    mapa.add_sheet(&sheet, UVec2::new(3, 1));
+    // Água: tile 1 alterna entre os tiles 2 e 3, 4 vezes por segundo.
+    assert!(mapa.animate(1, &[2, 3], 4.0));
+    assert!(!mapa.animate(1, &[2, 99], 4.0), "id fora do tileset");
+
+    let mut cor = |mapa: &TileMap| {
+        let camera = Camera2D::new(Vec2::splat(16.0));
+        mapa.draw(&mut renderer, &camera, Vec2::splat(32.0));
+        renderer.render(target.view(), UVec2::splat(32), &camera, Some(Color::BLACK));
+        let img = target.read_rgba(&gpu).unwrap();
+        [img[0], img[1], img[2]]
+    };
+    assert_eq!(cor(&mapa), [0, 255, 0]);
+    mapa.update(0.3);
+    assert_eq!(cor(&mapa), [0, 0, 255]);
+    mapa.update(0.25);
+    assert_eq!(cor(&mapa), [0, 255, 0]);
+}
