@@ -901,3 +901,489 @@ fn particulas_com_opcao_invalida_dao_erro_claro() {
         "{e}"
     );
 }
+
+// ----------------------------------------------------------------------
+// Sprint 6: controles, interface e dados salvos
+// ----------------------------------------------------------------------
+
+#[test]
+fn controles_e_acoes_em_lua() {
+    let dir = projeto(
+        "acoes",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              nn.input.bind("pular", { "space", "pad:a" })
+              nn.input.bind("direita", { "d", "right", "pad:leftx+" })
+              nn.input.bind("esquerda", { "a", "left", "pad:leftx-" })
+              self.pulos = 0
+            end
+            function c:update(dt)
+              if nn.input.action_pressed("pular") then self.pulos = self.pulos + 1 end
+              self.eixo = nn.input.action_axis("esquerda", "direita")
+              self.mx, self.my = nn.input.move()
+              self.start = nn.input.pad_down("start")
+              self.start1 = nn.input.pad_down("start", 1)
+              self.start2 = nn.input.pad_down("start", 2)
+              self.lt = nn.input.pad_axis("lt")
+              self.pads = #nn.input.pads()
+              self.nome = (nn.input.pads()[1] or {}).name
+              self.disp = nn.input.last_device()
+            end
+            return c
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<i64>("pads"), Some(0));
+
+    let pad = h.ctx.input.connect_pad("Controle de teste");
+    h.ctx.input.press_pad(pad, nn_input::PadButton::South);
+    h.ctx.input.press_pad(pad, nn_input::PadButton::Start);
+    h.ctx
+        .input
+        .set_pad_axis(pad, nn_input::PadAxis::LeftX, -1.0);
+    h.ctx
+        .input
+        .set_pad_axis(pad, nn_input::PadAxis::LeftTrigger, 0.6);
+    h.run_frames(3);
+    let f = |k: &str| h.game.0.field::<Value>(k).unwrap();
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<i64>("pulos"), Some(1));
+    assert_eq!(h.game.0.field::<f64>("eixo"), Some(-1.0));
+    assert_eq!(h.game.0.field::<f64>("mx"), Some(-1.0));
+    assert_eq!(f("start"), Value::Boolean(true));
+    assert_eq!(f("start1"), Value::Boolean(true));
+    assert_eq!(f("start2"), Value::Boolean(false));
+    assert!(h.game.0.field::<f64>("lt").unwrap() > 0.4);
+    assert_eq!(h.game.0.field::<i64>("pads"), Some(1));
+    assert_eq!(
+        h.game.0.field::<String>("nome").as_deref(),
+        Some("Controle de teste")
+    );
+    assert_eq!(h.game.0.field::<String>("disp").as_deref(), Some("gamepad"));
+
+    // Teclado também aciona a mesma ação.
+    h.ctx.input.release_pad(pad, nn_input::PadButton::South);
+    h.run_frames(1);
+    h.ctx.input.press_key(KeyCode::Space);
+    h.run_frames(1);
+    assert_eq!(h.game.0.field::<i64>("pulos"), Some(2));
+    assert_eq!(
+        h.game.0.field::<String>("disp").as_deref(),
+        Some("keyboard")
+    );
+}
+
+#[test]
+fn acao_desconhecida_e_entrada_invalida_dao_erro_claro() {
+    for (codigo, esperado) in [
+        ("nn.input.action('voar')", "ação desconhecida: \"voar\""),
+        (
+            "nn.input.bind('voar', { 'pad:zz' })",
+            "botão do controle desconhecido",
+        ),
+        ("nn.input.pad_down('a', 0)", "controle 0 não existe"),
+    ] {
+        let dir = projeto(
+            "acao-erro",
+            &[(
+                "main.lua",
+                &format!("local c = {{}}\nfunction c:update()\n  {codigo}\nend\nreturn c"),
+            )],
+        );
+        let Some(mut h) = cena(&dir, "main.lua") else {
+            return;
+        };
+        h.run_frames(1);
+        let e = h.game.0.error().unwrap().to_string();
+        assert!(e.contains(esperado) && e.contains("main.lua:3"), "{e}");
+    }
+}
+
+#[test]
+fn menu_em_lua() {
+    let dir = projeto(
+        "menu",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              nn.ui.theme({ scale = 0.15, focus_color = "#FF0000", panel_color = "#00000000" })
+              self.jogou = 0
+              self.musica = 0.5
+              self.tela_cheia = false
+              self.dificuldade = 2
+            end
+            function c:draw()
+              local ui = nn.ui.panel("menu", { title = "Título" })
+              if ui:button("Jogar") then self.jogou = self.jogou + 1 end
+              self.musica = ui:slider("Música", self.musica, { step = 0.25 })
+              self.tela_cheia = ui:toggle("Tela cheia", self.tela_cheia, { on = "Ligada", off = "Desligada" })
+              self.dificuldade = ui:choice("Dificuldade", { "Fácil", "Normal", "Difícil" }, self.dificuldade)
+              ui:label("versão 1", { color = "#888888", size = 0.8 })
+              self.foco = ui:focus()
+              if ui:back() then self.voltou = true end
+              -- sem ui:finish(): a engine fecha sozinha
+            end
+            return c
+            "##,
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<i64>("foco"), Some(1));
+    // O botão com foco aparece na cor de foco.
+    let [r, g, b, _] = pixel(&h, 6, 20);
+    assert!(r > 200 && g < 60 && b < 60, "{:?}", [r, g, b]);
+
+    let tap = |h: &mut Headless<Uma>, k: KeyCode| {
+        h.ctx.input.press_key(k);
+        h.run_frames(1);
+        h.ctx.input.release_key(k);
+        h.run_frames(1);
+    };
+    tap(&mut h, KeyCode::Enter);
+    assert_eq!(h.game.0.field::<i64>("jogou"), Some(1));
+    tap(&mut h, KeyCode::ArrowDown);
+    tap(&mut h, KeyCode::ArrowRight);
+    assert_eq!(h.game.0.field::<f64>("musica"), Some(0.75));
+    tap(&mut h, KeyCode::ArrowDown);
+    tap(&mut h, KeyCode::Enter);
+    assert_eq!(h.game.0.field::<bool>("tela_cheia"), Some(true));
+    tap(&mut h, KeyCode::ArrowDown);
+    tap(&mut h, KeyCode::ArrowRight);
+    tap(&mut h, KeyCode::ArrowRight);
+    assert_eq!(h.game.0.field::<i64>("dificuldade"), Some(1));
+    assert_eq!(h.game.0.field::<i64>("foco"), Some(4));
+    tap(&mut h, KeyCode::Escape);
+    assert_eq!(h.game.0.field::<bool>("voltou"), Some(true));
+    assert_eq!(h.game.0.error(), None);
+}
+
+#[test]
+fn painel_usado_depois_de_fechado_da_erro_claro() {
+    let dir = projeto(
+        "menu-fechado",
+        &[(
+            "main.lua",
+            "local c = {}\nfunction c:draw()\n  local ui = nn.ui.panel('a')\n  ui:finish()\n  ui:button('x')\nend\nreturn c",
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    let e = h.game.0.error().unwrap().to_string();
+    assert!(
+        e.contains("já foi fechado") && e.contains("main.lua:5"),
+        "{e}"
+    );
+}
+
+#[test]
+fn dados_salvos_sobrevivem_ao_jogo() {
+    let dir = projeto(
+        "save",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              self.antes = nn.save.get("recorde", 0)
+              self.nome = nn.save.get("nome", "ninguém")
+              local opcoes = nn.save.get("opcoes", { musica = 1 })
+              self.musica = opcoes.musica
+              self.lista = nn.save.get("lista", {})
+              nn.save.set("recorde", self.antes + 100)
+              nn.save.set("nome", "Nereu")
+              nn.save.set("opcoes", { musica = 0.3, tela_cheia = true })
+              nn.save.set("lista", { 10, 20, 30 })
+              nn.save.set("apagar", true)
+              nn.save.remove("apagar")
+              self.chaves = table.concat(nn.save.keys(), ",")
+              nn.save.flush()
+              local ok, erro = pcall(nn.save.set, "f", function() end)
+              self.ok, self.erro = ok, tostring(erro)
+            end
+            return c
+            "##,
+        )],
+    );
+    let save_dir = dir.join("dados");
+    let rodar = || {
+        let rt = ScriptRuntime::new(&dir).unwrap();
+        let h = Headless::new(config(&dir).save_dir(&save_dir), |ctx| {
+            let mut s = rt.scene("main.lua");
+            s.enter(ctx);
+            Uma(s)
+        });
+        match h {
+            Ok(mut h) => {
+                h.run_frames(1);
+                assert_eq!(h.game.0.error(), None);
+                Some(h)
+            }
+            Err(e) => {
+                if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+                    panic!("GPU obrigatória: {e}");
+                }
+                None
+            }
+        }
+    };
+    let Some(h) = rodar() else { return };
+    assert_eq!(h.game.0.field::<i64>("antes"), Some(0));
+    assert_eq!(h.game.0.field::<String>("nome").as_deref(), Some("ninguém"));
+    assert_eq!(h.game.0.field::<f64>("musica"), Some(1.0));
+    assert_eq!(
+        h.game.0.field::<String>("chaves").as_deref(),
+        Some("lista,nome,opcoes,recorde")
+    );
+    assert_eq!(h.game.0.field::<bool>("ok"), Some(false));
+    let erro = h.game.0.field::<String>("erro").unwrap();
+    assert!(erro.contains("não dá para salvar"), "{erro}");
+    drop(h);
+
+    // Arquivo legível, no lugar certo.
+    let json = std::fs::read_to_string(save_dir.join("save.json")).unwrap();
+    assert!(json.contains("\"nome\": \"Nereu\""), "{json}");
+
+    // "Abrir o jogo de novo": lê o que foi salvo.
+    let Some(h) = rodar() else { return };
+    assert_eq!(h.game.0.field::<i64>("antes"), Some(100));
+    assert_eq!(h.game.0.field::<String>("nome").as_deref(), Some("Nereu"));
+    assert_eq!(h.game.0.field::<f64>("musica"), Some(0.3));
+    let lista: mlua::Table = h.game.0.field("lista").unwrap();
+    assert_eq!(lista.raw_len(), 3);
+    assert_eq!(lista.get::<i64>(2).unwrap(), 20);
+}
+
+#[test]
+fn tela_cheia_volume_por_canal_e_config() {
+    let dir = projeto(
+        "janela",
+        &[
+            (
+                "config.lua",
+                "return { title = 'Meu Jogo', id = 'meu-jogo-teste', fullscreen = true }",
+            ),
+            (
+                "main.lua",
+                r##"
+                local c = {}
+                function c:update()
+                  self.cheia_antes = nn.window.fullscreen()
+                  nn.window.set_fullscreen(false)
+                  self.cheia_depois = nn.window.fullscreen()
+                  nn.audio.set_volume(0.4, "music")
+                  self.musica = nn.audio.volume("music")
+                  self.efeitos = nn.audio.volume("effects")
+                  self.geral = nn.audio.volume()
+                end
+                return c
+                "##,
+            ),
+        ],
+    );
+    let project = nn_script::Project::open(&dir).unwrap();
+    assert_eq!(project.config.id.as_deref(), Some("meu-jogo-teste"));
+    assert_eq!(project.config.save_id(), "meu-jogo-teste");
+    assert!(project.config.fullscreen);
+
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let h = Headless::new(project.config.clone().size(64, 64), |ctx| {
+        let mut s = rt.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    });
+    let Ok(mut h) = h else {
+        if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+            panic!("GPU obrigatória");
+        }
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<bool>("cheia_antes"), Some(true));
+    assert_eq!(h.game.0.field::<bool>("cheia_depois"), Some(false));
+    assert!(!h.ctx.is_fullscreen());
+    assert!((h.game.0.field::<f64>("musica").unwrap() - 0.4).abs() < 1e-6);
+    assert_eq!(h.game.0.field::<f64>("efeitos"), Some(1.0));
+    assert_eq!(h.game.0.field::<f64>("geral"), Some(1.0));
+}
+
+/// Copia uma pasta inteira (para testar um jogo de exemplo sem mexer nele).
+fn copiar_pasta(de: &Path, para: &Path) {
+    std::fs::create_dir_all(para).unwrap();
+    for entrada in std::fs::read_dir(de).unwrap() {
+        let entrada = entrada.unwrap();
+        let destino = para.join(entrada.file_name());
+        if entrada.file_type().unwrap().is_dir() {
+            copiar_pasta(&entrada.path(), &destino);
+        } else {
+            std::fs::copy(entrada.path(), destino).unwrap();
+        }
+    }
+}
+
+/// Jogo de plataforma inteiro (pilha de cenas) numa tela de 1280x720, com
+/// os dados salvos numa pasta temporária.
+fn plataforma_completo(dir: &Path, inicio: &str, save_dir: &Path) -> Option<Headless<SceneStack>> {
+    let rt = ScriptRuntime::new(dir).unwrap();
+    let config = config(dir).size(1280, 720).save_dir(save_dir);
+    let inicio = inicio.to_string();
+    match Headless::new(config, move |ctx| SceneStack::new(ctx, rt.scene(inicio))) {
+        Ok(h) => Some(h),
+        Err(e) => {
+            if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+                panic!("GPU obrigatória: {e}");
+            }
+            None
+        }
+    }
+}
+
+fn toque(h: &mut Headless<SceneStack>, k: KeyCode) {
+    h.ctx.input.press_key(k);
+    h.run_frames(1);
+    h.ctx.input.release_key(k);
+    h.run_frames(1);
+}
+
+#[test]
+fn plataforma_menus_opcoes_e_pausa() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/plataforma");
+    let save_dir = projeto("plataforma-save", &[]);
+    let Some(mut h) = plataforma_completo(&dir, "cenas/titulo.lua", &save_dir) else {
+        return;
+    };
+    h.run_frames(2);
+    assert_eq!(h.game.len(), 1);
+
+    // Título → Opções: música de 70% para 80%, tela cheia ligada.
+    toque(&mut h, KeyCode::ArrowDown);
+    toque(&mut h, KeyCode::Enter);
+    assert_eq!(h.game.len(), 2, "abriu as opções");
+    h.run_frames(1);
+    toque(&mut h, KeyCode::ArrowRight);
+    assert!((h.ctx.audio.channel_volume(nn_audio::Channel::Music) - 0.8).abs() < 1e-5);
+    toque(&mut h, KeyCode::ArrowDown);
+    toque(&mut h, KeyCode::ArrowDown);
+    toque(&mut h, KeyCode::Enter);
+    assert!(h.ctx.is_fullscreen());
+    toque(&mut h, KeyCode::Escape);
+    assert_eq!(h.game.len(), 1, "voltou ao título");
+    h.ctx.save.flush().unwrap();
+    let salvo = std::fs::read_to_string(save_dir.join("save.json")).unwrap();
+    assert!(
+        salvo.contains("\"musica\": 0.8") && salvo.contains("\"tela_cheia\": true"),
+        "{salvo}"
+    );
+
+    // Título → Jogar (o foco ficou em "Opções").
+    toque(&mut h, KeyCode::ArrowUp);
+    toque(&mut h, KeyCode::Enter);
+    h.run_frames(5);
+    // Na fase, Esc pausa (no título não faria nada).
+    toque(&mut h, KeyCode::Escape);
+    assert_eq!(h.game.len(), 2, "pausou");
+    // Start do controle também despausa.
+    let pad = h.ctx.input.connect_pad("controle");
+    h.ctx.input.press_pad(pad, nn_input::PadButton::Start);
+    h.run_frames(1);
+    h.ctx.input.release_pad(pad, nn_input::PadButton::Start);
+    h.run_frames(1);
+    assert_eq!(h.game.len(), 1, "despausou");
+    // Pausa de novo e escolhe "Título" com o direcional.
+    h.ctx.input.press_pad(pad, nn_input::PadButton::Start);
+    h.run_frames(1);
+    h.ctx.input.release_pad(pad, nn_input::PadButton::Start);
+    h.run_frames(2);
+    for _ in 0..3 {
+        h.ctx.input.press_pad(pad, nn_input::PadButton::DPadDown);
+        h.run_frames(1);
+        h.ctx.input.release_pad(pad, nn_input::PadButton::DPadDown);
+        h.run_frames(1);
+    }
+    h.ctx.input.press_pad(pad, nn_input::PadButton::South);
+    h.run_frames(2);
+    assert_eq!(h.game.len(), 1);
+    // De volta ao título: Esc não pausa nada.
+    toque(&mut h, KeyCode::Escape);
+    assert_eq!(h.game.len(), 1);
+
+    // Ao abrir de novo, as opções salvas são aplicadas.
+    drop(h);
+    let Some(mut h) = plataforma_completo(&dir, "cenas/titulo.lua", &save_dir) else {
+        return;
+    };
+    h.run_frames(1);
+    assert!((h.ctx.audio.channel_volume(nn_audio::Channel::Music) - 0.8).abs() < 1e-5);
+    assert!(h.ctx.is_fullscreen());
+}
+
+#[test]
+fn plataforma_guarda_recordes() {
+    let original = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/plataforma");
+    let dir = std::env::temp_dir().join(format!("nn-lua-{}-plataforma-copia", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    copiar_pasta(&original, &dir);
+    // Cena de teste que termina a fase com o resultado dado.
+    let terminar = |tempo: f64, moedas: i64| {
+        std::fs::write(
+            dir.join("cenas/teste.lua"),
+            format!(
+                "local t = {{}}\nfunction t:enter() nn.scene.push('cenas/vitoria.lua', \
+                 {{ moedas = {moedas}, total = 12, tempo = {tempo}, mortes = 0 }}) end\n\
+                 function t:draw() end\nreturn t"
+            ),
+        )
+        .unwrap();
+    };
+    let save_dir = projeto("plataforma-recordes", &[]);
+    let recordes = || {
+        let json = std::fs::read_to_string(save_dir.join("save.json")).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        v["recordes"].clone()
+    };
+
+    terminar(50.0, 7);
+    let Some(mut h) = plataforma_completo(&dir, "cenas/teste.lua", &save_dir) else {
+        return;
+    };
+    h.run_frames(3);
+    assert_eq!(h.game.len(), 2, "tela de vitória aberta");
+    drop(h);
+    assert_eq!(recordes()["tempo"], 50.0);
+    assert_eq!(recordes()["moedas"], 7);
+    assert_eq!(recordes()["vitorias"], 1);
+
+    // Mais rápido, mas com menos moedas: só o tempo melhora.
+    terminar(41.5, 5);
+    let Some(mut h) = plataforma_completo(&dir, "cenas/teste.lua", &save_dir) else {
+        return;
+    };
+    h.run_frames(3);
+    // O menu só aparece depois de um tempo; então "Jogar de novo" volta à fase.
+    toque(&mut h, KeyCode::Enter);
+    assert_eq!(h.game.len(), 2, "menu ainda não apareceu");
+    h.run_frames(60);
+    toque(&mut h, KeyCode::Enter);
+    assert_eq!(h.game.len(), 1, "voltou para a fase");
+    drop(h);
+    assert_eq!(recordes()["tempo"], 41.5);
+    assert_eq!(recordes()["moedas"], 7);
+    assert_eq!(recordes()["vitorias"], 2);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

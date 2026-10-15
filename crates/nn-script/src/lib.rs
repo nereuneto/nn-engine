@@ -28,10 +28,13 @@
 
 mod api;
 mod convert;
+mod input;
 mod particles;
 mod physics;
+mod save;
 mod tilemap;
 mod types;
+mod ui;
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -591,8 +594,8 @@ pub struct Project {
 
 impl Project {
     /// Lê a pasta do projeto. O arquivo `config.lua` é opcional e devolve uma
-    /// tabela com `title`, `width`, `height`, `vsync`, `fixed_hz`,
-    /// `clear_color`, `resizable`, `hot_reload` e `start`.
+    /// tabela com `title`, `id`, `width`, `height`, `fullscreen`, `vsync`,
+    /// `fixed_hz`, `clear_color`, `resizable`, `hot_reload` e `start`.
     pub fn open(dir: impl AsRef<Path>) -> Result<Self, ScriptError> {
         let dir = dir.as_ref();
         if !dir.is_dir() {
@@ -634,6 +637,12 @@ impl Project {
                 let num = |v: &Value| v.as_f64().map(|n| n as u32);
                 if let Value::String(s) = get("title")? {
                     config.title = s.to_string_lossy();
+                }
+                if let Value::String(s) = get("id")? {
+                    config.id = Some(s.to_string_lossy());
+                }
+                if let Some(b) = get("fullscreen")?.as_boolean() {
+                    config.fullscreen = b;
                 }
                 if let (Some(w), Some(h)) = (num(&get("width")?), num(&get("height")?)) {
                     config.size = (w, h);

@@ -152,15 +152,11 @@ impl Coletor {
 impl Game for Coletor {
     fn fixed_update(&mut self, ctx: &mut Context) {
         let input = &ctx.input;
-        let dir = (input.wasd()
-            + input.direction(
-                KeyCode::ArrowLeft,
-                KeyCode::ArrowRight,
-                KeyCode::ArrowDown,
-                KeyCode::ArrowUp,
-            ))
-        .normalize_or_zero();
-        let sprint = input.key_down(KeyCode::ShiftLeft) || input.key_down(KeyCode::ShiftRight);
+        // Teclado (WASD ou setas) ou controle (direcional ou analógico).
+        let dir = input.move_vector();
+        let sprint = input.key_down(KeyCode::ShiftLeft)
+            || input.key_down(KeyCode::ShiftRight)
+            || input.pad_down(PadButton::RightShoulder);
         let speed = if sprint { SPEED * SPRINT } else { SPEED };
 
         self.previous = self.current;

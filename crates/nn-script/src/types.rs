@@ -74,6 +74,9 @@ pub(crate) fn play_options(opts: Option<&Table>) -> Result<PlayOptions> {
     if let Some(v) = opt::<bool>(opts, "loop")? {
         o.looping = v;
     }
+    if let Some(v) = opt::<String>(opts, "channel")? {
+        o.channel = crate::convert::channel(&v)?;
+    }
     Ok(o)
 }
 

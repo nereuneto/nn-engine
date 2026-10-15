@@ -164,8 +164,15 @@ impl Game for SceneStack {
         while start > 0 && self.stack[start].is_overlay() {
             start -= 1;
         }
-        for scene in &mut self.stack[start..] {
+        let top = self.stack.len().saturating_sub(1);
+        let interactive = ctx.ui.is_interactive();
+        for (i, scene) in self.stack.iter_mut().enumerate().skip(start) {
+            // Só a cena do topo responde à interface; cada cena fecha seus
+            // painéis antes da próxima desenhar por cima.
+            ctx.ui.set_interactive(interactive && i == top);
             scene.render(ctx);
+            ctx.finish_panel();
         }
+        ctx.ui.set_interactive(interactive);
     }
 }

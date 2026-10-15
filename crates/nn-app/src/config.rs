@@ -10,6 +10,14 @@ use nn_core::Color;
 pub struct AppConfig {
     /// Título da janela.
     pub title: String,
+    /// Identificador do jogo, usado no nome da pasta onde o progresso é
+    /// salvo. `None` usa o título (veja [`AppConfig::save_id`]).
+    pub id: Option<String>,
+    /// Começa em tela cheia.
+    pub fullscreen: bool,
+    /// Pasta onde gravar os dados salvos, no lugar da pasta de dados do
+    /// usuário. Útil em testes.
+    pub save_dir: Option<PathBuf>,
     /// Tamanho inicial da janela em pixels lógicos (respeita a escala do SO).
     pub size: (u32, u32),
     pub resizable: bool,
@@ -34,6 +42,9 @@ impl Default for AppConfig {
     fn default() -> Self {
         Self {
             title: "nn-engine".into(),
+            id: None,
+            fullscreen: false,
+            save_dir: None,
             size: (1280, 720),
             resizable: true,
             vsync: true,
@@ -92,5 +103,35 @@ impl AppConfig {
     pub fn hot_reload(mut self, enabled: bool) -> Self {
         self.hot_reload = enabled;
         self
+    }
+
+    pub fn id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    pub fn fullscreen(mut self, fullscreen: bool) -> Self {
+        self.fullscreen = fullscreen;
+        self
+    }
+
+    pub fn save_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.save_dir = Some(dir.into());
+        self
+    }
+
+    /// Identificador usado para a pasta de dados: o [`AppConfig::id`] ou,
+    /// sem ele, o título em minúsculas e sem acentos.
+    pub fn save_id(&self) -> String {
+        crate::storage::slug(self.id.as_deref().unwrap_or(&self.title))
+    }
+
+    /// Dados salvos para esta configuração: em [`AppConfig::save_dir`] ou na
+    /// pasta de dados do usuário.
+    pub fn open_storage(&self) -> crate::Storage {
+        match &self.save_dir {
+            Some(dir) => crate::Storage::open(dir.join(crate::storage::SAVE_FILE)),
+            None => crate::Storage::for_game(&self.save_id()),
+        }
     }
 }

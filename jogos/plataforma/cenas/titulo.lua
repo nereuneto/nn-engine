@@ -1,9 +1,11 @@
--- Tela de título.
+-- Tela de título com o menu principal.
 local util = require("lib.util")
+local jogo = require("lib.jogo")
 
 local titulo = {}
 
 function titulo:enter()
+  jogo.preparar()
   self.sheet = nn.assets.sheet("assets/imagens/personagem.png", 16, 16, { pixel_art = true })
   self.anim = nn.animator(nn.animation({ 5, 6, 7, 8 }, 10))
   util.tocar_musica()
@@ -12,27 +14,34 @@ end
 
 function titulo:update(dt)
   self.anim:update(dt)
-  if nn.input.pressed("enter") or nn.input.pressed("space") then
-    nn.scene.switch("cenas/fase.lua")
-  end
-  if nn.input.pressed("escape") then nn.quit() end
 end
 
 function titulo:draw()
   local w, h = nn.window.size()
-  nn.screen.rect(0, h * 0.72, w, h * 0.28, "#5CAA46")
-  nn.screen.rect(0, h * 0.72, w, 10, "#84CC60")
-  local x = (nn.time.elapsed() * 220) % (w + 200) - 100
-  nn.screen.sprite(self.sheet, x, h * 0.72 - 96, { frame = self.anim:frame(), w = 96, h = 96 })
+  local s = util.escala()
+  local chao = h * 0.8
+  nn.screen.rect(0, chao, w, h - chao, "#5CAA46")
+  nn.screen.rect(0, chao, w, 10 * s, "#84CC60")
+  local tam = 96 * s
+  local x = (nn.time.elapsed() * 220 * s) % (w + 2 * tam) - tam
+  nn.screen.sprite(self.sheet, x, chao - tam, { frame = self.anim:frame(), w = tam, h = tam })
 
-  util.texto_sombra("Plataforma", w / 2, h * 0.25, { size = 88, anchor = "center", color = "#FFFFFF" })
-  util.texto_sombra("feito em Lua com a nn-engine", w / 2, h * 0.25 + 70, { size = 24, anchor = "center", color = "#1E3A4C" })
-  local piscar = math.floor(nn.time.elapsed() * 2) % 2 == 0
-  if piscar then
-    util.texto_sombra("Aperte Enter para jogar", w / 2, h * 0.5, { size = 32, anchor = "center", color = "#FFE27A" })
+  util.texto_sombra("Plataforma", w / 2, h * 0.14, { size = 88 * s, anchor = "center", color = "#FFFFFF" })
+  util.texto_sombra("feito em Lua com a nn-engine", w / 2, h * 0.14 + 62 * s,
+    { size = 24 * s, anchor = "center", color = "#1E3A4C" })
+
+  -- O menu: funciona com mouse, teclado e controle.
+  local ui = nn.ui.panel("titulo", { x = w / 2, y = h * 0.48, width = 360 })
+  if ui:button("Jogar") then nn.scene.switch("cenas/fase.lua") end
+  if ui:button("Opções") then nn.scene.push("cenas/opcoes.lua") end
+  if ui:button("Sair") then nn.quit() end
+  local rec = jogo.recordes()
+  if rec.tempo then
+    ui:label(("Recorde: %s  ·  %d moedas"):format(util.tempo(rec.tempo), rec.moedas or 0), { size = 0.8 })
   end
-  nn.screen.text("Setas/AD: andar    Espaço/W: pular    Esc: pausa    F1: ver colisões", w / 2, h - 24,
-    { size = 18, anchor = "bottom", color = "#E8F5E0" })
+  ui:finish()
+
+  nn.screen.text(jogo.ajuda(), w / 2, h - 24 * s, { size = 18 * s, anchor = "bottom", color = "#E8F5E0" })
 end
 
 return titulo

@@ -1,5 +1,6 @@
 -- A fase: mapa feito no Tiled (fases/fase1.tmj), física e colisões.
 local util = require("lib.util")
+local jogo = require("lib.jogo")
 
 local fase = {}
 
@@ -15,6 +16,7 @@ local BUFFER = 0.12         -- apertar o pulo um pouco antes de tocar o chão ta
 local TAM_SPRITE = 48
 
 function fase:enter()
+  jogo.preparar()
   self.mapa = nn.tilemap.load("fases/fase1.tmj", { scale = ESCALA })
   self.mundo = nn.physics.world({ gravity = GRAVIDADE })
   self.mundo:add_tilemap(self.mapa)
@@ -129,8 +131,9 @@ function fase:fixed_update(dt)
     end
   end
 
-  -- Andar com aceleração (mais solta no ar).
-  local dir = util.clamp(nn.input.axis("left", "right") + nn.input.axis("a", "d"), -1, 1)
+  -- Andar com aceleração (mais solta no ar). Com o analógico, inclinar
+  -- pouco anda devagar.
+  local dir = nn.input.action_axis("esquerda", "direita")
   local acel = j.on_ground and ACEL_CHAO or ACEL_AR
   j.vx = util.approach(j.vx, dir * VEL_ANDAR, acel * dt)
   if dir ~= 0 then self.esquerda = dir < 0 end
@@ -203,14 +206,13 @@ function fase:vencer()
 end
 
 function fase:update(dt)
-  if nn.input.pressed("escape") or nn.input.pressed("p") then nn.scene.push("cenas/pausa.lua") end
+  if nn.input.action_pressed("pausa") then nn.scene.push("cenas/pausa.lua") end
   if nn.input.pressed("f1") then self.debug = not self.debug end
 
-  if nn.input.pressed("space") or nn.input.pressed("up") or nn.input.pressed("w") then
+  if nn.input.action_pressed("pular") then
     self.buffer = BUFFER
   end
-  local soltou = nn.input.released("space") or nn.input.released("up") or nn.input.released("w")
-  if soltou and self.jogador.vy > 0 then
+  if nn.input.action_released("pular") and self.jogador.vy > 0 then
     self.jogador.vy = self.jogador.vy * CORTE_PULO
   end
 
@@ -238,8 +240,11 @@ function fase:draw()
   local j = self.jogador
   local x, y = util.lerp(self.ax, j.x, a), util.lerp(self.ay, j.y, a)
 
-  -- Câmera: segue olhando um pouco à frente, sem sair do mapa.
+  -- Câmera: segue olhando um pouco à frente, sem sair do mapa. O zoom
+  -- acompanha a altura da janela, então a tela cheia mostra o mesmo pedaço
+  -- da fase, só que maior.
   local w, h = nn.window.size()
+  nn.camera.set_zoom(util.escala())
   local zoom = nn.camera.zoom()
   local vw, vh = w / zoom, h / zoom
   local cx, cy = nn.camera.position()
@@ -304,15 +309,17 @@ end
 
 function fase:hud()
   local w, h = nn.window.size()
-  nn.screen.rect(14, 14, 300, 50, { 0, 0, 0, 0.3 })
-  nn.screen.sprite(self.moeda_sheet, 26, 21, { frame = 1, w = 36, h = 36 })
-  util.texto_sombra(("%d / %d"):format(self.pegas, self.total), 72, 22, { size = 28, color = "#FFE27A" })
-  util.texto_sombra(util.tempo(self.tempo), 180, 22, { size = 28 })
+  local s = util.escala()
+  nn.screen.rect(14 * s, 14 * s, 300 * s, 50 * s, { 0, 0, 0, 0.3 })
+  nn.screen.sprite(self.moeda_sheet, 26 * s, 21 * s, { frame = 1, w = 36 * s, h = 36 * s })
+  util.texto_sombra(("%d / %d"):format(self.pegas, self.total), 72 * s, 22 * s, { size = 28 * s, color = "#FFE27A" })
+  util.texto_sombra(util.tempo(self.tempo), 180 * s, 22 * s, { size = 28 * s })
   if self.mortes > 0 then
-    util.texto_sombra(("Quedas: %d"):format(self.mortes), w - 20, 22, { size = 22, anchor = "topright" })
+    util.texto_sombra(("Quedas: %d"):format(self.mortes), w - 20 * s, 22 * s, { size = 22 * s, anchor = "topright" })
   end
   if self.debug then
-    nn.screen.text("F1: esconder colisões", 20, h - 20, { size = 16, anchor = "bottomleft", color = "#FFFFFF" })
+    nn.screen.text("F1: esconder colisões", 20 * s, h - 20 * s,
+      { size = 16 * s, anchor = "bottomleft", color = "#FFFFFF" })
   end
 end
 

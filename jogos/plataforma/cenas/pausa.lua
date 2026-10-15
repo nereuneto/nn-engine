@@ -2,21 +2,29 @@ local util = require("lib.util")
 
 local pausa = { overlay = true }
 
-function pausa:enter() if musica then musica:set_volume(0.1) end end
-function pausa:exit() if musica then musica:set_volume(0.3) end end
+function pausa:enter()
+  if musica then musica:set_volume(util.VOLUME_MUSICA * 0.3) end
+  nn.ui.set_focus("pausa", 1)
+end
+
+function pausa:exit()
+  if musica then musica:set_volume(util.VOLUME_MUSICA) end
+end
 
 function pausa:update()
-  if nn.input.pressed("escape") or nn.input.pressed("p") then nn.scene.pop() end
-  if nn.input.pressed("r") then nn.scene.switch("cenas/fase.lua") end
-  if nn.input.pressed("m") then nn.scene.switch("cenas/titulo.lua") end
+  -- O mesmo botão que pausa (Esc, P ou Start) também volta ao jogo.
+  if nn.input.action_pressed("pausa") then nn.scene.pop() end
 end
 
 function pausa:draw()
   local w, h = nn.window.size()
   nn.screen.rect(0, 0, w, h, { 0.04, 0.06, 0.1, 0.55 })
-  util.texto_sombra("Pausado", w / 2, h / 2 - 10, { size = 64, anchor = "bottom" })
-  util.texto_sombra("Esc: continuar    R: recomeçar    M: título", w / 2, h / 2 + 10,
-    { size = 22, anchor = "top", color = "#DDE4DE" })
+  local ui = nn.ui.panel("pausa", { title = "Pausado" })
+  if ui:button("Continuar") or ui:back() then nn.scene.pop() end
+  if ui:button("Recomeçar") then nn.scene.switch("cenas/fase.lua") end
+  if ui:button("Opções") then nn.scene.push("cenas/opcoes.lua") end
+  if ui:button("Título") then nn.scene.switch("cenas/titulo.lua") end
+  ui:finish()
 end
 
 return pausa

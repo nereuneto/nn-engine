@@ -8,7 +8,7 @@ use nn_core::{Color, FixedTimestep, Time};
 use nn_input::Input;
 use nn_render::{Camera2D, Renderer};
 
-use crate::{AppConfig, Assets};
+use crate::{AppConfig, Assets, Storage, Ui};
 
 /// Tudo o que o jogo pode acessar da engine durante os callbacks.
 #[derive(Debug)]
@@ -28,6 +28,12 @@ pub struct Context {
     pub camera: Camera2D,
     /// Cor de fundo.
     pub clear_color: Color,
+    /// Interface (menus): tema e foco. Para montar painéis, use [`Context::panel`].
+    pub ui: Ui,
+    /// Dados salvos (recordes, opções, progresso).
+    pub save: Storage,
+    pub(crate) fullscreen: bool,
+    pub(crate) fullscreen_request: Option<bool>,
     pub(crate) timestep: FixedTimestep,
     pub(crate) viewport: UVec2,
     pub(crate) exit_requested: bool,
@@ -39,6 +45,7 @@ impl Context {
         renderer: Renderer,
         audio: Audio,
         viewport: UVec2,
+        save: Storage,
     ) -> Self {
         Self {
             input: Input::new(),
@@ -51,6 +58,10 @@ impl Context {
             },
             camera: Camera2D::default(),
             clear_color: config.clear_color,
+            ui: Ui::default(),
+            save,
+            fullscreen: config.fullscreen,
+            fullscreen_request: None,
             timestep: FixedTimestep::from_hz(config.fixed_hz),
             viewport,
             exit_requested: false,
@@ -91,6 +102,16 @@ impl Context {
     pub fn is_exiting(&self) -> bool {
         self.exit_requested
     }
+
+    /// Liga ou desliga a tela cheia (aplicado ao final do frame).
+    pub fn set_fullscreen(&mut self, fullscreen: bool) {
+        self.fullscreen_request = Some(fullscreen);
+    }
+
+    /// A janela está (ou vai ficar, se acabou de pedir) em tela cheia?
+    pub fn is_fullscreen(&self) -> bool {
+        self.fullscreen_request.unwrap_or(self.fullscreen)
+    }
 }
 
 /// Um jogo (ou qualquer aplicação) rodando na nn-engine.
@@ -127,6 +148,7 @@ pub(crate) fn draw<G: Game>(
     target: &nn_render::wgpu::TextureView,
 ) {
     game.render(ctx);
+    ctx.finish_panel();
     let clear = ctx.clear_color;
     let camera = ctx.camera;
     let viewport = ctx.viewport;

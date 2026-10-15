@@ -16,9 +16,13 @@
 mod assets;
 mod config;
 mod context;
+#[cfg(feature = "gamepad")]
+mod gamepad;
 mod headless;
 mod scene;
 mod source;
+mod storage;
+mod ui;
 mod window;
 
 pub use assets::{AssetError, Assets};
@@ -27,4 +31,6 @@ pub use context::{Context, Game};
 pub use headless::Headless;
 pub use scene::{Scene, SceneStack, Transition};
 pub use source::{AssetSource, DiskSource, Pack, PackError, list_dir, normalize};
+pub use storage::{SAVE_FILE, Storage, data_dir, slug};
+pub use ui::{Panel, PanelOptions, Theme, Ui};
 pub use window::{AppError, run};

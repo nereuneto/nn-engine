@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use kira::sound::PlaybackState;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
+use kira::track::{TrackBuilder, TrackHandle};
 use kira::{
     AudioManager, AudioManagerSettings, Decibels, DefaultBackend, Frame, Panning, PlaybackRate,
     Tween,
@@ -37,6 +38,25 @@ pub enum AudioError {
     Decode(#[from] kira::sound::FromFileError),
 }
 
+/// Canal de mixagem: cada um tem seu próprio volume, para o jogador
+/// ajustar música e efeitos separadamente.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Channel {
+    /// Efeitos sonoros (padrão).
+    #[default]
+    Effects,
+    /// Música de fundo.
+    Music,
+}
+
+impl Channel {
+    pub const ALL: [Channel; 2] = [Channel::Effects, Channel::Music];
+
+    fn index(self) -> usize {
+        self as usize
+    }
+}
+
 /// Opções de reprodução de um som.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlayOptions {
@@ -48,6 +68,8 @@ pub struct PlayOptions {
     pub pan: f32,
     /// Repete até ser parado. Use para música e sons contínuos.
     pub looping: bool,
+    /// Canal de mixagem (efeitos ou música).
+    pub channel: Channel,
 }
 
 impl Default for PlayOptions {
@@ -57,6 +79,7 @@ impl Default for PlayOptions {
             speed: 1.0,
             pan: 0.0,
             looping: false,
+            channel: Channel::Effects,
         }
     }
 }
@@ -79,6 +102,11 @@ impl PlayOptions {
 
     pub fn looped(mut self) -> Self {
         self.looping = true;
+        self
+    }
+
+    pub fn channel(mut self, channel: Channel) -> Self {
+        self.channel = channel;
         self
     }
 }
@@ -162,8 +190,11 @@ impl Sound {
 /// Sistema de áudio: guarda os sons carregados e toca.
 pub struct Audio {
     manager: Option<AudioManager<DefaultBackend>>,
+    /// Uma trilha do mixer por canal (vazio no modo mudo).
+    tracks: Vec<TrackHandle>,
     sounds: Vec<StaticSoundData>,
     master_volume: f32,
+    channel_volumes: [f32; 2],
 }
 
 impl std::fmt::Debug for Audio {
@@ -172,6 +203,7 @@ impl std::fmt::Debug for Audio {
             .field("enabled", &self.is_enabled())
             .field("sounds", &self.sounds.len())
             .field("master_volume", &self.master_volume)
+            .field("channel_volumes", &self.channel_volumes)
             .finish()
     }
 }
@@ -186,10 +218,21 @@ impl Audio {
     /// Abre o dispositivo de som padrão. Se não houver, entra em modo mudo.
     pub fn new() -> Self {
         match AudioManager::<DefaultBackend>::new(AudioManagerSettings::default()) {
-            Ok(manager) => Self {
-                manager: Some(manager),
-                ..Self::disabled()
-            },
+            Ok(mut manager) => {
+                let tracks = Channel::ALL
+                    .iter()
+                    .map(|_| manager.add_sub_track(TrackBuilder::new()))
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap_or_else(|e| {
+                        log::warn!("canais de áudio indisponíveis: {e}");
+                        Vec::new()
+                    });
+                Self {
+                    manager: Some(manager),
+                    tracks,
+                    ..Self::disabled()
+                }
+            }
             Err(e) => {
                 log::warn!("sem dispositivo de áudio, seguindo em modo mudo: {e}");
                 Self::disabled()
@@ -201,8 +244,10 @@ impl Audio {
     pub fn disabled() -> Self {
         Self {
             manager: None,
+            tracks: Vec::new(),
             sounds: Vec::new(),
             master_volume: 1.0,
+            channel_volumes: [1.0; 2],
         }
     }
 
@@ -282,7 +327,11 @@ impl Audio {
         let Some(manager) = &mut self.manager else {
             return Sound::silent();
         };
-        match manager.play(data) {
+        let played = match self.tracks.get_mut(options.channel.index()) {
+            Some(track) => track.play(data),
+            None => manager.play(data),
+        };
+        match played {
             Ok(handle) => Sound {
                 handle: Some(handle),
             },
@@ -304,6 +353,20 @@ impl Audio {
             manager
                 .main_track()
                 .set_volume(to_decibels(self.master_volume), Tween::default());
+        }
+    }
+
+    /// Volume de um canal (linear, 1.0 = normal), multiplicado pelo volume geral.
+    pub fn channel_volume(&self, channel: Channel) -> f32 {
+        self.channel_volumes[channel.index()]
+    }
+
+    /// Muda o volume de um canal, inclusive dos sons que já estão tocando nele.
+    pub fn set_channel_volume(&mut self, channel: Channel, volume: f32) {
+        let volume = volume.max(0.0);
+        self.channel_volumes[channel.index()] = volume;
+        if let Some(track) = self.tracks.get_mut(channel.index()) {
+            track.set_volume(to_decibels(volume), Tween::default());
         }
     }
 }
@@ -370,6 +433,19 @@ mod tests {
         som.stop();
         audio.set_master_volume(0.5);
         assert_eq!(audio.master_volume(), 0.5);
+    }
+
+    #[test]
+    fn volume_por_canal() {
+        let mut audio = Audio::disabled();
+        assert_eq!(audio.channel_volume(Channel::Music), 1.0);
+        audio.set_channel_volume(Channel::Music, 0.25);
+        audio.set_channel_volume(Channel::Effects, -1.0);
+        assert_eq!(audio.channel_volume(Channel::Music), 0.25);
+        assert_eq!(audio.channel_volume(Channel::Effects), 0.0);
+        let id = audio.add_samples(1000, &[0.5; 100]);
+        let som = audio.play_with(id, PlayOptions::default().channel(Channel::Music));
+        assert!(!som.is_playing());
     }
 
     #[test]

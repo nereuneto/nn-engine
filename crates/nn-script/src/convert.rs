@@ -1,8 +1,9 @@
 //! Conversões entre valores Lua e tipos da engine.
 
 use mlua::{Error, Result, Table, Value};
+use nn_audio::Channel;
 use nn_core::Color;
-use nn_input::{KeyCode, MouseButton};
+use nn_input::{AxisDir, Binding, KeyCode, MouseButton, PadAxis, PadButton};
 use nn_render::{Align, Anchor};
 
 pub(crate) fn err(msg: impl Into<String>) -> Error {
@@ -173,6 +174,86 @@ pub(crate) fn keys(name: &str) -> Result<&'static [KeyCode]> {
     })
 }
 
+/// Botão do controle pelo nome (layout do Xbox: "a" é o botão de baixo).
+pub(crate) fn pad_button(name: &str) -> Result<PadButton> {
+    use PadButton::*;
+    Ok(match name.to_ascii_lowercase().as_str() {
+        "a" | "south" => South,
+        "b" | "east" => East,
+        "x" | "west" => West,
+        "y" | "north" => North,
+        "lb" | "l1" => LeftShoulder,
+        "rb" | "r1" => RightShoulder,
+        "lt" | "l2" => LeftTrigger,
+        "rt" | "r2" => RightTrigger,
+        "back" | "select" => Select,
+        "start" => Start,
+        "ls" | "l3" => LeftStick,
+        "rs" | "r3" => RightStick,
+        "up" => DPadUp,
+        "down" => DPadDown,
+        "left" => DPadLeft,
+        "right" => DPadRight,
+        _ => {
+            return Err(err(format!(
+                "botão do controle desconhecido: \"{name}\" (use a, b, x, y, lb, rb, lt, rt, \
+                 back, start, ls, rs, up, down, left ou right)"
+            )));
+        }
+    })
+}
+
+/// Eixo do controle pelo nome.
+pub(crate) fn pad_axis(name: &str) -> Result<PadAxis> {
+    Ok(match name.to_ascii_lowercase().as_str() {
+        "leftx" => PadAxis::LeftX,
+        "lefty" => PadAxis::LeftY,
+        "rightx" => PadAxis::RightX,
+        "righty" => PadAxis::RightY,
+        "lt" => PadAxis::LeftTrigger,
+        "rt" => PadAxis::RightTrigger,
+        _ => {
+            return Err(err(format!(
+                "eixo do controle desconhecido: \"{name}\" (use leftx, lefty, rightx, righty, lt ou rt)"
+            )));
+        }
+    })
+}
+
+/// Entradas de uma ação: "space", "mouse:left", "pad:a", "pad:leftx+".
+pub(crate) fn bindings(spec: &str) -> Result<Vec<Binding>> {
+    if let Some(button) = spec.strip_prefix("mouse:") {
+        return Ok(vec![Binding::Mouse(mouse_button(button)?)]);
+    }
+    if let Some(name) = spec.strip_prefix("pad:") {
+        let dir = if name.ends_with('+') {
+            Some(AxisDir::Positive)
+        } else if name.ends_with('-') {
+            Some(AxisDir::Negative)
+        } else {
+            None
+        };
+        return Ok(vec![match dir {
+            Some(dir) => Binding::PadAxis(pad_axis(&name[..name.len() - 1])?, dir),
+            None => Binding::Pad(pad_button(name)?),
+        }]);
+    }
+    Ok(keys(spec)?.iter().map(|k| Binding::Key(*k)).collect())
+}
+
+/// Canal de áudio pelo nome.
+pub(crate) fn channel(name: &str) -> Result<Channel> {
+    Ok(match name {
+        "effects" => Channel::Effects,
+        "music" => Channel::Music,
+        _ => {
+            return Err(err(format!(
+                "canal de áudio desconhecido: \"{name}\" (use effects ou music)"
+            )));
+        }
+    })
+}
+
 pub(crate) fn mouse_button(name: &str) -> Result<MouseButton> {
     Ok(match name {
         "left" => MouseButton::Left,
@@ -208,6 +289,23 @@ mod tests {
         );
         assert!(color(&lua.load("'#XYZ'").eval::<Value>().unwrap()).is_err());
         assert!(color(&Value::Boolean(true)).is_err());
+    }
+
+    #[test]
+    fn entradas_de_acao_por_nome() {
+        assert_eq!(bindings("shift").unwrap().len(), 2);
+        assert_eq!(
+            bindings("mouse:right").unwrap(),
+            [Binding::Mouse(MouseButton::Right)]
+        );
+        assert_eq!(bindings("pad:A").unwrap(), [Binding::Pad(PadButton::South)]);
+        assert_eq!(
+            bindings("pad:leftx-").unwrap(),
+            [Binding::PadAxis(PadAxis::LeftX, AxisDir::Negative)]
+        );
+        assert!(bindings("pad:z").is_err());
+        assert!(bindings("pad:leftz+").is_err());
+        assert!(bindings("mouse:x").is_err());
     }
 
     #[test]
