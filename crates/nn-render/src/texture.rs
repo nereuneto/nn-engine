@@ -42,8 +42,7 @@ impl TextureOptions {
 pub(crate) struct GpuTexture {
     pub(crate) size: UVec2,
     pub(crate) bind_group: wgpu::BindGroup,
-    // Mantidos vivos enquanto o bind group existir.
-    _texture: wgpu::Texture,
+    texture: wgpu::Texture,
 }
 
 impl GpuTexture {
@@ -115,7 +114,37 @@ impl GpuTexture {
         Self {
             size,
             bind_group,
-            _texture: texture,
+            texture,
         }
+    }
+
+    /// Substitui os pixels de uma região da textura.
+    pub(crate) fn write(&self, queue: &wgpu::Queue, origin: UVec2, size: UVec2, rgba: &[u8]) {
+        if size.x == 0 || size.y == 0 {
+            return;
+        }
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: origin.x,
+                    y: origin.y,
+                    z: 0,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            rgba,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * size.x),
+                rows_per_image: Some(size.y),
+            },
+            wgpu::Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+        );
     }
 }

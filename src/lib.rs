@@ -19,9 +19,10 @@
 //! ```
 //!
 //! Os módulos também podem ser usados separadamente: [`core`], [`input`],
-//! [`render`] e [`app`].
+//! [`render`], [`audio`] e [`app`].
 
 pub use nn_app as app;
+pub use nn_audio as audio;
 pub use nn_core as core;
 pub use nn_input as input;
 pub use nn_render as render;
@@ -34,9 +35,13 @@ pub use nn_app::{AppConfig, AppError, Context, Game, run};
 pub mod prelude {
     pub use glam::{UVec2, Vec2};
     pub use nn_app::{AppConfig, AppError, Context, Game};
+    pub use nn_audio::{Audio, PlayOptions, Sound, SoundId};
     pub use nn_core::{Color, Time};
     pub use nn_input::{Input, KeyCode, MouseButton};
-    pub use nn_render::{Camera2D, Filter, Rect, Sprite, TextureId, TextureOptions};
+    pub use nn_render::{
+        Align, Anchor, Animation, AnimationPlayer, Camera2D, Filter, FontId, Playback, Rect,
+        Sprite, SpriteSheet, Text, TextureId, TextureOptions,
+    };
 }
 
 /// Garante que os exemplos do README continuam compilando.

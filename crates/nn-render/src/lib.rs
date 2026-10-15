@@ -1,22 +1,28 @@
 //! Renderer 2D da nn-engine.
 //!
 //! - [`GpuContext`]: conexão com a GPU.
-//! - [`Renderer`]: desenha [`Sprite`]s em lote, agrupando por textura.
+//! - [`Renderer`]: desenha [`Sprite`]s e [`Text`]os em lote, agrupando por
+//!   textura, no espaço do mundo ou da tela (HUD).
+//! - [`SpriteSheet`], [`Animation`] e [`AnimationPlayer`]: animação quadro a quadro.
 //! - [`Camera2D`]: câmera ortográfica com Y para cima.
 //! - [`OffscreenTarget`]: renderiza em memória (testes e capturas).
 
+mod animation;
 mod camera;
 mod context;
 mod offscreen;
 mod renderer;
 mod sprite;
+mod text;
 mod texture;
 
+pub use animation::{Animation, AnimationPlayer, Playback, SpriteSheet};
 pub use camera::Camera2D;
 pub use context::GpuContext;
 pub use offscreen::OffscreenTarget;
-pub use renderer::{RenderStats, Renderer};
+pub use renderer::{RenderStats, Renderer, ScreenPainter};
 pub use sprite::{Rect, Sprite};
+pub use text::{Align, Anchor, FontId, Text};
 pub use texture::{Filter, TextureId, TextureOptions};
 
 pub use wgpu;
@@ -30,6 +36,8 @@ pub enum RenderError {
     RequestDevice(String),
     #[error("falha ao ler pixels da GPU: {0}")]
     Readback(String),
+    #[error("fonte inválida: {0}")]
+    Font(String),
     #[error("falha ao decodificar ou salvar imagem: {0}")]
     Image(#[from] image::ImageError),
     #[error("falha ao ler {path}: {source}")]
