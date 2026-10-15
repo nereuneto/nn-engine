@@ -1,0 +1,22 @@
+[package]
+name = "nn-render"
+description = "Renderer 2D da nn-engine baseado em wgpu: sprites em lote, texturas e câmera."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+nn-core.workspace = true
+wgpu.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+image.workspace = true
+log.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+pollster.workspace = true
+
+[lints]
+workspace = true
