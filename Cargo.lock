@@ -1532,7 +1532,9 @@ dependencies = [
  "env_logger",
  "log",
  "nn-app",
+ "nn-input",
  "nn-script",
+ "serde_json",
 ]
 
 [[package]]

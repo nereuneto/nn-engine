@@ -21,9 +21,9 @@ function pausa:draw()
   nn.screen.rect(0, 0, w, h, { 0.04, 0.06, 0.1, 0.55 })
   local ui = nn.ui.panel("pausa", { title = "Pausado" })
   if ui:button("Continuar") or ui:back() then nn.scene.pop() end
-  if ui:button("Recomeçar") then nn.scene.switch("cenas/fase.lua") end
+  if ui:button("Recomeçar") then nn.scene.switch("cenas/fase.lua", nil, { fade = 0.4 }) end
   if ui:button("Opções") then nn.scene.push("cenas/opcoes.lua") end
-  if ui:button("Título") then nn.scene.switch("cenas/titulo.lua") end
+  if ui:button("Título") then nn.scene.switch("cenas/titulo.lua", nil, { fade = 0.6 }) end
   ui:finish()
 end
 

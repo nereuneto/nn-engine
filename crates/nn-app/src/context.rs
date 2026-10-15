@@ -32,6 +32,7 @@ pub struct Context {
     pub ui: Ui,
     /// Dados salvos (recordes, opções, progresso).
     pub save: Storage,
+    pub(crate) effects: crate::effects::Effects,
     pub(crate) fullscreen: bool,
     pub(crate) fullscreen_request: Option<bool>,
     pub(crate) timestep: FixedTimestep,
@@ -60,6 +61,7 @@ impl Context {
             clear_color: config.clear_color,
             ui: Ui::default(),
             save,
+            effects: Default::default(),
             fullscreen: config.fullscreen,
             fullscreen_request: None,
             timestep: FixedTimestep::from_hz(config.fixed_hz),
@@ -134,6 +136,7 @@ pub trait Game: 'static {
 pub(crate) fn simulate<G: Game>(ctx: &mut Context, game: &mut G, dt: Duration) {
     ctx.poll_assets();
     ctx.time.tick(dt);
+    ctx.effects.advance(dt.as_secs_f32());
     let steps = ctx.timestep.advance(dt);
     for _ in 0..steps {
         game.fixed_update(ctx);
@@ -149,8 +152,9 @@ pub(crate) fn draw<G: Game>(
 ) {
     game.render(ctx);
     ctx.finish_panel();
+    ctx.draw_overlays();
     let clear = ctx.clear_color;
-    let camera = ctx.camera;
+    let camera = ctx.render_camera();
     let viewport = ctx.viewport;
     ctx.renderer.render(target, viewport, &camera, Some(clear));
 }

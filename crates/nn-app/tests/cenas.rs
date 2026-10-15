@@ -188,3 +188,99 @@ fn quit_fecha_o_jogo() {
     h.run_frames(1);
     assert!(h.ctx.is_exiting());
 }
+
+fn pixel_central<G: nn_app::Game>(h: &nn_app::Headless<G>) -> [u8; 4] {
+    let px = h.pixels().unwrap();
+    let i = ((32 * 64 + 32) * 4) as usize;
+    [px[i], px[i + 1], px[i + 2], px[i + 3]]
+}
+
+#[test]
+fn transicao_com_escurecimento() {
+    let log = Log::default();
+    let l = log.clone();
+    let config = AppConfig::default()
+        .size(64, 64)
+        .clear_color(nn_core::Color::WHITE);
+    let Some(mut h) = comum::headless(config, move |ctx| {
+        let a = Probe::new("a", &l)
+            .then(|log| Transition::Switch(Box::new(Probe::new("b", log))).fade(0.5));
+        SceneStack::new(ctx, a)
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert!(h.game.is_fading());
+    take(&log);
+
+    // Escurecendo: a cena antiga só é desenhada (não recebe update) e a
+    // nova ainda não entrou.
+    h.run_frames(10);
+    let eventos = take(&log);
+    assert!(eventos.iter().all(|e| e == "a.render"), "{eventos:?}");
+    let [r, ..] = pixel_central(&h);
+    assert!(r > 20 && r < 250, "meio escuro: {r}");
+
+    // Na metade, troca com a tela coberta.
+    h.run_frames(6);
+    let eventos = take(&log);
+    assert!(eventos.contains(&"a.exit".to_string()), "{eventos:?}");
+    assert!(eventos.contains(&"b.enter".to_string()), "{eventos:?}");
+    let [r, ..] = pixel_central(&h);
+    assert!(r < 100, "coberta: {r}");
+
+    // Clareando: a cena nova já roda.
+    h.run_frames(20);
+    let eventos = take(&log);
+    assert!(eventos.contains(&"b.update".to_string()));
+    assert!(!h.game.is_fading());
+    assert_eq!(pixel_central(&h)[0], 255);
+}
+
+#[test]
+fn sair_com_escurecimento() {
+    let log = Log::default();
+    let l = log.clone();
+    let Some(mut h) = comum::headless(AppConfig::default(), move |ctx| {
+        SceneStack::new(
+            ctx,
+            Probe::new("x", &l).then(|_| Transition::Quit.fade(0.2)),
+        )
+    }) else {
+        return;
+    };
+    h.run_frames(3);
+    assert!(!h.ctx.is_exiting(), "espera escurecer");
+    h.run_frames(5);
+    assert!(h.ctx.is_exiting());
+}
+
+#[test]
+fn fade_de_nada_e_nada_e_duracao_zero_e_imediata() {
+    assert!(matches!(Transition::None.fade(1.0), Transition::None));
+    let t = Transition::Pop
+        .fade(1.0)
+        .fade_with(0.3, nn_core::Color::WHITE);
+    match t {
+        Transition::Fade(inner, f) => {
+            assert!(matches!(*inner, Transition::Pop));
+            assert_eq!(f.duration, 0.3);
+        }
+        other => panic!("{other:?}"),
+    }
+
+    let log = Log::default();
+    let l = log.clone();
+    let Some(mut h) = comum::headless(AppConfig::default(), move |ctx| {
+        SceneStack::new(
+            ctx,
+            Probe::new("a", &l)
+                .then(|log| Transition::Push(Box::new(Probe::new("b", log))).fade(0.0)),
+        )
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.len(), 2);
+    assert!(!h.game.is_fading());
+}

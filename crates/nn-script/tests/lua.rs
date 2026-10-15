@@ -1294,7 +1294,8 @@ fn plataforma_menus_opcoes_e_pausa() {
     // Título → Jogar (o foco ficou em "Opções").
     toque(&mut h, KeyCode::ArrowUp);
     toque(&mut h, KeyCode::Enter);
-    h.run_frames(5);
+    // A troca é com escurecimento: espera terminar.
+    h.run_frames(45);
     // Na fase, Esc pausa (no título não faria nada).
     toque(&mut h, KeyCode::Escape);
     assert_eq!(h.game.len(), 2, "pausou");
@@ -1318,6 +1319,8 @@ fn plataforma_menus_opcoes_e_pausa() {
     }
     h.ctx.input.press_pad(pad, nn_input::PadButton::South);
     h.run_frames(2);
+    assert_eq!(h.game.len(), 2, "escurecendo: a troca acontece na metade");
+    h.run_frames(40);
     assert_eq!(h.game.len(), 1);
     // De volta ao título: Esc não pausa nada.
     toque(&mut h, KeyCode::Escape);
@@ -1380,10 +1383,96 @@ fn plataforma_guarda_recordes() {
     assert_eq!(h.game.len(), 2, "menu ainda não apareceu");
     h.run_frames(60);
     toque(&mut h, KeyCode::Enter);
+    h.run_frames(40);
     assert_eq!(h.game.len(), 1, "voltou para a fase");
     drop(h);
     assert_eq!(recordes()["tempo"], 41.5);
     assert_eq!(recordes()["moedas"], 7);
     assert_eq!(recordes()["vitorias"], 2);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+// ----------------------------------------------------------------------
+// Sprint 7: transições e efeitos de tela
+// ----------------------------------------------------------------------
+
+#[test]
+fn troca_de_cena_com_escurecimento_e_efeitos() {
+    let dir = projeto(
+        "fade",
+        &[
+            (
+                "main.lua",
+                r##"
+                local c = {}
+                function c:update()
+                  if nn.input.pressed("enter") then
+                    nn.camera.shake(10, 0.5)
+                    nn.screen.flash("#FF0000", 0.2)
+                    nn.scene.switch("b.lua", { de = "a" }, { fade = 0.4, color = "#FFFFFF" })
+                  end
+                end
+                function c:draw() nn.screen.rect(0, 0, 64, 64, "#0000FF") end
+                return c
+                "##,
+            ),
+            (
+                "b.lua",
+                r##"
+                local b = {}
+                function b:enter(args) veio_de = args.de end
+                function b:update() if nn.input.pressed("q") then nn.quit({ fade = true }) end end
+                function b:draw() nn.screen.rect(0, 0, 64, 64, "#00FF00") end
+                return b
+                "##,
+            ),
+        ],
+    );
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| SceneStack::new(ctx, rt2.scene("main.lua"))) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(pixel(&h, 32, 32), [0, 0, 255, 255]);
+    h.ctx.input.press_key(KeyCode::Enter);
+    h.run_frames(1);
+    h.ctx.input.release_key(KeyCode::Enter);
+    assert!(h.game.is_fading());
+    assert_ne!(h.ctx.shake_offset(), glam::Vec2::ZERO, "tremendo");
+    // Metade do caminho (0,2 s): já é a cena nova, coberta de branco.
+    h.run_frames(12);
+    assert_eq!(global::<String>(&rt, "veio_de"), "a");
+    let [r, g, b, _] = pixel(&h, 32, 32);
+    assert!(r > 200 && g > 200 && b > 200, "{:?}", [r, g, b]);
+    h.run_frames(20);
+    assert!(!h.game.is_fading());
+    assert_eq!(pixel(&h, 32, 32), [0, 255, 0, 255]);
+
+    // nn.quit({ fade = true }) escurece por 0,25 s antes de fechar.
+    h.ctx.input.press_key(KeyCode::KeyQ);
+    h.run_frames(1);
+    assert!(!h.ctx.is_exiting());
+    h.run_frames(20);
+    assert!(h.ctx.is_exiting());
+}
+
+#[test]
+fn opcao_de_fade_invalida_da_erro_claro() {
+    let dir = projeto(
+        "fade-erro",
+        &[(
+            "main.lua",
+            "local c = {}\nfunction c:update()\n  nn.scene.pop({ fade = 'devagar' })\nend\nreturn c",
+        )],
+    );
+    let Some(mut h) = cena(&dir, "main.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    let e = h.game.0.error().unwrap().to_string();
+    assert!(
+        e.contains("fade: use a duração") && e.contains("main.lua:3"),
+        "{e}"
+    );
 }

@@ -162,9 +162,10 @@ function fase:fixed_update(dt)
     end
   end
 
-  -- Pousou depois de uma queda: poeira.
+  -- Pousou depois de uma queda: poeira (e um tranco se a queda foi alta).
   if no_ar_antes and j.on_ground and queda < -500 then
     self.efeitos.poeira:burst(10, j.x, j.y - 21)
+    if queda < -1300 then nn.camera.shake(6, 0.15) end
   end
   self.efeitos.passos.emitting = j.on_ground and math.abs(j.vx) > 250
   self.efeitos.passos:set_position(j.x, j.y - 21)
@@ -186,6 +187,8 @@ end
 function fase:cair()
   self.mortes = self.mortes + 1
   nn.audio.play(self.sons.dano, { volume = 0.7 })
+  nn.camera.shake(16, 0.4)
+  nn.screen.flash("#FF303066", 0.3)
   local j = self.jogador
   self.efeitos.queda:burst(30, util.clamp(j.x, 0, self.mapa.world_width), math.max(j.y, 40))
   j:set_position(self.inicio.x, self.inicio.y)
@@ -200,6 +203,7 @@ function fase:vencer()
   self.jogador:set_velocity(0, 0)
   self.efeitos.passos.emitting = false
   nn.audio.play(self.sons.vitoria)
+  nn.screen.flash("#FFFFFF55", 0.4)
   nn.scene.push("cenas/vitoria.lua", {
     moedas = self.pegas, total = self.total, tempo = self.tempo, mortes = self.mortes,
   })

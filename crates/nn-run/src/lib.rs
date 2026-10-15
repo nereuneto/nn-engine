@@ -1,4 +1,5 @@
-//! Exportação de jogos em Lua para um executável único.
+//! Ferramentas da linha de comando `nn`: criar projetos ([`create_project`])
+//! e exportar jogos em Lua para um executável único ([`export`]).
 //!
 //! O executável exportado é o `nn-jogo` com todos os arquivos do projeto
 //! anexados no fim (veja [`nn_app::Pack`]). Ao abrir, ele lê o pacote de si
@@ -10,6 +11,10 @@ use std::process::Command;
 
 use nn_app::{Pack, list_dir, normalize};
 use nn_script::{Project, ScriptRuntime};
+
+mod novo;
+
+pub use novo::{NewOptions, NewReport, Template, create_project};
 
 /// Sufixo dos executáveis nesta plataforma (`.exe` no Windows).
 pub const EXE_SUFFIX: &str = std::env::consts::EXE_SUFFIX;
