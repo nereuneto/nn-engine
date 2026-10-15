@@ -4,6 +4,12 @@ local jogo = {}
 
 local OPCOES_PADRAO = { musica = 0.7, efeitos = 0.8, tela_cheia = false }
 
+-- As fases, em ordem. Cada uma libera a seguinte quando é completada.
+jogo.FASES = {
+  { arquivo = "fases/fase1.tmj", nome = "Campos verdes" },
+  { arquivo = "fases/fase2.tmj", nome = "Penhascos" },
+}
+
 -- Chamado ao entrar no título e na fase. Pode ser chamado várias vezes.
 function jogo.preparar()
   -- Cada ação aceita teclado e controle ao mesmo tempo.
@@ -64,14 +70,34 @@ function jogo.salvar_opcoes(o)
   jogo.aplicar_opcoes(o)
 end
 
--- { tempo = melhor tempo, moedas = mais moedas, vitorias = quantas vezes chegou }
-function jogo.recordes()
-  return nn.save.get("recordes", {})
+-- Recordes de todas as fases: { ["1"] = { tempo, moedas, vitorias }, ["2"] = ... }.
+-- As chaves são textos para o arquivo salvo guardar um objeto, não uma lista.
+local function todos_recordes()
+  local todos = nn.save.get("recordes", {})
+  -- Versão antiga do jogo: só havia uma fase e os recordes ficavam direto aqui.
+  if type(todos.tempo) == "number" then todos = { ["1"] = todos } end
+  return todos
 end
 
--- Registra o resultado de uma partida. Devolve o que foi recorde e os recordes.
+-- Recordes de uma fase (tabela vazia se ainda não foi completada).
+function jogo.recordes(n)
+  return todos_recordes()[tostring(n or 1)] or {}
+end
+
+-- Quantas fases o jogador já pode jogar.
+function jogo.liberadas()
+  local n = nn.save.get("liberadas", 1)
+  -- Quem completou a fase 1 numa versão antiga também ganha a fase 2.
+  if jogo.recordes(1).tempo then n = math.max(n, 2) end
+  return math.max(1, math.min(n, #jogo.FASES))
+end
+
+-- Registra o resultado de uma partida (r.fase, r.tempo, r.moedas...),
+-- libera a próxima fase e devolve o que foi recorde e os recordes da fase.
 function jogo.registrar(r)
-  local rec = jogo.recordes()
+  local n = r.fase or 1
+  local todos = todos_recordes()
+  local rec = todos[tostring(n)] or {}
   local novo = {}
   if rec.tempo == nil or r.tempo < rec.tempo then
     rec.tempo = r.tempo
@@ -82,7 +108,9 @@ function jogo.registrar(r)
     novo.moedas = true
   end
   rec.vitorias = (rec.vitorias or 0) + 1
-  nn.save.set("recordes", rec)
+  todos[tostring(n)] = rec
+  nn.save.set("recordes", todos)
+  nn.save.set("liberadas", math.max(nn.save.get("liberadas", 1), math.min(n + 1, #jogo.FASES)))
   return novo, rec
 end
 

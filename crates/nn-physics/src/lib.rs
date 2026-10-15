@@ -717,7 +717,19 @@ impl World {
             .collect()
     }
 
-    /// Corpos que se sobrepõem a `id` agora.
+    /// Os dois corpos se sobrepõem agora? Só a forma conta: camadas e
+    /// máscaras são ignoradas. Útil para inimigos que atravessam o jogador
+    /// (sem se empurrarem) mas precisam saber quando encostam nele.
+    pub fn intersects(&self, a: BodyId, b: BodyId) -> bool {
+        match (self.get(a), self.get(b)) {
+            (Some(ba), Some(bb)) if a != b => {
+                overlap(ba.position, &ba.shape, bb.position, &bb.shape)
+            }
+            _ => false,
+        }
+    }
+
+    /// Corpos que se sobrepõem a `id` agora (respeitando camadas e máscaras).
     pub fn overlapping(&self, id: BodyId) -> Vec<BodyId> {
         let Some(body) = self.get(id) else {
             return Vec::new();

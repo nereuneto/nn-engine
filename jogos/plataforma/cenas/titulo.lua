@@ -37,12 +37,23 @@ function titulo:draw()
 
   -- O menu: funciona com mouse, teclado e controle.
   local ui = nn.ui.panel("titulo", { x = w / 2, y = h * 0.48, width = 360 })
-  if ui:button("Jogar") then nn.scene.switch("cenas/fase.lua", nil, { fade = 0.6 }) end
+  if ui:button("Jogar") then
+    -- Com uma fase só liberada, vai direto; com mais, deixa escolher.
+    if jogo.liberadas() == 1 then
+      nn.scene.switch("cenas/fase.lua", { fase = 1 }, { fade = 0.6 })
+    else
+      nn.scene.push("cenas/fases.lua")
+    end
+  end
   if ui:button("Opções") then nn.scene.push("cenas/opcoes.lua") end
   if ui:button("Sair") then nn.quit({ fade = 0.4 }) end
-  local rec = jogo.recordes()
+  local rec = jogo.recordes(1)
   if rec.tempo then
-    ui:label(("Recorde: %s  ·  %d moedas"):format(util.tempo(rec.tempo), rec.moedas or 0), { size = 0.8 })
+    local feitas = 0
+    for n = 1, #jogo.FASES do
+      if jogo.recordes(n).tempo then feitas = feitas + 1 end
+    end
+    ui:label(("Fases completas: %d de %d"):format(feitas, #jogo.FASES), { size = 0.8 })
   end
   ui:finish()
 

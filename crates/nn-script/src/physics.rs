@@ -126,6 +126,13 @@ impl UserData for LBody {
         m.add_method("set_velocity", |_, this, (x, y): (f32, f32)| {
             this.with_mut(|b| b.velocity = Vec2::new(x, y))
         });
+        m.add_method("intersects", |_, this, other: AnyUserData| {
+            let other = other.borrow::<LBody>()?;
+            if !Rc::ptr_eq(&this.world, &other.world) {
+                return Err(err("os dois corpos precisam ser do mesmo mundo"));
+            }
+            Ok(this.world.borrow().intersects(this.id, other.id))
+        });
         m.add_method("overlaps", |_, this, ()| {
             let ids = this.world.borrow().overlapping(this.id);
             Ok(ids

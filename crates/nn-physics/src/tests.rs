@@ -276,3 +276,39 @@ fn ids_continuam_validos_depois_de_remover() {
     assert_eq!(BodyId::from_bits(b.to_bits()), b);
     assert_eq!(w.len(), 1);
 }
+
+#[test]
+fn sobreposicao_entre_dois_corpos_ignora_camadas() {
+    let mut w = World::default();
+    // Jogador e inimigo em camadas que não interagem: não se empurram...
+    let jogador = w.add(
+        Body::dynamic(Shape::rect(20.0, 40.0))
+            .at(Vec2::new(0.0, 0.0))
+            .with_layer(2, u32::MAX),
+    );
+    let inimigo = w.add(
+        Body::dynamic(Shape::circle(10.0))
+            .at(Vec2::new(25.0, 0.0))
+            .with_gravity_scale(0.0)
+            .with_layer(4, 1),
+    );
+    w.get_mut(jogador).unwrap().gravity_scale = 0.0;
+    assert!(!w.intersects(jogador, inimigo), "ainda separados");
+    w.get_mut(inimigo).unwrap().position.x = 15.0;
+    w.step(DT);
+    // ...mas a sobreposição é detectada.
+    assert!(w.intersects(jogador, inimigo));
+    assert!(w.intersects(inimigo, jogador));
+    assert_eq!(
+        w.get(inimigo).unwrap().position.x,
+        15.0,
+        "não foi empurrado"
+    );
+    assert!(
+        w.overlapping(jogador).is_empty(),
+        "overlapping respeita as máscaras"
+    );
+    assert!(!w.intersects(jogador, jogador));
+    w.remove(inimigo);
+    assert!(!w.intersects(jogador, inimigo));
+}
