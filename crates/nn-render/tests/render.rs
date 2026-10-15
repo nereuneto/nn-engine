@@ -392,3 +392,48 @@ fn circulo_redondo() {
     assert_color(img.pixel(5, 5), BLACK, "canto");
     assert_color(img.pixel(58, 58), BLACK, "canto oposto");
 }
+
+#[test]
+fn mistura_aditiva_soma_as_cores() {
+    use nn_render::Blend;
+    let Some(mut h) = Harness::new() else { return };
+    let white = h.renderer.white_texture();
+    // Fundo azul + vermelho aditivo = magenta; com alpha normal seria vermelho.
+    h.renderer.draw(
+        &Sprite::new(white)
+            .at(Vec2::new(-16.0, 0.0))
+            .size(Vec2::splat(32.0))
+            .color(Color::RED)
+            .blend(Blend::Add),
+    );
+    h.renderer.draw(
+        &Sprite::new(white)
+            .at(Vec2::new(16.0, 0.0))
+            .size(Vec2::splat(32.0))
+            .color(Color::RED),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLUE);
+    assert_color(img.pixel(16, 32), [255, 0, 255, 255], "aditivo");
+    assert_color(img.pixel(48, 32), RED, "normal");
+    // Mesma textura, mistura diferente: duas chamadas de desenho.
+    assert_eq!(h.renderer.last_stats().draw_calls, 2);
+}
+
+#[test]
+fn particulas_aparecem_na_tela() {
+    use nn_render::{ParticleConfig, ParticleEmitter};
+    let Some(mut h) = Harness::new() else { return };
+    let mut fx = ParticleEmitter::new(ParticleConfig {
+        lifetime: (1.0, 1.0),
+        speed: (0.0, 0.0),
+        size: (20.0, 20.0),
+        colors: vec![Color::GREEN],
+        ..Default::default()
+    });
+    fx.burst(3);
+    fx.update(0.1);
+    fx.draw(&mut h.renderer);
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_color(img.pixel(32, 32), GREEN, "partícula no centro");
+    assert_eq!(h.renderer.last_stats().draw_calls, 1);
+}

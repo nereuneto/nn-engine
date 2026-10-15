@@ -42,8 +42,9 @@ pub mod prelude {
     pub use nn_core::{Color, Time};
     pub use nn_input::{Input, KeyCode, MouseButton};
     pub use nn_render::{
-        Align, Anchor, Animation, AnimationPlayer, Camera2D, Filter, FontId, Playback, Rect,
-        Sprite, SpriteSheet, Text, TextureId, TextureOptions,
+        Align, Anchor, Animation, AnimationPlayer, Blend, Camera2D, EmitArea, Filter, FontId,
+        ParticleConfig, ParticleEmitter, Playback, Rect, Sprite, SpriteSheet, Text, TextureId,
+        TextureOptions,
     };
 }
 

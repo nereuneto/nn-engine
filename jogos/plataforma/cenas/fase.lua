@@ -36,6 +36,7 @@ function fase:enter()
     vitoria = nn.assets.sound("assets/sons/vitoria.wav"),
   }
   util.tocar_musica()
+  self:criar_efeitos()
 
   -- Objetos colocados no editor viram corpos.
   local inicio = self.mapa:object("inicio")
@@ -78,6 +79,42 @@ function fase:enter()
   nn.camera.set_position(inicio.x, inicio.y)
 end
 
+-- Partículas. Todas as cores com "00" no fim somem aos poucos.
+function fase:criar_efeitos()
+  local efeitos = {}
+  -- Poeira ao pular e ao pousar.
+  efeitos.poeira = nn.particles({
+    emitting = false, lifetime = { 0.25, 0.45 }, speed = { 40, 130 },
+    direction = math.pi / 2, spread = math.pi * 0.9, gravity = -300, drag = 3,
+    size = { 16, 4 }, size_variation = 0.3, colors = { "#EFE3C8DD", "#C8B89800" },
+  })
+  -- Passos: soltam poeira enquanto o personagem corre no chão.
+  efeitos.passos = nn.particles({
+    emitting = false, rate = 16, lifetime = { 0.2, 0.35 }, speed = { 20, 60 },
+    direction = math.pi / 2, spread = math.pi * 0.6, gravity = -200,
+    size = { 10, 2 }, colors = { "#EFE3C8AA", "#C8B89800" },
+  })
+  -- Brilho ao pegar moeda (mistura aditiva: as cores somam e "acendem").
+  efeitos.brilho = nn.particles({
+    emitting = false, lifetime = { 0.3, 0.6 }, speed = { 120, 280 }, drag = 4,
+    size = { 14, 0 }, colors = { "#FFFFFF", "#FFE27A", "#FF9A3000" }, blend = "add",
+  })
+  -- Ao cair nos espinhos ou no buraco.
+  efeitos.queda = nn.particles({
+    emitting = false, lifetime = { 0.4, 0.8 }, speed = { 150, 420 }, gravity = -1100,
+    drag = 1, size = { 16, 3 }, size_variation = 0.4, spin = { -6, 6 },
+    colors = { "#FFD0D0", "#E04848", "#60202000" },
+  })
+  -- Fogos na chegada.
+  efeitos.fogos = nn.particles({
+    emitting = false, lifetime = { 0.8, 1.4 }, speed = { 180, 480 }, gravity = -500,
+    drag = 1.5, size = { 18, 0 }, max = 3000, blend = "add",
+    colors = { "#FFFFFF", "#FFE27A", "#FF5AA0", "#5AC8FF00" },
+  })
+  self.efeitos = efeitos
+  self.fogos_tempo, self.fogos_soltos = 0, 0
+end
+
 function fase:fixed_update(dt)
   if self.venceu then return end
   local j = self.jogador
@@ -105,8 +142,10 @@ function fase:fixed_update(dt)
     j.vy = VEL_PULO
     self.buffer, self.coyote = 0, 0
     nn.audio.play(self.sons.pulo, { volume = 0.6 })
+    self.efeitos.poeira:burst(8, j.x, j.y - 21)
   end
 
+  local no_ar_antes, queda = not j.on_ground, j.vy
   self.tempo = self.tempo + dt
   for _, e in ipairs(self.mundo:step(dt)) do
     if e.type == "enter" and e.b == j then
@@ -120,6 +159,13 @@ function fase:fixed_update(dt)
     end
   end
 
+  -- Pousou depois de uma queda: poeira.
+  if no_ar_antes and j.on_ground and queda < -500 then
+    self.efeitos.poeira:burst(10, j.x, j.y - 21)
+  end
+  self.efeitos.passos.emitting = j.on_ground and math.abs(j.vx) > 250
+  self.efeitos.passos:set_position(j.x, j.y - 21)
+
   if j.y < -200 then self:cair() end
 end
 
@@ -130,6 +176,7 @@ function fase:pegar(corpo)
   corpo:remove()
   self.pegas = self.pegas + 1
   table.insert(self.popups, { x = m.x, y = m.y, idade = 0 })
+  self.efeitos.brilho:burst(18, m.x, m.y)
   nn.audio.play(self.sons.moeda, { speed = 0.95 + math.random() * 0.15, volume = 0.8 })
 end
 
@@ -137,6 +184,7 @@ function fase:cair()
   self.mortes = self.mortes + 1
   nn.audio.play(self.sons.dano, { volume = 0.7 })
   local j = self.jogador
+  self.efeitos.queda:burst(30, util.clamp(j.x, 0, self.mapa.world_width), math.max(j.y, 40))
   j:set_position(self.inicio.x, self.inicio.y)
   j:set_velocity(0, 0)
   self.ax, self.ay = j.x, j.y
@@ -147,6 +195,7 @@ function fase:vencer()
   if self.venceu then return end
   self.venceu = true
   self.jogador:set_velocity(0, 0)
+  self.efeitos.passos.emitting = false
   nn.audio.play(self.sons.vitoria)
   nn.scene.push("cenas/vitoria.lua", {
     moedas = self.pegas, total = self.total, tempo = self.tempo, mortes = self.mortes,
@@ -222,6 +271,9 @@ function fase:draw()
     })
   end
 
+  self:atualizar_efeitos()
+  for _, efeito in pairs(self.efeitos) do efeito:draw() end
+
   for _, p in ipairs(self.popups) do
     local k = p.idade / 0.7
     nn.draw.text("+1", p.x, p.y + 24 + 40 * k, { size = 28, color = "#FFE27A", alpha = 1 - k * k, anchor = "center" })
@@ -229,6 +281,25 @@ function fase:draw()
 
   if self.debug then self.mundo:debug_draw() end
   self:hud()
+end
+
+-- As partículas são só visuais, então andam no draw: assim continuam
+-- animando por baixo da tela de pausa e da tela de chegada.
+function fase:atualizar_efeitos()
+  local dt = nn.time.delta()
+  if self.venceu and self.fogos_soltos < 10 then
+    self.fogos_tempo = self.fogos_tempo - dt
+    if self.fogos_tempo <= 0 then
+      self.fogos_tempo = 0.22
+      self.fogos_soltos = self.fogos_soltos + 1
+      -- Espalhados pela parte de cima da tela.
+      local cx, cy = nn.camera.position()
+      local x = cx + (math.random() - 0.5) * 900
+      local y = cy + 60 + math.random() * 200
+      self.efeitos.fogos:burst(45, x, y)
+    end
+  end
+  for _, efeito in pairs(self.efeitos) do efeito:update(dt) end
 end
 
 function fase:hud()

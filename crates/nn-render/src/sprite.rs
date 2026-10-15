@@ -44,6 +44,16 @@ impl Rect {
     }
 }
 
+/// Como a cor do sprite se combina com o que já está desenhado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum Blend {
+    /// Transparência normal.
+    #[default]
+    Alpha,
+    /// Soma a cor ao fundo: brilhos, fogo, faíscas, luz.
+    Add,
+}
+
 /// Um retângulo texturizado no mundo.
 ///
 /// ```
@@ -73,6 +83,8 @@ pub struct Sprite {
     pub color: Color,
     /// Região da textura usada.
     pub region: Rect,
+    /// Modo de mistura com o fundo.
+    pub blend: Blend,
 }
 
 impl Sprite {
@@ -85,6 +97,7 @@ impl Sprite {
             rotation: 0.0,
             color: Color::WHITE,
             region: Rect::FULL,
+            blend: Blend::Alpha,
         }
     }
 
@@ -115,6 +128,11 @@ impl Sprite {
 
     pub fn region(mut self, region: Rect) -> Self {
         self.region = region;
+        self
+    }
+
+    pub fn blend(mut self, blend: Blend) -> Self {
+        self.blend = blend;
         self
     }
 }

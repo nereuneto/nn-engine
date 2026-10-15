@@ -66,6 +66,10 @@ all = { level = "warn", priority = -1 }
 [lints]
 workspace = true
 
+# Executáveis de release menores (sem símbolos de depuração).
+[profile.release]
+strip = true
+
 # Dependências compiladas com otimização mesmo em debug: deixa o renderer
 # e o carregamento de imagens rápidos sem perder o debug do nosso código.
 [profile.dev.package."*"]

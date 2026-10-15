@@ -1,13 +1,15 @@
-//! Pasta de assets: carregamento com cache e recarga quando o arquivo muda.
+//! Assets do jogo: carregamento com cache e recarga quando o arquivo muda.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
 use nn_audio::{AudioError, SoundId};
 use nn_render::{FontId, RenderError, TextureId, TextureOptions};
 
 use crate::Context;
+use crate::source::{AssetSource, DiskSource, normalize};
 
 /// Erros ao carregar assets.
 #[derive(Debug, thiserror::Error)]
@@ -31,18 +33,18 @@ struct Tracked<T> {
     modified: Option<SystemTime>,
 }
 
-/// Assets carregados a partir da pasta do jogo.
+/// Assets carregados a partir da pasta do jogo (ou do pacote, num jogo exportado).
 ///
 /// Cada arquivo é carregado uma única vez: pedir o mesmo caminho de novo
 /// devolve o mesmo id. Com a recarga ligada, imagens e sons alterados no
 /// disco são recarregados sozinhos, mantendo o id.
 #[derive(Debug)]
 pub struct Assets {
-    root: PathBuf,
+    source: Arc<dyn AssetSource>,
     hot_reload: bool,
-    textures: HashMap<(PathBuf, TextureOptions), Tracked<TextureId>>,
-    sounds: HashMap<PathBuf, Tracked<SoundId>>,
-    fonts: HashMap<PathBuf, FontId>,
+    textures: HashMap<(String, TextureOptions), Tracked<TextureId>>,
+    sounds: HashMap<String, Tracked<SoundId>>,
+    fonts: HashMap<String, FontId>,
     last_poll: Option<Instant>,
     reloaded: Vec<PathBuf>,
 }
@@ -51,9 +53,11 @@ impl Assets {
     /// Intervalo entre verificações de arquivos alterados.
     pub const POLL_INTERVAL: Duration = Duration::from_millis(250);
 
-    pub fn new(root: impl Into<PathBuf>, hot_reload: bool) -> Self {
+    /// Assets lidos de `source`. Origens empacotadas nunca recarregam.
+    pub fn new(source: Arc<dyn AssetSource>, hot_reload: bool) -> Self {
+        let hot_reload = hot_reload && !source.is_packed();
         Self {
-            root: root.into(),
+            source,
             hot_reload,
             textures: HashMap::new(),
             sounds: HashMap::new(),
@@ -61,6 +65,11 @@ impl Assets {
             last_poll: None,
             reloaded: Vec::new(),
         }
+    }
+
+    /// Assets lidos de uma pasta do disco.
+    pub fn from_dir(root: impl Into<PathBuf>, hot_reload: bool) -> Self {
+        Self::new(Arc::new(DiskSource::new(root)), hot_reload)
     }
 
     /// Escolhe a pasta de assets: `dir` relativo à pasta atual, ou ao lado do
@@ -81,14 +90,19 @@ impl Assets {
         dir.to_path_buf()
     }
 
-    /// Pasta raiz dos assets.
-    pub fn root(&self) -> &Path {
-        &self.root
+    /// Origem dos arquivos (para quem precisa ler da mesma forma, como os scripts).
+    pub fn source(&self) -> Arc<dyn AssetSource> {
+        self.source.clone()
     }
 
-    /// Caminho completo de um asset.
+    /// Onde estão os assets (para mensagens).
+    pub fn root(&self) -> PathBuf {
+        self.source.describe(Path::new(""))
+    }
+
+    /// Nome completo de um asset, para mensagens.
     pub fn resolve(&self, path: impl AsRef<Path>) -> PathBuf {
-        self.root.join(path)
+        self.source.describe(path.as_ref())
     }
 
     pub fn hot_reload(&self) -> bool {
@@ -96,7 +110,7 @@ impl Assets {
     }
 
     pub fn set_hot_reload(&mut self, enabled: bool) {
-        self.hot_reload = enabled;
+        self.hot_reload = enabled && !self.source.is_packed();
     }
 
     /// Arquivos recarregados na última verificação (para avisos na tela, logs...).
@@ -104,17 +118,25 @@ impl Assets {
         &self.reloaded
     }
 
-    /// Lê os bytes de um arquivo da pasta de assets.
+    /// Lê os bytes de um arquivo dos assets.
     pub fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, AssetError> {
-        read(&self.resolve(path))
+        let path = path.as_ref();
+        self.source.read(path).map_err(|source| {
+            let path = self.source.describe(path);
+            if source.kind() == std::io::ErrorKind::NotFound {
+                AssetError::NotFound(path)
+            } else {
+                AssetError::Io { path, source }
+            }
+        })
     }
 
-    /// Lê um arquivo de texto (UTF-8) da pasta de assets.
+    /// Lê um arquivo de texto (UTF-8) dos assets.
     pub fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, AssetError> {
-        let full = self.resolve(path);
-        let bytes = read(&full)?;
+        let path = path.as_ref();
+        let bytes = self.read(path)?;
         String::from_utf8(bytes).map_err(|e| AssetError::Io {
-            path: full,
+            path: self.source.describe(path),
             source: std::io::Error::new(std::io::ErrorKind::InvalidData, e),
         })
     }
@@ -133,84 +155,67 @@ impl Assets {
     }
 }
 
-fn read(path: &Path) -> Result<Vec<u8>, AssetError> {
-    std::fs::read(path).map_err(|source| {
-        if source.kind() == std::io::ErrorKind::NotFound {
-            AssetError::NotFound(path.to_owned())
-        } else {
-            AssetError::Io {
-                path: path.to_owned(),
-                source,
-            }
-        }
-    })
-}
-
-fn modified(path: &Path) -> Option<SystemTime> {
-    std::fs::metadata(path).and_then(|m| m.modified()).ok()
-}
-
 impl Context {
-    /// Carrega uma imagem (PNG) da pasta de assets. Chamadas repetidas com o
-    /// mesmo caminho e opções devolvem a mesma textura.
+    /// Carrega uma imagem (PNG) dos assets. Chamadas repetidas com o mesmo
+    /// caminho e opções devolvem a mesma textura.
     pub fn load_texture(
         &mut self,
         path: impl AsRef<Path>,
         options: TextureOptions,
     ) -> Result<TextureId, AssetError> {
-        let full = self.assets.resolve(path);
-        if let Some(t) = self.assets.textures.get(&(full.clone(), options)) {
+        let key = normalize(path.as_ref());
+        if let Some(t) = self.assets.textures.get(&(key.clone(), options)) {
             return Ok(t.id);
         }
-        let bytes = read(&full)?;
+        let bytes = self.assets.read(&key)?;
         let id = self
             .renderer
             .load_texture_bytes(&bytes, options)
             .map_err(|source| AssetError::Render {
-                path: full.clone(),
+                path: self.assets.resolve(&key),
                 source,
             })?;
-        let modified = modified(&full);
+        let modified = self.assets.source.modified(Path::new(&key));
         self.assets
             .textures
-            .insert((full, options), Tracked { id, modified });
+            .insert((key, options), Tracked { id, modified });
         Ok(id)
     }
 
-    /// Carrega um som (WAV, OGG Vorbis ou MP3) da pasta de assets, com cache.
+    /// Carrega um som (WAV, OGG Vorbis ou MP3) dos assets, com cache.
     pub fn load_sound(&mut self, path: impl AsRef<Path>) -> Result<SoundId, AssetError> {
-        let full = self.assets.resolve(path);
-        if let Some(t) = self.assets.sounds.get(&full) {
+        let key = normalize(path.as_ref());
+        if let Some(t) = self.assets.sounds.get(&key) {
             return Ok(t.id);
         }
-        let bytes = read(&full)?;
+        let bytes = self.assets.read(&key)?;
         let id = self
             .audio
             .load_bytes(bytes)
             .map_err(|source| AssetError::Audio {
-                path: full.clone(),
+                path: self.assets.resolve(&key),
                 source,
             })?;
-        let modified = modified(&full);
-        self.assets.sounds.insert(full, Tracked { id, modified });
+        let modified = self.assets.source.modified(Path::new(&key));
+        self.assets.sounds.insert(key, Tracked { id, modified });
         Ok(id)
     }
 
-    /// Carrega uma fonte (.ttf, .otf) da pasta de assets, com cache.
+    /// Carrega uma fonte (.ttf, .otf) dos assets, com cache.
     pub fn load_font(&mut self, path: impl AsRef<Path>) -> Result<FontId, AssetError> {
-        let full = self.assets.resolve(path);
-        if let Some(id) = self.assets.fonts.get(&full) {
+        let key = normalize(path.as_ref());
+        if let Some(id) = self.assets.fonts.get(&key) {
             return Ok(*id);
         }
-        let bytes = read(&full)?;
+        let bytes = self.assets.read(&key)?;
         let id = self
             .renderer
             .load_font_bytes(&bytes)
             .map_err(|source| AssetError::Render {
-                path: full.clone(),
+                path: self.assets.resolve(&key),
                 source,
             })?;
-        self.assets.fonts.insert(full, id);
+        self.assets.fonts.insert(key, id);
         Ok(id)
     }
 
@@ -222,6 +227,7 @@ impl Context {
             return;
         }
         self.assets.reloaded.clear();
+        let source = self.assets.source.clone();
 
         let textures: Vec<_> = self
             .assets
@@ -230,19 +236,20 @@ impl Context {
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         for ((path, options), tracked) in textures {
-            let current = modified(&path);
+            let current = source.modified(Path::new(&path));
             if current.is_none() || current == tracked.modified {
                 continue;
             }
-            match read(&path).and_then(|bytes| {
+            let result = self.assets.read(&path).and_then(|bytes| {
                 self.renderer
                     .replace_texture_bytes(tracked.id, &bytes, options)
-                    .map_err(|source| AssetError::Render {
-                        path: path.clone(),
-                        source,
+                    .map_err(|e| AssetError::Render {
+                        path: source.describe(Path::new(&path)),
+                        source: e,
                     })
-            }) {
-                Ok(()) => log::info!("recarregado: {}", path.display()),
+            });
+            match result {
+                Ok(()) => log::info!("recarregado: {path}"),
                 // Arquivo pela metade (editor ainda salvando) ou inválido: tenta de novo depois.
                 Err(e) => {
                     log::warn!("não foi possível recarregar: {e}");
@@ -252,7 +259,7 @@ impl Context {
             if let Some(t) = self.assets.textures.get_mut(&(path.clone(), options)) {
                 t.modified = current;
             }
-            self.assets.reloaded.push(path);
+            self.assets.reloaded.push(PathBuf::from(path));
         }
 
         let sounds: Vec<_> = self
@@ -262,19 +269,20 @@ impl Context {
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         for (path, tracked) in sounds {
-            let current = modified(&path);
+            let current = source.modified(Path::new(&path));
             if current.is_none() || current == tracked.modified {
                 continue;
             }
-            match read(&path).and_then(|bytes| {
+            let result = self.assets.read(&path).and_then(|bytes| {
                 self.audio
                     .replace_bytes(tracked.id, bytes)
-                    .map_err(|source| AssetError::Audio {
-                        path: path.clone(),
-                        source,
+                    .map_err(|e| AssetError::Audio {
+                        path: source.describe(Path::new(&path)),
+                        source: e,
                     })
-            }) {
-                Ok(()) => log::info!("recarregado: {}", path.display()),
+            });
+            match result {
+                Ok(()) => log::info!("recarregado: {path}"),
                 Err(e) => {
                     log::warn!("não foi possível recarregar: {e}");
                     continue;
@@ -283,7 +291,7 @@ impl Context {
             if let Some(t) = self.assets.sounds.get_mut(&path) {
                 t.modified = current;
             }
-            self.assets.reloaded.push(path);
+            self.assets.reloaded.push(PathBuf::from(path));
         }
     }
 }

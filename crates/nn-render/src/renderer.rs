@@ -8,7 +8,9 @@ use nn_core::Color;
 
 use crate::text::{FontId, Text, TextSystem};
 use crate::texture::GpuTexture;
-use crate::{Camera2D, GpuContext, RenderError, Sprite, SpriteSheet, TextureId, TextureOptions};
+use crate::{
+    Blend, Camera2D, GpuContext, RenderError, Sprite, SpriteSheet, TextureId, TextureOptions,
+};
 
 /// Dados de um sprite como a GPU os lê (um por instância).
 #[repr(C)]
@@ -51,10 +53,12 @@ struct ViewUniform {
     _padding: [f32; 3],
 }
 
-/// Sequência de instâncias consecutivas com a mesma textura: vira uma chamada de desenho.
+/// Sequência de instâncias consecutivas com a mesma textura e mistura: vira
+/// uma chamada de desenho.
 #[derive(Debug, Clone, Copy)]
 struct Batch {
     texture: TextureId,
+    blend: Blend,
     start: u32,
     end: u32,
 }
@@ -66,13 +70,16 @@ struct DrawQueue {
 }
 
 impl DrawQueue {
-    fn push(&mut self, texture: TextureId, instance: SpriteInstance) {
+    fn push(&mut self, texture: TextureId, blend: Blend, instance: SpriteInstance) {
         let index = self.instances.len() as u32;
         self.instances.push(instance);
         match self.batches.last_mut() {
-            Some(batch) if batch.texture == texture => batch.end = index + 1,
+            Some(batch) if batch.texture == texture && batch.blend == blend => {
+                batch.end = index + 1;
+            }
             _ => self.batches.push(Batch {
                 texture,
+                blend,
                 start: index,
                 end: index + 1,
             }),
@@ -127,6 +134,7 @@ pub struct Renderer {
     queue: wgpu::Queue,
     format: wgpu::TextureFormat,
     pipeline: wgpu::RenderPipeline,
+    additive_pipeline: wgpu::RenderPipeline,
     world_view: View,
     screen_view: View,
     texture_layout: wgpu::BindGroupLayout,
@@ -211,36 +219,55 @@ impl Renderer {
             bind_group_layouts: &[Some(&view_layout), Some(&texture_layout)],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nn sprite"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[Some(SpriteInstance::layout())],
+        let make_pipeline = |label: &str, blend: wgpu::BlendState| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(SpriteInstance::layout())],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    // Sem descarte de faces: tamanho negativo espelha o sprite.
+                    cull_mode: None,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(blend),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let pipeline = make_pipeline("nn sprite", wgpu::BlendState::ALPHA_BLENDING);
+        // Aditiva: soma a cor ao fundo (brilho, fogo, faíscas).
+        let additive_pipeline = make_pipeline(
+            "nn sprite aditivo",
+            wgpu::BlendState {
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::Zero,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
             },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                // Sem descarte de faces: tamanho negativo espelha o sprite.
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        );
 
         let instance_buffer = Self::create_instance_buffer(&device, Self::INITIAL_CAPACITY);
 
@@ -249,6 +276,7 @@ impl Renderer {
             queue,
             format,
             pipeline,
+            additive_pipeline,
             world_view,
             screen_view,
             texture_layout,
@@ -286,6 +314,12 @@ impl Renderer {
     // ------------------------------------------------------------------
     // Texturas
     // ------------------------------------------------------------------
+
+    /// Textura de um círculo branco com borda suave (usada por `draw_circle`
+    /// e como padrão das partículas).
+    pub fn circle_texture(&self) -> TextureId {
+        self.circle
+    }
 
     /// Textura branca de 1×1, para desenhar retângulos de cor sólida.
     pub fn white_texture(&self) -> TextureId {
@@ -494,7 +528,8 @@ impl Renderer {
             region: sprite.region.to_array(),
             color: self.gpu_color(sprite.color).to_array(),
         };
-        self.queue_mut(space).push(sprite.texture, instance);
+        self.queue_mut(space)
+            .push(sprite.texture, sprite.blend, instance);
     }
 
     fn push_text(&mut self, space: Space, text: &Text<'_>) {
@@ -530,7 +565,8 @@ impl Renderer {
                 region: glyph.region.to_array(),
                 color,
             };
-            self.queue_mut(space).push(glyph.texture, instance);
+            self.queue_mut(space)
+                .push(glyph.texture, Blend::Alpha, instance);
         }
     }
 
@@ -633,8 +669,8 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_pipeline(&self.pipeline);
             pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+            let mut current_blend = None;
 
             let passes = [
                 (&self.world_view, &self.world, 0u32),
@@ -646,6 +682,13 @@ impl Renderer {
                 }
                 pass.set_bind_group(0, &view.bind_group, &[]);
                 for batch in &queue.batches {
+                    if current_blend != Some(batch.blend) {
+                        pass.set_pipeline(match batch.blend {
+                            Blend::Alpha => &self.pipeline,
+                            Blend::Add => &self.additive_pipeline,
+                        });
+                        current_blend = Some(batch.blend);
+                    }
                     let texture = &self.textures[batch.texture.0 as usize];
                     pass.set_bind_group(1, &texture.bind_group, &[]);
                     pass.draw(0..6, base + batch.start..base + batch.end);

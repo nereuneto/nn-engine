@@ -45,6 +45,26 @@ return {
 }
 ```
 
+## Distribuindo o jogo
+
+```sh
+cargo nn exportar jogos/plataforma
+```
+
+Gera `dist/plataforma` (ou `dist/plataforma.exe` no Windows): **um único arquivo** com a engine e todos os arquivos do projeto dentro. Quem for jogar só precisa dele: não precisa de Rust, Lua, nem da pasta do projeto. No Windows, o jogo abre sem janela de console.
+
+Antes de empacotar, a sintaxe de todos os `.lua` é verificada; com erro, nada é gerado e o erro aparece com arquivo e linha. A primeira exportação compila a versão otimizada da engine e demora alguns minutos; as próximas são rápidas.
+
+Opções:
+
+| Opção | Descrição |
+|---|---|
+| `--saida <pasta>` | Onde criar o executável (padrão: `dist`). |
+| `--nome <nome>` | Nome do arquivo (padrão: nome da pasta do projeto). |
+| `--runtime <arquivo>` | Executável `nn-jogo` a usar. Para gerar o jogo de Windows estando no Linux (ou o contrário), baixe o `nn-jogo` do outro sistema nas *releases* do repositório e passe aqui. |
+
+Se o jogo exportado não abrir (por exemplo, por falta de suporte de vídeo), ele deixa um arquivo `<nome>-erro.txt` ao lado do executável explicando o motivo.
+
 ## Cenas
 
 Cada cena é um arquivo que devolve uma tabela. Todas as funções são opcionais e recebem `self`, a tabela de estado da cena.
@@ -264,6 +284,45 @@ local mapa = nn.tilemap.new({
 ```
 
 Outros métodos e campos: `width`, `height` (em tiles), `tile_width`, `tile_height`, `world_width`, `world_height`, `layers`, `properties`, `:tile(col, lin, camada)`, `:set_tile(col, lin, tile, camada)` (a colisão acompanha: ótimo para blocos quebráveis), `:set_solid(col, lin, "solid" | "one_way" | nil)`, `:solid(col, lin)`, `:cell_at(x, y)` e `:cell_center(col, lin)`. Colunas e linhas começam em 1, com a linha 1 no topo, como no editor.
+
+### nn.particles
+
+```lua
+local brilho = nn.particles({
+  emitting = false,                         -- só solta com :burst
+  lifetime = { 0.3, 0.6 },                  -- vida em segundos (mínimo, máximo)
+  speed = { 120, 280 },
+  drag = 4,                                 -- freia com o tempo
+  size = { 14, 0 },                         -- tamanho no início e no fim
+  colors = { "#FFFFFF", "#FFE27A", "#FF9A3000" },  -- gradiente ao longo da vida
+  blend = "add",                            -- soma as cores: efeito de luz
+})
+
+brilho:burst(18, moeda.x, moeda.y)          -- solta 18 de uma vez
+
+local fumaca = nn.particles({ rate = 20, direction = math.pi / 2, spread = 0.6, gravity = 40 })
+fumaca:set_position(chamine.x, chamine.y)   -- emite sozinho, 20 por segundo
+
+function cena:update(dt) brilho:update(dt); fumaca:update(dt) end
+function cena:draw() brilho:draw(); fumaca:draw() end
+```
+
+| Opção | Descrição |
+|---|---|
+| `rate` | Partículas por segundo enquanto `emitting` for verdadeiro. |
+| `emitting` | Começa emitindo (padrão `true`). |
+| `lifetime`, `speed`, `size`, `spin` | Número ou faixa `{mínimo, máximo}` (`size` é `{início, fim}`). |
+| `direction`, `spread` | Direção central e abertura total, em radianos (padrão: para cima, em todas as direções). |
+| `gravity` | Número (Y) ou `{x, y}`. |
+| `drag` | Perda de velocidade por segundo. |
+| `size_variation` | Variação aleatória do tamanho (0.3 = até 30%). |
+| `colors` ou `color` | Lista de cores ao longo da vida, ou uma cor que some aos poucos. |
+| `texture`, `frame` | Imagem ou quadro de spritesheet (padrão: círculo suave). |
+| `area` | Onde nascem: `{ w =, h = }` ou `{ radius = }` (padrão: um ponto). |
+| `blend` | `"alpha"` (padrão) ou `"add"` (luz, fogo, faíscas). |
+| `max` | Limite de partículas vivas (padrão 1000). |
+
+O emissor tem `x`, `y`, `emitting` e `rate` (leitura e escrita), `count` e `finished`, e os métodos `:burst(n, x, y)`, `:set_position(x, y)`, `:update(dt)`, `:draw()`, `:draw_screen()` e `:clear()`.
 
 ### nn.camera
 
