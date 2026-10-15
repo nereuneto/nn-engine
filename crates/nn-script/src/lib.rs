@@ -28,6 +28,8 @@
 
 mod api;
 mod convert;
+mod physics;
+mod tilemap;
 mod types;
 
 use std::cell::{Cell, RefCell};

@@ -380,3 +380,15 @@ fn glifos_sao_reaproveitados_entre_frames() {
     assert_eq!(h.renderer.last_stats().draw_calls, 1);
     assert_eq!(h.renderer.glyph_atlas_pages(), 1);
 }
+
+#[test]
+fn circulo_redondo() {
+    let Some(mut h) = Harness::new() else { return };
+    h.renderer.draw_circle(Vec2::ZERO, 30.0, Color::RED);
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_color(img.pixel(32, 32), RED, "centro");
+    assert_color(img.pixel(32, 5), RED, "perto do topo");
+    // Cantos do quadrado que envolve o círculo ficam vazios.
+    assert_color(img.pixel(5, 5), BLACK, "canto");
+    assert_color(img.pixel(58, 58), BLACK, "canto oposto");
+}

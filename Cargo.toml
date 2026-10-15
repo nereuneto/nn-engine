@@ -13,6 +13,8 @@ nn-render.workspace = true
 nn-app.workspace = true
 nn-audio.workspace = true
 nn-script.workspace = true
+nn-physics.workspace = true
+nn-tilemap.workspace = true
 glam.workspace = true
 
 [dev-dependencies]
@@ -35,6 +37,8 @@ nn-render = { path = "crates/nn-render", version = "0.1.0" }
 nn-app = { path = "crates/nn-app", version = "0.1.0" }
 nn-audio = { path = "crates/nn-audio", version = "0.1.0" }
 nn-script = { path = "crates/nn-script", version = "0.1.0" }
+nn-physics = { path = "crates/nn-physics", version = "0.1.0" }
+nn-tilemap = { path = "crates/nn-tilemap", version = "0.1.0" }
 
 wgpu = "30"
 winit = "0.30"
@@ -45,6 +49,8 @@ pollster = "1"
 log = "0.4"
 env_logger = "0.11"
 thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 fontdue = "0.9"
 # Lua 5.4 compilada junto (vendored): não precisa instalar nada.
 mlua = { version = "0.12", features = ["lua54", "vendored"] }

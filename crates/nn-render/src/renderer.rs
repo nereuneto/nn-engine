@@ -132,6 +132,7 @@ pub struct Renderer {
     texture_layout: wgpu::BindGroupLayout,
     textures: Vec<GpuTexture>,
     white: TextureId,
+    circle: TextureId,
     text: TextSystem,
     world: DrawQueue,
     screen: DrawQueue,
@@ -253,6 +254,7 @@ impl Renderer {
             texture_layout,
             textures: Vec::new(),
             white: TextureId(0),
+            circle: TextureId(0),
             text: TextSystem::new(),
             world: DrawQueue::default(),
             screen: DrawQueue::default(),
@@ -262,6 +264,8 @@ impl Renderer {
         };
         renderer.white =
             renderer.create_texture(UVec2::ONE, &[255, 255, 255, 255], TextureOptions::default());
+        let (size, pixels) = circle_pixels(128);
+        renderer.circle = renderer.create_texture(size, &pixels, TextureOptions::default());
         renderer
     }
 
@@ -444,6 +448,15 @@ impl Renderer {
     /// Retângulo de cor sólida centrado em `center`, no espaço do mundo.
     pub fn draw_rect(&mut self, center: Vec2, size: Vec2, color: Color) {
         let sprite = Sprite::new(self.white).at(center).size(size).color(color);
+        self.push_sprite(Space::World, &sprite);
+    }
+
+    /// Círculo de cor sólida, no espaço do mundo.
+    pub fn draw_circle(&mut self, center: Vec2, radius: f32, color: Color) {
+        let sprite = Sprite::new(self.circle)
+            .at(center)
+            .size(Vec2::splat(radius * 2.0))
+            .color(color);
         self.push_sprite(Space::World, &sprite);
     }
 
@@ -661,6 +674,20 @@ impl Renderer {
     }
 }
 
+/// Círculo branco com borda suavizada, para `draw_circle`.
+fn circle_pixels(size: u32) -> (UVec2, Vec<u8>) {
+    let r = size as f32 / 2.0;
+    let mut px = Vec::with_capacity((size * size * 4) as usize);
+    for y in 0..size {
+        for x in 0..size {
+            let d = Vec2::new(x as f32 + 0.5 - r, y as f32 + 0.5 - r).length();
+            let a = (r - d).clamp(0.0, 1.0);
+            px.extend_from_slice(&[255, 255, 255, (a * 255.0) as u8]);
+        }
+    }
+    (UVec2::splat(size), px)
+}
+
 /// Projeção da tela: pixels, origem no canto superior esquerdo, Y para baixo.
 fn screen_projection(size: Vec2) -> Mat4 {
     glam::camera::rh::proj::directx::orthographic(0.0, size.x, size.y, 0.0, -1.0, 1.0)
@@ -695,6 +722,16 @@ impl ScreenPainter<'_> {
             .at(top_left)
             .size(size)
             .origin(Vec2::ZERO)
+            .color(color);
+        self.renderer.push_sprite(Space::Screen, &sprite);
+        self
+    }
+
+    /// Círculo de cor sólida a partir do centro.
+    pub fn draw_circle(&mut self, center: Vec2, radius: f32, color: Color) -> &mut Self {
+        let sprite = Sprite::new(self.renderer.circle)
+            .at(center)
+            .size(Vec2::splat(radius * 2.0))
             .color(color);
         self.renderer.push_sprite(Space::Screen, &sprite);
         self
