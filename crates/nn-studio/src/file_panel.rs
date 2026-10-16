@@ -1,0 +1,652 @@
+//! Painel Arquivos: a árvore do projeto com ícones e miniaturas, menus de
+//! contexto, renomear no lugar e filtro.
+
+use std::collections::{HashMap, HashSet};
+use std::time::SystemTime;
+
+use eframe::egui::{self, Key, RichText, TextureHandle, Vec2};
+
+use crate::files::{FileEntry, FileKind, FileTree};
+use crate::project::{Action, NewKind};
+use crate::settings::Mode;
+
+/// Novas miniaturas carregadas por quadro (o resto vem nos próximos).
+const THUMBS_PER_FRAME: usize = 6;
+const THUMB: f32 = 16.0;
+
+#[derive(Default)]
+pub struct FilePanel {
+    pub selected: Option<String>,
+    expanded: HashSet<String>,
+    initialized: bool,
+    renaming: Option<Rename>,
+    /// Arquivo para rolar até ele no próximo quadro.
+    scroll_to: Option<String>,
+    pub filter: String,
+    thumbs: HashMap<String, (Option<SystemTime>, Option<TextureHandle>)>,
+}
+
+impl std::fmt::Debug for FilePanel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FilePanel")
+            .field("selected", &self.selected)
+            .field("filter", &self.filter)
+            .finish()
+    }
+}
+
+#[derive(Debug)]
+struct Rename {
+    rel: String,
+    name: String,
+    focus: bool,
+}
+
+impl FilePanel {
+    /// Pasta (relativa) da seleção: onde coisas novas são criadas.
+    pub fn target_dir(&self, tree: &FileTree) -> Option<String> {
+        let sel = self.selected.as_ref()?;
+        let e = tree.get(sel)?;
+        Some(crate::files::parent_dir(&e.rel, e.is_dir))
+    }
+
+    /// Começa a renomear um arquivo (F2).
+    pub fn start_rename(&mut self, rel: &str) {
+        let name = rel.rsplit('/').next().unwrap_or(rel).to_string();
+        self.renaming = Some(Rename {
+            rel: rel.to_string(),
+            name,
+            focus: true,
+        });
+    }
+
+    /// Mostra um arquivo: abre as pastas acima dele e o seleciona.
+    pub fn reveal(&mut self, rel: &str) {
+        let mut dir = rel;
+        while let Some((parent, _)) = dir.rsplit_once('/') {
+            self.expanded.insert(parent.to_string());
+            dir = parent;
+        }
+        self.selected = Some(rel.to_string());
+        self.scroll_to = Some(rel.to_string());
+    }
+
+    /// Um arquivo mudou de nome: atualiza a seleção e as pastas abertas.
+    pub fn renamed(&mut self, from: &str, to: &str) {
+        let fix = |p: &str| -> Option<String> {
+            if p == from {
+                Some(to.to_string())
+            } else {
+                p.strip_prefix(&format!("{from}/"))
+                    .map(|rest| format!("{to}/{rest}"))
+            }
+        };
+        if let Some(sel) = &self.selected
+            && let Some(n) = fix(sel)
+        {
+            self.selected = Some(n);
+        }
+        self.expanded = self
+            .expanded
+            .iter()
+            .map(|p| fix(p).unwrap_or_else(|| p.clone()))
+            .collect();
+        self.thumbs.retain(|k, _| fix(k).is_none());
+    }
+
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        tree: &FileTree,
+        mode: Mode,
+        title: &str,
+        actions: &mut Vec<Action>,
+    ) {
+        if !self.initialized {
+            self.initialized = true;
+            // Projetos pequenos abrem com todas as pastas à mostra.
+            let small = tree.entries().len() <= 80;
+            for e in tree.entries().iter().filter(|e| e.is_dir) {
+                if small || e.depth == 0 {
+                    self.expanded.insert(e.rel.clone());
+                }
+            }
+        }
+
+        ui.horizontal(|ui| {
+            ui.menu_button("➕ Novo", |ui| {
+                let dir = self.target_dir(tree).unwrap_or_default();
+                if ui.button("📜 Cena").on_hover_text("Uma tela do jogo (menu, fase, fim...)").clicked() {
+                    actions.push(Action::NewItem { kind: NewKind::Scene, parent: scene_dir(tree, &dir) });
+                    ui.close();
+                }
+                if ui.button("🧩 Script (módulo)").on_hover_text("Código usado por várias cenas, com require").clicked() {
+                    actions.push(Action::NewItem { kind: NewKind::Module, parent: module_dir(tree, &dir) });
+                    ui.close();
+                }
+                if ui.button("📁 Pasta").clicked() {
+                    actions.push(Action::NewItem { kind: NewKind::Folder, parent: dir.clone() });
+                    ui.close();
+                }
+            });
+            if ui
+                .button("📥 Importar")
+                .on_hover_text("Copiar imagens, sons e outros arquivos para o projeto.\nVocê também pode arrastar arquivos para esta janela.")
+                .clicked()
+            {
+                actions.push(Action::Import { dest: self.target_dir(tree) });
+            }
+            ui.add(
+                egui::TextEdit::singleline(&mut self.filter)
+                    .hint_text("🔍 Filtrar")
+                    .desired_width(ui.available_width().max(40.0)),
+            );
+        });
+        ui.separator();
+
+        let mut to_load = THUMBS_PER_FRAME;
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.spacing_mut().item_spacing.y = 1.0;
+                // Raiz do projeto.
+                let root_sel = self.selected.as_deref() == Some("");
+                let r =
+                    ui.selectable_label(root_sel, RichText::new(format!("🎮 {title}")).strong());
+                if r.clicked() {
+                    self.selected = Some(String::new());
+                }
+                r.context_menu(|ui| self.folder_menu(ui, "", mode, actions));
+
+                if !self.filter.trim().is_empty() {
+                    self.filtered(ui, tree, actions, &mut to_load);
+                    return;
+                }
+                let mut hidden_under: Option<String> = None;
+                for e in tree.entries() {
+                    if let Some(h) = &hidden_under {
+                        if e.rel.starts_with(&format!("{h}/")) {
+                            continue;
+                        }
+                        hidden_under = None;
+                    }
+                    // Pastas de saída e de build ficam escondidas no modo Simples.
+                    if !mode.is_full()
+                        && e.depth == 0
+                        && e.is_dir
+                        && matches!(e.name.as_str(), "dist" | "target")
+                    {
+                        hidden_under = Some(e.rel.clone());
+                        continue;
+                    }
+                    self.row(ui, tree, e, mode, actions, &mut to_load);
+                    if e.is_dir && !self.expanded.contains(&e.rel) {
+                        hidden_under = Some(e.rel.clone());
+                    }
+                }
+                if tree.truncated {
+                    ui.weak(format!(
+                        "(mostrando só os primeiros {} itens)",
+                        crate::files::MAX_ENTRIES
+                    ));
+                }
+            });
+
+        // Atalhos com o mouse sobre o painel.
+        if ui.ui_contains_pointer()
+            && self.renaming.is_none()
+            && let Some(sel) = self.selected.clone().filter(|s| !s.is_empty())
+        {
+            if ui.input(|i| i.key_pressed(Key::F2)) {
+                self.start_rename(&sel);
+            }
+            if ui.input(|i| i.key_pressed(Key::Delete)) {
+                actions.push(Action::AskDelete(sel));
+            }
+        }
+    }
+
+    fn filtered(
+        &mut self,
+        ui: &mut egui::Ui,
+        tree: &FileTree,
+        actions: &mut Vec<Action>,
+        to_load: &mut usize,
+    ) {
+        let mut found: Vec<(i32, &FileEntry)> = tree
+            .entries()
+            .iter()
+            .filter(|e| !e.is_dir)
+            .filter_map(|e| {
+                crate::commands::fuzzy_score(&self.filter, &e.name)
+                    .map(|s| s + 20)
+                    .max(crate::commands::fuzzy_score(&self.filter, &e.rel))
+                    .map(|s| (s, e))
+            })
+            .collect();
+        found.sort_by_key(|f| std::cmp::Reverse(f.0));
+        if found.is_empty() {
+            ui.weak("Nenhum arquivo com esse nome.");
+        }
+        for (_, e) in found.into_iter().take(200) {
+            ui.horizontal(|ui| {
+                self.icon(ui, tree, e, to_load);
+                let sel = self.selected.as_deref() == Some(e.rel.as_str());
+                let r = ui.selectable_label(sel, &e.rel);
+                if r.clicked() {
+                    self.selected = Some(e.rel.clone());
+                    actions.push(Action::OpenFile {
+                        rel: e.rel.clone(),
+                        line: None,
+                    });
+                }
+            });
+        }
+    }
+
+    fn icon(&mut self, ui: &mut egui::Ui, tree: &FileTree, e: &FileEntry, to_load: &mut usize) {
+        if e.kind == FileKind::Image && e.rel.to_lowercase().ends_with(".png") {
+            let stale = self
+                .thumbs
+                .get(&e.rel)
+                .is_none_or(|(m, _)| *m != e.modified);
+            if stale && *to_load > 0 {
+                *to_load -= 1;
+                let tex = thumbnail(ui.ctx(), &tree.full(&e.rel), &e.rel);
+                self.thumbs.insert(e.rel.clone(), (e.modified, tex));
+            } else if stale {
+                ui.ctx().request_repaint();
+            }
+            if let Some((_, Some(tex))) = self.thumbs.get(&e.rel) {
+                let size = tex.size_vec2();
+                let scale = (THUMB / size.x.max(size.y)).min(4.0);
+                let (rect, _) = ui.allocate_exact_size(Vec2::splat(THUMB), egui::Sense::hover());
+                ui.painter().image(
+                    tex.id(),
+                    egui::Rect::from_center_size(rect.center(), size * scale),
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
+                return;
+            }
+        }
+        let (rect, _) = ui.allocate_exact_size(Vec2::splat(THUMB), egui::Sense::hover());
+        paint_icon(ui.painter(), rect, e.kind, false);
+    }
+
+    fn row(
+        &mut self,
+        ui: &mut egui::Ui,
+        tree: &FileTree,
+        e: &FileEntry,
+        mode: Mode,
+        actions: &mut Vec<Action>,
+        to_load: &mut usize,
+    ) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 3.0;
+            ui.add_space(e.depth as f32 * 14.0);
+            if e.is_dir {
+                let open = self.expanded.contains(&e.rel);
+                let arrow = if open { "⏷" } else { "⏵" };
+                if ui
+                    .add(egui::Button::new(arrow).frame(false).small())
+                    .clicked()
+                {
+                    self.toggle(&e.rel);
+                }
+            } else {
+                ui.add_space(14.0);
+            }
+            if e.is_dir {
+                let open = self.expanded.contains(&e.rel);
+                let (rect, _) = ui.allocate_exact_size(Vec2::splat(THUMB), egui::Sense::hover());
+                paint_icon(ui.painter(), rect, FileKind::Folder, open);
+            } else {
+                self.icon(ui, tree, e, to_load);
+            }
+
+            if let Some(rn) = &mut self.renaming
+                && rn.rel == e.rel
+            {
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut rn.name)
+                        .desired_width(ui.available_width() - 8.0),
+                );
+                if rn.focus {
+                    rn.focus = false;
+                    r.request_focus();
+                    // Seleciona o nome sem a extensão.
+                    let stem = rn
+                        .name
+                        .rfind('.')
+                        .filter(|i| *i > 0 && !e.is_dir)
+                        .unwrap_or(rn.name.len());
+                    let stem_chars = rn.name[..stem].chars().count();
+                    if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), r.id) {
+                        state
+                            .cursor
+                            .set_char_range(Some(egui::text::CCursorRange::two(
+                                egui::text::CCursor::new(0),
+                                egui::text::CCursor::new(stem_chars),
+                            )));
+                        state.store(ui.ctx(), r.id);
+                    }
+                }
+                let enter = ui.input(|i| i.key_pressed(Key::Enter));
+                let esc = ui.input(|i| i.key_pressed(Key::Escape));
+                if esc {
+                    self.renaming = None;
+                } else if r.lost_focus() || enter {
+                    let rn = self.renaming.take().expect("renomeando");
+                    let old = rn.rel.rsplit('/').next().unwrap_or(&rn.rel);
+                    if rn.name.trim() != old {
+                        actions.push(Action::Rename {
+                            rel: rn.rel,
+                            new_name: rn.name.trim().to_string(),
+                        });
+                    }
+                }
+                return;
+            }
+
+            let selected = self.selected.as_deref() == Some(e.rel.as_str());
+            let mut text = RichText::new(&e.name);
+            if e.is_dir {
+                text = text.strong();
+            }
+            let r = ui.selectable_label(selected, text);
+            let r = if e.is_dir {
+                r
+            } else {
+                r.on_hover_text(format!(
+                    "{}\n{} · {}",
+                    e.rel,
+                    e.kind.label(),
+                    crate::files::human_size(e.size)
+                ))
+            };
+            if self.scroll_to.as_deref() == Some(e.rel.as_str()) {
+                r.scroll_to_me(Some(egui::Align::Center));
+                self.scroll_to = None;
+            }
+            if r.clicked() {
+                self.selected = Some(e.rel.clone());
+                if e.is_dir {
+                    self.toggle(&e.rel);
+                } else {
+                    actions.push(Action::OpenFile {
+                        rel: e.rel.clone(),
+                        line: None,
+                    });
+                }
+            }
+            if e.kind == FileKind::Sound
+                && ui
+                    .add(egui::Button::new("▶").small().frame(false))
+                    .on_hover_text("Ouvir")
+                    .clicked()
+            {
+                actions.push(Action::PlaySound(e.rel.clone()));
+            }
+            r.context_menu(|ui| {
+                self.selected = Some(e.rel.clone());
+                if e.is_dir {
+                    self.folder_menu(ui, &e.rel, mode, actions);
+                    ui.separator();
+                } else {
+                    if ui.button("Abrir").clicked() {
+                        actions.push(Action::OpenFile {
+                            rel: e.rel.clone(),
+                            line: None,
+                        });
+                        ui.close();
+                    }
+                    if e.kind == FileKind::Sound && ui.button("▶ Ouvir").clicked() {
+                        actions.push(Action::PlaySound(e.rel.clone()));
+                        ui.close();
+                    }
+                    if ui
+                        .button("📋 Copiar caminho")
+                        .on_hover_text(format!("Copia \"{}\", para usar no código", e.rel))
+                        .clicked()
+                    {
+                        actions.push(Action::CopyText(format!("\"{}\"", e.rel)));
+                        ui.close();
+                    }
+                    if e.kind == FileKind::Lua && ui.button("📋 Copiar require").clicked() {
+                        actions.push(Action::CopyText(format!(
+                            "require(\"{}\")",
+                            crate::files::module_name(&e.rel)
+                        )));
+                        ui.close();
+                    }
+                    if ui.button("Abrir no programa padrão").clicked() {
+                        actions.push(Action::OpenExternal(e.rel.clone()));
+                        ui.close();
+                    }
+                    ui.separator();
+                }
+                if ui.button("✏ Renomear (F2)").clicked() {
+                    self.start_rename(&e.rel);
+                    ui.close();
+                }
+                if ui.button("🗑 Mandar para a lixeira (Del)").clicked() {
+                    actions.push(Action::AskDelete(e.rel.clone()));
+                    ui.close();
+                }
+                if ui.button("Mostrar na pasta do sistema").clicked() {
+                    actions.push(Action::Reveal(e.rel.clone()));
+                    ui.close();
+                }
+            });
+        });
+    }
+
+    fn folder_menu(
+        &mut self,
+        ui: &mut egui::Ui,
+        dir: &str,
+        _mode: Mode,
+        actions: &mut Vec<Action>,
+    ) {
+        if ui.button("📜 Nova cena aqui").clicked() {
+            actions.push(Action::NewItem {
+                kind: NewKind::Scene,
+                parent: dir.to_string(),
+            });
+            ui.close();
+        }
+        if ui.button("🧩 Novo script aqui").clicked() {
+            actions.push(Action::NewItem {
+                kind: NewKind::Module,
+                parent: dir.to_string(),
+            });
+            ui.close();
+        }
+        if ui.button("📁 Nova pasta aqui").clicked() {
+            actions.push(Action::NewItem {
+                kind: NewKind::Folder,
+                parent: dir.to_string(),
+            });
+            ui.close();
+        }
+        if ui.button("📥 Importar para cá...").clicked() {
+            actions.push(Action::Import {
+                dest: Some(dir.to_string()),
+            });
+            ui.close();
+        }
+        if dir.is_empty() && ui.button("Mostrar na pasta do sistema").clicked() {
+            actions.push(Action::Reveal(String::new()));
+            ui.close();
+        }
+    }
+
+    fn toggle(&mut self, rel: &str) {
+        if !self.expanded.remove(rel) {
+            self.expanded.insert(rel.to_string());
+        }
+    }
+}
+
+/// Pasta sugerida para cenas novas: a escolhida, ou `cenas`, se existir.
+fn scene_dir(tree: &FileTree, chosen: &str) -> String {
+    if !chosen.is_empty() || !tree.get("cenas").is_some_and(|e| e.is_dir) {
+        chosen.to_string()
+    } else {
+        "cenas".into()
+    }
+}
+
+/// Pasta sugerida para módulos novos: a escolhida, ou `lib`, se existir.
+fn module_dir(tree: &FileTree, chosen: &str) -> String {
+    if !chosen.is_empty() || !tree.get("lib").is_some_and(|e| e.is_dir) {
+        chosen.to_string()
+    } else {
+        "lib".into()
+    }
+}
+
+/// Miniatura de uma imagem (pequena, sem suavizar a pixel art).
+fn thumbnail(ctx: &egui::Context, path: &std::path::Path, rel: &str) -> Option<TextureHandle> {
+    let img = crate::viewers::load_rgba(path).ok()?;
+    let max = img.width().max(img.height());
+    let img = if max > 64 {
+        let s = 64.0 / max as f32;
+        image::imageops::resize(
+            &img,
+            ((img.width() as f32 * s) as u32).max(1),
+            ((img.height() as f32 * s) as u32).max(1),
+            image::imageops::FilterType::Nearest,
+        )
+    } else {
+        img
+    };
+    Some(ctx.load_texture(
+        format!("miniatura:{rel}"),
+        crate::viewers::to_color_image(&img),
+        egui::TextureOptions::NEAREST,
+    ))
+}
+
+/// Desenha o ícone de um tipo de arquivo (sem depender de fontes de emoji).
+pub fn paint_icon(painter: &egui::Painter, rect: egui::Rect, kind: FileKind, open: bool) {
+    use egui::{Color32, Pos2, Rect, Stroke, vec2};
+    let c = rect.center();
+    let rgb = Color32::from_rgb;
+    if kind == FileKind::Folder {
+        let color = rgb(0xE0, 0xA8, 0x3A);
+        let body = Rect::from_center_size(c + vec2(0.0, 1.5), vec2(14.0, 10.0));
+        let tab = Rect::from_min_size(body.left_top() - vec2(0.0, 2.5), vec2(6.0, 4.0));
+        painter.rect_filled(tab, 1.0, color);
+        painter.rect_filled(body, 1.5, color);
+        if open {
+            let front = Rect::from_min_max(body.left_top() + vec2(1.5, 3.0), body.right_bottom());
+            painter.rect_filled(front, 1.5, rgb(0xF5, 0xCB, 0x6A));
+        }
+        return;
+    }
+    let (fill, mark) = match kind {
+        FileKind::Lua => (rgb(0x4A, 0x86, 0xD8), "lines"),
+        FileKind::Text => (rgb(0x8A, 0x93, 0x9E), "lines"),
+        FileKind::Map => (rgb(0x4C, 0xA8, 0x5A), "grid"),
+        FileKind::Tileset => (rgb(0x3E, 0x8E, 0x7E), "grid"),
+        FileKind::Sound => (rgb(0xA0, 0x6C, 0xD5), "note"),
+        FileKind::Image => (rgb(0xD8, 0x7A, 0x4A), "picture"),
+        FileKind::Font => (rgb(0x8A, 0x93, 0x9E), "letter"),
+        _ => (rgb(0x6E, 0x76, 0x80), "none"),
+    };
+    let page = Rect::from_center_size(c, vec2(11.0, 14.0));
+    painter.rect_filled(page, 1.5, fill);
+    // Canto dobrado.
+    let corner = [
+        Pos2::new(page.right() - 4.0, page.top()),
+        Pos2::new(page.right(), page.top() + 4.0),
+        Pos2::new(page.right() - 4.0, page.top() + 4.0),
+    ];
+    painter.add(egui::Shape::convex_polygon(
+        corner.to_vec(),
+        Color32::from_white_alpha(110),
+        Stroke::NONE,
+    ));
+    let white = Color32::from_white_alpha(230);
+    let s = Stroke::new(1.2, white);
+    match mark {
+        "lines" => {
+            for (i, w) in [6.0, 4.0, 5.5].iter().enumerate() {
+                let y = page.top() + 6.0 + i as f32 * 2.6;
+                painter.line_segment(
+                    [
+                        Pos2::new(page.left() + 2.0, y),
+                        Pos2::new(page.left() + 2.0 + w, y),
+                    ],
+                    s,
+                );
+            }
+        }
+        "grid" => {
+            let g = Rect::from_center_size(page.center() + vec2(0.0, 1.0), vec2(7.0, 7.0));
+            painter.rect_stroke(g, 0.0, s, egui::StrokeKind::Middle);
+            painter.line_segment(
+                [
+                    Pos2::new(g.center().x, g.top()),
+                    Pos2::new(g.center().x, g.bottom()),
+                ],
+                s,
+            );
+            painter.line_segment(
+                [
+                    Pos2::new(g.left(), g.center().y),
+                    Pos2::new(g.right(), g.center().y),
+                ],
+                s,
+            );
+        }
+        "note" => {
+            let x = page.center().x + 1.0;
+            painter.line_segment(
+                [
+                    Pos2::new(x, page.top() + 4.0),
+                    Pos2::new(x, page.bottom() - 4.0),
+                ],
+                s,
+            );
+            painter.line_segment(
+                [
+                    Pos2::new(x, page.top() + 4.0),
+                    Pos2::new(x + 2.5, page.top() + 5.5),
+                ],
+                s,
+            );
+            painter.circle_filled(Pos2::new(x - 1.5, page.bottom() - 4.0), 1.8, white);
+        }
+        "picture" => {
+            let base = page.bottom() - 3.0;
+            painter.add(egui::Shape::convex_polygon(
+                vec![
+                    Pos2::new(page.left() + 1.5, base),
+                    Pos2::new(page.left() + 4.5, page.center().y),
+                    Pos2::new(page.left() + 7.5, base),
+                ],
+                white,
+                Stroke::NONE,
+            ));
+            painter.circle_filled(
+                Pos2::new(page.right() - 3.0, page.center().y - 1.0),
+                1.3,
+                white,
+            );
+        }
+        "letter" => {
+            painter.text(
+                page.center() + vec2(0.0, 1.0),
+                egui::Align2::CENTER_CENTER,
+                "A",
+                egui::FontId::proportional(9.0),
+                white,
+            );
+        }
+        _ => {}
+    }
+}

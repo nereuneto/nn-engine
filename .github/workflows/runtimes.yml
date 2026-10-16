@@ -1,8 +1,9 @@
 name: Runtimes
 
-# Compila o `nn` (ferramenta) e o `nn-jogo` (executável dos jogos) otimizados
-# para Windows e Linux. Com eles, dá para exportar jogos para os dois sistemas
-# a partir de qualquer um: `nn exportar <pasta> --runtime nn-jogo.exe`.
+# Compila o NN Studio (editor), o `nn` (ferramenta de linha de comando) e o
+# `nn-jogo` (executável dos jogos) otimizados para Windows e Linux. Os três vão
+# juntos: o NN Studio usa o `nn-jogo` ao lado dele para exportar os jogos. Dá
+# para exportar para o outro sistema com `nn exportar <pasta> --runtime nn-jogo.exe`.
 on:
   push:
     tags: ["v*"]
@@ -31,15 +32,15 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Build
-        run: cargo build --release -p nn-run --bins
+        run: cargo build --release -p nn-run --bins -p nn-studio
 
       - name: Empacotar (Linux)
         if: runner.os == 'Linux'
-        run: tar -czf nn-linux.tar.gz -C target/release nn nn-jogo
+        run: tar -czf nn-linux.tar.gz -C target/release nn-studio nn nn-jogo
       - name: Empacotar (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path target/release/nn.exe, target/release/nn-jogo.exe -DestinationPath nn-windows.zip
+        run: Compress-Archive -Path target/release/nn-studio.exe, target/release/nn.exe, target/release/nn-jogo.exe -DestinationPath nn-windows.zip
 
       - uses: actions/upload-artifact@v4
         with:

@@ -310,6 +310,26 @@ impl Audio {
         self.sounds[id.0 as usize].duration()
     }
 
+    /// Forma de onda resumida para desenhar: o som dividido em `buckets`
+    /// pedaços, com o menor e o maior valor (de -1 a 1, mono) de cada um.
+    pub fn waveform(&self, id: SoundId, buckets: usize) -> Vec<(f32, f32)> {
+        let frames = &self.sounds[id.0 as usize].frames;
+        if frames.is_empty() || buckets == 0 {
+            return Vec::new();
+        }
+        let buckets = buckets.min(frames.len());
+        (0..buckets)
+            .map(|b| {
+                let start = b * frames.len() / buckets;
+                let end = ((b + 1) * frames.len() / buckets).max(start + 1);
+                frames[start..end]
+                    .iter()
+                    .map(|f| (f.left + f.right) * 0.5)
+                    .fold((f32::MAX, f32::MIN), |(lo, hi), v| (lo.min(v), hi.max(v)))
+            })
+            .collect()
+    }
+
     /// Toca o som uma vez, com as opções padrão.
     pub fn play(&mut self, id: SoundId) -> Sound {
         self.play_with(id, PlayOptions::default())
@@ -419,6 +439,22 @@ mod tests {
         let mut audio = Audio::disabled();
         let id = audio.add_samples(1000, &[0.0; 250]);
         assert_eq!(audio.duration(id), Duration::from_millis(250));
+    }
+
+    #[test]
+    fn forma_de_onda_resumida() {
+        let mut audio = Audio::disabled();
+        // Meio segundo de silêncio e meio de onda cheia.
+        let mut samples = vec![0.0; 100];
+        samples.extend((0..100).map(|i| if i % 2 == 0 { 1.0 } else { -1.0 }));
+        let id = audio.add_samples(200, &samples);
+        let w = audio.waveform(id, 4);
+        assert_eq!(w.len(), 4);
+        assert_eq!(w[0], (0.0, 0.0));
+        assert_eq!(w[3], (-1.0, 1.0));
+        // Mais pedaços que amostras: um por amostra.
+        assert_eq!(audio.waveform(id, 10_000).len(), 200);
+        assert!(audio.waveform(id, 0).is_empty());
     }
 
     #[test]

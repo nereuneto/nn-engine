@@ -28,6 +28,7 @@
 
 mod api;
 mod convert;
+mod errors;
 mod input;
 mod particles;
 mod physics;
@@ -50,6 +51,8 @@ use nn_core::Color;
 use nn_render::Text;
 
 use crate::api::{CTX_KEY, SceneRequest, Shared};
+
+pub use errors::translate_error;
 
 /// Erro ao preparar o ambiente Lua.
 #[derive(Debug)]
@@ -572,7 +575,7 @@ fn format_error(e: &mlua::Error) -> String {
             msg = rest.to_string();
         }
     }
-    msg.trim().to_string()
+    translate_error(msg.trim())
 }
 
 fn root_cause(e: &mlua::Error) -> String {
@@ -610,7 +613,9 @@ impl Project {
             .ok()
             .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
             .unwrap_or_else(|| "nn-engine".into());
-        let mut project = Self::from_source(Arc::new(DiskSource::new(dir)), &title)?;
+        // Projeto em pasta = jogo em desenvolvimento: recarrega ao salvar,
+        // a não ser que o config.lua diga `hot_reload = false`.
+        let mut project = Self::read(Arc::new(DiskSource::new(dir)), &title, true)?;
         project.config.assets_dir = dir.to_path_buf();
         Ok(project)
     }
@@ -620,7 +625,18 @@ impl Project {
         source: Arc<dyn AssetSource>,
         default_title: &str,
     ) -> Result<Self, ScriptError> {
-        let mut config = nn_app::AppConfig::new(default_title).asset_source(source.clone());
+        let hot_reload = nn_app::AppConfig::default().hot_reload;
+        Self::read(source, default_title, hot_reload)
+    }
+
+    fn read(
+        source: Arc<dyn AssetSource>,
+        default_title: &str,
+        hot_reload: bool,
+    ) -> Result<Self, ScriptError> {
+        let mut config = nn_app::AppConfig::new(default_title)
+            .asset_source(source.clone())
+            .hot_reload(hot_reload);
         let mut start = "main.lua".to_string();
 
         match source.read(Path::new("config.lua")) {
@@ -635,7 +651,12 @@ impl Project {
                     t.get(k)
                         .map_err(|e| ScriptError(format!("config.lua: {k}: {e}")))
                 };
-                let num = |v: &Value| v.as_f64().map(|n| n as u32);
+                // Lua 5.4 separa inteiros (1280) de números com vírgula (1280.0).
+                let num = |v: &Value| match v {
+                    Value::Integer(i) => Some((*i).max(0) as u32),
+                    Value::Number(n) => Some(n.max(0.0) as u32),
+                    _ => None,
+                };
                 if let Value::String(s) = get("title")? {
                     config.title = s.to_string_lossy();
                 }

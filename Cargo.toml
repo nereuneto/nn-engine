@@ -39,6 +39,7 @@ nn-audio = { path = "crates/nn-audio", version = "0.1.0" }
 nn-script = { path = "crates/nn-script", version = "0.1.0" }
 nn-physics = { path = "crates/nn-physics", version = "0.1.0" }
 nn-tilemap = { path = "crates/nn-tilemap", version = "0.1.0" }
+nn-run = { path = "crates/nn-run", version = "0.1.0" }
 
 wgpu = "30"
 winit = "0.30"

@@ -6,13 +6,25 @@ Plataformas suportadas: **Windows** e **Linux**.
 
 ## Começando
 
-Pré-requisito: Rust 1.88 ou mais recente, instalado pelo [rustup](https://rustup.rs).
+Pré-requisito: Rust instalado pelo [rustup](https://rustup.rs). A engine pede o Rust 1.88 ou mais novo; o editor (NN Studio), o 1.95. Com o rustup, `rustup update` deixa tudo em dia.
 
 **Windows:** baixe e rode o `rustup-init.exe` do site acima. Se o instalador avisar que faltam as ferramentas de build do Visual Studio (o compilador C++ da Microsoft), escolha a opção de instalação rápida que ele oferece. Depois **abra um terminal novo** para o `cargo` aparecer no PATH e confira com `cargo --version`.
 
 **Linux:** `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`. O áudio usa ALSA e os controles usam udev, então instale também os cabeçalhos de desenvolvimento: `sudo apt install libasound2-dev libudev-dev pkg-config` (Debian/Ubuntu) ou `sudo dnf install alsa-lib-devel systemd-devel` (Fedora).
 
 A primeira compilação demora alguns minutos (o wgpu é grande); as seguintes são rápidas.
+
+### NN Studio: o editor
+
+```sh
+cargo studio
+```
+
+![NN Studio](docs/imagens/nn-studio.png)
+
+O NN Studio é o jeito mais fácil de fazer um jogo: crie um projeto a partir de um modelo (ou abra um dos exemplos), edite o código Lua com cores e erros apontados enquanto digita, veja imagens, sons e mapas, arraste arquivos do computador para dentro do projeto e aperte **▶ Jogar (F5)**: o jogo abre na janela dele e, a cada arquivo salvo, a mudança aparece na hora. O console mostra o `print` do jogo e os erros em português, com link direto para a linha. Tem modo Simples e Completo, tema escuro e claro, paleta de comandos (Ctrl+Shift+P) e exportação do jogo pronto para distribuir. Guia completo em **[docs/studio.md](docs/studio.md)**.
+
+Tudo o que o NN Studio faz também dá para fazer pela linha de comando, com a ferramenta `nn`:
 
 ### Criar um jogo novo
 

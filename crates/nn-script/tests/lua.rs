@@ -152,6 +152,11 @@ fn erro_de_sintaxe_mostra_tela_de_erro() {
     h.run_frames(1);
     let erro = h.game.0.error().expect("deveria haver erro").to_string();
     assert!(erro.contains("main.lua:2"), "{erro}");
+    // Mensagem em português.
+    assert!(
+        erro.contains("esperava") || erro.contains("símbolo inesperado"),
+        "{erro}"
+    );
     // Faixa vermelha no topo da tela de erro.
     let [r, g, _, _] = pixel(&h, 10, 2);
     assert!(r > 200 && g < 100);
@@ -172,6 +177,11 @@ fn erro_em_tempo_de_execucao_aponta_a_linha() {
     h.run_frames(1);
     let erro = h.game.0.error().unwrap().to_string();
     assert!(erro.contains("main.lua:4"), "{erro}");
+    assert!(
+        erro.contains("tentou acessar um campo de um valor nil (vazio) (variável local 't')"),
+        "{erro}"
+    );
+    assert!(erro.contains("caminho até o erro"), "{erro}");
 }
 
 #[test]
@@ -1801,4 +1811,32 @@ fn plataforma_segunda_fase_roda_com_elevador_e_camera_vertical() {
         h.ctx.camera.position.y
     );
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn config_lua_le_numeros_inteiros_e_com_virgula() {
+    let dir = projeto(
+        "config-numeros",
+        &[
+            (
+                "config.lua",
+                "return { width = 960, height = 540.0, fixed_hz = 30, title = \"T\" }",
+            ),
+            ("main.lua", "return {}"),
+        ],
+    );
+    let project = nn_script::Project::open(&dir).unwrap();
+    assert_eq!(project.config.size, (960, 540));
+    assert_eq!(project.config.fixed_hz, 30);
+    assert_eq!(project.config.title, "T");
+    // Projeto em pasta recarrega ao salvar, a não ser que o config diga o contrário.
+    assert!(project.config.hot_reload);
+    let dir = projeto(
+        "config-sem-recarga",
+        &[
+            ("config.lua", "return { hot_reload = false }"),
+            ("main.lua", "return {}"),
+        ],
+    );
+    assert!(!nn_script::Project::open(&dir).unwrap().config.hot_reload);
 }
