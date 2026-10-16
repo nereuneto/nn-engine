@@ -144,6 +144,8 @@ pub struct Renderer {
     textures: Vec<GpuTexture>,
     white: TextureId,
     circle: TextureId,
+    /// Texturas dos painéis arredondados: (raio, borda) → (fundo, borda, margem).
+    rounded: std::collections::HashMap<(u32, u32), (TextureId, TextureId, u32)>,
     text: TextSystem,
     world: DrawQueue,
     screen: DrawQueue,
@@ -298,6 +300,7 @@ impl Renderer {
             textures: Vec::new(),
             white: TextureId(0),
             circle: TextureId(0),
+            rounded: std::collections::HashMap::new(),
             text: TextSystem::new(),
             world: DrawQueue::default(),
             screen: DrawQueue::default(),
@@ -542,6 +545,45 @@ impl Renderer {
             .size(Vec2::splat(radius * 2.0))
             .color(color);
         self.push_sprite(Space::World, &sprite);
+    }
+
+    /// Painel (retângulo arredondado com borda, ou imagem em 9 fatias) no
+    /// espaço do mundo, com centro em `panel.center`.
+    pub fn draw_panel(&mut self, panel: &crate::Panel) {
+        for sprite in self.panel_sprites(panel, true) {
+            self.push_sprite(Space::World, &sprite);
+        }
+    }
+
+    fn panel_sprites(&mut self, panel: &crate::Panel, y_up: bool) -> Vec<Sprite> {
+        let rounded = match panel.image {
+            None => self.rounded_textures(panel.radius.max(0.0), panel.border.max(0.0)),
+            Some(_) => (self.white, self.white, 1),
+        };
+        let textures = &self.textures;
+        crate::panel::panel_sprites(panel, y_up, &mut |_, _| rounded, &|id| {
+            textures
+                .get(id.0 as usize)
+                .map(|t| t.size)
+                .unwrap_or(UVec2::ONE)
+        })
+    }
+
+    fn rounded_textures(&mut self, radius: f32, border: f32) -> (TextureId, TextureId, u32) {
+        let key = ((radius * 2.0).round() as u32, (border * 2.0).round() as u32);
+        if let Some(t) = self.rounded.get(&key) {
+            return *t;
+        }
+        let (r, b) = (key.0 as f32 / 2.0, key.1 as f32 / 2.0);
+        let (size, fill, ring) = crate::panel::rounded_pixels(r, b);
+        let opts = TextureOptions::default();
+        let t = (
+            self.create_texture(size, &fill, opts),
+            self.create_texture(size, &ring, opts),
+            crate::panel::round_margin(r, b),
+        );
+        self.rounded.insert(key, t);
+        t
     }
 
     /// Texto no espaço do mundo (acompanha a câmera e o zoom).
@@ -891,6 +933,14 @@ impl ScreenPainter<'_> {
 
     pub fn draw_text(&mut self, text: &Text<'_>) -> &mut Self {
         self.renderer.push_text(Space::Screen, text);
+        self
+    }
+
+    /// Painel com centro em `panel.center` (pixels da tela, Y para baixo).
+    pub fn draw_panel(&mut self, panel: &crate::Panel) -> &mut Self {
+        for sprite in self.renderer.panel_sprites(panel, false) {
+            self.renderer.push_sprite(Space::Screen, &sprite);
+        }
         self
     }
 }

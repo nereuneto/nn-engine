@@ -437,3 +437,53 @@ fn particulas_aparecem_na_tela() {
     assert_color(img.pixel(32, 32), GREEN, "partícula no centro");
     assert_eq!(h.renderer.last_stats().draw_calls, 1);
 }
+
+#[test]
+fn painel_arredondado_com_borda() {
+    let Some(mut h) = Harness::new() else { return };
+    // Painel de 48×48 no meio (a câmera mostra 64×64 com centro no 0, 0),
+    // fundo verde, borda vermelha de 4 e cantos de raio 12.
+    h.renderer.draw_panel(
+        &nn_render::Panel::new(Vec2::ZERO, Vec2::splat(48.0))
+            .color(Color::rgb(0.0, 1.0, 0.0))
+            .radius(12.0)
+            .border(4.0, Color::rgb(1.0, 0.0, 0.0)),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_color(img.pixel(32, 32), GREEN, "meio");
+    assert_color(img.pixel(32, 9), RED, "borda de cima");
+    assert_color(img.pixel(54, 32), RED, "borda da direita");
+    assert_color(img.pixel(9, 9), BLACK, "canto de fora (arredondado)");
+    assert_color(img.pixel(2, 2), BLACK, "fora");
+}
+
+#[test]
+fn painel_de_imagem_em_nove_fatias() {
+    let Some(mut h) = Harness::new() else { return };
+    // Imagem 3×3: borda azul, meio branco. Fatias de 1 pixel, cada uma com 8.
+    let mut px = Vec::new();
+    for y in 0..3 {
+        for x in 0..3 {
+            px.extend_from_slice(if x == 1 && y == 1 { &WHITE } else { &BLUE });
+        }
+    }
+    let tex = h
+        .renderer
+        .create_texture(UVec2::splat(3), &px, TextureOptions::PIXEL_ART);
+    h.renderer.screen().draw_panel(
+        &nn_render::Panel::new(Vec2::splat(32.0), Vec2::new(56.0, 40.0)).image(
+            nn_render::PanelImage {
+                texture: tex,
+                region: nn_render::Rect::FULL,
+                slice: 1.0,
+                scale: 8.0,
+            },
+        ),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_color(img.pixel(32, 32), WHITE, "meio estica");
+    assert_color(img.pixel(8, 32), BLUE, "borda da esquerda (8 px)");
+    assert_color(img.pixel(14, 32), WHITE, "logo depois da borda");
+    assert_color(img.pixel(32, 15), BLUE, "borda de cima");
+    assert_color(img.pixel(2, 32), BLACK, "fora");
+}

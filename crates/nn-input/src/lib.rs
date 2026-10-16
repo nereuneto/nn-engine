@@ -108,6 +108,8 @@ pub struct Input {
     deadzone: f32,
     actions: HashMap<String, Action>,
     last_device: Device,
+    /// Texto digitado neste frame (letras, com acento e maiúsculas).
+    typed: String,
 }
 
 impl Default for Input {
@@ -122,6 +124,7 @@ impl Default for Input {
             deadzone: DEFAULT_DEADZONE,
             actions: HashMap::new(),
             last_device: Device::default(),
+            typed: String::new(),
         }
     }
 }
@@ -238,6 +241,19 @@ impl Input {
         }
     }
 
+    /// O texto digitado neste frame, como o sistema entendeu as teclas
+    /// (maiúsculas, acentos, Ç...). Sem as teclas de controle (Enter,
+    /// Backspace, Tab, Esc): veja essas com [`Input::key_pressed`].
+    pub fn typed(&self) -> &str {
+        &self.typed
+    }
+
+    /// Registra texto digitado. Normalmente chamado pela engine.
+    pub fn type_text(&mut self, text: &str) {
+        self.typed.extend(text.chars().filter(|c| !c.is_control()));
+        self.last_device = Device::Keyboard;
+    }
+
     /// Registra a soltura de uma tecla. Normalmente chamado pela engine.
     pub fn release_key(&mut self, key: KeyCode) {
         self.keys.release(key);
@@ -293,6 +309,11 @@ impl Input {
                         ElementState::Pressed => self.press_key(code),
                         ElementState::Released => self.release_key(code),
                     }
+                }
+                if event.state == ElementState::Pressed
+                    && let Some(text) = &event.text
+                {
+                    self.type_text(text);
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => match state {
@@ -595,6 +616,7 @@ impl Input {
         }
         self.keys.end_frame();
         self.mouse.end_frame();
+        self.typed.clear();
         for pad in &mut self.pads {
             pad.buttons.end_frame();
         }

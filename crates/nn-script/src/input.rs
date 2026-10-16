@@ -272,6 +272,10 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
         })?,
     )?;
     input.set(
+        "text",
+        lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.input.typed().to_string())))?,
+    )?;
+    input.set(
         "last_device",
         lua.create_function(|lua, ()| {
             with_ctx(lua, |c| {

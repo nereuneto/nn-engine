@@ -9,10 +9,12 @@ local B = {
       options = {
         { "nada", "nada (um evento decide)" },
         { "cena", "ir para outra cena" },
+        { "por_cima", "abrir uma cena por cima (pausa)" },
+        { "fechar", "fechar esta cena (a aberta por cima)" },
         { "reiniciar", "reiniciar a cena" },
         { "sair", "fechar o jogo" },
       } },
-    { "cena", "", type = "scene", label = "Cena", show_if = { "acao", "cena" } },
+    { "cena", "", type = "scene", label = "Cena", show_if = { "acao", "cena", "por_cima" } },
     { "foco", false, label = "Começa selecionado",
       help = "O botão que já vem destacado para quem usa teclado ou controle." },
     { "cor", "#FFD166", type = "color", label = "Cor ao destacar" },
@@ -31,89 +33,18 @@ function B:start()
   local c = visual(self.obj)
   self.cor_original = c and c.color
   self.sx, self.sy = self.obj.scale_x, self.obj.scale_y
-  local s = self.scene
-  s._buttons = s._buttons or {}
-  table.insert(s._buttons, self)
-  if self.foco then s._button_focus = self end
-end
-
-local function alive_buttons(scene)
-  local out = {}
-  for _, b in ipairs(scene._buttons or {}) do
-    if b.obj.alive and b.enabled and b.obj:shown() then table.insert(out, b) end
-  end
-  scene._buttons = out
-  return out
-end
-
-local function pressed(names, pad)
-  for _, k in ipairs(names) do
-    if nn.input.pressed(k) then return true end
-  end
-  return pad and nn.input.pad_pressed(pad) or false
-end
-
--- O botão mais perto na direção (dx, dy).
-local function nearest(list, from, dx, dy)
-  local fx, fy = from.obj:world_transform()
-  local best, best_d
-  for _, b in ipairs(list) do
-    if b ~= from then
-      local x, y = b.obj:world_transform()
-      local along = (x - fx) * dx + (y - fy) * dy
-      if along > 1 then
-        local across = math.abs((x - fx) * dy - (y - fy) * dx)
-        local d = along + across * 2
-        if not best_d or d < best_d then best, best_d = b, d end
-      end
-    end
-  end
-  return best
-end
-
--- Teclado e controle: um botão por cena cuida disso a cada quadro.
-local function navigate(scene)
-  local frame = nn.time.frame()
-  if scene._button_frame == frame then return end
-  scene._button_frame = frame
-  local list = alive_buttons(scene)
-  if #list == 0 then return end
-  local focus = scene._button_focus
-  if focus and not (focus.obj.alive and focus.enabled) then focus = nil end
-  local dirs = {
-    { { "up", "w" }, "up", 0, 1 }, { { "down", "s" }, "down", 0, -1 },
-    { { "left", "a" }, "left", -1, 0 }, { { "right", "d" }, "right", 1, 0 },
-  }
-  for _, d in ipairs(dirs) do
-    if pressed(d[1], d[2]) then
-      if not focus then
-        table.sort(list, function(a, b)
-          local _, ay = a.obj:world_transform()
-          local _, by = b.obj:world_transform()
-          return ay > by
-        end)
-        focus = list[1]
-      else
-        focus = nearest(list, focus, d[3], d[4]) or focus
-      end
-    end
-  end
-  -- O mouse andou por cima de um botão: ele fica com o destaque.
-  local mx, my = nn.input.mouse()
-  if mx and (mx ~= scene._button_mx or my ~= scene._button_my) then
-    scene._button_mx, scene._button_my = mx, my
-    for _, b in ipairs(list) do
-      if b.obj:mouse_over() then focus = b end
-    end
-  end
-  scene._button_focus = focus
-  if focus and pressed({ "enter", "space" }, "a") then focus:apertar() end
+  -- O foco (setas, mouse, controle) é o mesmo dos botões de interface.
+  self.item = self.scene:_ui_add({
+    obj = self.obj, kind = "behavior",
+    enabled = function() return self.enabled end,
+    press = function() self:apertar() end,
+    start_focus = self.foco,
+  })
 end
 
 function B:update(dt)
-  navigate(self.scene)
-  if nn.input.mouse_pressed("left") and self.obj:mouse_over() then self:apertar() end
-  local on = self.scene._button_focus == self
+  local state = self.scene:_ui_state(self.item)
+  local on = state == "hover" or state == "press"
   local c = visual(self.obj)
   if c then c.color = on and self.cor or self.cor_original end
   local k = on and self.aumentar or 1
@@ -125,6 +56,10 @@ function B:apertar()
   self.obj:send("clicou")
   if self.acao == "cena" and self.cena ~= "" then
     nn.scene.switch(self.cena, nil, { fade = 0.4 })
+  elseif self.acao == "por_cima" then
+    self.scene:open_over(self.cena)
+  elseif self.acao == "fechar" then
+    self.scene:close_over()
   elseif self.acao == "reiniciar" then
     self.scene:restart()
   elseif self.acao == "sair" then

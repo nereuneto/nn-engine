@@ -43,6 +43,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Variáveis do jogo: começam com o `vars` do config.lua e valem entre as cenas.",
     ),
     d(
+        "nn.theme",
+        "",
+        "Tema da interface (`theme` do config.lua): font, text, button, hover, press, disabled, panel, border, accent, sound.",
+    ),
+    d(
         "nn.reset_vars",
         "()",
         "Volta as variáveis do jogo (nn.vars) aos valores do config.lua.",
@@ -99,6 +104,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Círculo de cor sólida.",
     ),
     d(
+        "nn.draw.panel",
+        "(x, y, w, h, opts)",
+        "Painel com centro em x, y (opts: color, radius, border, border_color, image, frame, slice, slice_scale).",
+    ),
+    d(
         "nn.draw.text",
         "(texto, x, y, opts)",
         "Texto no mundo (opts: size, color, alpha, anchor, align, font).",
@@ -120,6 +130,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Retângulo na tela (x, y é o canto superior esquerdo).",
     ),
     d("nn.screen.circle", "(x, y, raio, cor)", "Círculo na tela."),
+    d(
+        "nn.screen.panel",
+        "(x, y, w, h, opts)",
+        "Painel na tela, do canto de cima à esquerda (cantos arredondados, borda ou imagem em 9 fatias).",
+    ),
     d("nn.screen.text", "(texto, x, y, opts)", "Texto na tela."),
     d(
         "nn.screen.flash",
@@ -168,6 +183,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "nn.input.last_device",
         "()",
         "Último usado: \"keyboard\", \"mouse\" ou \"gamepad\".",
+    ),
+    d(
+        "nn.input.text",
+        "()",
+        "Texto digitado neste quadro (com acentos e maiúsculas), para campos de texto.",
     ),
     d(
         "nn.input.mouse",

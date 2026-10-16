@@ -8,11 +8,13 @@
 //! - [`Camera2D`]: câmera ortográfica com Y para cima.
 //! - [`OffscreenTarget`]: renderiza em memória (testes e capturas).
 //! - [`Presentation`]: tamanho fixo do jogo ajustado à janela.
+//! - [`Panel`]: painéis de menus (cantos arredondados, borda, 9 fatias).
 
 mod animation;
 mod camera;
 mod context;
 mod offscreen;
+mod panel;
 mod parallax;
 mod particles;
 mod present;
@@ -25,6 +27,7 @@ pub use animation::{Animation, AnimationPlayer, Playback, SpriteSheet};
 pub use camera::{Bounds, Camera2D, Follow};
 pub use context::GpuContext;
 pub use offscreen::OffscreenTarget;
+pub use panel::{Panel, PanelImage};
 pub use parallax::Parallax;
 pub use particles::{EmitArea, ParticleConfig, ParticleEmitter};
 pub use present::{Presentation, ScaleMode};
