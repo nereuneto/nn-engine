@@ -1244,3 +1244,62 @@ fn variaveis_do_jogo_nas_configuracoes() {
     let text = std::fs::read_to_string(proj.join("config.lua")).unwrap();
     assert!(text.contains("vars = { pontos = 0 }"), "{text}");
 }
+
+#[test]
+fn eventos_pelo_painel_criar_desfazer_salvar_e_ver_como_codigo() {
+    let dir = temp("eventos");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    h.get_by_label("quadrado").click();
+    h.run();
+    // O Inspetor mostra o resumo e leva ao painel Eventos.
+    h.get_by_label("➕ Criar").click();
+    h.run();
+    assert!(tabs(&h).contains(&Tab::Events));
+    // Nova regra do quadrado: busca "encostar" e Enter escolhe.
+    h.get_by_label("➕ Regra de quadrado").click();
+    h.run();
+    digitar(&mut h, "encostar");
+    tela(&mut h, "eventos-menu");
+    h.key_press(Key::Enter);
+    h.run();
+    let regras = objeto(&h, "quadrado").events.clone();
+    assert_eq!(regras.len(), 1);
+    assert_eq!(regras[0].when[0].id, "encostar");
+    assert_eq!(regras[0].when[0].str("quem"), "@este");
+    // Então: destruir (o outro).
+    h.get_by_label("➕ ação").click();
+    h.run();
+    digitar(&mut h, "destruir");
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(objeto(&h, "quadrado").events[0].actions[0].id, "destruir");
+    tela(&mut h, "eventos");
+    // Desfazer tira a ação; refazer volta.
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(objeto(&h, "quadrado").events[0].actions.is_empty());
+    atalho(&mut h, Modifiers::COMMAND, Key::Y);
+    assert_eq!(objeto(&h, "quadrado").events[0].actions.len(), 1);
+    // Salvar grava as regras no objeto.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(
+        text.contains("{ cond = \"encostar\", quem = \"@este\", em = \"@jogador\" },"),
+        "{text}"
+    );
+    assert!(
+        text.contains("{ act = \"destruir\", alvo = \"@este\" },"),
+        "{text}"
+    );
+    // Ver como código.
+    h.get_by_label("Ver como código").click();
+    h.run();
+    h.get_by_label_contains("Como código: quadrado");
+    let code = h
+        .get_by(|n| n.role() == Role::MultilineTextInput)
+        .value()
+        .unwrap_or_default();
+    assert!(code.contains("self.obj:destroy()"), "{code}");
+    tela(&mut h, "eventos-codigo");
+}

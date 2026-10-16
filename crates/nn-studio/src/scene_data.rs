@@ -165,6 +165,85 @@ impl Component {
     }
 }
 
+/// Uma condição ou ação de um evento: o id do catálogo e os campos.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct EventItem {
+    pub id: String,
+    /// Condição invertida ("não").
+    pub not: bool,
+    pub props: Vec<(String, Prop)>,
+}
+
+impl EventItem {
+    pub fn get(&self, key: &str) -> Option<&Prop> {
+        self.props.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+    }
+
+    pub fn str(&self, key: &str) -> &str {
+        self.get(key).map(Prop::str).unwrap_or("")
+    }
+
+    pub fn set(&mut self, key: &str, value: Prop) {
+        match self.props.iter_mut().find(|(k, _)| k == key) {
+            Some((_, v)) => *v = value,
+            None => self.props.push((key.to_string(), value)),
+        }
+    }
+}
+
+/// Uma regra "Quando... Então..." (ou uma linha de comentário).
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Rule {
+    pub when: Vec<EventItem>,
+    pub actions: Vec<EventItem>,
+    /// "Enquanto": roda a cada quadro enquanto as condições valem.
+    pub repeat: bool,
+    /// Desligada.
+    pub off: bool,
+    /// Linha de comentário (sem condições nem ações).
+    pub comment: Option<String>,
+}
+
+impl Rule {
+    pub fn to_json(&self) -> serde_json::Value {
+        let item = |i: &EventItem, key: &str| {
+            let mut m = serde_json::Map::new();
+            m.insert(key.into(), serde_json::json!(i.id));
+            if i.not {
+                m.insert("nao".into(), serde_json::json!(true));
+            }
+            for (k, v) in &i.props {
+                m.insert(k.clone(), v.to_json());
+            }
+            serde_json::Value::Object(m)
+        };
+        let mut m = serde_json::Map::new();
+        if let Some(c) = &self.comment {
+            m.insert("comment".into(), serde_json::json!(c));
+        }
+        if self.repeat {
+            m.insert("mode".into(), serde_json::json!("enquanto"));
+        }
+        if self.off {
+            m.insert("off".into(), serde_json::json!(true));
+        }
+        m.insert(
+            "when".into(),
+            serde_json::Value::Array(self.when.iter().map(|i| item(i, "cond")).collect()),
+        );
+        m.insert(
+            "actions".into(),
+            serde_json::Value::Array(self.actions.iter().map(|i| item(i, "act")).collect()),
+        );
+        serde_json::Value::Object(m)
+    }
+}
+
+/// Regras como JSON (para o ajuste ao vivo).
+pub fn rules_json(rules: &[Rule]) -> serde_json::Value {
+    serde_json::Value::Array(rules.iter().map(Rule::to_json).collect())
+}
+
 /// Ligação de uma instância com o prefab.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrefabLink {
@@ -198,6 +277,8 @@ pub struct Object {
     pub children: Vec<Object>,
     /// Instância de um prefab.
     pub prefab: Option<PrefabLink>,
+    /// Eventos do objeto (numa instância, os do prefab).
+    pub events: Vec<Rule>,
 }
 
 impl Object {
@@ -216,6 +297,7 @@ impl Object {
             components: Vec::new(),
             children: Vec::new(),
             prefab: None,
+            events: Vec::new(),
         }
     }
 
@@ -290,6 +372,7 @@ impl Object {
             }
         }
         self.components = comps;
+        self.events = base.events.clone();
         if let Some(link) = &mut self.prefab {
             link.base = Some(Box::new(base));
             link.raw.clear();
@@ -320,6 +403,8 @@ pub struct SceneData {
     pub gravity: f64,
     pub overlay: bool,
     pub objects: Vec<Object>,
+    /// Eventos da cena.
+    pub events: Vec<Rule>,
 }
 
 impl Default for SceneData {
@@ -330,6 +415,7 @@ impl Default for SceneData {
             gravity: -1800.0,
             overlay: false,
             objects: Vec::new(),
+            events: Vec::new(),
         }
     }
 }
@@ -446,10 +532,12 @@ pub fn read(text: &str, name: &str) -> Result<SceneData, String> {
         gravity: num(&t, "gravity", -1800.0),
         overlay: boolean(&t, "overlay", false),
         objects: Vec::new(),
+        events: Vec::new(),
     };
     if let Ok(Value::Table(list)) = t.get::<Value>("objects") {
         scene.objects = read_objects(&list, name)?;
     }
+    scene.events = read_rules(&t, name, "cena")?;
     fix_ids(&mut scene);
     Ok(scene)
 }
@@ -546,7 +634,114 @@ fn read_object(o: &Table, name: &str) -> Result<Object, String> {
     if let Ok(Value::Table(children)) = o.get::<Value>("children") {
         obj.children = read_objects(&children, name)?;
     }
+    if obj.prefab.is_none() {
+        obj.events = read_rules(o, name, &obj.name)?;
+    }
     Ok(obj)
+}
+
+/// Lê o campo `events` (lista de regras) de uma cena ou objeto.
+fn read_rules(t: &Table, name: &str, owner: &str) -> Result<Vec<Rule>, String> {
+    let Ok(Value::Table(list)) = t.get::<Value>("events") else {
+        return Ok(Vec::new());
+    };
+    let item = |it: &Table, key: &str| -> EventItem {
+        let mut e = EventItem {
+            id: string(it, key),
+            not: boolean(it, "nao", false),
+            props: Vec::new(),
+        };
+        let mut props: Vec<(String, Prop)> = it
+            .pairs::<String, Value>()
+            .filter_map(Result::ok)
+            .filter(|(k, _)| k != key && k != "nao")
+            .filter_map(|(k, v)| to_prop(&v).map(|p| (k, p)))
+            .collect();
+        crate::events::sort_props(&e.id, key == "cond", &mut props);
+        e.props = props;
+        e
+    };
+    let mut out = Vec::new();
+    for (i, r) in list.sequence_values::<Table>().enumerate() {
+        let r = r.map_err(|e| format!("{name}: evento {} de {owner} inválido: {e}", i + 1))?;
+        let mut rule = Rule {
+            repeat: string(&r, "mode") == "enquanto",
+            off: boolean(&r, "off", false),
+            comment: match r.get::<Value>("comment") {
+                Ok(Value::String(s)) => Some(s.to_string_lossy()),
+                _ => None,
+            },
+            ..Default::default()
+        };
+        if let Ok(Value::Table(w)) = r.get::<Value>("when") {
+            rule.when = w
+                .sequence_values::<Table>()
+                .filter_map(Result::ok)
+                .map(|c| item(&c, "cond"))
+                .collect();
+        }
+        if let Ok(Value::Table(a)) = r.get::<Value>("actions") {
+            rule.actions = a
+                .sequence_values::<Table>()
+                .filter_map(Result::ok)
+                .map(|c| item(&c, "act"))
+                .collect();
+        }
+        out.push(rule);
+    }
+    Ok(out)
+}
+
+/// Grava uma lista de regras (`events = { ... },`).
+fn write_rules(s: &mut String, rules: &[Rule], depth: usize) {
+    if rules.is_empty() {
+        return;
+    }
+    let pad = "  ".repeat(depth);
+    let inner = "  ".repeat(depth + 1);
+    let item = |i: &EventItem, key: &str| {
+        let mut line = format!("{key} = {}", crate::config_lua::lua_string(&i.id));
+        if i.not {
+            line.push_str(", nao = true");
+        }
+        for (k, v) in &i.props {
+            line.push_str(&format!(", {k} = {}", v.to_lua()));
+        }
+        format!("{{ {line} }}")
+    };
+    s.push_str(&format!("{pad}events = {{\n"));
+    for r in rules {
+        if let Some(c) = &r.comment
+            && r.when.is_empty()
+            && r.actions.is_empty()
+        {
+            s.push_str(&format!(
+                "{inner}{{ comment = {} }},\n",
+                crate::config_lua::lua_string(c)
+            ));
+            continue;
+        }
+        let mut head = String::new();
+        if let Some(c) = &r.comment {
+            head.push_str(&format!("comment = {}, ", crate::config_lua::lua_string(c)));
+        }
+        if r.repeat {
+            head.push_str("mode = \"enquanto\", ");
+        }
+        if r.off {
+            head.push_str("off = true, ");
+        }
+        s.push_str(&format!("{inner}{{ {head}when = {{\n"));
+        for c in &r.when {
+            s.push_str(&format!("{inner}    {},\n", item(c, "cond")));
+        }
+        s.push_str(&format!("{inner}  }}, actions = {{\n"));
+        for a in &r.actions {
+            s.push_str(&format!("{inner}    {},\n", item(a, "act")));
+        }
+        s.push_str(&format!("{inner}  }} }},\n"));
+    }
+    s.push_str(&format!("{pad}}},\n"));
 }
 
 /// Lê um `.prefab`: um objeto (com filhos).
@@ -654,6 +849,7 @@ pub fn write(scene: &SceneData) -> String {
     if scene.overlay {
         s.push_str("  overlay = true,\n");
     }
+    write_rules(&mut s, &scene.events, 1);
     s.push_str("  objects = {\n");
     write_objects(&mut s, &scene.objects, 2);
     s.push_str("  },\n}\n");
@@ -713,6 +909,9 @@ fn write_objects(s: &mut String, list: &[Object], depth: usize) {
                 s.push_str(&format!("{inner}  {{ {line} }},\n"));
             }
             s.push_str(&format!("{inner}}},\n"));
+        }
+        if o.prefab.is_none() {
+            write_rules(s, &o.events, depth + 1);
         }
         if !o.children.is_empty() {
             s.push_str(&format!("{inner}children = {{\n"));
@@ -1255,6 +1454,85 @@ mod tests {
         assert_eq!(copy_name("moeda 2"), "moeda 3");
         let (o, p, i) = s.remove(4).unwrap();
         assert_eq!((o.id, p, i), (4, None, 2));
+    }
+
+    #[test]
+    fn eventos_da_cena_e_do_objeto_ida_e_volta() {
+        let cat = crate::events::catalog();
+        let mut enc = cat.condition("encostar").unwrap().new_item(false);
+        enc.set("em", Prop::Str("chave".into()));
+        let mut tecla = cat.condition("tecla").unwrap().new_item(false);
+        tecla.not = true;
+        let mut var = cat.action("variavel").unwrap().new_item(false);
+        var.set("valor", Prop::Str("{pontos}".into()));
+        let mut s = SceneData {
+            events: vec![
+                Rule {
+                    comment: Some("Chaves abrem a porta".into()),
+                    ..Default::default()
+                },
+                Rule {
+                    when: vec![enc, tecla],
+                    actions: vec![var],
+                    repeat: true,
+                    off: true,
+                    comment: None,
+                },
+            ],
+            ..Default::default()
+        };
+        let mut o = Object::new(1, "porta");
+        o.events = vec![Rule {
+            when: vec![cat.condition("comecou").unwrap().new_item(true)],
+            actions: vec![cat.action("destruir").unwrap().new_item(true)],
+            ..Default::default()
+        }];
+        s.objects.push(o);
+        let text = write(&s);
+        assert!(
+            text.contains("{ comment = \"Chaves abrem a porta\" },"),
+            "{text}"
+        );
+        assert!(
+            text.contains("mode = \"enquanto\", off = true, when = {"),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "{ cond = \"tecla\", nao = true, modo = \"apertar\", tecla = \"pular\" },"
+            ),
+            "{text}"
+        );
+        let back = read(&text, "teste").unwrap();
+        assert_eq!(back, s);
+        assert_eq!(write(&back), text);
+        // O JSON do ajuste ao vivo tem o formato que a engine lê.
+        let json = rules_json(&s.events).to_string();
+        assert!(json.contains("\"mode\":\"enquanto\""), "{json}");
+        assert!(json.contains("\"cond\":\"encostar\""), "{json}");
+    }
+
+    #[test]
+    fn instancia_de_prefab_usa_as_regras_do_prefab() {
+        let mut base = Object::new(1, "moeda");
+        base.events = vec![Rule {
+            comment: Some("do prefab".into()),
+            ..Default::default()
+        }];
+        let mut inst = Object::new(5, "moeda");
+        inst.prefab = Some(PrefabLink {
+            path: "prefabs/moeda.prefab".into(),
+            base: None,
+            raw: Vec::new(),
+        });
+        inst.link_prefab(base);
+        assert_eq!(inst.events.len(), 1);
+        let s = SceneData {
+            objects: vec![inst],
+            ..Default::default()
+        };
+        // A instância não grava as regras (elas são do prefab).
+        assert!(!write(&s).contains("events"));
     }
 
     #[test]

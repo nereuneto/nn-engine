@@ -32,6 +32,8 @@ pub struct LiveChange {
     pub component: Option<usize>,
     pub field: String,
     pub value: Prop,
+    /// Valor que não é simples (as regras de eventos).
+    pub json: Option<serde_json::Value>,
 }
 
 impl LiveChange {
@@ -40,7 +42,7 @@ impl LiveChange {
             "scene": scene,
             "id": self.id,
             "field": self.field,
-            "value": self.value.to_json(),
+            "value": self.json.clone().unwrap_or_else(|| self.value.to_json()),
         });
         if let Some(c) = self.component {
             v["component"] = serde_json::json!(c);
@@ -53,8 +55,21 @@ impl LiveChange {
 /// recarregar (campos de objetos e componentes que já existiam).
 pub fn diff(before: &SceneData, after: &SceneData) -> Vec<LiveChange> {
     let mut out = Vec::new();
+    let events = |id: u32, rules: &[scene_data::Rule]| LiveChange {
+        id,
+        component: None,
+        field: "events".into(),
+        value: Prop::Bool(false),
+        json: Some(scene_data::rules_json(rules)),
+    };
+    if before.events != after.events {
+        out.push(events(0, &after.events));
+    }
     scene_data::visit(&after.objects, &mut |o| {
         let Some(b) = before.find(o.id) else { return };
+        if b.events != o.events {
+            out.push(events(o.id, &o.events));
+        }
         for key in [
             "name", "x", "y", "rotation", "scale_x", "scale_y", "visible", "layer",
         ] {
@@ -67,6 +82,7 @@ pub fn diff(before: &SceneData, after: &SceneData) -> Vec<LiveChange> {
                     component: None,
                     field: key.into(),
                     value,
+                    json: None,
                 });
             }
         }
@@ -84,6 +100,7 @@ pub fn diff(before: &SceneData, after: &SceneData) -> Vec<LiveChange> {
                         component: Some(i + 1),
                         field: k.clone(),
                         value: v.clone(),
+                        json: None,
                     });
                 }
             }
@@ -247,6 +264,9 @@ pub struct GameState {
     pub paused: bool,
     pub objects: std::collections::HashMap<u32, GameObject>,
     pub vars: Vec<(String, Prop)>,
+    /// Regras que dispararam desde o último estado ("c:2" = 2ª regra da
+    /// cena, "7:1" = 1ª regra do objeto 7).
+    pub fired: Vec<String>,
 }
 
 fn json_prop(v: &serde_json::Value) -> Option<Prop> {
@@ -314,6 +334,12 @@ impl GameState {
                     },
                 );
             }
+        }
+        if let Some(list) = v.get("fired").and_then(|o| o.as_array()) {
+            state.fired = list
+                .iter()
+                .filter_map(|s| s.as_str().map(str::to_string))
+                .collect();
         }
         if let Some(map) = v.get("vars").and_then(|o| o.as_object()) {
             state.vars = map

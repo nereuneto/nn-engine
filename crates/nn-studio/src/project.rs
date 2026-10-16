@@ -40,6 +40,8 @@ pub enum Tab {
     Scene(String),
     Hierarchy,
     Inspector,
+    /// Eventos "Quando... Então..." da cena ativa.
+    Events,
 }
 
 impl Tab {
@@ -75,7 +77,7 @@ impl Tab {
     pub fn is_document(&self) -> bool {
         !matches!(
             self,
-            Tab::Files | Tab::Console | Tab::Hierarchy | Tab::Inspector
+            Tab::Files | Tab::Console | Tab::Hierarchy | Tab::Inspector | Tab::Events
         )
     }
 }
@@ -88,7 +90,7 @@ pub fn default_layout() -> DockState<Tab> {
     let [center, files] = tree.split_left(NodeIndex::root(), 0.2, vec![Tab::Files]);
     let [_files, _hierarchy] = tree.split_below(files, 0.5, vec![Tab::Hierarchy]);
     let [center, _inspector] = tree.split_right(center, 0.72, vec![Tab::Inspector]);
-    let [_center, _console] = tree.split_below(center, 0.70, vec![Tab::Console]);
+    let [_center, _console] = tree.split_below(center, 0.66, vec![Tab::Console, Tab::Events]);
     state
 }
 
@@ -250,6 +252,7 @@ pub struct ProjectWorkspace {
     scene_renderer: Option<SceneRenderer>,
     hierarchy: HierarchyPanel,
     inspector: Inspector,
+    events: crate::events_view::EventsPanel,
     /// Cena que o jogo aberto está mostrando (para o ajuste ao vivo).
     pub game_scene: Option<String>,
     /// O que o jogo aberto conta da cena da frente.
@@ -340,6 +343,7 @@ impl ProjectWorkspace {
             scene_renderer: None,
             hierarchy: HierarchyPanel::default(),
             inspector: Inspector::default(),
+            events: Default::default(),
             game_scene: None,
             game_state: None,
             config: ConfigValues::default(),
@@ -533,6 +537,27 @@ impl ProjectWorkspace {
                     vec![Tab::Inspector],
                 );
             }
+            Tab::Events => {
+                // Junto do Console, se ele estiver aberto.
+                match self.dock.find_tab(&Tab::Console) {
+                    Some(path) => {
+                        if let Ok(leaf) = self.dock.leaf_mut(path.node_path()) {
+                            leaf.append_tab(Tab::Events);
+                        }
+                    }
+                    None => {
+                        self.dock.main_surface_mut().split_below(
+                            NodeIndex::root(),
+                            0.66,
+                            vec![Tab::Events],
+                        );
+                    }
+                }
+                if let Some(path) = self.dock.find_tab(&Tab::Events) {
+                    let _ = self.dock.set_active_tab(path);
+                    self.dock.set_focused_node_and_surface(path.node_path());
+                }
+            }
             _ => {
                 // Vai para onde já estão os outros documentos.
                 match self.dock.find_tab_from(Tab::is_document) {
@@ -608,6 +633,15 @@ impl ProjectWorkspace {
             if self.dock.find_tab(&tab).is_none() {
                 self.show_tab(tab);
             }
+        }
+        // Eventos: junto do Console, sem tirar o Console da frente.
+        if self.dock.find_tab(&Tab::Events).is_none()
+            && let Some(path) = self.dock.find_tab(&Tab::Console)
+            && let Ok(leaf) = self.dock.leaf_mut(path.node_path())
+        {
+            let active = leaf.active;
+            leaf.append_tab(Tab::Events);
+            leaf.active = active;
         }
     }
 
@@ -685,7 +719,7 @@ impl ProjectWorkspace {
         let active = self.active_scene.clone();
         match self.dock.find_active_focused() {
             Some((_, Tab::Scene(r))) => Some(r.clone()),
-            Some((_, Tab::Hierarchy | Tab::Inspector)) => active,
+            Some((_, Tab::Hierarchy | Tab::Inspector | Tab::Events)) => active,
             _ => None,
         }
     }
@@ -754,6 +788,9 @@ impl ProjectWorkspace {
                 Some(LiveMessage::Scene(scene)) => self.game_scene = Some(scene),
                 Some(LiveMessage::State(v)) => {
                     self.game_state = crate::scene_view::GameState::parse(&v);
+                    if let Some(g) = &self.game_state {
+                        self.events.flash(&g.scene, &g.fired);
+                    }
                 }
                 Some(LiveMessage::Select(id)) => {
                     // Ctrl+clique no jogo: seleciona o objeto aqui.
@@ -995,6 +1032,7 @@ impl ProjectWorkspace {
             Command::ShowHome => self.show_tab(Tab::Home),
             Command::ShowHierarchy => self.show_tab(Tab::Hierarchy),
             Command::ShowInspector => self.show_tab(Tab::Inspector),
+            Command::ShowEvents => self.show_tab(Tab::Events),
             Command::ClearConsole => self.console.clear(),
             Command::ResetLayout => {
                 self.dock = default_layout();
@@ -1493,6 +1531,7 @@ impl ProjectWorkspace {
             code_env = Some((rel.clone(), self.completion_env(&rel)));
         }
         {
+            let vars: Vec<String> = self.config.vars.iter().map(|(k, _)| k.clone()).collect();
             let mut viewer = Viewer {
                 root: &self.root,
                 title: &self.title,
@@ -1520,6 +1559,8 @@ impl ProjectWorkspace {
                 scene_renderer: &mut self.scene_renderer,
                 hierarchy: &mut self.hierarchy,
                 inspector: &mut self.inspector,
+                events: &mut self.events,
+                vars: &vars,
                 game_scene: self.game_scene.as_deref(),
                 design: (f64::from(self.config.width), f64::from(self.config.height)),
                 clear_color: &self.config.clear_color,
@@ -2045,6 +2086,9 @@ struct Viewer<'a> {
     scene_renderer: &'a mut Option<SceneRenderer>,
     hierarchy: &'a mut HierarchyPanel,
     inspector: &'a mut Inspector,
+    events: &'a mut crate::events_view::EventsPanel,
+    /// Variáveis do jogo (config.lua).
+    vars: &'a [String],
     game_scene: Option<&'a str>,
     design: (f64, f64),
     clear_color: &'a str,
@@ -2076,6 +2120,7 @@ impl TabViewer for Viewer<'_> {
             Tab::Settings => "Configurações".to_string(),
             Tab::Hierarchy => "Hierarquia".to_string(),
             Tab::Inspector => "Inspetor".to_string(),
+            Tab::Events => "Eventos".to_string(),
             Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) | Tab::Scene(r) => {
                 let name = r.rsplit('/').next().unwrap_or(r).to_string();
                 if self.docs.get(r.as_str()).is_some_and(CodeDoc::is_dirty)
@@ -2252,6 +2297,23 @@ impl TabViewer for Viewer<'_> {
                     }
                 }
             }
+            Tab::Events => {
+                let doc = self
+                    .active_scene
+                    .as_deref()
+                    .and_then(|r| self.scenes.get_mut(r));
+                let env = crate::events_view::EventsEnv {
+                    files: self.files,
+                    vars: self.vars,
+                };
+                for a in self.events.ui(ui, doc, &env) {
+                    match a {
+                        crate::events_view::EventsAction::OpenFile(rel) => {
+                            self.actions.push(Action::OpenFile { rel, line: None });
+                        }
+                    }
+                }
+            }
             Tab::Inspector => {
                 let active = self.active_scene.clone();
                 let doc = active.as_deref().and_then(|r| self.scenes.get_mut(r));
@@ -2265,6 +2327,9 @@ impl TabViewer for Viewer<'_> {
                     match a {
                         InspectorAction::OpenFile(rel) => {
                             self.actions.push(Action::OpenFile { rel, line: None });
+                        }
+                        InspectorAction::ShowEvents => {
+                            self.actions.push(Action::Command(Command::ShowEvents));
                         }
                         InspectorAction::CreateScript => {
                             if let Some(r) = &active {

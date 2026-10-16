@@ -12,6 +12,8 @@ pub mod commands;
 pub mod complete;
 pub mod config_lua;
 pub mod console;
+pub mod events;
+pub mod events_view;
 pub mod examples;
 pub mod file_panel;
 pub mod files;

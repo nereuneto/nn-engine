@@ -38,18 +38,19 @@ local KEY_GROUPS = {
 }
 
 E.KEYS = {
-  { "pular", "pular (espaço, ↑, W, A do controle)" },
+  { "pular", "pular (espaço, seta para cima, W, A do controle)" },
   { "confirmar", "confirmar (Enter, espaço, A do controle)" },
   { "voltar", "voltar (Esc, B do controle)" },
   { "acao", "ação (X, J, X do controle)" },
-  { "esquerda", "esquerda (←, A)" },
-  { "direita", "direita (→, D)" },
-  { "cima", "cima (↑, W)" },
-  { "baixo", "baixo (↓, S)" },
+  { "esquerda", "esquerda (seta, A, controle)" },
+  { "direita", "direita (seta, D, controle)" },
+  { "cima", "cima (seta, W, controle)" },
+  { "baixo", "baixo (seta, S, controle)" },
   { "qualquer", "qualquer tecla" },
   { "space", "espaço" }, { "enter", "Enter" }, { "escape", "Esc" }, { "shift", "Shift" },
   { "ctrl", "Ctrl" }, { "tab", "Tab" },
-  { "up", "↑" }, { "down", "↓" }, { "left", "←" }, { "right", "→" },
+  { "up", "seta para cima" }, { "down", "seta para baixo" }, { "left", "seta para a esquerda" },
+  { "right", "seta para a direita" },
 }
 for c in ("abcdefghijklmnopqrstuvwxyz0123456789"):gmatch(".") do
   table.insert(E.KEYS, { c, c:upper() })
@@ -202,14 +203,14 @@ local COMPARE = {
 E.CONDITIONS = {
   -- Cena e tempo
   {
-    id = "comecou", category = "Cena e tempo", trigger = true,
+    id = "comecou", name = "A cena (ou o objeto) começa", category = "Cena e tempo", trigger = true,
     text = "começar",
     help = "Na regra da cena: quando a cena começa. Na de um objeto: quando ele aparece.",
     lua = "-- em enter()",
     test = function(ctx) return not ctx.started end,
   },
   {
-    id = "a_cada", category = "Cena e tempo", trigger = true,
+    id = "a_cada", name = "A cada N segundos", category = "Cena e tempo", trigger = true,
     text = "a cada {segundos} segundos",
     props = { { "segundos", 1, min = 0.05 } },
     lua = "-- a cada {segundos} s (conte o tempo em update)",
@@ -225,7 +226,7 @@ E.CONDITIONS = {
     test = function(ctx, p, st) return st.fire end,
   },
   {
-    id = "depois_de", category = "Cena e tempo", trigger = true,
+    id = "depois_de", name = "Depois de N segundos", category = "Cena e tempo", trigger = true,
     text = "passarem {segundos} segundos",
     help = "Uma vez, depois desse tempo (contando de quando a cena ou o objeto começou).",
     props = { { "segundos", 2, min = 0 } },
@@ -238,7 +239,7 @@ E.CONDITIONS = {
     test = function(ctx, p, st) return st.fire end,
   },
   {
-    id = "chance", category = "Cena e tempo",
+    id = "chance", name = "Sorte (chance em %)", category = "Cena e tempo",
     text = "der sorte ({chance}% de chance)",
     help = "Sorteia toda vez que a regra é conferida.",
     props = { { "chance", 50, min = 0, max = 100 } },
@@ -247,7 +248,7 @@ E.CONDITIONS = {
   },
   -- Controles
   {
-    id = "tecla", category = "Controles",
+    id = "tecla", name = "Tecla ou botão", category = "Controles",
     trigger = function(p) return p.modo ~= "segurar" end,
     text = "{modo} {tecla}",
     props = {
@@ -259,7 +260,7 @@ E.CONDITIONS = {
     test = function(ctx, p) return key_state(p.tecla, p.modo) end,
   },
   {
-    id = "clicar", category = "Controles", trigger = true,
+    id = "clicar", name = "Clique no objeto", category = "Controles", trigger = true,
     text = "clicar em {quem}",
     help = "Clique do mouse no objeto (ou, num Botão, Enter / A do controle).",
     props = { who("quem") },
@@ -279,10 +280,10 @@ E.CONDITIONS = {
   },
   -- Toques
   {
-    id = "encostar", category = "Toques", trigger = true,
+    id = "encostar", name = "Encostar em", category = "Toques", trigger = true,
     text = "{quem} encostar em {em}",
     help = "No momento em que os dois começam a se tocar.",
-    props = { who("quem"), who("em", "", "Em", { allow_empty = false }) },
+    props = { who("quem"), who("em", "@jogador", "Em") },
     lua = "{quem}:touching({em}) -- só quando começa a encostar",
     tick = function(ctx, p, st)
       local b0 = ctx.base
@@ -301,9 +302,9 @@ E.CONDITIONS = {
     test = function(ctx, p, st) return st.new or {} end,
   },
   {
-    id = "desencostar", category = "Toques", trigger = true,
+    id = "desencostar", name = "Parar de encostar", category = "Toques", trigger = true,
     text = "{quem} parar de encostar em {em}",
-    props = { who("quem"), who("em", "", "Em") },
+    props = { who("quem"), who("em", "@jogador", "Em") },
     lua = "not {quem}:touching({em}) -- só quando para de encostar",
     tick = function(ctx, p, st)
       local b0 = ctx.base
@@ -326,9 +327,9 @@ E.CONDITIONS = {
     test = function(ctx, p, st) return st.left or {} end,
   },
   {
-    id = "encostando", category = "Toques",
+    id = "encostando", name = "Estiver encostando", category = "Toques",
     text = "{quem} estiver encostando em {em}",
-    props = { who("quem"), who("em", "", "Em") },
+    props = { who("quem"), who("em", "@jogador", "Em") },
     lua = "{quem}:touching({em})",
     test = function(ctx, p, st, b)
       local out = {}
@@ -341,9 +342,9 @@ E.CONDITIONS = {
     end,
   },
   {
-    id = "perto", category = "Toques",
+    id = "perto", name = "Estiver perto de", category = "Toques",
     text = "{quem} estiver a menos de {distancia} de {alvo}",
-    props = { who("quem"), { "distancia", 200, min = 0 }, who("alvo", "", "De") },
+    props = { who("quem"), { "distancia", 200, min = 0 }, who("alvo", "@jogador", "De") },
     lua = "distancia({quem}, {alvo}) < {distancia}",
     test = function(ctx, p, st, b)
       local out = {}
@@ -363,12 +364,12 @@ E.CONDITIONS = {
   },
   -- Variáveis
   {
-    id = "variavel", category = "Variáveis",
+    id = "variavel", name = "Comparar variável", category = "Variáveis",
     text = "a variável {var} for {op} {valor}",
     props = {
       { "var", "moedas", type = "var", label = "Variável" },
       { "op", ">=", options = COMPARE },
-      { "valor", "10", type = "value", label = "Valor" },
+      { "valor", 10, type = "value", label = "Valor" },
     },
     lua = "nn.vars.{var} {op} {valor}",
     test = function(ctx, p)
@@ -395,7 +396,7 @@ E.CONDITIONS = {
   },
   -- Objetos
   {
-    id = "acabaram", category = "Objetos",
+    id = "acabaram", name = "Não sobrar nenhum", category = "Objetos",
     text = "não sobrar nenhum {nome}",
     help = "Todos os objetos com esse nome sumiram (pegou todas as moedas, venceu todos os inimigos...).",
     props = { { "nome", "", type = "object", label = "Nome" } },
@@ -406,7 +407,7 @@ E.CONDITIONS = {
     end,
   },
   {
-    id = "destruido", category = "Objetos", trigger = true,
+    id = "destruido", name = "Objeto destruído", category = "Objetos", trigger = true,
     text = "{quem} for destruído",
     props = { who("quem") },
     lua = "-- em destroyed() do comportamento",
@@ -430,7 +431,7 @@ E.CONDITIONS = {
     end,
   },
   {
-    id = "saiu_da_tela", category = "Objetos", trigger = true,
+    id = "saiu_da_tela", name = "Sair da tela", category = "Objetos", trigger = true,
     text = "{quem} sair da tela",
     props = { who("quem") },
     lua = "-- fora de nn.camera.view()",
@@ -447,7 +448,7 @@ E.CONDITIONS = {
     test = function(ctx, p, st) return st.out or {} end,
   },
   {
-    id = "no_chao", category = "Objetos",
+    id = "no_chao", name = "No chão ou no ar", category = "Objetos",
     text = "{quem} estiver {onde}",
     props = { who("quem"), { "onde", "chao", options = { { "chao", "no chão" }, { "ar", "no ar" } } } },
     lua = "{quem}.body.on_ground",
@@ -461,7 +462,7 @@ E.CONDITIONS = {
     end,
   },
   {
-    id = "visivel", category = "Objetos",
+    id = "visivel", name = "Visível ou escondido", category = "Objetos",
     text = "{quem} estiver {estado}",
     props = { who("quem"), { "estado", "visivel", options = { { "visivel", "visível" }, { "escondido", "escondido" } } } },
     lua = "{quem}.visible",
@@ -475,10 +476,10 @@ E.CONDITIONS = {
   },
   -- Mensagens
   {
-    id = "pegar", category = "Mensagens", trigger = true,
+    id = "pegar", name = "Pegar um coletável", category = "Mensagens", trigger = true,
     text = "{quem} pegar {item}",
     help = "Um Coletável foi pego. Vazio = qualquer um.",
-    props = { who("quem"), { "item", "", type = "object", label = "Item" } },
+    props = { who("quem"), { "item", "", type = "object", label = "Item", allow_empty = "qualquer um" } },
     lua = "-- coletou(item) no comportamento",
     test = function(ctx, p, st, b)
       local out = {}
@@ -493,7 +494,7 @@ E.CONDITIONS = {
     end,
   },
   {
-    id = "levou_dano", category = "Mensagens", trigger = true,
+    id = "levou_dano", name = "Levar dano", category = "Mensagens", trigger = true,
     text = "{quem} levar dano",
     help = "Precisa do comportamento Vida.",
     props = { who("quem") },
@@ -508,7 +509,7 @@ E.CONDITIONS = {
     end,
   },
   {
-    id = "vida_acabou", category = "Mensagens", trigger = true,
+    id = "vida_acabou", name = "Vida acabar", category = "Mensagens", trigger = true,
     text = "a vida de {quem} acabar",
     help = "Precisa do comportamento Vida.",
     props = { who("quem") },
@@ -523,7 +524,7 @@ E.CONDITIONS = {
     end,
   },
   {
-    id = "mensagem", category = "Mensagens", trigger = true,
+    id = "mensagem", name = "Receber mensagem", category = "Mensagens", trigger = true,
     text = "{quem} receber a mensagem {msg}",
     help = "Mensagens vêm da ação \"Mandar mensagem\", de comportamentos e de scripts (obj:send(\"nome\")).",
     props = { who("quem"), { "msg", "abrir", label = "Mensagem" } },
@@ -569,12 +570,12 @@ end
 E.ACTIONS = {
   -- Variáveis
   {
-    id = "variavel", category = "Variáveis",
+    id = "variavel", name = "Mudar variável", category = "Variáveis",
     text = "variável {var}: {op} {valor}",
     props = {
       { "var", "moedas", type = "var", label = "Variável" },
       { "op", "somar", options = VAR_OPS },
-      { "valor", "1", type = "value", label = "Valor",
+      { "valor", 1, type = "value", label = "Valor",
         help = "Um número, um texto ou outra variável entre chaves: {pontos}." },
     },
     lua = "nn.vars.{var} = ... -- {op} {valor}",
@@ -597,7 +598,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "salvar", category = "Variáveis",
+    id = "salvar", name = "Salvar no disco", category = "Variáveis",
     text = "salvar no disco: {var}",
     help = "Guarda a variável (ou todas) para a próxima vez que o jogo abrir.",
     props = { { "var", "", type = "var", label = "Variável", allow_empty = "todas" } },
@@ -614,7 +615,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "carregar", category = "Variáveis",
+    id = "carregar", name = "Carregar do disco", category = "Variáveis",
     text = "carregar do disco: {var}",
     help = "Lê o que foi salvo (se ainda não tiver nada salvo, a variável fica como está).",
     props = { { "var", "", type = "var", label = "Variável", allow_empty = "todas" } },
@@ -633,7 +634,7 @@ E.ACTIONS = {
   },
   -- Cenas
   {
-    id = "ir_para_cena", category = "Cenas",
+    id = "ir_para_cena", name = "Ir para cena", category = "Cenas",
     text = "ir para a cena {cena}",
     props = { { "cena", "", type = "scene", label = "Cena" },
       { "escurecer", 0.5, min = 0, label = "Escurecer (s)", advanced = true } },
@@ -645,7 +646,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "reiniciar", category = "Cenas",
+    id = "reiniciar", name = "Reiniciar a cena", category = "Cenas",
     text = "reiniciar a cena {como}",
     props = { { "como", "comeco", options = {
       { "comeco", "do começo" }, { "checkpoint", "do último checkpoint" },
@@ -657,14 +658,14 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "sair", category = "Cenas",
+    id = "sair", name = "Fechar o jogo", category = "Cenas",
     text = "fechar o jogo",
     lua = "nn.quit()",
     run = function() nn.quit({ fade = 0.4 }) end,
   },
   -- Objetos
   {
-    id = "criar", category = "Objetos",
+    id = "criar", name = "Criar prefab", category = "Objetos",
     text = "criar {prefab} em {onde}",
     props = {
       { "prefab", "", type = "prefab", label = "Prefab" },
@@ -687,14 +688,14 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "destruir", category = "Objetos",
+    id = "destruir", name = "Destruir", category = "Objetos",
     text = "destruir {alvo}",
     props = { who("alvo") },
     lua = "{alvo}:destroy()",
     run = function(ctx, p, b) each(ctx, p.alvo, b, function(o) o:destroy() end) end,
   },
   {
-    id = "mostrar", category = "Objetos",
+    id = "mostrar", name = "Mostrar ou esconder", category = "Objetos",
     text = "{acao} {alvo}",
     props = { { "acao", "esconder", options = { { "mostrar", "mostrar" }, { "esconder", "esconder" } } },
       who("alvo") },
@@ -704,7 +705,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "mover", category = "Movimento",
+    id = "mover", name = "Levar para (mover)", category = "Movimento",
     text = "levar {alvo} {modo} {x}, {y}",
     props = { who("alvo"),
       { "modo", "para", options = { { "para", "para a posição" }, { "somar", "andando" } } },
@@ -719,7 +720,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "velocidade", category = "Movimento",
+    id = "velocidade", name = "Velocidade ou empurrão", category = "Movimento",
     text = "{modo} {alvo}: {vx}, {vy}",
     help = "Velocidade em x (direita +) e y (cima +). Com corpo físico, vale para o corpo.",
     props = { { "modo", "definir", options = { { "definir", "mudar a velocidade de" }, { "somar", "empurrar" } } },
@@ -731,7 +732,7 @@ E.ACTIONS = {
   },
   -- Aparência
   {
-    id = "texto", category = "Aparência",
+    id = "texto", name = "Mudar texto", category = "Aparência",
     text = "mudar o texto de {alvo} para {texto}",
     props = { who("alvo"), { "texto", "Moedas: {moedas}", label = "Texto",
       help = "Variáveis entre chaves viram o valor: {moedas}." } },
@@ -746,7 +747,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "imagem", category = "Aparência",
+    id = "imagem", name = "Mudar imagem", category = "Aparência",
     text = "mudar a imagem de {alvo} para {imagem}",
     props = { who("alvo"), { "imagem", "", type = "image", label = "Imagem" } },
     lua = "{alvo}.sprite.image = \"{imagem}\"",
@@ -761,7 +762,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "quadro", category = "Aparência",
+    id = "quadro", name = "Mudar quadro", category = "Aparência",
     text = "mudar o quadro de {alvo} para {quadro}",
     props = { who("alvo"), { "quadro", 1, min = 1, integer = true } },
     lua = "{alvo}.sprite.frame = {quadro}",
@@ -772,7 +773,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "cor", category = "Aparência",
+    id = "cor", name = "Mudar cor", category = "Aparência",
     text = "mudar a cor de {alvo} para {cor}",
     props = { who("alvo"), { "cor", "#FF6B6B", type = "color" } },
     lua = "{alvo}.sprite.color = \"{cor}\"",
@@ -785,7 +786,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "faiscas", category = "Aparência",
+    id = "faiscas", name = "Faíscas", category = "Aparência",
     text = "soltar faíscas em {alvo}",
     props = { who("alvo"), { "cor", "#FFD166", type = "color", advanced = true },
       { "quantidade", 16, min = 1, integer = true, advanced = true } },
@@ -798,7 +799,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "tremer", category = "Aparência",
+    id = "tremer", name = "Tremer a câmera", category = "Aparência",
     text = "tremer a câmera",
     props = { { "forca", 8, min = 0, label = "Força", advanced = true },
       { "tempo", 0.3, min = 0, label = "Tempo (s)", advanced = true } },
@@ -807,7 +808,7 @@ E.ACTIONS = {
   },
   -- Som
   {
-    id = "som", category = "Som",
+    id = "som", name = "Tocar som", category = "Som",
     text = "tocar o som {som}",
     props = { { "som", "", type = "sound", label = "Som" },
       { "volume", 1, min = 0, max = 2, advanced = true } },
@@ -818,7 +819,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "musica", category = "Som",
+    id = "musica", name = "Música", category = "Som",
     text = "{acao} a música {som}",
     props = { { "acao", "tocar", options = { { "tocar", "tocar" }, { "parar", "parar" } } },
       { "som", "", type = "sound", label = "Música" },
@@ -839,7 +840,7 @@ E.ACTIONS = {
   },
   -- Comportamentos e mensagens
   {
-    id = "comportamento", category = "Comportamentos",
+    id = "comportamento", name = "Ligar ou desligar comportamento", category = "Comportamentos",
     text = "{acao} o comportamento {nome} de {alvo}",
     props = { { "acao", "desligar", options = { { "ligar", "ligar" }, { "desligar", "desligar" } } },
       { "nome", "plataforma", type = "behavior", label = "Comportamento" }, who("alvo") },
@@ -852,7 +853,7 @@ E.ACTIONS = {
     end,
   },
   {
-    id = "mensagem", category = "Comportamentos",
+    id = "mensagem", name = "Mandar mensagem", category = "Comportamentos",
     text = "mandar a mensagem {msg} para {alvo}",
     props = { { "msg", "abrir", label = "Mensagem" }, who("alvo") },
     lua = "{alvo}:send(\"{msg}\")",
@@ -862,7 +863,7 @@ E.ACTIONS = {
   },
   -- Tempo
   {
-    id = "esperar", category = "Tempo",
+    id = "esperar", name = "Esperar", category = "Tempo",
     text = "esperar {segundos} segundos",
     help = "As ações seguintes desta regra acontecem depois desse tempo.",
     props = { { "segundos", 1, min = 0 } },
@@ -870,7 +871,7 @@ E.ACTIONS = {
     -- Tratada à parte em run_actions.
   },
   {
-    id = "console", category = "Tempo",
+    id = "console", name = "Escrever no console", category = "Tempo",
     text = "escrever no console: {texto}",
     props = { { "texto", "moedas = {moedas}", label = "Texto" } },
     lua = "print(\"{texto}\")",
@@ -912,7 +913,7 @@ function E.catalog()
       local trig = d.trigger
       if type(trig) == "function" then trig = "depends" end
       table.insert(out, {
-        id = d.id, category = d.category, text = d.text, help = d.help,
+        id = d.id, name = d.name, category = d.category, text = d.text, help = d.help,
         lua = d.lua, trigger = trig, props = d._props,
       })
     end

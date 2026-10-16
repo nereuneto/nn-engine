@@ -455,6 +455,7 @@ impl StudioApp {
                     Command::ShowFiles,
                     Command::ShowHierarchy,
                     Command::ShowInspector,
+                    Command::ShowEvents,
                     Command::ShowConsole,
                 ] {
                     if self.command_button(ui, c) {
