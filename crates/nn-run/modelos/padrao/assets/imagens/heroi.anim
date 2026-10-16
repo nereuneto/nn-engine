@@ -1,0 +1,12 @@
+-- Animações de heroi.png (feitas no NN Studio).
+return {
+  format = 1,
+  frame_w = 16,
+  frame_h = 16,
+  animations = {
+    { name = "parado", frames = { 1, 2 }, fps = 3 },
+    { name = "andar", frames = { 5, 6, 7, 8 }, fps = 10 },
+    { name = "pular", frames = { 6 }, fps = 10 },
+    { name = "cair", frames = { 7 }, fps = 10 },
+  },
+}

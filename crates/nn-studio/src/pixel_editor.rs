@@ -1677,12 +1677,17 @@ impl PixelDoc {
             PixRect::of(&self.img)
         };
         let view_size = Vec2::new(view.w as f32, view.h as f32);
-        let fit = ((rect.width() - 24.0) / view_size.x)
-            .min((rect.height() - 24.0) / view_size.y)
+        // Em cima fica a barra do zoom; embaixo, as coordenadas.
+        let area = Rect::from_min_max(
+            rect.min + Vec2::new(12.0, 34.0),
+            rect.max - Vec2::new(12.0, 22.0),
+        );
+        let fit = (area.width() / view_size.x)
+            .min(area.height() / view_size.y)
             .clamp(0.1, 64.0);
         let fit = if fit > 1.0 { fit.floor() } else { fit };
         let zoom = self.zoom.unwrap_or(fit);
-        let origin = rect.center() + self.pan - view_size * zoom / 2.0;
+        let origin = area.center() + self.pan - view_size * zoom / 2.0;
         let to_screen =
             |x: f32, y: f32| origin + Vec2::new(x - view.x as f32, y - view.y as f32) * zoom;
         let to_pixel = |p: Pos2| {
@@ -1702,12 +1707,11 @@ impl PixelDoc {
                 let new_zoom = (zoom * factor).clamp(0.1, 128.0);
                 let fpix = (p - origin) / zoom;
                 let new_origin = p - fpix * new_zoom;
-                self.pan = new_origin - rect.center() + view_size * new_zoom / 2.0;
+                self.pan = new_origin - area.center() + view_size * new_zoom / 2.0;
                 self.zoom = Some(new_zoom);
             }
         }
-        let (space, alt, shift) =
-            ui.input(|i| (i.key_down(Key::Space), i.modifiers.alt, i.modifiers.shift));
+        let (space, shift) = ui.input(|i| (i.key_down(Key::Space), i.modifiers.shift));
         let panning = resp.dragged_by(PointerButton::Middle)
             || (space && resp.dragged_by(PointerButton::Primary));
         if panning {
@@ -1807,58 +1811,91 @@ impl PixelDoc {
             dashed_rect(&painter, r);
         }
 
-        // Desenhar.
+        // Desenhar. Os eventos do mouse são lidos em ordem: um traço rápido
+        // (vários movimentos num quadro só) sai inteiro.
         self.hover_px = resp.hover_pos().map(to_pixel);
-        let pointer = ui.input(|i| i.pointer.interact_pos()).map(to_pixel);
-        if !panning && !space {
-            let pressed = ui.input(|i| {
-                if i.pointer.button_pressed(PointerButton::Primary) {
-                    Some(PointerButton::Primary)
-                } else if i.pointer.button_pressed(PointerButton::Secondary) {
-                    Some(PointerButton::Secondary)
-                } else {
-                    None
-                }
-            });
-            if let (Some(button), true, Some(p)) = (pressed, resp.hovered(), pointer) {
-                resp.request_focus();
-                if alt && self.tool != Tool::Select {
-                    self.begin_stroke(Tool::Picker, button, p, false);
-                } else if self.tool == Tool::Select {
-                    self.select_press(p);
-                } else {
-                    self.begin_stroke(self.tool, button, p, shift);
-                }
-            }
-            if let Some(p) = pointer {
-                if let Some(s) = &self.stroke {
-                    let down = ui.input(|i| i.pointer.button_down(s.button));
-                    if down {
-                        if p != s.last || matches!(s.tool, Tool::Line | Tool::Rect | Tool::Ellipse)
-                        {
-                            self.continue_stroke(p, shift);
-                        }
-                    } else {
-                        self.end_stroke();
-                    }
-                } else if self.tool == Tool::Select && ui.input(|i| i.pointer.primary_down()) {
-                    self.select_drag(p);
-                }
-            }
-            if ui.input(|i| i.pointer.primary_released()) {
-                if self.stroke.is_some() {
-                    self.end_stroke();
-                }
-                self.sel_start = None;
-                self.float_grab = None;
-            }
-        }
-
-        // Zoom, no canto da tela.
         let bar = Rect::from_min_size(
             rect.right_top() + Vec2::new(-176.0, 6.0),
             Vec2::new(170.0, 22.0),
         );
+        if !panning && !space {
+            let events: Vec<egui::Event> = ui.input(|i| i.events.clone());
+            let can_press = resp.hovered() || resp.contains_pointer();
+            for e in events {
+                match e {
+                    egui::Event::PointerMoved(pos) => {
+                        let p = to_pixel(pos);
+                        if let Some(s) = &self.stroke {
+                            if p != s.last
+                                || matches!(s.tool, Tool::Line | Tool::Rect | Tool::Ellipse)
+                            {
+                                self.continue_stroke(p, shift);
+                            }
+                        } else if self.tool == Tool::Select
+                            && (self.sel_start.is_some() || self.float_grab.is_some())
+                        {
+                            self.select_drag(p);
+                        }
+                    }
+                    egui::Event::PointerButton {
+                        pos,
+                        button,
+                        pressed: true,
+                        modifiers,
+                    } if matches!(button, PointerButton::Primary | PointerButton::Secondary)
+                        && can_press
+                        && rect.contains(pos)
+                        && !bar.contains(pos)
+                        && self.stroke.is_none() =>
+                    {
+                        let p = to_pixel(pos);
+                        resp.request_focus();
+                        if modifiers.alt && self.tool != Tool::Select {
+                            self.begin_stroke(Tool::Picker, button, p, false);
+                        } else if self.tool == Tool::Select {
+                            if button == PointerButton::Primary {
+                                self.select_press(p);
+                            }
+                        } else {
+                            self.begin_stroke(self.tool, button, p, modifiers.shift);
+                        }
+                    }
+                    egui::Event::PointerButton {
+                        pos,
+                        button,
+                        pressed: false,
+                        ..
+                    } => {
+                        if self.stroke.as_ref().is_some_and(|s| s.button == button) {
+                            let p = to_pixel(pos);
+                            if self.stroke.as_ref().is_some_and(|s| s.last != p) {
+                                self.continue_stroke(p, shift);
+                            }
+                            self.end_stroke();
+                        }
+                        if button == PointerButton::Primary {
+                            self.sel_start = None;
+                            self.float_grab = None;
+                        }
+                    }
+                    egui::Event::PointerGone => {
+                        // Saiu da janela segurando: termina o traço.
+                        if self.stroke.is_some() && !ui.input(|i| i.pointer.any_down()) {
+                            self.end_stroke();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            // Soltou fora da janela (sem o evento): termina o traço.
+            if let Some(s) = &self.stroke
+                && !ui.input(|i| i.pointer.button_down(s.button))
+            {
+                self.end_stroke();
+            }
+        }
+
+        // Zoom, no canto da tela.
         painter.rect_filled(
             bar.expand(2.0),
             4.0,

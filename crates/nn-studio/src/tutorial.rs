@@ -254,7 +254,7 @@ fn primeiro_jogo() -> Tutorial {
             },
             Step {
                 title: "Vida ao herói",
-                text: "➕ Adicionar componente > Aparência > Animação automática. Nos quadros, use parado: 1-2, andando: 5-8, pulando: 6. Teste de novo se quiser ver.",
+                text: "➕ Adicionar componente > Aparência > Animação automática. Em cada estado, clique no ☰ e escolha a animação: Parado: parado, Andando: andar, Pulando: pular (a imagem já vem com elas, em heroi.anim). Teste de novo se quiser ver.",
                 target: Some("inspetor.adicionar"),
                 show: Some(Tab::Inspector),
                 done: Some(|ws, _| {
@@ -265,7 +265,7 @@ fn primeiro_jogo() -> Tutorial {
             },
             Step {
                 title: "Uma moeda",
-                text: "Arraste moeda.png para a cena, num lugar que o herói alcance. Adicione Itens > Coletável (ela some ao ser pega e soma 1 na variável moedas) e Aparência > Animação automática com parado: 1-4.",
+                text: "Arraste moeda.png para a cena, num lugar que o herói alcance. Adicione Itens > Coletável (ela some ao ser pega e soma 1 na variável moedas) e, em Imagem > Animação, escolha girar no ☰.",
                 target: Some("arquivo:assets/imagens/moeda.png"),
                 show: Some(Tab::Files),
                 done: Some(|ws, _| {
