@@ -28,6 +28,7 @@ pub mod map_doc;
 pub mod map_editor;
 pub mod new_map;
 pub mod paint;
+pub mod particle_presets;
 pub mod pixel_editor;
 pub mod pixel_ops;
 pub mod project;

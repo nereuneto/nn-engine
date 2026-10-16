@@ -69,6 +69,7 @@ fn config_from(opts: &Table) -> Result<ParticleConfig> {
     c.size_variation = opt::<f32>(o, "size_variation")?.unwrap_or(0.0);
     c.spin = range(opts, "spin", c.spin)?;
     c.max = opt::<usize>(o, "max")?.unwrap_or(c.max);
+    c.follow = opt::<bool>(o, "follow")?.unwrap_or(false);
 
     let gravity: Value = opts.get("gravity")?;
     c.gravity = match gravity {

@@ -73,6 +73,9 @@ projeto continua aberto.
 - **Monte um menu** (uns 10 minutos), a partir do modelo Vazio: corações no
   HUD presos no canto da tela, uma cena de pausa que abre por cima do jogo
   com Esc, com botões e um volume ([interface](#interface-menus-e-hud)).
+- **Efeitos com partículas** (uns 6 minutos), a partir do modelo Vazio: fogo
+  e explosão prontos, a direção na seta, a explosão num prefab e um evento
+  que solta ela com uma tecla ([partículas](#partículas)).
 
 Eles ficam no Início (**🎓 Tutoriais**) e em **Ajuda > Tutoriais**.
 
@@ -187,8 +190,9 @@ retângulo "tela do jogo" mostra o que cabe na janela (o tamanho do
 - **Encaixar** prende na grade ao mover (segurar **Ctrl** também encaixa). As
   **setas do teclado** movem o selecionado 1 unidade (10 com **Shift**).
 - **Ctrl+D** duplica, **Del** apaga. **➕ Objeto** cria um objeto vazio, uma
-  imagem, um retângulo, um círculo, um texto, uma câmera, um som ou
-  partículas no meio da vista.
+  imagem, um retângulo, um círculo, um texto, uma câmera, um som,
+  [partículas](#partículas) (vazias ou um efeito pronto) ou um componente de
+  [interface](#interface-menus-e-hud) no meio da vista.
 - **Arrastar arquivos** do painel Arquivos para a cena: uma imagem vira um
   sprite, um mapa `.tmj` vira um mapa, um som vira um objeto de som e um
   `.prefab` vira uma instância do prefab.
@@ -221,7 +225,7 @@ desenhada por cima) e os **componentes**:
 | Mapa de tiles | Desenha um mapa `.tmj`, com a colisão dos tiles. **✏ Pintar** pinta o mapa ali na cena ([mapas de tiles](#mapas-de-tiles)); **Abrir o mapa** abre a aba dele. |
 | Câmera | Onde a câmera começa, ou quem ela segue (com suavidade e limite no mapa). |
 | Som | Toca um som ou música quando a cena começa. |
-| Partículas | Fumaça, faíscas, poeira, chuva... |
+| Partículas | Fogo, fumaça, faíscas, explosões, chuva... animando na cena ([partículas](#partículas)). |
 | Interface | Painel, Botão, Barra, Ícones, Deslizador, Caixa de marcar, Campo de texto e Grupo: menus e HUD ([interface](#interface-menus-e-hud)). |
 | Comportamento | Um comportamento pronto ou um script seu (veja abaixo). |
 
@@ -419,6 +423,55 @@ lidas como frases, com os campos no meio da frase.
 Algumas ações têm opções a mais no 🔧 (deslocamento ao criar, volume, força do
 tremor...). O formato no arquivo está no
 [guia do Lua](lua.md#eventos-quando-então).
+
+### Partículas
+
+![Tochas do modelo Aventura com fogo de partículas animando na cena](imagens/nn-studio-particulas.png)
+
+**➕ Objeto > Partículas** cria um emissor vazio ou um **efeito pronto**:
+fogo, fumaça, faíscas, explosão, poeira, brilho, bolhas, chuva, neve e
+confete. No Inspetor, **✨ Efeito pronto** troca os valores pelos de outro
+efeito (Ctrl+Z desfaz).
+
+As partículas **animam na cena do editor**, como no jogo. O botão **✨
+Partículas**, na barra da cena, pausa a prévia. Com o objeto selecionado, a
+**seta laranja** mostra a direção e a abertura (arraste a ponta para mudar a
+direção; com Ctrl, de 15 em 15 graus), e a área onde as partículas nascem
+aparece tracejada.
+
+O componente tem três grupos:
+
+- **Emissão.** *Contínuo* solta sem parar (por segundo); *De uma vez* solta
+  uma quantidade junta, ao começar (*Soltar ao começar*), repetindo (*Repetir
+  a cada*) ou só quando um evento pedir. *Ao terminar: destruir o objeto*
+  faz o objeto sumir quando todas as partículas acabam. A área onde nascem
+  pode ser um ponto, um retângulo (chuva e neve no alto da tela) ou um
+  círculo.
+- **Movimento.** Vida (com variação), velocidade, direção, abertura,
+  gravidade (negativa cai, positiva sobe, como a fumaça), freio e
+  **Acompanham o objeto** (o jato de uma nave anda junto com ela; desligado,
+  vira um rastro).
+- **Aparência.** Tamanho inicial e final (com variação), cores inicial,
+  do meio (opcional) e final, **Luz** (soma as cores: fogo e faíscas mais
+  fortes), uma **imagem** ou um quadro de spritesheet no lugar do círculo
+  suave, e giro.
+
+**💥 Soltar**, no Inspetor, solta uma leva na prévia. Uma explosão no
+editor repete sozinha, para dar para ver.
+
+**Efeitos em prefab.** Um efeito que aparece quando algo acontece (uma
+explosão, um brilho ao pegar uma moeda) fica bem num [prefab](#prefabs): um
+objeto com Partículas *De uma vez* e *Ao terminar: destruir o objeto*. A
+ação **Criar prefab** dos eventos põe ele onde precisa; ele estoura e some.
+
+Nos [eventos](#eventos-quando-então): a ação **Soltar partículas** solta uma
+quantidade de um objeto (poeira ao pular), **Ligar ou desligar partículas**
+para ou volta a emissão contínua, e a condição **Partículas terminarem** avisa
+quando uma explosão acabou.
+
+Os modelos têm exemplos: na **Nave**, o jato atrás da nave e a explosão dos
+asteroides (`prefabs/explosao.prefab`); na **Plataforma**, poeira ao pular e
+um brilho ao pegar moeda; na **Aventura**, tochas com fogo.
 
 ### Desfazer e salvar
 
@@ -762,5 +815,5 @@ o jogo.
 
 ## O que vem depois
 
-A próxima etapa do NN Studio traz o editor de partículas, com prévia na cena
-e efeitos prontos.
+A próxima etapa é a **v0.1**: acabamento, revisão dos tutoriais e dos
+modelos, e o NN Studio pronto para instalar.

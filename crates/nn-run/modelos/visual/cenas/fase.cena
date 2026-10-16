@@ -11,6 +11,18 @@ return {
       }, actions = {
         { act = "por_cima", cena = "cenas/pausa.cena" },
       } },
+    { comment = "Poeira nos pés ao pular, e um brilho onde a moeda estava." },
+    { when = {
+        { cond = "tecla", modo = "apertar", tecla = "pular" },
+        { cond = "no_chao", quem = "@jogador", onde = "chao" },
+      }, actions = {
+        { act = "soltar_particulas", alvo = "poeira", quantidade = 10 },
+      } },
+    { when = {
+        { cond = "pegar", quem = "@jogador", item = "moeda" },
+      }, actions = {
+        { act = "criar", prefab = "prefabs/brilho.prefab", onde = "@outro" },
+      } },
     { comment = "A saída só abre depois de pegar todas as moedas." },
     { when = {
         { cond = "acabaram", nome = "moeda" },
@@ -48,6 +60,16 @@ return {
         { type = "behavior", script = "nn:plataforma", coiote = 0.1, pulo = 860, pulo_variavel = true, pulos_no_ar = 0, velocidade = 320 },
         { type = "behavior", script = "nn:animacao", andando = "andar", caindo = "cair", espelhar = true, fps = 10, parado = "parado", pulando = "pular" },
         { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", cena = "", invencivel = 1, piscar = true, variavel = "vidas", vidas = 3 },
+      },
+      children = {
+        {
+          id = 17, name = "poeira",
+          x = 0, y = -30, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = -1,
+          components = {
+            { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 10, on_start = false, interval = 0, when_done = "nada", lifetime = 0.45, lifetime_var = 0.4, speed_min = 30, speed_max = 90, direction = 90, spread = 140, gravity = -60, drag = 3, area = "retangulo", area_w = 30, area_h = 4, area_radius = 50, size_start = 12, size_end = 2, size_var = 0, color_start = "#E8DCC4CC", color_mid = "", color_end = "#C8B89800", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500 },
+          },
+        },
       },
     },
     {

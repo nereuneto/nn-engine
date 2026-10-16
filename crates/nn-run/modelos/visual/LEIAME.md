@@ -15,6 +15,8 @@ Cada objeto faz o que faz por causa dos **comportamentos** dele (no Inspetor):
 - `inimigo`: Patrulha e Perigo (dá para derrotar pulando em cima).
 - `plataforma_movel`: Movimento automático (sobe e desce, e leva o herói junto).
 - `saida`: um **evento** (painel Eventos) leva para `cenas/fim.cena` quando o herói encosta nela, mas só depois de pegar todas as moedas. Outro evento, da cena, deixa a saída verde nessa hora.
+- **Partículas:** o herói tem um filho `poeira` (Partículas de uma vez, sem soltar ao começar); um evento da cena solta a poeira quando ele pula do chão. Outro evento cria o prefab `brilho` (`prefabs/brilho.prefab`) onde a moeda estava: ele brilha e some sozinho.
+
 As variáveis do jogo (`moedas`, `vidas`) ficam no `config.lua` e valem de uma cena para outra.
 
 ## Interface: HUD e menus

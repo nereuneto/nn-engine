@@ -170,6 +170,10 @@ enum DragKind {
         start: ViewCamera,
     },
     Marquee,
+    /// A seta da direção das partículas (componente `ci`).
+    Direction {
+        ci: usize,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -213,6 +217,10 @@ pub struct SceneDoc {
     view_rect: Option<Rect>,
     /// Objeto de mapa sendo pintado (modo Pintar).
     pub painting: Option<u32>,
+    /// A prévia das partículas está parada.
+    pub particles_paused: bool,
+    /// Objetos com partículas para soltar no próximo desenho (💥 Soltar).
+    pub burst_requests: Vec<u32>,
     paint_stroke: Option<crate::paint::Stroke>,
     /// O mapa cresceu desde que o jogo abriu: ele só vê ao salvar.
     pub paint_grew: bool,
@@ -411,6 +419,9 @@ fn read_doc(root: &Path, rel: &str) -> Result<SceneData, String> {
 }
 
 const GIZMO_LEN: f32 = 64.0;
+/// Comprimento da seta da direção das partículas.
+const FX_LEN: f32 = 90.0;
+const FX: Color32 = Color32::from_rgb(0xFF, 0x8A, 0x3D);
 const HANDLE: f32 = 7.0;
 const RED: Color32 = Color32::from_rgb(0xE5, 0x48, 0x4D);
 const GREEN: Color32 = Color32::from_rgb(0x46, 0xC2, 0x6A);
@@ -450,6 +461,8 @@ impl SceneDoc {
             frame_start: None,
             view_rect: None,
             painting: None,
+            particles_paused: false,
+            burst_requests: Vec::new(),
             paint_stroke: None,
             paint_grew: false,
         }
@@ -679,6 +692,15 @@ impl SceneDoc {
         id
     }
 
+    /// Algum objeto tem partículas?
+    pub fn has_particles(&self) -> bool {
+        let mut any = false;
+        scene_data::visit(&self.data.objects, &mut |o| {
+            any |= o.component("particles").is_some();
+        });
+        any
+    }
+
     /// Centro da vista atual (onde objetos novos aparecem).
     pub fn view_center(&self) -> (f64, f64) {
         (self.camera.x, self.camera.y)
@@ -882,6 +904,8 @@ impl SceneDoc {
                     size,
                     background: scene_render::parse_color(bg),
                     time: env.time,
+                    particles: !self.particles_paused,
+                    bursts: std::mem::take(&mut self.burst_requests),
                 };
                 let tex = renderer.render(&self.rel, env.root, &self.data, &view);
                 painter.image(
@@ -1098,6 +1122,14 @@ impl SceneDoc {
                 .response
                 .on_hover_text("Ver como o HUD e os menus ficam em telas de outros formatos (só no editor)");
             crate::tutorial::anchor(ui.ctx(), "cena.tela", r.rect);
+            if self.has_particles() {
+                let r = ui
+                    .selectable_label(!self.particles_paused, "✨ Partículas")
+                    .on_hover_text("Prévia das partículas animando na cena (clique para pausar)");
+                if r.clicked() {
+                    self.particles_paused = !self.particles_paused;
+                }
+            }
             ui.label(format!("{:.0}%", self.camera.zoom * 100.0))
                 .on_hover_text("Zoom: role o mouse. Mover a vista: botão do meio, ou Espaço + arrastar.");
             if ui.button("⛶ Enquadrar").on_hover_text("F").clicked()
@@ -1188,10 +1220,17 @@ impl SceneDoc {
             // Ícone de objetos sem nada visível (vazio, som, câmera, partículas).
             let (_, is_icon) = local_bounds(o, env.root, env.sizes, icon_size);
             let center = cam.to_screen(rect, t.x, t.y);
-            if is_icon
+            // (Partículas animando já aparecem: o ícone só com a prévia parada.)
+            let fx_icon = self.particles_paused && o.component("particles").is_some();
+            let only_fx = is_icon
+                && !self.particles_paused
+                && o.component("particles").is_some()
+                && o.components.iter().all(|c| c.kind == "particles");
+            if (is_icon && !only_fx)
+                || fx_icon
                 || o.components
                     .iter()
-                    .any(|c| matches!(c.kind.as_str(), "sound" | "camera" | "particles"))
+                    .any(|c| matches!(c.kind.as_str(), "sound" | "camera"))
             {
                 let letter = icon_letter(o);
                 painter.circle(
@@ -1299,6 +1338,56 @@ impl SceneDoc {
                 ));
             }
         }
+        // Partículas do objeto selecionado: a área e a direção (a seta
+        // arrasta).
+        if let Some(&id) = self.selection.last()
+            && let (Some(o), Some(t)) = (self.data.find(id), self.data.world_transform(id))
+            && let Some(c) = o.component("particles")
+        {
+            let center = cam.to_screen(rect, t.x, t.y);
+            let stroke = Stroke::new(1.5, FX);
+            match c.str("area") {
+                "retangulo" => {
+                    let (w, h) = (c.num("area_w"), c.num("area_h"));
+                    let a = cam.to_screen(rect, t.x - w / 2.0, t.y + h / 2.0);
+                    let b = cam.to_screen(rect, t.x + w / 2.0, t.y - h / 2.0);
+                    let r = Rect::from_two_pos(a, b);
+                    let pts = [
+                        r.left_top(),
+                        r.right_top(),
+                        r.right_bottom(),
+                        r.left_bottom(),
+                        r.left_top(),
+                    ];
+                    painter.add(egui::Shape::dashed_line(&pts, stroke, 6.0, 4.0));
+                }
+                "circulo" => {
+                    let r = (c.num("area_radius") * cam.zoom) as f32;
+                    painter.circle_stroke(center, r, stroke);
+                }
+                _ => {}
+            }
+            let dir = c.num("direction").to_radians() as f32;
+            let half = (c.num("spread").clamp(0.0, 360.0).to_radians() / 2.0) as f32;
+            let unit = |a: f32| Vec2::new(a.cos(), -a.sin());
+            if half < std::f32::consts::PI - 0.01 {
+                for a in [dir - half, dir + half] {
+                    painter.line_segment(
+                        [center, center + unit(a) * FX_LEN * 0.7],
+                        Stroke::new(1.0, FX.gamma_multiply(0.6)),
+                    );
+                }
+            } else {
+                painter.circle_stroke(
+                    center,
+                    FX_LEN * 0.7,
+                    Stroke::new(1.0, FX.gamma_multiply(0.6)),
+                );
+            }
+            let tip = center + unit(dir) * FX_LEN;
+            arrow(painter, center, tip, FX);
+            painter.circle_filled(tip, 5.0, FX);
+        }
         // Gizmo no objeto principal.
         if let Some(&id) = self.selection.last()
             && let Some(t) = self.data.world_transform(id)
@@ -1354,6 +1443,16 @@ impl SceneDoc {
         let id = *self.selection.last()?;
         let t = self.data.world_transform(id)?;
         let c = self.camera.to_screen(rect, t.x, t.y);
+        // A ponta da seta das partículas vem antes das alças.
+        if let Some(o) = self.data.find(id)
+            && let Some(ci) = o.components.iter().position(|k| k.kind == "particles")
+        {
+            let a = o.components[ci].num("direction").to_radians() as f32;
+            let tip = c + Vec2::new(a.cos(), -a.sin()) * FX_LEN;
+            if (tip - p).length() < HANDLE * 1.5 {
+                return Some(DragKind::Direction { ci });
+            }
+        }
         match self.tool {
             Tool::Move => {
                 if Rect::from_center_size(c + Vec2::new(12.0, -12.0), Vec2::splat(14.0)).contains(p)
@@ -1943,6 +2042,27 @@ impl SceneDoc {
                     self.set_world_position(*id, t.x + dx, t.y + dy);
                 }
             }
+            DragKind::Direction { ci } => {
+                let Some(&(id, t)) = drag.objects.last() else {
+                    return;
+                };
+                let c = self.camera.to_screen(rect, t.x, t.y);
+                let mut a = angle_of(c, now);
+                if snap {
+                    a = (a / 15.0).round() * 15.0;
+                }
+                if a < 0.0 {
+                    a += 360.0;
+                }
+                self.record_drag(drag, "direcao");
+                if let Some(k) = self
+                    .data
+                    .find_mut(id)
+                    .and_then(|o| o.components.get_mut(*ci))
+                {
+                    k.set("direction", Prop::Num(round2(a)));
+                }
+            }
             DragKind::Rotate { start_angle } => {
                 let Some(&(_, t)) = drag.objects.last() else {
                     return;
@@ -2080,7 +2200,7 @@ impl SceneDoc {
 /// Itens do menu "Adicionar objeto": devolve o objeto pronto (com id 0;
 /// [`SceneDoc::add_prepared`] numera ele e os filhos).
 pub fn add_object_menu(ui: &mut egui::Ui) -> Option<Object> {
-    let items: [(&str, &str, &[&str]); 8] = [
+    let items: [(&str, &str, &[&str]); 7] = [
         ("Vazio", "objeto", &[]),
         ("Imagem (sprite)", "sprite", &["sprite"]),
         ("Retângulo", "retangulo", &["shape"]),
@@ -2088,7 +2208,6 @@ pub fn add_object_menu(ui: &mut egui::Ui) -> Option<Object> {
         ("Texto", "texto", &["text"]),
         ("Câmera", "camera", &["camera"]),
         ("Som", "som", &["sound"]),
-        ("Partículas", "particulas", &["particles"]),
     ];
     let mut out = None;
     for (label, name, comps) in items {
@@ -2103,6 +2222,29 @@ pub fn add_object_menu(ui: &mut egui::Ui) -> Option<Object> {
             out = Some(o);
         }
     }
+    let r = ui.menu_button("Partículas", |ui| {
+        let r = ui
+            .button("Vazias")
+            .on_hover_text("Um emissor para ajustar do zero no Inspetor");
+        if r.clicked() {
+            let mut o = Object::new(0, "particulas");
+            o.components.push(Component::new("particles"));
+            out = Some(o);
+            ui.close();
+        }
+        ui.separator();
+        for p in crate::particle_presets::PRESETS {
+            let r = ui.button(p.label).on_hover_text(p.tip);
+            crate::tutorial::anchor(ui.ctx(), &format!("cena.objeto:fx:{}", p.id), r.rect);
+            if r.clicked() {
+                let mut o = Object::new(0, p.id);
+                o.components.push(p.component());
+                out = Some(o);
+                ui.close();
+            }
+        }
+    });
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:particulas", r.response.rect);
     let r = ui.menu_button("Interface", |ui| {
         if let Some(o) = interface_menu(ui) {
             out = Some(o);

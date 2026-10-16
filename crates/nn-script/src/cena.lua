@@ -47,11 +47,17 @@ M.FIELDS = {
     { "sound", "" }, { "autoplay", true }, { "loop", false }, { "volume", 1 },
     { "channel", "effects" },
   },
+  -- Partículas: contínuas (fogo, chuva) ou de uma vez (explosão).
   particles = {
-    { "rate", 20 }, { "lifetime", 1 }, { "speed_min", 40 }, { "speed_max", 120 },
-    { "direction", 90 }, { "spread", 360 }, { "gravity", 0 }, { "size_start", 12 },
-    { "size_end", 0 }, { "color_start", "#FFFFFF" }, { "color_end", "#FFFFFF00" },
-    { "blend", "alpha" }, { "emitting", true },
+    { "mode", "continuo" }, { "rate", 20 }, { "emitting", true }, { "amount", 30 },
+    { "on_start", true }, { "interval", 0 }, { "when_done", "nada" },
+    { "lifetime", 1 }, { "lifetime_var", 0 }, { "speed_min", 40 }, { "speed_max", 120 },
+    { "direction", 90 }, { "spread", 360 }, { "gravity", 0 }, { "drag", 0 },
+    { "area", "ponto" }, { "area_w", 100 }, { "area_h", 100 }, { "area_radius", 50 },
+    { "size_start", 12 }, { "size_end", 0 }, { "size_var", 0 },
+    { "color_start", "#FFFFFF" }, { "color_mid", "" }, { "color_end", "#FFFFFF00" },
+    { "image", "" }, { "frame", 1 }, { "frame_w", 0 }, { "frame_h", 0 }, { "spin", 0 },
+    { "blend", "alpha" }, { "follow", false }, { "max", 500 },
   },
   -- Interface (menus e HUD). Cores vazias ("") usam o tema do projeto
   -- (config.lua, `theme`).
@@ -891,17 +897,107 @@ local function make_body(scene, o, c)
   o._sx, o._sy, o._px, o._py = o.x, o.y, o.x, o.y
 end
 
-local function make_particles(o, c)
-  o.particles = nn.particles({
-    rate = c.rate, emitting = c.emitting, lifetime = c.lifetime,
+--- As opções do nn.particles de um componente de partículas.
+function M.particle_options(c)
+  local burst = c.mode == "explosao"
+  local colors = { c.color_start }
+  if c.color_mid and c.color_mid ~= "" then table.insert(colors, c.color_mid) end
+  table.insert(colors, c.color_end)
+  local opts = {
+    rate = burst and 0 or c.rate,
+    emitting = (not burst) and c.emitting,
+    lifetime = { c.lifetime * (1 - math.max(0, math.min(1, c.lifetime_var))), c.lifetime },
     speed = { c.speed_min, c.speed_max },
-    direction = c.direction * DEG, spread = c.spread * DEG, gravity = c.gravity,
-    size = { c.size_start, c.size_end },
-    colors = { c.color_start, c.color_end },
-    blend = c.blend,
-  })
+    direction = c.direction * DEG, spread = c.spread * DEG,
+    gravity = c.gravity, drag = c.drag,
+    size = { c.size_start, c.size_end }, size_variation = c.size_var,
+    colors = colors, blend = c.blend, follow = c.follow,
+    spin = { -c.spin * DEG, c.spin * DEG }, max = math.max(1, math.floor(c.max)),
+  }
+  if c.area == "retangulo" then
+    opts.area = { w = c.area_w, h = c.area_h }
+  elseif c.area == "circulo" then
+    opts.area = { radius = c.area_radius }
+  end
+  if c.image ~= "" then
+    if c.frame_w > 0 and c.frame_h > 0 then
+      opts.texture = nn.assets.sheet(c.image, c.frame_w, c.frame_h, { pixel_art = true })
+      opts.frame = math.max(1, math.floor(c.frame))
+    else
+      opts.texture = nn.assets.texture(c.image, { pixel_art = true })
+    end
+  end
+  return opts
+end
+
+local function make_particles(o, c, live)
+  local ok, fx = pcall(nn.particles, M.particle_options(c))
+  if not ok then error(fx, 0) end
+  local old = o.particles
+  o.particles = fx
+  c._fx = fx
   local x, y = o:world_transform()
-  o.particles:set_position(x, y)
+  fx:set_position(x, y)
+  c._wait = c.interval
+  c._active = false
+  -- Explosão: solta tudo ao começar (no editor ao vivo, só se ainda não soltou).
+  if c.mode == "explosao" and c.on_start and not (live and old) then
+    fx:burst(math.floor(c.amount))
+    c._active = true
+  end
+end
+
+--- Solta `n` partículas do emissor do objeto (ou a quantidade dele).
+function M.burst_particles(o, n)
+  local c = o:component("particles")
+  if not (c and c._fx) then return end
+  local x, y = o:world_transform()
+  c._fx:set_position(x, y)
+  c._fx:burst(math.floor(n or c.amount))
+  c._active = true
+end
+
+--- Liga ou desliga a emissão contínua.
+function M.set_emitting(o, on)
+  local c = o:component("particles")
+  if not (c and c._fx) then return end
+  c.emitting = on
+  c._fx.emitting = on and c.mode ~= "explosao"
+end
+
+-- Um quadro de cada emissor: posição, repetir a explosão e o fim.
+local function update_particles(scene, dt)
+  for _, o in ipairs(scene.object_list) do
+    local k = o.alive and o:component("particles")
+    if k and k._kill then
+      o:destroy()
+    elseif o.alive and o.particles then
+      local fx = o.particles
+      local x, y = o:world_transform()
+      fx:set_position(x, y)
+      fx:update(dt)
+      local c = o:component("particles")
+      if c and c._fx == fx then
+        if c.mode == "explosao" and c.interval > 0 then
+          c._wait = (c._wait or c.interval) - dt
+          if c._wait <= 0 then
+            c._wait = c._wait + c.interval
+            fx:burst(math.floor(c.amount))
+            c._active = true
+          end
+        end
+        if fx.emitting then c._active = true end
+        local repeating = c.mode == "explosao" and c.interval > 0
+        -- Terminou: soltou alguma coisa, parou de emitir e todas sumiram.
+        if c._active and fx.finished and not repeating then
+          c._active = false
+          if M.events then M.events.signal(scene, { kind = "particulas", obj = o }) end
+          -- Some no quadro seguinte, depois dos eventos verem o aviso.
+          if c.when_done == "destruir" then c._kill = true end
+        end
+      end
+    end
+  end
 end
 
 -- Interface ------------------------------------------------------------------
@@ -1241,7 +1337,7 @@ function M.prepare(scene, o, c, live)
       end
     end
   elseif t == "particles" then
-    make_particles(o, c)
+    make_particles(o, c, live)
   elseif M.UI_KINDS[t] then
     prepare_ui(scene, o, c)
   elseif t == "camera" then
@@ -1472,13 +1568,7 @@ function M.update(scene, dt)
   M.events.step(scene, dt)
   refresh_list(scene)
   update_animations(scene, dt)
-  for _, o in ipairs(scene.object_list) do
-    if o.particles then
-      local x, y = o:world_transform()
-      o.particles:set_position(x, y)
-      o.particles:update(dt)
-    end
-  end
+  update_particles(scene, dt)
   for _, fx in pairs(scene._fx or {}) do fx:update(dt) end
   M.arrange_all(scene)
   if not scene.overlay then M.update_camera(scene, dt, false) end

@@ -167,7 +167,16 @@ fn key_rule(rule: &scene_data::Rule, modo: &str) -> bool {
 /// Os tutoriais, na ordem do menu.
 pub fn all() -> &'static [Tutorial] {
     static LIST: std::sync::OnceLock<Vec<Tutorial>> = std::sync::OnceLock::new();
-    LIST.get_or_init(|| vec![primeiro_jogo(), eventos(), desenhe(), tiles(), menu()])
+    LIST.get_or_init(|| {
+        vec![
+            primeiro_jogo(),
+            eventos(),
+            desenhe(),
+            tiles(),
+            menu(),
+            particulas(),
+        ]
+    })
 }
 
 pub fn find(id: &str) -> Option<&'static Tutorial> {
@@ -848,6 +857,94 @@ fn menu() -> Tutorial {
             Step {
                 title: "Pronto: HUD e menu!",
                 text: "Você fez um HUD preso no canto e uma pausa por cima do jogo, com botões e um volume, sem código.\n\nPróximos passos: ➕ Objeto > Interface > Menu com botões faz um título com Jogar, Opções e Sair. Um botão com Ao apertar: Abrir cena por cima abre uma tela de opções. A Barra mostra vida ou tempo; a Caixa de marcar liga a tela cheia; o Campo de texto pede o nome do jogador. O modelo Plataforma (visual) tem tudo isso pronto para ver.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// Os componentes de partículas da cena aberta.
+fn emitters(ws: &ProjectWorkspace) -> Vec<&scene_data::Component> {
+    objects(ws)
+        .into_iter()
+        .filter_map(|o| o.component("particles"))
+        .collect()
+}
+
+fn particulas() -> Tutorial {
+    Tutorial {
+        id: "efeitos-com-particulas",
+        title: "Efeitos com partículas",
+        summary: "Fogo e uma explosão prontos, a explosão num prefab e um evento que solta ela com uma tecla.",
+        minutes: 6,
+        template: Template::Vazio,
+        project: "Efeitos",
+        steps: vec![
+            Step {
+                title: "Partículas",
+                text: "Fogo, fumaça, faíscas, chuva e explosões são feitos de partículas: muitas bolinhas (ou imagens) que nascem, andam, mudam de cor e somem.\n\nO NN Studio tem efeitos prontos, e eles já animam na cena enquanto você monta.",
+                target: None,
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Fogo",
+                text: "Na barra da cena, clique em ➕ Objeto > Partículas > Fogo. O fogo aparece no meio da vista, já queimando.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| emitters(ws).iter().any(|c| c.str("mode") == "continuo")),
+            },
+            Step {
+                title: "A direção",
+                text: "Com o fogo selecionado, aparece uma seta laranja: é para onde as partículas vão. Arraste a ponta dela para o lado: o fogo passa a soprar para lá, como se tivesse vento.\n\nNo Inspetor, em Partículas, ficam todos os ajustes: quantas por segundo, vida, velocidade, tamanho e as cores.",
+                target: Some("cena"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    emitters(ws).iter().any(|c| {
+                        c.str("mode") == "continuo" && (c.num("direction") - 90.0).abs() > 10.0
+                    })
+                }),
+            },
+            Step {
+                title: "Uma explosão",
+                text: "Agora ➕ Objeto > Partículas > Explosão. Ela solta tudo de uma vez e, no jogo, some sozinha quando termina (Ao terminar: Destruir o objeto). No editor ela repete para você ver; o 💥 Soltar, no Inspetor, solta mais uma.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| emitters(ws).iter().any(|c| c.str("mode") == "explosao")),
+            },
+            Step {
+                title: "Explosão em prefab",
+                text: "Uma explosão aparece quando algo acontece: por isso ela vira um prefab. Na Hierarquia, clique com o botão direito em explosao > 📦 Criar prefab. Depois apague a explosão da cena (Delete): o prefab fica guardado em prefabs/explosao.prefab.",
+                target: Some("hierarquia"),
+                show: Some(Tab::Hierarchy),
+                done: Some(|ws, _| ws.files.exists("prefabs/explosao.prefab")),
+            },
+            Step {
+                title: "Explodir com uma tecla",
+                text: "No painel Eventos: ➕ Regra da cena > Controles > Tecla ou botão, e escolha a tecla ação (X ou J). Em Então: ➕ ação > Objetos > Criar prefab, escolha prefabs/explosao.prefab e, em Onde, o fogo.",
+                target: Some("eventos.regra_cena"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    scene_rules(ws).iter().any(|r| {
+                        r.when.iter().any(|c| c.id == "tecla")
+                            && r.actions.iter().any(|a| {
+                                a.id == "criar" && a.str("prefab").ends_with("explosao.prefab")
+                            })
+                    })
+                }),
+            },
+            Step {
+                title: "Teste!",
+                text: "Aperte ▶ Testar daqui (F6) e aperte X no jogo: cada aperto cria uma explosão no fogo, que estoura e some.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: efeitos!",
+                text: "Próximos passos: Chuva e Neve cobrem a tela (ponha no alto da cena). A Poeira não solta sozinha: a ação Soltar partículas solta quando você quiser (ao pular, ao cair). Acompanham o objeto, no Inspetor, faz o jato de uma nave andar junto com ela. A condição Partículas terminarem avisa quando uma explosão acabou. Os modelos Nave, Plataforma e Aventura têm exemplos.",
                 target: None,
                 show: None,
                 done: None,

@@ -206,7 +206,7 @@ No script, `obj.button`, `obj.bar`, `obj.slider`... são os componentes (`obj.bu
 | `camera` | `follow` (nome do objeto a seguir), `smooth` (6), `zoom` (1), `limit_to_map` (true) |
 | `sound` | `sound`, `autoplay` (true), `loop`, `volume` (1), `channel` ("effects" ou "music") |
 | `behavior` | `script` (`"nn:plataforma"` para um [pronto](#comportamentos-prontos) ou o caminho de um `.lua`) e as propriedades dele, soltas: `{ type = "behavior", script = "nn:patrulha", velocidade = 60 }` |
-| `particles` | `rate` (20), `lifetime` (1), `speed_min`, `speed_max`, `direction` (90, em graus), `spread` (360), `gravity`, `size_start`, `size_end`, `color_start`, `color_end`, `blend`, `emitting` |
+| `particles` | `mode` ("continuo" ou "explosao"), `rate` (20 por segundo), `emitting` (true), `amount` (30, de uma vez), `on_start` (true: solta ao começar), `interval` (0: repetir a explosão a cada N s), `when_done` ("nada" ou "destruir": o objeto some quando as partículas acabam), `lifetime` (1), `lifetime_var` (0 a 1), `speed_min`, `speed_max`, `direction` (90, em graus), `spread` (360), `gravity` (negativa cai), `drag`, `area` ("ponto", "retangulo", "circulo"), `area_w`, `area_h`, `area_radius`, `size_start`, `size_end`, `size_var`, `color_start`, `color_mid` ("" = sem), `color_end`, `image`, `frame`, `frame_w`, `frame_h`, `spin` (graus por segundo), `blend` ("alpha" ou "add"), `follow` (false: as partículas acompanham o objeto), `max` (500) |
 
 **O script da cena** é um arquivo `.lua` que devolve uma tabela com os callbacks de sempre (`enter`, `fixed_update`, `update`, `draw`, `exit`, `resume`, `reload`), chamados depois do que a engine faz sozinha. Os objetos já existem quando o `enter` roda:
 
@@ -219,7 +219,7 @@ No script, `obj.button`, `obj.bar`, `obj.slider`... são os componentes (`obj.bu
 | `obj.sprite:play(nome, reiniciar)` | Toca uma [animação](#animações-anim) da imagem (se já estiver tocando, continua; `reiniciar = true` começa de novo). Também dá para mudar `obj.sprite.animation`. |
 | `obj.sprite:stop()`, `:finished()`, `:animations()` | Para (o quadro atual fica) / a animação de modo "once" chegou ao fim? / os nomes das animações da imagem. Ao terminar, o objeto recebe a mensagem `animacao_terminou` (com o nome). |
 | `obj.body` | O corpo físico ([nn.physics](#nnphysics)): `vx`, `vy`, `on_ground`, `:set_position`... |
-| `obj.map`, `obj.particles`, `obj.sound` | O mapa carregado, o emissor de partículas e o som. |
+| `obj.map`, `obj.particles`, `obj.sound` | O mapa carregado, o emissor de partículas ([nn.particles](#nnparticles): `obj.particles:burst(20)`, `obj.particles.emitting = false`) e o som. |
 | `obj:component(tipo)`, `obj.components` | Qualquer componente, pelo tipo / todos. |
 | `obj:world_transform()` | Posição, rotação e escala no mundo (somando os pais). |
 | `obj:destroy()` | Tira o objeto (e os filhos) da cena. |
@@ -407,6 +407,7 @@ Condições (`cond`):
 | `pegar` | `quem`, `item` ("" = qualquer coletável) |
 | `levou_dano` / `vida_acabou` | `quem` (precisa do comportamento Vida) |
 | `animacao_terminou` | `quem`, `nome` ("" = qualquer uma; só animações de modo "once") |
+| `particulas_terminaram` | `quem` (uma explosão acabou, ou um emissor desligado ficou sem partículas) |
 | `mensagem` | `quem`, `msg` (de `obj:send("msg")`, de comportamentos ou da ação `mensagem`) |
 | `mudou` | `quem` (um deslizador, caixa de marcar ou campo de texto mudou pelo jogador) |
 
@@ -431,6 +432,8 @@ Ações (`act`):
 | `texto` / `imagem` / `quadro` / `cor` | `alvo` e `texto` / `imagem` / `quadro` / `cor` |
 | `animacao` | `nome`, `alvo`, `reiniciar` (false) |
 | `faiscas` | `alvo`, `cor`, `quantidade` |
+| `soltar_particulas` | `alvo`, `quantidade` (do componente Partículas do objeto) |
+| `emissor` | `acao` ("ligar", "desligar"), `alvo` |
 | `tremer` | `forca`, `tempo` |
 | `som` | `som`, `volume` |
 | `musica` | `acao` ("tocar", "parar"), `som`, `volume` |
@@ -779,6 +782,7 @@ function cena:draw() brilho:draw(); fumaca:draw() end
 | `area` | Onde nascem: `{ w =, h = }` ou `{ radius = }` (padrão: um ponto). |
 | `blend` | `"alpha"` (padrão) ou `"add"` (luz, fogo, faíscas). |
 | `max` | Limite de partículas vivas (padrão 1000). |
+| `follow` | As partículas acompanham o emissor quando ele anda (o jato de uma nave). Padrão `false`: ficam onde nasceram (um rastro). |
 
 O emissor tem `x`, `y`, `emitting` e `rate` (leitura e escrita), `count` e `finished`, e os métodos `:burst(n, x, y)`, `:set_position(x, y)`, `:update(dt)`, `:draw()`, `:draw_screen()` e `:clear()`.
 

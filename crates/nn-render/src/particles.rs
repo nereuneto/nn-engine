@@ -55,6 +55,9 @@ pub struct ParticleConfig {
     pub blend: Blend,
     /// Limite de partículas vivas.
     pub max: usize,
+    /// As partículas acompanham o emissor quando ele anda (o jato de uma
+    /// nave). Sem isso, ficam no mundo onde nasceram (um rastro).
+    pub follow: bool,
 }
 
 impl Default for ParticleConfig {
@@ -76,6 +79,7 @@ impl Default for ParticleConfig {
             area: EmitArea::Point,
             blend: Blend::Alpha,
             max: 1000,
+            follow: false,
         }
     }
 }
@@ -106,14 +110,18 @@ pub struct ParticleEmitter {
 
 impl ParticleEmitter {
     pub fn new(config: ParticleConfig) -> Self {
+        // Cada emissor sorteia diferente (duas tochas não ficam iguais).
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         Self {
             config,
             position: Vec2::ZERO,
             emitting: true,
             particles: Vec::new(),
             carry: 0.0,
-            seed: 0x9E37_79B9,
+            seed: 1,
         }
+        .with_seed(0x9E37_79B9 ^ n.wrapping_mul(0x85EB_CA6B))
     }
 
     /// Define a semente do sorteio (para resultados repetíveis).
@@ -215,8 +223,13 @@ impl ParticleEmitter {
         let scale = 1.0 + (self.random() * 2.0 - 1.0) * variation;
         let rotation = self.random() * std::f32::consts::TAU;
         let spin = self.range(self.config.spin);
+        let origin = if self.config.follow {
+            Vec2::ZERO
+        } else {
+            self.position
+        };
         self.particles.push(Particle {
-            position: self.position + offset,
+            position: origin + offset,
             velocity: Vec2::new(angle.cos(), angle.sin()) * speed,
             age: 0.0,
             life,
@@ -251,12 +264,17 @@ impl ParticleEmitter {
             .config
             .texture
             .unwrap_or_else(|| renderer.circle_texture());
+        let origin = if self.config.follow {
+            self.position
+        } else {
+            Vec2::ZERO
+        };
         self.particles.iter().map(move |p| {
             let t = p.age / p.life;
             let size =
                 (self.config.size.0 + (self.config.size.1 - self.config.size.0) * t) * p.scale;
             Sprite::new(texture)
-                .at(p.position)
+                .at(origin + p.position)
                 .size(Vec2::splat(size.max(0.0)))
                 .rotation(p.rotation)
                 .color(self.color_at(t))
@@ -284,7 +302,12 @@ impl ParticleEmitter {
 
     /// Posições das partículas vivas (útil em testes e efeitos próprios).
     pub fn positions(&self) -> impl Iterator<Item = Vec2> + '_ {
-        self.particles.iter().map(|p| p.position)
+        let origin = if self.config.follow {
+            self.position
+        } else {
+            Vec2::ZERO
+        };
+        self.particles.iter().map(move |p| origin + p.position)
     }
 }
 
@@ -376,6 +399,39 @@ mod tests {
         let largura = e.positions().map(|p| p.x).fold(f32::MIN, f32::max)
             - e.positions().map(|p| p.x).fold(f32::MAX, f32::min);
         assert!(largura > 80.0, "espalhou pouco: {largura}");
+    }
+
+    #[test]
+    fn acompanhar_o_emissor() {
+        let mut e = ParticleEmitter::new(ParticleConfig {
+            speed: (0.0, 0.0),
+            follow: true,
+            ..config()
+        });
+        e.burst(1);
+        e.position = Vec2::new(30.0, -10.0);
+        assert_eq!(e.positions().next(), Some(Vec2::new(30.0, -10.0)));
+        // No mundo, a partícula fica onde nasceu.
+        let mut w = ParticleEmitter::new(ParticleConfig {
+            speed: (0.0, 0.0),
+            ..config()
+        });
+        w.burst(1);
+        w.position = Vec2::new(30.0, -10.0);
+        assert_eq!(w.positions().next(), Some(Vec2::ZERO));
+    }
+
+    #[test]
+    fn emissores_sorteiam_diferente() {
+        let mut a = ParticleEmitter::new(config());
+        let mut b = ParticleEmitter::new(config());
+        a.burst(5);
+        b.burst(5);
+        a.update(0.1);
+        b.update(0.1);
+        let pa: Vec<Vec2> = a.positions().collect();
+        let pb: Vec<Vec2> = b.positions().collect();
+        assert_ne!(pa, pb);
     }
 
     #[test]

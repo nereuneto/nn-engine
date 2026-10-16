@@ -527,6 +527,21 @@ E.CONDITIONS = {
     end,
   },
   {
+    id = "particulas_terminaram", name = "Partículas terminarem", category = "Objetos", trigger = true,
+    text = "as partículas de {quem} terminarem",
+    help = "Uma explosão acabou (ou um emissor desligado ficou sem partículas).",
+    props = { who("quem") },
+    lua = "{quem}.particles.finished",
+    test = function(ctx, p, st, b)
+      local set = set_of(resolve(ctx.scene, p.quem, b, true))
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "particulas")) do
+        if set[s.obj] then table.insert(out, { este = s.obj }) end
+      end
+      return out
+    end,
+  },
+  {
     id = "animacao_terminou", name = "Animação terminar", category = "Objetos", trigger = true,
     text = "{quem} terminar a animação {nome}",
     help = "Só animações que tocam uma vez (modo \"uma vez\" no editor de animação). Vazio = qualquer uma.",
@@ -936,6 +951,31 @@ E.ACTIONS = {
       for _, o in ipairs(resolve(ctx.scene, p.alvo, b, true)) do
         local x, y = o:world_transform()
         ctx.scene:burst(x, y, p.cor, math.floor(number(p.quantidade)))
+      end
+    end,
+  },
+  {
+    id = "soltar_particulas", name = "Soltar partículas", category = "Aparência",
+    text = "soltar {quantidade} partículas de {alvo}",
+    help = "O objeto precisa do componente Partículas: solta de uma vez (poeira ao pular, brilho, explosão).",
+    props = { who("alvo"), { "quantidade", 20, min = 1, integer = true, label = "Quantidade" } },
+    lua = "{alvo}.particles:burst({quantidade})",
+    run = function(ctx, p, b)
+      for _, o in ipairs(resolve(ctx.scene, p.alvo, b, true)) do
+        M.burst_particles(o, number(p.quantidade))
+      end
+    end,
+  },
+  {
+    id = "emissor", name = "Ligar ou desligar partículas", category = "Aparência",
+    text = "{acao} as partículas de {alvo}",
+    help = "Para a emissão contínua (as que já saíram terminam a vida) ou volta a emitir.",
+    props = { { "acao", "desligar", options = { { "ligar", "ligar" }, { "desligar", "desligar" } } },
+      who("alvo") },
+    lua = "{alvo}.particles.emitting = ...",
+    run = function(ctx, p, b)
+      for _, o in ipairs(resolve(ctx.scene, p.alvo, b, true)) do
+        M.set_emitting(o, p.acao == "ligar")
       end
     end,
   },

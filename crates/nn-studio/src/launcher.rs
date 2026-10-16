@@ -130,7 +130,7 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
         ),
         Template::Nave => (
             "Nave",
-            "Atire nos asteroides, sem código: pontos, vidas e recorde salvo no computador.",
+            "Atire nos asteroides, sem código: explosões de partículas, pontos, vidas e recorde salvo no computador.",
         ),
         Template::Vazio => (
             "Vazio",

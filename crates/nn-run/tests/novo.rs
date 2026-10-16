@@ -201,6 +201,20 @@ fn modelo_visual_roda_a_fase_e_pega_moedas() {
     assert_eq!(h.game.0.error(), None);
     assert_eq!(var("moedas"), 1, "pegou a moeda do chão");
     assert_eq!(var("vidas"), 3);
+    // Pular do chão solta a poeira nos pés (um evento da cena).
+    assert_eq!(
+        lua::<i64>(&check, "return cena:find('poeira').particles.count"),
+        0
+    );
+    h.ctx.input.press_key(KeyCode::Space);
+    h.run_frames(1);
+    h.ctx.input.release_key(KeyCode::Space);
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(
+        lua::<i64>(&check, "return cena:find('poeira').particles.count"),
+        10
+    );
     drop(h);
     std::fs::remove_dir_all(&dir).unwrap();
 }

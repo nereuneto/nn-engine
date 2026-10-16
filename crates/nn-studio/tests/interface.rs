@@ -2231,3 +2231,234 @@ fn modelo_plataforma_abre_os_menus_no_editor() {
     h.run_steps(4);
     tela(&mut h, "modelo-hud");
 }
+
+#[test]
+fn particulas_efeitos_prontos_previa_e_seta() {
+    let dir = temp("particulas");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    com_cena(&mut h, &proj);
+    // ➕ Objeto > Partículas > Fogo.
+    h.get_by_label("➕ Objeto").click();
+    h.run_steps(2);
+    h.get_by(|n| n.label().is_some_and(|l| l.starts_with("Partículas")))
+        .hover();
+    h.run_steps(3);
+    h.get_by_label("Fogo").click();
+    // (As partículas animam: a tela redesenha sempre.)
+    h.run_steps(20);
+    let fogo = objeto(&h, "fogo").clone();
+    let c = fogo.component("particles").unwrap();
+    assert_eq!(c.str("color_mid"), "#FF7A1A");
+    assert_eq!(c.str("area"), "circulo");
+    h.get_by_label("Emissão");
+    h.get_by_label("Aparência");
+    h.get_by_label("✨ Partículas");
+    tela(&mut h, "particulas-fogo");
+
+    // A ponta da seta muda a direção (para a direita: 0°).
+    let rect = h.get_by_label("Vista da cena").rect();
+    let t = cena(&h).data.world_transform(fogo.id).unwrap();
+    let centro = cena(&h).camera.to_screen(rect, t.x, t.y);
+    let ponta = centro + egui::vec2(0.0, -90.0);
+    let destino = centro + egui::vec2(90.0, 0.0);
+    h.hover_at(ponta);
+    h.run_steps(1);
+    h.drag_at(ponta);
+    h.run_steps(1);
+    for i in 1..=6 {
+        h.hover_at(ponta + (destino - ponta) * (i as f32 / 6.0));
+        h.run_steps(1);
+    }
+    h.drop_at(destino);
+    h.run_steps(2);
+    let dir = objeto(&h, "fogo")
+        .component("particles")
+        .unwrap()
+        .num("direction");
+    assert!(!(5.0..=355.0).contains(&dir), "direção {dir}");
+    atalho_passos(&mut h, Modifiers::COMMAND, Key::Z);
+    let dir = objeto(&h, "fogo")
+        .component("particles")
+        .unwrap()
+        .num("direction");
+    assert_eq!(dir, 90.0, "desfazer volta a direção");
+
+    // Efeito pronto pelo Inspetor: vira explosão; 💥 Soltar na prévia.
+    h.get_by_label("✨ Efeito pronto").click();
+    h.run_steps(2);
+    h.get_by_label("Explosão").click();
+    h.run_steps(3);
+    let c = objeto(&h, "fogo").component("particles").unwrap().clone();
+    assert_eq!(c.str("mode"), "explosao");
+    assert_eq!(c.str("when_done"), "destruir");
+    h.get_by_label("💥 Soltar").click();
+    h.run_steps(3);
+    tela(&mut h, "particulas-explosao");
+    // Pausar a prévia.
+    h.get_by_label("✨ Partículas").click();
+    h.run_steps(2);
+    assert!(cena(&h).particles_paused);
+    // Salvar grava os campos novos.
+    atalho_passos(&mut h, Modifiers::COMMAND, Key::S);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(text.contains("mode = \"explosao\""), "{text}");
+}
+
+/// Atalho de teclado com a tela redesenhando sempre.
+fn atalho_passos(h: &mut Harness<'_, StudioApp>, modifiers: Modifiers, key: Key) {
+    h.key_press_modifiers(modifiers, key);
+    h.run_steps(3);
+}
+
+#[test]
+fn tutorial_efeitos_com_particulas() {
+    use nn_studio::scene_data::{EventItem, Prop, Rule};
+    let dir = temp("tutorial-fx");
+    let mut h = studio_with(&dir, None, fake_game(&dir), true);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("efeitos-com-particulas");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/efeitos");
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    const FASE: &str = "cenas/fase.cena";
+    let fx = |h: &mut Harness<'_, StudioApp>, nome: &str| {
+        h.get_by_label("➕ Objeto").click();
+        h.run_steps(2);
+        h.get_by(|n| n.label().is_some_and(|l| l.starts_with("Partículas")))
+            .hover();
+        h.run_steps(3);
+        h.get_by(|n| n.role() == Role::Button && n.label().as_deref() == Some(nome))
+            .click();
+    };
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 1);
+    fx(&mut h, "Fogo");
+    espera(&mut h, 2);
+    // Arrastar a ponta da seta para o lado.
+    let id = h.state().project().unwrap().scenes[FASE].selection[0];
+    let rect = h.get_by_label("Vista da cena").rect();
+    let doc = &h.state().project().unwrap().scenes[FASE];
+    let t = doc.data.world_transform(id).unwrap();
+    let centro = doc.camera.to_screen(rect, t.x, t.y);
+    let (ponta, destino) = (
+        centro + egui::vec2(0.0, -90.0),
+        centro + egui::vec2(-90.0, -20.0),
+    );
+    h.hover_at(ponta);
+    h.run_steps(1);
+    h.drag_at(ponta);
+    h.run_steps(1);
+    for i in 1..=6 {
+        h.hover_at(ponta + (destino - ponta) * (i as f32 / 6.0));
+        h.run_steps(1);
+    }
+    h.drop_at(destino);
+    espera(&mut h, 3);
+    fx(&mut h, "Explosão");
+    espera(&mut h, 4);
+    tela(&mut h, "tutorial-fx");
+    // O prefab (como o Criar prefab da Hierarquia faria).
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut(FASE).unwrap();
+        let o = doc
+            .data
+            .objects
+            .iter()
+            .find(|o| o.name == "explosao")
+            .unwrap()
+            .clone();
+        std::fs::create_dir_all(projeto.join("prefabs")).unwrap();
+        std::fs::write(
+            projeto.join("prefabs/explosao.prefab"),
+            nn_studio::scene_data::write_prefab(&o),
+        )
+        .unwrap();
+        ws.files.rescan();
+    }
+    espera(&mut h, 5);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut(FASE).unwrap();
+        let mut quando = EventItem {
+            id: "tecla".into(),
+            ..Default::default()
+        };
+        quando.set("modo", Prop::Str("apertar".into()));
+        quando.set("tecla", Prop::Str("acao".into()));
+        let mut entao = EventItem {
+            id: "criar".into(),
+            ..Default::default()
+        };
+        entao.set("prefab", Prop::Str("prefabs/explosao.prefab".into()));
+        entao.set("onde", Prop::Str("fogo".into()));
+        doc.data.events.push(Rule {
+            when: vec![quando],
+            actions: vec![entao],
+            ..Default::default()
+        });
+    }
+    espera(&mut h, 6);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 7);
+    let fase = std::fs::read_to_string(projeto.join(FASE)).unwrap();
+    assert!(fase.contains("type = \"particles\""), "{fase}");
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}
+
+#[test]
+fn modelo_aventura_tochas_animam_no_editor() {
+    let dir = temp("modelo-tochas");
+    let proj = dir.join("jogo");
+    nn_run::create_project(&nn_run::NewOptions {
+        dir: proj.clone(),
+        title: None,
+        template: nn_run::Template::Aventura,
+    })
+    .unwrap();
+    let options = StudioOptions {
+        settings_path: Some(dir.join("preferencias.json")),
+        open: Some(proj.clone()),
+        exe: Some(fake_game(&dir)),
+    };
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .wgpu()
+        .build_eframe(move |cc| {
+            let mut app = StudioApp::new(&cc.egui_ctx, options);
+            app.set_render_state(cc.wgpu_render_state.clone());
+            app
+        });
+    h.run_steps(4);
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("cenas/mapa.cena", None);
+    h.run_steps(4);
+    assert!(!h.state().project().unwrap().scenes["cenas/mapa.cena"].is_dirty());
+    h.get_all_by_label("fogo").next().unwrap().click();
+    {
+        // Perto da porta, para ver o fogo das tochas.
+        let ws = h.state_mut().project_mut().unwrap();
+        let cam = &mut ws.scenes.get_mut("cenas/mapa.cena").unwrap().camera;
+        (cam.x, cam.y, cam.zoom) = (96.0, 10.0, 1.05);
+    }
+    // As partículas precisam de um tempo de relógio para aparecer.
+    for _ in 0..8 {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        h.run_steps(1);
+    }
+    h.get_by_label("✨ Efeito pronto");
+    tela(&mut h, "modelo-tochas");
+}
