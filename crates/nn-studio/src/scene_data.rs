@@ -964,19 +964,26 @@ fn write_objects(s: &mut String, list: &[Object], depth: usize) {
     }
 }
 
-// Tamanho da tela do jogo que o editor está mostrando (para as âncoras do
-// HUD): o do config.lua, ou o escolhido para ver em outros tamanhos.
-static SCREEN_W: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-static SCREEN_H: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+// O que o editor sabe do projeto aberto para desenhar como o jogo: o tamanho
+// da tela (para as âncoras do HUD), a proporção escolhida para ver, o tema
+// da interface e as variáveis do jogo (do config.lua). Fica na thread da
+// interface (cada janela de teste tem a sua).
+#[derive(Default)]
+struct ProjectView {
+    screen: (f64, f64),
+    preview: f64,
+    theme: Vec<(String, String)>,
+    vars: Vec<(String, Prop)>,
+}
+
+thread_local! {
+    static VIEW: std::cell::RefCell<ProjectView> = std::cell::RefCell::new(ProjectView::default());
+}
 
 /// Muda o tamanho da tela usado nas âncoras do HUD.
 pub fn set_screen_size(w: f64, h: f64) {
-    use std::sync::atomic::Ordering::Relaxed;
-    SCREEN_W.store(w.to_bits(), Relaxed);
-    SCREEN_H.store(h.to_bits(), Relaxed);
+    VIEW.with_borrow_mut(|v| v.screen = (w, h));
 }
-
-static PREVIEW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Proporções de tela para ver como o HUD fica (largura ÷ altura; 0 = a
 /// do jogo).
@@ -990,27 +997,22 @@ pub const PREVIEWS: [(&str, f64); 5] = [
 
 /// Vê a cena numa tela de outra proporção (0 = a do jogo).
 pub fn set_preview(ratio: f64) {
-    PREVIEW.store(ratio.to_bits(), std::sync::atomic::Ordering::Relaxed);
+    VIEW.with_borrow_mut(|v| v.preview = ratio);
 }
 
 pub fn preview() -> f64 {
-    f64::from_bits(PREVIEW.load(std::sync::atomic::Ordering::Relaxed))
+    VIEW.with_borrow(|v| v.preview)
 }
 
 /// Tamanho da tela usado nas âncoras do HUD (padrão 1280 × 720). Com uma
 /// proporção escolhida para ver, a altura fica e a largura muda.
 pub fn screen_size() -> (f64, f64) {
-    use std::sync::atomic::Ordering::Relaxed;
-    let (w, h) = (
-        f64::from_bits(SCREEN_W.load(Relaxed)),
-        f64::from_bits(SCREEN_H.load(Relaxed)),
-    );
+    let ((w, h), ratio) = VIEW.with_borrow(|v| (v.screen, v.preview));
     let (w, h) = if w > 0.0 && h > 0.0 {
         (w, h)
     } else {
         (1280.0, 720.0)
     };
-    let ratio = preview();
     if ratio > 0.0 {
         ((h * ratio).round(), h)
     } else {
@@ -1018,22 +1020,19 @@ pub fn screen_size() -> (f64, f64) {
     }
 }
 
-// Tema da interface e variáveis do jogo (do config.lua), para o editor
-// desenhar os menus e o HUD como o jogo.
-type ProjectUi = (Vec<(String, String)>, Vec<(String, Prop)>);
-static PROJECT_UI: std::sync::RwLock<ProjectUi> = std::sync::RwLock::new((Vec::new(), Vec::new()));
-
 /// O editor leu o config.lua: o tema e as variáveis do jogo.
 pub fn set_project_ui(theme: Vec<(String, String)>, vars: Vec<(String, Prop)>) {
-    if let Ok(mut g) = PROJECT_UI.write() {
-        *g = (theme, vars);
-    }
+    VIEW.with_borrow_mut(|v| {
+        v.theme = theme;
+        v.vars = vars;
+    });
 }
 
 /// Valor do tema da interface (o do projeto, ou o padrão da engine).
 pub fn theme_value(key: &str) -> String {
-    let mine = PROJECT_UI.read().ok().and_then(|g| {
-        g.0.iter()
+    let mine = VIEW.with_borrow(|v| {
+        v.theme
+            .iter()
             .find(|(k, _)| k == key)
             .map(|(_, v)| v.clone())
             .filter(|v| !v.is_empty())
@@ -1059,18 +1058,17 @@ pub fn themed(value: &str, key: &str) -> String {
 
 /// Valor inicial de uma variável do jogo (config.lua).
 pub fn var_value(name: &str) -> Option<Prop> {
-    PROJECT_UI
-        .read()
-        .ok()
-        .and_then(|g| g.1.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()))
+    VIEW.with_borrow(|v| {
+        v.vars
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, p)| p.clone())
+    })
 }
 
 /// Nomes das variáveis do jogo (config.lua).
 pub fn var_names() -> Vec<String> {
-    PROJECT_UI
-        .read()
-        .map(|g| g.1.iter().map(|(k, _)| k.clone()).collect())
-        .unwrap_or_default()
+    VIEW.with_borrow(|v| v.vars.iter().map(|(k, _)| k.clone()).collect())
 }
 
 /// Pontos da tela para prender o HUD: (nome, rótulo, fração x, fração y a

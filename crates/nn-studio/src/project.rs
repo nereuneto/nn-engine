@@ -95,7 +95,7 @@ pub fn default_layout() -> DockState<Tab> {
     let [center, files] = tree.split_left(NodeIndex::root(), 0.2, vec![Tab::Files]);
     let [_files, _hierarchy] = tree.split_below(files, 0.5, vec![Tab::Hierarchy]);
     let [center, _inspector] = tree.split_right(center, 0.72, vec![Tab::Inspector]);
-    let [_center, _console] = tree.split_below(center, 0.66, vec![Tab::Console, Tab::Events]);
+    let [_center, _console] = tree.split_below(center, 0.74, vec![Tab::Console, Tab::Events]);
     state
 }
 
@@ -3196,11 +3196,13 @@ impl Viewer<'_> {
                 .iter()
                 .any(|c| c.kind == "sprite" && !c.str("animation").is_empty());
         });
-        // As partículas também animam (a não ser com a prévia parada).
-        animated |= !doc.particles_paused && doc.has_particles();
-        if animated {
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(33));
+        // As partículas também animam (a não ser com a prévia parada), mais
+        // lisas; com a janela sem foco, nada anima.
+        let fx = !doc.particles_paused && doc.has_particles();
+        if fx {
+            crate::theme::animate(ui.ctx(), std::time::Duration::from_millis(16));
+        } else if animated {
+            crate::theme::animate(ui.ctx(), std::time::Duration::from_millis(33));
         }
         // Clicou nesta cena: a Hierarquia e o Inspetor passam a mostrá-la.
         if ui.ui_contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {

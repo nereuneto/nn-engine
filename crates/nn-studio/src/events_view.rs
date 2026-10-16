@@ -364,7 +364,7 @@ impl EventsPanel {
             ui.add_space(4.0);
         }
         if lit_any {
-            ui.ctx().request_repaint_after(Duration::from_millis(30));
+            crate::theme::animate(ui.ctx(), Duration::from_millis(30));
         }
         if let Some((i, o)) = op {
             edit.structure();

@@ -1469,8 +1469,8 @@ impl Inspector {
                 ui.label("Por cima:");
                 let mut o = doc.data.overlay;
                 let r = ui
-                    .checkbox(&mut o, "Abre por cima de outra cena (pausa, opções)")
-                    .on_hover_text("A cena de baixo continua aparecendo, parada, até esta fechar. Os objetos ficam presos à tela e o fundo vira um véu (use uma cor transparente).");
+                    .checkbox(&mut o, "Pausa ou menu")
+                    .on_hover_text("Abre por cima de outra cena (pausa, opções). A cena de baixo continua aparecendo, parada, até esta fechar. Os objetos ficam presos à tela e o fundo vira um véu (use uma cor transparente).");
                 crate::tutorial::anchor_in(ui, "inspetor:por-cima", r.rect);
                 if r.changed() {
                     doc.record(None);

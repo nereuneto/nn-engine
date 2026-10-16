@@ -735,6 +735,14 @@ impl SceneDoc {
                 max = (max.0.max(wx), max.1.max(wy));
             }
         }
+        // A cena toda (sem seleção) também mostra a tela do jogo inteira.
+        if self.selection.is_empty() {
+            let (cx, cy, zoom) = self.data.camera_start();
+            let (sw, sh) = scene_data::screen_size();
+            let (hw, hh) = (sw / zoom / 2.0, sh / zoom / 2.0);
+            min = (min.0.min(cx - hw), min.1.min(cy - hh));
+            max = (max.0.max(cx + hw), max.1.max(cy + hh));
+        }
         if min.0 > max.0 {
             self.camera = ViewCamera::default();
             return;
