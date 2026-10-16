@@ -4,9 +4,32 @@ Engine de jogos 2D em Rust, construída sobre [wgpu](https://wgpu.rs) e [winit](
 
 Plataformas suportadas: **Windows** e **Linux**.
 
-## Começando
+## Baixar
 
-Pré-requisito: Rust instalado pelo [rustup](https://rustup.rs). A engine pede o Rust 1.88 ou mais novo; o editor (NN Studio), o 1.95. Com o rustup, `rustup update` deixa tudo em dia.
+Para fazer jogos não é preciso instalar Rust nem compilar nada: baixe o **NN Studio** pronto na página da [última versão](https://github.com/nereuneto/nn-engine/releases/latest).
+
+| Sistema | Arquivo | Como usar |
+|---|---|---|
+| Windows 10 ou 11 | `NN-Studio-<versão>-setup.exe` | Instalador: não pede senha de administrador; cria atalhos no menu Iniciar (e, se quiser, na área de trabalho) e aparece em *Aplicativos instalados* para desinstalar. |
+| Windows (portátil) | `NN-Studio-<versão>-windows-portatil.zip` | Extraia numa pasta e abra o `nn-studio.exe`. |
+| Linux x86_64 | `NN-Studio-<versão>-x86_64.AppImage` | Um arquivo só: marque como executável (`chmod +x`) e abra. |
+| Linux (pasta) | `NN-Studio-<versão>-linux-x86_64.tar.gz` | Extraia e rode o `nn-studio`. |
+
+Junto com o editor vêm o `nn` (ferramenta de linha de comando) e o `nn-jogo` (o executável que vira o seu jogo exportado).
+
+**Requisitos:** no Windows, uma placa de vídeo com DirectX 12 ou Vulkan; no Linux, com Vulkan (os drivers atuais da Intel, AMD e NVIDIA têm). No Linux, o áudio sai pelo ALSA (ou pelo PipeWire/PulseAudio, que o atendem).
+
+**"O Windows protegeu o computador":** o NN Studio ainda não tem assinatura digital (um certificado pago), então o Windows avisa na primeira vez que o instalador abre. Clique em **Mais informações** e depois em **Executar assim mesmo**. Os arquivos são gerados pelo [workflow público](.github/workflows/runtimes.yml) a partir deste repositório.
+
+O NN Studio avisa quando sai uma versão nova (ele consulta esta página no máximo uma vez por dia e nunca baixa nada sozinho; dá para desligar na tela inicial do NN Studio). O que mudou em cada versão está no [CHANGELOG](CHANGELOG.md).
+
+## Licença
+
+O código da nn-engine e do NN Studio pode ser usado sob a licença [MIT](LICENSE-MIT) ou a [Apache-2.0](LICENSE-APACHE), à sua escolha. As imagens e os sons dos modelos e exemplos seguem a mesma licença. Os jogos que você faz com a nn-engine são seus.
+
+## Começando pelo código
+
+Para compilar a engine e o editor (ou fazer jogos em Rust), o pré-requisito é o Rust instalado pelo [rustup](https://rustup.rs). A engine pede o Rust 1.88 ou mais novo; o editor (NN Studio), o 1.95. Com o rustup, `rustup update` deixa tudo em dia.
 
 **Windows:** baixe e rode o `rustup-init.exe` do site acima. Se o instalador avisar que faltam as ferramentas de build do Visual Studio (o compilador C++ da Microsoft), escolha a opção de instalação rápida que ele oferece. Depois **abra um terminal novo** para o `cargo` aparecer no PATH e confira com `cargo --version`.
 

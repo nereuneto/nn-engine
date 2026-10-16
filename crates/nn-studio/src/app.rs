@@ -25,6 +25,8 @@ pub struct StudioOptions {
     pub open: Option<PathBuf>,
     /// Executável que roda os jogos (`--jogar`). Padrão: o próprio programa.
     pub exe: Option<PathBuf>,
+    /// Consultar se há versão nova (desligado nos testes).
+    pub check_updates: bool,
 }
 
 enum Screen {
@@ -64,6 +66,8 @@ pub struct StudioApp {
     about: bool,
     /// O erro que fechou o editor da última vez (aviso ao abrir).
     crash: Option<String>,
+    /// Consulta de versão nova em andamento.
+    update_rx: Option<std::sync::mpsc::Receiver<Option<crate::update::Release>>>,
     shortcuts: bool,
     logo: Option<egui::TextureHandle>,
     window_title: String,
@@ -152,6 +156,7 @@ impl StudioApp {
             allow_close: false,
             about: false,
             crash: None,
+            update_rx: None,
             shortcuts: false,
             logo,
             window_title: String::new(),
@@ -941,6 +946,19 @@ impl StudioApp {
         let ctx = ui.ctx().clone();
         theme::apply(&ctx, self.settings.theme, self.settings.zoom);
 
+        // Resposta da consulta de versão nova.
+        if let Some(rx) = &self.update_rx
+            && let Ok(result) = rx.try_recv()
+        {
+            self.update_rx = None;
+            self.settings.last_update_check = crate::settings::now_secs();
+            if let Some(r) = result {
+                log::info!("última versão publicada: {}", r.version);
+                self.settings.latest_version = Some(r.version);
+                self.settings.latest_url = Some(r.url);
+            }
+        }
+
         // Fechar a janela com alterações não salvas: pergunta antes.
         if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close {
             if self.dirty() {
@@ -1027,12 +1045,16 @@ impl StudioApp {
 /// Resumo das preferências para saber quando gravar.
 fn snapshot(s: &Settings) -> String {
     format!(
-        "{:?}{:?}{}{}{:?}{}",
+        "{:?}{:?}{}{}{:?}{}{}{:?}{:?}{}",
         s.theme,
         s.mode,
         s.zoom,
         s.clear_console_on_play,
         s.projects_dir,
+        s.check_updates,
+        s.last_update_check,
+        s.latest_version,
+        s.skipped_version,
         s.recent
             .iter()
             .map(|r| r.path.to_string_lossy())

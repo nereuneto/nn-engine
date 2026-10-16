@@ -150,12 +150,14 @@ fn pintura_ao_vivo_muda_tiles_e_colisao() {
             ("tiles/terreno.tsj", TSJ),
             ("mapas/fase.tmj", TMJ),
             (
-                "cenas/fase.cena",
+                "cenas/pintura.cena",
                 r#"return { objects = { { id = 7, name = "mapa", components = { { type = "map", map = "mapas/fase.tmj" } } } } }"#,
             ),
         ],
     );
-    let Some((mut h, rt)) = cena(&dir, "cenas/fase.cena") else {
+    // (Nome de cena só deste teste: o ajuste ao vivo vai para a cena pelo
+    // nome, e os testes rodam ao mesmo tempo.)
+    let Some((mut h, rt)) = cena(&dir, "cenas/pintura.cena") else {
         return;
     };
     h.run_frames(1);
@@ -164,7 +166,7 @@ fn pintura_ao_vivo_muda_tiles_e_colisao() {
         None
     );
     assert!(nn_script::live::push(
-        r#"{"scene":"cenas/fase.cena","id":7,"field":"tiles","value":[["chao",1,1,1],["chao",2,1,2147483649]]}"#
+        r#"{"scene":"cenas/pintura.cena","id":7,"field":"tiles","value":[["chao",1,1,1],["chao",2,1,2147483649]]}"#
     ));
     h.run_frames(1);
     assert_eq!(lua::<u32>(&rt, "cena.objects.mapa.map:tile(1, 1)"), 1);

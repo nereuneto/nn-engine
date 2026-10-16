@@ -41,4 +41,5 @@ pub mod theme;
 pub mod tiles_view;
 pub mod tileset;
 pub mod tutorial;
+pub mod update;
 pub mod viewers;

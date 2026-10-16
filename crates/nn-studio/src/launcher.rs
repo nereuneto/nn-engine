@@ -30,6 +30,44 @@ struct NewProjectForm {
     submit: bool,
 }
 
+/// Aviso de versão nova (se a última consulta achou uma mais nova que esta
+/// e a pessoa não pediu para esquecer dela).
+fn update_banner(ui: &mut egui::Ui, settings: &mut Settings) {
+    let Some(latest) = settings.latest_version.clone() else {
+        return;
+    };
+    if !settings.check_updates
+        || !crate::update::is_newer(&latest, env!("CARGO_PKG_VERSION"))
+        || settings.skipped_version.as_deref() == Some(latest.as_str())
+    {
+        return;
+    }
+    let url = settings
+        .latest_url
+        .clone()
+        .unwrap_or_else(|| crate::update::RELEASES_PAGE.to_string());
+    egui::Frame::new()
+        .fill(theme::PLAY.gamma_multiply(0.25))
+        .inner_margin(10.0)
+        .corner_radius(6.0)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width().min(760.0));
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(format!("🎉 Saiu o NN Studio {latest}")).strong());
+                ui.weak(format!("(você tem a {})", env!("CARGO_PKG_VERSION")));
+                ui.hyperlink_to("Ver o que mudou e baixar", url);
+                if ui
+                    .small_button("Agora não")
+                    .on_hover_text("Não avisa mais desta versão")
+                    .clicked()
+                {
+                    settings.skipped_version = Some(latest.clone());
+                }
+            });
+        });
+    ui.add_space(10.0);
+}
+
 /// Um cartão de modelo: miniatura e nome. Clique escolhe.
 fn template_card(
     ui: &mut egui::Ui,
@@ -277,6 +315,8 @@ impl Launcher {
                             ui.selectable_value(&mut settings.mode, Mode::Completo, "Completo")
                                 .on_hover_text("Mostra todas as opções.");
                         });
+                        ui.checkbox(&mut settings.check_updates, "Avisar versões novas")
+                            .on_hover_text("Consulta o GitHub no máximo uma vez por dia. Só avisa: nunca baixa nada sozinho.");
                         ui.add_space(6.0);
                         ui.weak(format!("versão {}", env!("CARGO_PKG_VERSION")));
                     },
@@ -284,6 +324,7 @@ impl Launcher {
                 ui.separator();
                 ui.vertical(|ui| {
                     ui.add_space(24.0);
+                    update_banner(ui, settings);
                     if let Some(e) = &self.error {
                         let mut close = false;
                         egui::Frame::new()

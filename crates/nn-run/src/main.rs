@@ -16,11 +16,15 @@ uso:
   nn novo <pasta> [opções]       cria um jogo novo, pronto para rodar
   nn [pasta]                     roda o jogo em Lua da pasta (padrão: pasta atual)
   nn exportar <pasta> [opções]   gera um executável único com o jogo
+  nn --versao                    mostra a versão
 
 opções de novo:
   --titulo <título>    título do jogo (padrão: nome da pasta)
   --modelo <nome>      padrao: título, partida, pausa e recorde (padrão)
-                       visual: fase montada no NN Studio (cena visual)
+                       visual: fase de plataforma montada no NN Studio
+                       aventura: aventura vista de cima (NN Studio)
+                       nave: jogo de nave (NN Studio)
+                       vazio: cena vazia com imagens e sons
                        minimo: só uma cena com um quadrado que anda
 
 opções de exportar:
@@ -36,6 +40,10 @@ fn main() -> ExitCode {
     match args.first().map(String::as_str) {
         Some("-h" | "--help" | "ajuda") => {
             println!("{HELP}");
+            ExitCode::SUCCESS
+        }
+        Some("-V" | "--version" | "--versao") => {
+            println!("nn {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
         Some("exportar") => exportar(&args[1..]),
@@ -72,7 +80,7 @@ fn novo(args: &[String]) -> ExitCode {
                 Template::from_name(&v)
                     .map(|t| opts.template = t)
                     .ok_or_else(|| {
-                        format!("modelo desconhecido: {v} (use padrao, visual ou minimo)")
+                        format!("modelo desconhecido: {v} (use padrao, visual, aventura, nave, vazio ou minimo)")
                     })
             }),
             other if other.starts_with("--") => Err(format!("opção desconhecida: {other}")),

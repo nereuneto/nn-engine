@@ -8,7 +8,7 @@ Mova a nave com as setas ou WASD e atire com espaço. Cada asteroide destruído 
 
 ## Como foi feito
 
-- `cenas/titulo.cena`: título, recorde e botões (**Botão**). Um evento zera as variáveis e **carrega o recorde do disco**.
+- `cenas/titulo.cena`: título, recorde e botões (componente **Botão**, que funciona com mouse, teclado e controle). Um evento zera as variáveis e **carrega o recorde do disco**.
 - `cenas/jogo.cena` (sem gravidade): a nave tem **Jogador top-down**, **Atirar** (cria o prefab `tiro`), **Vida** e **Animação automática**, e um filho `jato` com **Partículas** (o fogo azul atrás dela). Um objeto escondido com **Gerador** cria asteroides; outro cria as estrelas do fundo. Os limites são corpos físicos invisíveis.
 - `prefabs/asteroide.prefab`: **Perigo** e **eventos** dele mesmo: começa andando para a esquerda, some quando um tiro encosta (soma pontos e cria o prefab `explosao`) e quando sai da tela. Mudar o prefab muda todos os asteroides.
 - `prefabs/explosao.prefab`: só **Partículas**, no modo *De uma vez*, com *Ao terminar: destruir o objeto*. A ação **Criar prefab** põe a explosão onde o asteroide estava; ela estoura e some sozinha.

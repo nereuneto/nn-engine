@@ -51,6 +51,7 @@ fn main() -> ExitCode {
                 settings_path: settings_dir().map(|d| d.join(SETTINGS_FILE)),
                 open: other.map(PathBuf::from),
                 exe: None,
+                check_updates: true,
             };
             match run(options) {
                 Ok(()) => ExitCode::SUCCESS,

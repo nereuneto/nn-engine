@@ -8,7 +8,7 @@ Ande com as setas ou WASD. Pegue a chave, abra a porta e encontre o tesouro. As 
 
 ## Como foi feito
 
-- `cenas/titulo.cena`: título com botões (comportamento **Botão**). Um evento zera as variáveis a cada jogo novo.
+- `cenas/titulo.cena`: título com botões (componente **Botão**, que funciona com mouse, teclado e controle). Um evento zera as variáveis a cada jogo novo.
 - `cenas/mapa.cena`: a fase, **sem gravidade** (no Inspetor da cena). O herói tem **Jogador top-down**, **Animação automática** e **Vida**; as lesmas, **Perseguir** e **Perigo**; os morcegos, **Patrulha** e **Perigo**; a chave, **Coletável** (soma em `chaves`).
 - O chão, a água e as paredes são um **mapa de tiles** (`mapas/mapa.tmj`). Selecione o objeto `mapa` e clique em **✏ Pintar**: no painel **Tiles**, os terrenos **grama** e **agua** pintam o lago com as margens certas; as paredes ficam na camada `paredes`. A água e as pedras bloqueiam (marcadas como **Sólido** no tileset `assets/imagens/terreno.tsj`).
 - A **porta** e o **baú** têm **eventos** (painel Eventos): com uma chave, a porta abre e gasta a chave; sem chave, aparece um aviso por 2 segundos. Encostar no baú abre o baú, toca a vitória e, depois de 1,5 segundo, vai para `cenas/fim.cena`.
