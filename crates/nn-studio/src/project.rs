@@ -263,6 +263,8 @@ pub struct ProjectWorkspace {
     /// usam. Refeito quando alguma cena muda.
     script_objects: Option<HashMap<String, Vec<String>>>,
     started: std::time::Instant,
+    /// Quantas vezes o jogo foi aberto (▶ Jogar ou Testar daqui).
+    pub plays: u64,
 }
 
 impl std::fmt::Debug for ProjectWorkspace {
@@ -349,6 +351,7 @@ impl ProjectWorkspace {
             config: ConfigValues::default(),
             script_objects: None,
             started: std::time::Instant::now(),
+            plays: 0,
         };
         ws.reload_config();
         ws.console.info(format!(
@@ -750,6 +753,7 @@ impl ProjectWorkspace {
 
     /// Roda o jogo; com `start`, começando nessa cena em vez da inicial.
     pub fn play_from(&mut self, ctx: &egui::Context, env: &mut Env, start: Option<&str>) {
+        self.plays += 1;
         let _ = self.save_all();
         if let Some(mut g) = self.game.take() {
             g.stop();

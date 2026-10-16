@@ -69,7 +69,7 @@ fn anchor_rect(ctx: &egui::Context, key: &str) -> Option<Rect> {
 /// O que o tutorial sabe enquanto um passo está aberto.
 #[derive(Debug, Default, Clone)]
 pub struct StepState {
-    /// O jogo foi aberto depois que o passo começou.
+    /// O jogo foi aberto (▶) depois que o passo começou.
     pub played: bool,
 }
 
@@ -461,6 +461,8 @@ pub struct TutorialRun {
     size: egui::Vec2,
     /// Quanto tempo o "Feito!" fica antes do próximo passo.
     pub pause: Duration,
+    /// Vezes que o jogo foi aberto quando o passo começou.
+    plays_at_start: Option<u64>,
 }
 
 /// Quanto tempo o "Feito!" fica antes de ir para o próximo passo.
@@ -476,6 +478,7 @@ impl TutorialRun {
             shown: false,
             size: egui::vec2(380.0, 230.0),
             pause: DONE_PAUSE,
+            plays_at_start: None,
         }
     }
 
@@ -484,6 +487,7 @@ impl TutorialRun {
         self.state = StepState::default();
         self.done_at = None;
         self.shown = false;
+        self.plays_at_start = None;
     }
 
     pub fn current(&self) -> &Step {
@@ -506,7 +510,9 @@ impl TutorialRun {
                 ws.file_panel.reveal(rel);
             }
         }
-        if ws.is_playing() {
+        // Apertou ▶ (mesmo que o jogo já tenha fechado).
+        let plays = *self.plays_at_start.get_or_insert(ws.plays);
+        if ws.plays > plays {
             self.state.played = true;
         }
         let done = self.current().done.is_some_and(|f| f(ws, &self.state));
