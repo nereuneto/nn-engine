@@ -46,20 +46,20 @@ return {
     },
     {
       id = 5, name = "parede",
-      x = 100, y = 186, rotation = 0, scale_x = 1, scale_y = 1,
+      x = 100, y = 202, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "shape", shape = "rect", w = 40, h = 308, radius = 32, color = "#3B4252", hud = false },
-        { type = "body", body = "static", shape = "box", w = 40, h = 308, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "shape", shape = "rect", w = 40, h = 276, radius = 32, color = "#3B4252", hud = false },
+        { type = "body", body = "static", shape = "box", w = 40, h = 276, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
     },
     {
       id = 6, name = "parede",
-      x = 100, y = -186, rotation = 0, scale_x = 1, scale_y = 1,
+      x = 100, y = -202, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "shape", shape = "rect", w = 40, h = 308, radius = 32, color = "#3B4252", hud = false },
-        { type = "body", body = "static", shape = "box", w = 40, h = 308, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "shape", shape = "rect", w = 40, h = 276, radius = 32, color = "#3B4252", hud = false },
+        { type = "body", body = "static", shape = "box", w = 40, h = 276, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
     },
     {
@@ -107,8 +107,8 @@ return {
       x = 100, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/porta.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
-        { type = "body", body = "static", shape = "box", w = 40, h = 64, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "sprite", image = "assets/imagens/porta.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 128, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "body", body = "static", shape = "box", w = 40, h = 128, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
       events = {
         { comment = "Com uma chave, a porta abre (e gasta a chave)." },
@@ -217,6 +217,7 @@ return {
             { act = "som", som = "assets/sons/vitoria.wav" },
             { act = "faiscas", alvo = "@este", cor = "#FFD166", quantidade = 40 },
             { act = "comportamento", acao = "desligar", nome = "topdown", alvo = "@jogador" },
+            { act = "velocidade", modo = "definir", alvo = "@jogador", vx = 0, vy = 0 },
             { act = "esperar", segundos = 1.5 },
             { act = "ir_para_cena", cena = "cenas/fim.cena", escurecer = 0.6 },
           } },
