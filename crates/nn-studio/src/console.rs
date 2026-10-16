@@ -84,6 +84,17 @@ pub fn format_record(level: log::Level, target: &str, message: &str) -> String {
 }
 
 /// Interpreta uma linha da saída do jogo: (nível, categoria, texto).
+/// Linha em que o jogo avisa qual cena está na frente (para o ajuste ao
+/// vivo): devolve o caminho da cena.
+pub fn live_scene(line: &str) -> Option<String> {
+    let json = line.strip_prefix(LOG_PREFIX)?;
+    let rec = serde_json::from_str::<Record>(json).ok()?;
+    if rec.target != nn_script::live::LOG_TARGET {
+        return None;
+    }
+    rec.message.strip_prefix("cena: ").map(str::to_string)
+}
+
 pub fn parse_game_line(line: &str) -> (Level, Category, String) {
     if let Some(json) = line.strip_prefix(LOG_PREFIX)
         && let Ok(rec) = serde_json::from_str::<Record>(json)

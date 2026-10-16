@@ -154,8 +154,18 @@ impl Renderer {
 
     /// Cria o renderer para desenhar em alvos com o formato `format`.
     pub fn new(gpu: &GpuContext, format: wgpu::TextureFormat) -> Self {
-        let device = gpu.device.clone();
-        let queue = gpu.queue.clone();
+        Self::from_device(&gpu.device, &gpu.queue, format)
+    }
+
+    /// Cria o renderer sobre um dispositivo que já existe (por exemplo, o de
+    /// outra biblioteca de interface, como o editor faz para mostrar a cena).
+    pub fn from_device(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+    ) -> Self {
+        let device = device.clone();
+        let queue = queue.clone();
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("sprite.wgsl"));
 

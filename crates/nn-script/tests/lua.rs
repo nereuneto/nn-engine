@@ -1840,3 +1840,243 @@ fn config_lua_le_numeros_inteiros_e_com_virgula() {
     );
     assert!(!nn_script::Project::open(&dir).unwrap().config.hot_reload);
 }
+
+// --- Cenas visuais (.cena) -------------------------------------------------
+
+const CENA_BASICA: &str = r##"
+return {
+  format = 1,
+  background = "#000000",
+  objects = {
+    { id = 1, name = "quadrado", x = 0, y = 0, layer = 1,
+      components = { { type = "shape", shape = "rect", w = 20, h = 20, color = "#FF0000" } } },
+    { id = 2, name = "escondido", x = 0, y = 0, visible = false, layer = 5,
+      components = { { type = "shape", w = 20, h = 20, color = "#00FF00" } } },
+  },
+}
+"##;
+
+#[test]
+fn cena_visual_desenha_os_objetos() {
+    let dir = projeto("cena-basica", &[("cenas/a.cena", CENA_BASICA)]);
+    let Some(mut h) = cena(&dir, "cenas/a.cena") else {
+        return;
+    };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    let [r, g, b, _] = pixel(&h, 32, 32);
+    assert!(r > 200 && g < 50 && b < 50, "centro: {r} {g} {b}");
+    // Fora do quadrado: o fundo da cena (preto).
+    let [r, g, b, _] = pixel(&h, 2, 2);
+    assert!(r < 30 && g < 30 && b < 30, "canto: {r} {g} {b}");
+}
+
+#[test]
+fn cena_visual_com_script_fisica_e_eventos() {
+    let dir = projeto(
+        "cena-fisica",
+        &[
+            (
+                "cenas/fase.cena",
+                r##"
+                return {
+                  script = "cenas/fase.lua",
+                  gravity = -1000,
+                  objects = {
+                    { id = 1, name = "chao", x = 0, y = -20,
+                      components = {
+                        { type = "shape", w = 60, h = 8, color = "#888888" },
+                        { type = "body", body = "static", w = 60, h = 8 },
+                      } },
+                    { id = 2, name = "jogador", x = 0, y = 20,
+                      components = {
+                        { type = "shape", w = 8, h = 8, color = "#FFFFFF" },
+                        { type = "body", w = 8, h = 8 },
+                      },
+                      children = {
+                        { id = 3, name = "chapeu", x = 0, y = 6,
+                          components = { { type = "shape", w = 4, h = 2 } } },
+                      } },
+                    { id = 4, name = "moeda", x = 0, y = -10,
+                      components = { { type = "body", body = "static", shape = "circle", radius = 3, sensor = true } } },
+                  },
+                }
+                "##,
+            ),
+            (
+                "cenas/fase.lua",
+                r##"
+                local cena = {}
+                function cena:enter() self.iniciou = true; self.toques = 0 end
+                function cena:contact(e)
+                  if e.type == "enter" and e.object_a and e.object_a.name == "moeda" then
+                    self.toques = self.toques + 1
+                    e.object_a:destroy()
+                  end
+                end
+                function cena:update(dt)
+                  local j = self:find("jogador")
+                  self.jy = j.y
+                  self.no_chao = j.body.on_ground
+                  local cx, cy = self.objects.chapeu:world_transform()
+                  self.chapeu_y = cy
+                  self.vivos = #self:find_all("moeda")
+                end
+                return cena
+                "##,
+            ),
+        ],
+    );
+    // Abre a cena pelo .cena (o script vem junto).
+    let Some(mut h) = cena(&dir, "cenas/fase.cena") else {
+        return;
+    };
+    h.run_frames(90);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<bool>("iniciou"), Some(true));
+    let jy: f64 = h.game.0.field("jy").unwrap();
+    // Caiu e parou em cima do chão (topo do chão em -16, metade do jogador 4).
+    assert!((jy - -12.0).abs() < 1.5, "jy = {jy}");
+    assert_eq!(h.game.0.field::<bool>("no_chao"), Some(true));
+    // O filho acompanha o pai.
+    let cy: f64 = h.game.0.field("chapeu_y").unwrap();
+    assert!((cy - (jy + 6.0)).abs() < 0.01, "chapéu {cy}");
+    // Passou pela moeda (sensor): evento com os objetos, e ela sumiu.
+    assert_eq!(h.game.0.field::<i64>("toques"), Some(1));
+    assert_eq!(h.game.0.field::<i64>("vivos"), Some(0));
+}
+
+#[test]
+fn cena_visual_recebe_ajuste_ao_vivo_e_recarrega_ao_salvar() {
+    let dir = projeto("cena-ao-vivo", &[("cenas/a.cena", CENA_BASICA)]);
+    let Some(mut h) = cena(&dir, "cenas/a.cena") else {
+        return;
+    };
+    h.run_frames(1);
+    // O editor mudou a cor do quadrado (componente 1 do objeto 1).
+    assert!(nn_script::live::push(
+        r##"{"scene":"cenas/a.cena","id":1,"component":1,"field":"color","value":"#0000FF"}"##
+    ));
+    // E moveu o objeto para fora do centro e depois de volta.
+    assert!(nn_script::live::push(
+        r##"{"scene":"cenas/a.cena","id":1,"field":"x","value":20}"##
+    ));
+    h.run_frames(1);
+    let [r, _, b, _] = pixel(&h, 32 + 20, 32);
+    assert!(b > 200 && r < 50, "movido e azul: {r} {b}");
+    let [r, g, b, _] = pixel(&h, 32, 32);
+    assert!(r < 30 && g < 30 && b < 30, "o centro ficou vazio");
+
+    // Salvar o arquivo recarrega a cena com o que está nele.
+    espera_relogio_do_disco();
+    std::fs::write(
+        dir.join("cenas/a.cena"),
+        CENA_BASICA.replace("#FF0000", "#FFFF00"),
+    )
+    .unwrap();
+    std::thread::sleep(ScriptRuntime::POLL_INTERVAL + Duration::from_millis(50));
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    let [r, g, b, _] = pixel(&h, 32, 32);
+    assert!(
+        r > 200 && g > 200 && b < 50,
+        "amarelo no centro: {r} {g} {b}"
+    );
+}
+
+#[test]
+fn cena_visual_com_erro_da_mensagem_clara() {
+    let dir = projeto(
+        "cena-erro",
+        &[
+            (
+                "cenas/a.cena",
+                "return { objects = { { id = 1, name = \"x\", components = { { type = \"foguete\" } } } } }",
+            ),
+            (
+                "cenas/b.cena",
+                "return { objects = { { id = 1, name = \"x\", components = { { type = \"sprite\", image = \"sumiu.png\" } } } } }",
+            ),
+            ("cenas/c.cena", "return { objects = {"),
+        ],
+    );
+    for (path, esperado) in [
+        ("cenas/a.cena", "componente desconhecido: \"foguete\""),
+        ("cenas/b.cena", "sumiu.png"),
+        ("cenas/c.cena", "cenas/c.cena:1"),
+    ] {
+        let Some(mut h) = cena(&dir, path) else {
+            return;
+        };
+        h.run_frames(1);
+        let erro = h.game.0.error().unwrap_or_default().to_string();
+        assert!(erro.contains(esperado), "{path}: {erro}");
+    }
+    // A verificação de sintaxe da exportação também olha os .cena.
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let erros = rt.check_syntax();
+    assert!(
+        erros.iter().any(|e| e.contains("cenas/c.cena")),
+        "{erros:?}"
+    );
+}
+
+#[test]
+fn cena_visual_com_todos_os_componentes_roda() {
+    // Copia o jogo de plataforma para usar as imagens, sons e o mapa dele.
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/plataforma");
+    let dir = projeto("cena-completa", &[]);
+    for (rel, full) in nn_app::list_dir(&src) {
+        let to = dir.join(&rel);
+        std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+        std::fs::copy(full, to).unwrap();
+    }
+    std::fs::write(
+        dir.join("cenas/teste.cena"),
+        r##"
+        return {
+          script = "cenas/teste.lua",
+          objects = {
+            { id = 1, name = "mapa", x = 0, y = 0, components = { { type = "map", map = "fases/fase1.tmj", scale = 3 } } },
+            { id = 2, name = "jogador", x = 300, y = 400, layer = 2,
+              components = {
+                { type = "sprite", image = "assets/imagens/personagem.png", frame_w = 16, frame_h = 16, frame = 5, w = 48, h = 48 },
+                { type = "body", w = 30, h = 42 },
+                { type = "particles", rate = 30 },
+              } },
+            { id = 3, name = "camera", components = { { type = "camera", follow = "jogador", zoom = 1 } } },
+            { id = 4, name = "musica", components = { { type = "sound", sound = "assets/sons/moeda.wav" } } },
+            { id = 5, name = "placar", x = 0, y = 600, rotation = 10, scale_x = 2,
+              components = { { type = "text", text = "Olá", size = 20 } } },
+          },
+        }
+        "##,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("cenas/teste.lua"),
+        r##"
+        local cena = {}
+        function cena:update(dt)
+          local x0, y0, x1, y1 = nn.camera.view()
+          self.cam_x = (x0 + x1) / 2
+          self.sprite_frame = self.objects.jogador.sprite.frame
+          self.tem_mapa = self.objects.mapa.map ~= nil
+          self.tem_som = self.objects.musica.sound ~= nil
+        end
+        return cena
+        "##,
+    )
+    .unwrap();
+    let Some(mut h) = cena(&dir, "cenas/teste.cena") else {
+        return;
+    };
+    h.run_frames(30);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<i64>("sprite_frame"), Some(5));
+    assert_eq!(h.game.0.field::<bool>("tem_mapa"), Some(true));
+    assert_eq!(h.game.0.field::<bool>("tem_som"), Some(true));
+    // A câmera segue o jogador (presa aos limites do mapa).
+    let cam_x: f64 = h.game.0.field("cam_x").unwrap();
+    assert!(cam_x > 20.0, "câmera em {cam_x}");
+}

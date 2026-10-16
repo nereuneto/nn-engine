@@ -15,6 +15,8 @@ pub const MAX_ENTRIES: usize = 5000;
 pub enum FileKind {
     Folder,
     Lua,
+    /// Cena visual do NN Studio (`.cena`).
+    Scene,
     Image,
     Sound,
     Map,
@@ -32,6 +34,7 @@ impl FileKind {
             .unwrap_or_default();
         match ext.as_str() {
             "lua" => FileKind::Lua,
+            "cena" => FileKind::Scene,
             "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" => FileKind::Image,
             "wav" | "ogg" | "mp3" | "flac" => FileKind::Sound,
             "tmj" | "tmx" => FileKind::Map,
@@ -47,6 +50,7 @@ impl FileKind {
         match self {
             FileKind::Folder => "pasta",
             FileKind::Lua => "script Lua",
+            FileKind::Scene => "cena visual",
             FileKind::Image => "imagem",
             FileKind::Sound => "som",
             FileKind::Map => "mapa",
@@ -496,6 +500,54 @@ pub fn scene_template(rel: &str) -> String {
          -- Desenha a cena (a câmera começa no centro da tela).\n\
          function cena:draw()\n\
          \x20 nn.draw.rect(self.x, self.y, 50, 50, \"#3FA7D6\")\n\
+         end\n\
+         \n\
+         return cena\n"
+    )
+}
+
+/// Conteúdo de uma cena visual nova: um título e um quadrado.
+pub fn visual_scene_template() -> String {
+    use crate::scene_data::{Component, Object, Prop, SceneData, write};
+    let mut title = Object::new(1, "titulo");
+    title.y = 160.0;
+    let mut text = Component::new("text");
+    text.set("text", Prop::Str("Minha cena".into()));
+    text.set("size", Prop::Num(48.0));
+    title.components.push(text);
+    let mut square = Object::new(2, "quadrado");
+    square.components.push(Component::new("shape"));
+    let scene = SceneData {
+        objects: vec![title, square],
+        ..SceneData::default()
+    };
+    write(&scene)
+}
+
+/// Script de uma cena visual: os objetos já existem em `self.objects`.
+pub fn scene_script_template(scene_rel: &str) -> String {
+    format!(
+        "-- Script da cena visual {scene_rel}.\n\
+         -- Os objetos montados no editor estão em self.objects (pelo nome).\n\
+         local cena = {{}}\n\
+         \n\
+         -- A cena começou (os objetos já foram criados).\n\
+         function cena:enter(args)\n\
+         end\n\
+         \n\
+         -- Passos fixos (60 por segundo): movimento e regras.\n\
+         function cena:fixed_update(dt)\n\
+         \x20 -- Exemplo: mover o objeto \"quadrado\" com WASD, as setas ou o controle.\n\
+         \x20 local q = self.objects.quadrado\n\
+         \x20 if q then\n\
+         \x20   local dx, dy = nn.input.move()\n\
+         \x20   q.x = q.x + dx * 300 * dt\n\
+         \x20   q.y = q.y + dy * 300 * dt\n\
+         \x20 end\n\
+         end\n\
+         \n\
+         -- Dois corpos se tocaram (e.object_a e e.object_b são os objetos).\n\
+         function cena:contact(e)\n\
          end\n\
          \n\
          return cena\n"

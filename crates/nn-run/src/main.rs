@@ -20,6 +20,7 @@ uso:
 opções de novo:
   --titulo <título>    título do jogo (padrão: nome da pasta)
   --modelo <nome>      padrao: título, partida, pausa e recorde (padrão)
+                       visual: fase montada no NN Studio (cena visual)
                        minimo: só uma cena com um quadrado que anda
 
 opções de exportar:
@@ -70,7 +71,9 @@ fn novo(args: &[String]) -> ExitCode {
             "--modelo" => value("--modelo").and_then(|v| {
                 Template::from_name(&v)
                     .map(|t| opts.template = t)
-                    .ok_or_else(|| format!("modelo desconhecido: {v} (use padrao ou minimo)"))
+                    .ok_or_else(|| {
+                        format!("modelo desconhecido: {v} (use padrao, visual ou minimo)")
+                    })
             }),
             other if other.starts_with("--") => Err(format!("opção desconhecida: {other}")),
             other => {

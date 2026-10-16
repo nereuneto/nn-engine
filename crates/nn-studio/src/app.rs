@@ -65,6 +65,8 @@ pub struct StudioApp {
     shortcuts: bool,
     logo: Option<egui::TextureHandle>,
     window_title: String,
+    /// GPU do editor (as cenas visuais são desenhadas com ela).
+    render_state: Option<eframe::egui_wgpu::RenderState>,
 }
 
 impl std::fmt::Debug for StudioApp {
@@ -92,11 +94,21 @@ pub fn run(options: StudioOptions) -> eframe::Result<()> {
     eframe::run_native(
         "NN Studio",
         native,
-        Box::new(move |cc| Ok(Box::new(StudioApp::new(&cc.egui_ctx, options)))),
+        Box::new(move |cc| {
+            let mut app = StudioApp::new(&cc.egui_ctx, options);
+            app.set_render_state(cc.wgpu_render_state.clone());
+            Ok(Box::new(app))
+        }),
     )
 }
 
 impl StudioApp {
+    /// GPU do editor, para desenhar as cenas visuais (sem ela, a aba da
+    /// cena mostra só os contornos).
+    pub fn set_render_state(&mut self, state: Option<eframe::egui_wgpu::RenderState>) {
+        self.render_state = state;
+    }
+
     pub fn new(ctx: &egui::Context, options: StudioOptions) -> Self {
         let settings = options
             .settings_path
@@ -130,6 +142,7 @@ impl StudioApp {
             shortcuts: false,
             logo,
             window_title: String::new(),
+            render_state: None,
         };
         theme::apply(ctx, app.settings.theme, app.settings.zoom);
         if let Some(dir) = options.open {
@@ -246,6 +259,7 @@ impl StudioApp {
                 settings: &mut self.settings,
                 audio: &mut self.audio,
                 exe: &self.exe,
+                render_state: self.render_state.as_ref(),
             };
             if ws.run(cmd, ctx, &mut env) {
                 return;
@@ -306,9 +320,22 @@ impl StudioApp {
         let weight =
             |m: egui::Modifiers| m.shift as u8 + m.alt as u8 + m.command as u8 + m.ctrl as u8;
         cmds.sort_by_key(|(_, s)| std::cmp::Reverse(weight(s.modifiers)));
+        // Ctrl+Z / Ctrl+Y num campo de texto ficam com o campo.
+        let typing = ctx.text_edit_focused();
         let mut out = Vec::new();
         ctx.input_mut(|i| {
+            if !typing
+                && i.consume_shortcut(&egui::KeyboardShortcut::new(
+                    egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+                    egui::Key::Z,
+                ))
+            {
+                out.push(Command::Redo);
+            }
             for (c, s) in &cmds {
+                if typing && matches!(c, Command::Undo | Command::Redo) {
+                    continue;
+                }
                 if i.consume_shortcut(s) {
                     out.push(*c);
                 }
@@ -364,6 +391,7 @@ impl StudioApp {
                 ui.separator();
                 for c in [
                     Command::NewScene,
+                    Command::NewCodeScene,
                     Command::NewScript,
                     Command::NewFolder,
                     Command::ImportFiles,
@@ -384,6 +412,12 @@ impl StudioApp {
                 }
             });
             ui.menu_button("Editar", |ui| {
+                for c in [Command::Undo, Command::Redo] {
+                    if self.command_button(ui, c) {
+                        out.push(c);
+                    }
+                }
+                ui.separator();
                 for c in [Command::Find, Command::Replace, Command::GoToLine] {
                     if self.command_button(ui, c) {
                         out.push(c);
@@ -402,7 +436,7 @@ impl StudioApp {
                 }
             });
             ui.menu_button("Jogo", |ui| {
-                for c in [Command::Play, Command::Stop] {
+                for c in [Command::Play, Command::TestHere, Command::Stop] {
                     if self.command_button(ui, c) {
                         out.push(c);
                     }
@@ -416,7 +450,13 @@ impl StudioApp {
                 }
             });
             ui.menu_button("Exibir", |ui| {
-                for c in [Command::ShowHome, Command::ShowFiles, Command::ShowConsole] {
+                for c in [
+                    Command::ShowHome,
+                    Command::ShowFiles,
+                    Command::ShowHierarchy,
+                    Command::ShowInspector,
+                    Command::ShowConsole,
+                ] {
                     if self.command_button(ui, c) {
                         out.push(c);
                     }
@@ -692,7 +732,7 @@ impl StudioApp {
             }
             if !save && let Some(ws) = self.project_mut() {
                 // Descarta: os documentos voltam ao que está no disco.
-                ws.docs.clear();
+                ws.discard_changes();
             }
             self.pending = None;
             self.proceed(ctx, p);
@@ -835,6 +875,7 @@ impl StudioApp {
                                 settings: &mut self.settings,
                                 audio: &mut self.audio,
                                 exe: &self.exe,
+                                render_state: self.render_state.as_ref(),
                             };
                             commands.extend(ws.ui(ui, &mut env));
                         }

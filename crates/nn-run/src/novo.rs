@@ -11,15 +11,19 @@ pub enum Template {
     Padrao,
     /// Só uma cena com um quadrado que anda.
     Minimo,
+    /// Fase de plataforma montada no NN Studio (cena visual `.cena`) com um
+    /// script pequeno: o jeito de começar pelo editor.
+    Visual,
 }
 
 impl Template {
-    pub const ALL: [Template; 2] = [Template::Padrao, Template::Minimo];
+    pub const ALL: [Template; 3] = [Template::Padrao, Template::Visual, Template::Minimo];
 
     pub fn name(self) -> &'static str {
         match self {
             Template::Padrao => "padrao",
             Template::Minimo => "minimo",
+            Template::Visual => "visual",
         }
     }
 
@@ -27,6 +31,7 @@ impl Template {
         match name {
             "padrao" | "padrão" => Some(Template::Padrao),
             "minimo" | "mínimo" => Some(Template::Minimo),
+            "visual" => Some(Template::Visual),
             _ => None,
         }
     }
@@ -54,6 +59,31 @@ impl Template {
                 "assets/sons/confirmar.wav",
             ),
             Template::Minimo => modelo!("minimo": "config.lua", "main.lua"),
+            Template::Visual => &[
+                ("config.lua", include_bytes!("../modelos/visual/config.lua")),
+                ("LEIAME.md", include_bytes!("../modelos/visual/LEIAME.md")),
+                (
+                    "cenas/fase.cena",
+                    include_bytes!("../modelos/visual/cenas/fase.cena"),
+                ),
+                (
+                    "cenas/fase.lua",
+                    include_bytes!("../modelos/visual/cenas/fase.lua"),
+                ),
+                // As imagens e o som são os mesmos do modelo padrão.
+                (
+                    "assets/imagens/heroi.png",
+                    include_bytes!("../modelos/padrao/assets/imagens/heroi.png"),
+                ),
+                (
+                    "assets/imagens/moeda.png",
+                    include_bytes!("../modelos/padrao/assets/imagens/moeda.png"),
+                ),
+                (
+                    "assets/sons/moeda.wav",
+                    include_bytes!("../modelos/padrao/assets/sons/moeda.wav"),
+                ),
+            ],
         }
     }
 }

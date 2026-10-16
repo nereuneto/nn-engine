@@ -9,31 +9,40 @@ use std::time::Instant;
 
 /// Argumento que faz o executável rodar um jogo em vez do editor.
 pub const PLAY_ARG: &str = "--jogar";
+/// Argumento que escolhe a cena inicial (Testar daqui).
+pub const SCENE_ARG: &str = "--cena";
 
 #[derive(Debug)]
 pub struct GameProcess {
     child: Child,
+    stdin: Option<std::process::ChildStdin>,
     lines: Receiver<String>,
     started: Instant,
     project: PathBuf,
 }
 
 impl GameProcess {
-    /// Abre o jogo da pasta `project` com o executável `exe`.
+    /// Abre o jogo da pasta `project` com o executável `exe`, começando
+    /// em `scene` (ou na cena inicial do projeto).
     /// `wake` é chamado quando chega saída nova (para redesenhar o editor).
     pub fn start(
         exe: &Path,
         project: &Path,
+        scene: Option<&str>,
         wake: impl Fn() + Send + Sync + Clone + 'static,
     ) -> std::io::Result<Self> {
-        let mut child = Command::new(exe)
-            .arg(PLAY_ARG)
-            .arg(project)
+        let mut cmd = Command::new(exe);
+        cmd.arg(PLAY_ARG).arg(project);
+        if let Some(scene) = scene {
+            cmd.arg(SCENE_ARG).arg(scene);
+        }
+        let mut child = cmd
             .current_dir(project)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
+        let stdin = child.stdin.take();
         let (tx, rx) = channel();
         if let Some(out) = child.stdout.take() {
             spawn_reader(out, tx.clone(), wake.clone());
@@ -43,10 +52,28 @@ impl GameProcess {
         }
         Ok(Self {
             child,
+            stdin,
             lines: rx,
             started: Instant::now(),
             project: project.to_path_buf(),
         })
+    }
+
+    /// Manda uma linha para o jogo (ajuste ao vivo). `false` se não deu.
+    pub fn send(&mut self, line: &str) -> bool {
+        use std::io::Write;
+        let Some(stdin) = &mut self.stdin else {
+            return false;
+        };
+        let ok = stdin
+            .write_all(line.as_bytes())
+            .and_then(|()| stdin.write_all(b"\n"))
+            .and_then(|()| stdin.flush())
+            .is_ok();
+        if !ok {
+            self.stdin = None;
+        }
+        ok
     }
 
     /// Linhas novas da saída do jogo.
@@ -69,6 +96,7 @@ impl GameProcess {
 
     /// Fecha o jogo.
     pub fn stop(&mut self) {
+        self.stdin = None;
         if self.exited().is_none() {
             let _ = self.child.kill();
             let _ = self.child.wait();
@@ -149,7 +177,7 @@ mod tests {
         .unwrap();
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let mut g = GameProcess::start(&script, &dir, || {}).unwrap();
+        let mut g = GameProcess::start(&script, &dir, None, || {}).unwrap();
         let start = Instant::now();
         let mut lines = Vec::new();
         let status = loop {

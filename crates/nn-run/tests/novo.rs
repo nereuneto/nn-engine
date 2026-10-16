@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use nn_app::{AppConfig, Headless, SceneStack};
+use nn_app::{AppConfig, Headless, Scene, SceneStack};
 use nn_input::KeyCode;
 use nn_run::{NewOptions, Template, create_project};
 use nn_script::{Project, ScriptRuntime};
@@ -117,6 +117,74 @@ fn modelo_minimo_e_titulo_escolhido() {
     };
     h.run_frames(5);
     assert_eq!(h.game.len(), 1);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Uma cena só, para ler o estado do script.
+struct Uma(nn_script::LuaScene);
+impl nn_app::Game for Uma {
+    fn fixed_update(&mut self, ctx: &mut nn_app::Context) {
+        self.0.fixed_update(ctx);
+    }
+    fn update(&mut self, ctx: &mut nn_app::Context) {
+        let _ = self.0.update(ctx);
+    }
+    fn render(&mut self, ctx: &mut nn_app::Context) {
+        self.0.render(ctx);
+    }
+}
+
+#[test]
+fn modelo_visual_roda_a_fase_e_pega_moedas() {
+    let dir = temp("visual");
+    let r = create_project(&NewOptions {
+        dir: dir.clone(),
+        title: None,
+        template: Template::Visual,
+    })
+    .unwrap();
+    assert!(r.files.contains(&"cenas/fase.cena".to_string()));
+    let project = Project::open(&dir).unwrap();
+    assert_eq!(project.start, "cenas/fase.cena");
+    assert!(ScriptRuntime::new(&dir).unwrap().check_syntax().is_empty());
+
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let config = project
+        .config
+        .clone()
+        .size(320, 180)
+        .save_dir(dir.join("dados"))
+        .hot_reload(false);
+    let h = Headless::new(config, move |ctx| {
+        let mut s = rt.scene("cenas/fase.cena");
+        s.enter(ctx);
+        Uma(s)
+    });
+    let mut h = match h {
+        Ok(h) => h,
+        Err(e) => {
+            assert!(
+                !std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1"),
+                "GPU obrigatória: {e}"
+            );
+            return;
+        }
+    };
+    h.run_frames(30);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(h.game.0.field::<i64>("total"), Some(3));
+    // Anda para a direita até a moeda que está no chão.
+    h.ctx.input.press_key(KeyCode::KeyD);
+    h.run_frames(150);
+    h.ctx.input.release_key(KeyCode::KeyD);
+    h.run_frames(5);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(
+        h.game.0.field::<i64>("pontos"),
+        Some(1),
+        "pegou a moeda do chão"
+    );
     drop(h);
     std::fs::remove_dir_all(&dir).unwrap();
 }

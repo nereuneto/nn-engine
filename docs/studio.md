@@ -22,7 +22,10 @@ projetos em Lua da ferramenta `nn`, então dá para alternar entre os dois.
   nada). Pastas que sumiram aparecem como "pasta não encontrada".
 - **✨ Novo projeto:** escolha o nome do jogo, onde criar e o modelo:
   - **Padrão:** um jogo pequeno e completo (título com menu, partida, pausa, fim
-    e recorde salvo). É o melhor jeito de começar.
+    e recorde salvo). É o melhor jeito de começar pelo código.
+  - **Cena visual:** uma fase de plataforma montada no editor, com o mouse
+    (herói, plataformas, moedas e placar), e um script curto com as regras. O
+    jeito de começar pelo editor.
   - **Mínimo:** só uma cena com um quadrado que anda.
 - **📂 Abrir projeto:** escolha a pasta do jogo (a que tem o `config.lua` ou o
   `main.lua`). Também dá para **arrastar a pasta** para a janela.
@@ -35,8 +38,10 @@ Os painéis podem ser arrastados pelas abas e encaixados onde você quiser. O
 layout e as abas abertas ficam guardados para cada projeto; para voltar ao
 original, use **Exibir > Restaurar layout padrão**.
 
-- **Arquivos** (à esquerda): a pasta do projeto.
-- **Início, código, imagens, sons e mapas** (no centro).
+- **Arquivos** (à esquerda, em cima): a pasta do projeto.
+- **Hierarquia** (à esquerda, embaixo): os objetos da cena visual aberta.
+- **Início, cenas, código, imagens, sons e mapas** (no centro).
+- **Inspetor** (à direita): as propriedades do objeto selecionado.
 - **Console** (embaixo): mensagens do jogo e do editor.
 
 ### Modo Simples e modo Completo
@@ -56,9 +61,12 @@ só arquivos. A busca ignora acentos e aceita letras soltas ("cfg" acha
 
 - **Clique** num arquivo para abrir. Imagens mostram uma miniatura na lista;
   sons têm um ▶ para ouvir.
-- **➕ Novo:** cena (já vem com um quadrado que anda), script (módulo para usar
-  com `require`) ou pasta. Cenas novas vão para `cenas/` e scripts para `lib/`,
-  se essas pastas existirem.
+- **➕ Novo:** cena visual (montada com o mouse, veja abaixo), cena em código
+  (já vem com um quadrado que anda), script (módulo para usar com `require`)
+  ou pasta. Cenas novas vão para `cenas/` e scripts para `lib/`, se essas
+  pastas existirem.
+- **Arraste** uma imagem, um mapa ou um som do painel para dentro de uma cena
+  visual (vira um objeto) ou para um campo de arquivo do Inspetor.
 - **📥 Importar** ou **arrastar arquivos** do computador para a janela:
   imagens vão para `assets/imagens`, sons para `assets/sons` e fontes para
   `assets/fontes`. Com uma pasta selecionada no painel, vão para ela. Nada é
@@ -90,6 +98,114 @@ só arquivos. A busca ignora acentos e aceita letras soltas ("cfg" acha
   recarregado sozinho; se você também tiver alterações, ele pergunta qual
   versão manter.
 
+## Cenas visuais
+
+Uma cena visual (arquivo `.cena`) é montada com o mouse: você põe objetos,
+arruma no lugar e ajusta as propriedades, sem escrever código. Ela roda na
+engine como qualquer outra cena (`nn.scene.switch("cenas/fase.cena")`, cena
+inicial no `config.lua`, exportação, recarregar ao salvar). Crie uma com
+**Ctrl+N** ou **➕ Novo > Cena visual**.
+
+![Cena visual do modelo "Cena visual" aberta no NN Studio](imagens/nn-studio-cena.png)
+
+### A aba da cena
+
+A cena é desenhada pela própria engine, do jeito que vai aparecer no jogo. O
+retângulo "tela do jogo" mostra o que cabe na janela (o tamanho do
+`config.lua`), a partir da posição da câmera.
+
+- **Navegar:** role o mouse para o zoom (no ponto do cursor); arraste com o
+  botão do meio, com o direito ou com **Espaço** segurado para mover a vista.
+  **F** (ou ⛶ Enquadrar) enquadra o selecionado ou a cena toda.
+- **Selecionar:** clique num objeto; **Shift** ou **Ctrl** somam à seleção;
+  arraste num espaço vazio para selecionar com um retângulo. **Esc** limpa.
+- **Ferramentas:** **W** mover, **E** girar, **R** escalar. Arraste o objeto ou
+  as alças: as setas vermelha e verde movem só em X ou em Y; o círculo gira
+  (com **Ctrl**, de 15 em 15 graus); os cantos escalam (com **Shift**,
+  proporcional).
+- **Encaixar** prende na grade ao mover (segurar **Ctrl** também encaixa). As
+  **setas do teclado** movem o selecionado 1 unidade (10 com **Shift**).
+- **Ctrl+D** duplica, **Del** apaga. **➕ Objeto** cria um objeto vazio, uma
+  imagem, um retângulo, um círculo, um texto, uma câmera, um som ou
+  partículas no meio da vista.
+- **Arrastar arquivos** do painel Arquivos para a cena: uma imagem vira um
+  sprite, um mapa `.tmj` vira um mapa, um som vira um objeto de som.
+- **Colisões** mostra os corpos físicos (verde) por cima.
+
+### Hierarquia
+
+A lista dos objetos da cena, na ordem de desenho. Clique para selecionar,
+clique duas vezes (ou **F2**) para renomear. O 👁 esconde e o cadeado trava (um
+objeto travado não é selecionado clicando na cena). **Arraste** um objeto para
+mudar a ordem ou solte em cima de outro para virar filho dele: o filho anda,
+gira e escala junto com o pai. O botão direito tem Duplicar, Criar filho
+vazio, Tirar do pai e Excluir; o campo 🔍 filtra pelo nome.
+
+### Inspetor
+
+Sem nada selecionado, mostra a cena: o **script** dela, a cor de **fundo** e a
+**gravidade**. Com um objeto selecionado, mostra o nome, visível/travado, a
+**Transformação** (posição, rotação em graus, escala e camada: camada maior é
+desenhada por cima) e os **componentes**:
+
+| Componente | O que faz |
+|---|---|
+| Imagem (sprite) | Mostra uma imagem ou um quadro de uma spritesheet. Com **É uma tira de quadros**, escolha o quadro clicando na grade. |
+| Texto | Escreve um texto no mundo. |
+| Forma | Retângulo ou círculo de uma cor. |
+| Corpo físico | Cai, colide, para no chão (dinâmico, estático ou cinemático; caixa ou círculo; sensor; plataforma de mão única). |
+| Mapa do Tiled | Desenha um mapa `.tmj`, com a colisão dos tiles. |
+| Câmera | Onde a câmera começa, ou quem ela segue (com suavidade e limite no mapa). |
+| Som | Toca um som ou música quando a cena começa. |
+| Partículas | Fumaça, faíscas, poeira, chuva... |
+
+**➕ Adicionar componente** acrescenta outro; o menu ☰ de cada um sobe, desce
+ou remove. Campos de arquivo aceitam arrastar do painel Arquivos. No modo
+Simples, opções avançadas ficam escondidas.
+
+### Desfazer e salvar
+
+**Ctrl+Z** desfaz e **Ctrl+Y** (ou Ctrl+Shift+Z) refaz o que foi feito na cena,
+na Hierarquia ou no Inspetor; arrastar com o mouse conta como um passo só.
+**Ctrl+S** salva o `.cena`. A aba mostra "•" enquanto houver alterações.
+
+O `.cena` é um arquivo Lua comum e legível (veja o formato no
+[guia do Lua](lua.md#cenas-visuais-cena)). Dá para editá-lo à mão: se ele mudar
+fora do editor, a aba recarrega sozinha.
+
+### Testar daqui e ajuste ao vivo
+
+**▶ Testar daqui (F6)** salva tudo e roda o jogo começando nesta cena, em vez
+da cena inicial do projeto.
+
+Com o jogo aberto mostrando a cena, aparece **• Ao vivo** na barra da cena: o
+que você mudar no Inspetor ou arrastando na cena aparece no jogo **na hora,
+sem salvar**. Para guardar a mudança, salve; para descartar, desfaça.
+
+### O script da cena
+
+A cena pode ter um script Lua (no Inspetor, **Script > Criar**). Ele recebe os
+mesmos callbacks de uma cena em código (`enter`, `fixed_update`, `update`,
+`draw`...) e encontra os objetos em `self.objects`, pelo nome:
+
+```lua
+local cena = {}
+
+function cena:fixed_update(dt)
+  local heroi = self.objects.heroi
+  heroi.body.vx = nn.input.move() * 300
+end
+
+-- Dois corpos se tocaram.
+function cena:contact(e)
+  if e.object_a.name == "moeda" then e.object_a:destroy() end
+end
+
+return cena
+```
+
+A referência completa está no [guia do Lua](lua.md#cenas-visuais-cena).
+
 ## Imagens, sons e mapas
 
 - **Imagens:** zoom (botões ou Ctrl + rolar), grade de pixels de perto e
@@ -105,6 +221,8 @@ só arquivos. A busca ignora acentos e aceita letras soltas ("cfg" acha
 
 - **▶ Jogar (F5)** salva tudo e abre o jogo na janela dele. Com o jogo aberto,
   salve um arquivo: a mudança aparece na hora, sem fechar o jogo.
+- **▶ Testar daqui (F6)**, numa cena visual, começa o jogo nela (veja
+  [Testar daqui e ajuste ao vivo](#testar-daqui-e-ajuste-ao-vivo)).
 - **⟳ Reiniciar (F5)** fecha e abre o jogo de novo; **⏹ Parar (Shift+F5)**
   fecha.
 - O **Console** recebe o que o jogo escreve com `print()`, os avisos e os
@@ -134,8 +252,10 @@ mensagem diz onde está o erro.
 | Atalho | Comando |
 |---|---|
 | F5 / Shift+F5 | Jogar (ou reiniciar) / Parar |
+| F6 | Testar a partir da cena visual aberta |
 | Ctrl+S / Ctrl+Shift+S | Salvar / Salvar tudo |
-| Ctrl+N | Nova cena |
+| Ctrl+Z / Ctrl+Y | Desfazer / refazer (na cena visual) |
+| Ctrl+N | Nova cena visual |
 | Ctrl+Shift+N / Ctrl+O | Novo projeto / Abrir projeto |
 | Ctrl+Shift+P / Ctrl+P | Paleta de comandos / Abrir arquivo |
 | Ctrl+F / Ctrl+H / Ctrl+G | Buscar / Substituir / Ir para a linha |
@@ -144,6 +264,10 @@ mensagem diz onde está o erro.
 | Ctrl+W | Fechar aba |
 | Ctrl+= / Ctrl+- / Ctrl+0 | Aumentar / diminuir / tamanho normal da interface |
 | F2 / Del (no painel) | Renomear / mandar para a lixeira |
+| W / E / R (na cena) | Mover / girar / escalar |
+| F / Esc (na cena) | Enquadrar / limpar a seleção |
+| Setas, Shift+setas (na cena) | Mover 1 / 10 unidades |
+| Ctrl+D / Del (na cena) | Duplicar / apagar |
 | F1 | Guia do Lua |
 
 A lista também está em **Ajuda > Atalhos do teclado**.
@@ -167,10 +291,18 @@ o jogo.
 - As mensagens de erro do Lua são traduzidas pela própria engine
   (`nn_script::translate_error`), então a tela de erro do jogo também fica em
   português.
+- As cenas visuais são lidas por um módulo Lua dentro da engine
+  (`crates/nn-script/src/cena.lua`). A lista de componentes e dos valores
+  padrão dele é a mesma que o Inspetor usa. Na aba da cena, o editor desenha
+  com o renderer da engine na GPU do próprio editor.
+- **Testar daqui** roda `nn-studio --jogar <pasta> --cena <arquivo>`. O ajuste
+  ao vivo vai pela entrada padrão do jogo, uma linha JSON por mudança
+  (`{"scene": "cenas/fase.cena", "id": 3, "field": "x", "value": 120}`); o
+  jogo avisa no log qual cena está na frente.
 
 ## O que vem depois
 
-As próximas etapas do NN Studio trazem a cena visual (objetos, hierarquia,
-inspetor, mover com o mouse, desfazer), comportamentos prontos sem código,
-eventos "Quando... Então...", o tutorial guiado e editores de pixel art,
-animação, mapas, partículas e menus dentro do próprio editor.
+As próximas etapas do NN Studio trazem comportamentos prontos sem código
+(andar, pular, seguir, coletar...), prefabs, as variáveis do script no
+Inspetor, eventos "Quando... Então...", o tutorial guiado e editores de pixel
+art, animação, mapas, partículas e menus dentro do próprio editor.

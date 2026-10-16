@@ -22,7 +22,11 @@ cargo studio
 
 ![NN Studio](docs/imagens/nn-studio.png)
 
-O NN Studio é o jeito mais fácil de fazer um jogo: crie um projeto a partir de um modelo (ou abra um dos exemplos), edite o código Lua com cores e erros apontados enquanto digita, veja imagens, sons e mapas, arraste arquivos do computador para dentro do projeto e aperte **▶ Jogar (F5)**: o jogo abre na janela dele e, a cada arquivo salvo, a mudança aparece na hora. O console mostra o `print` do jogo e os erros em português, com link direto para a linha. Tem modo Simples e Completo, tema escuro e claro, paleta de comandos (Ctrl+Shift+P) e exportação do jogo pronto para distribuir. Guia completo em **[docs/studio.md](docs/studio.md)**.
+O NN Studio é o jeito mais fácil de fazer um jogo: crie um projeto a partir de um modelo (ou abra um dos exemplos), edite o código Lua com cores e erros apontados enquanto digita, veja imagens, sons e mapas, arraste arquivos do computador para dentro do projeto e aperte **▶ Jogar (F5)**: o jogo abre na janela dele e, a cada arquivo salvo, a mudança aparece na hora. O console mostra o `print` do jogo e os erros em português, com link direto para a linha. Tem modo Simples e Completo, tema escuro e claro, paleta de comandos (Ctrl+Shift+P) e exportação do jogo pronto para distribuir.
+
+Fases e telas também podem ser montadas com o mouse, em **cenas visuais** (`.cena`): arraste imagens, mapas e sons para a cena, mova, gire e escale com as alças, organize os objetos na Hierarquia e ajuste tudo no Inspetor (sprite, texto, forma, corpo físico, mapa, câmera, som, partículas), com desfazer e refazer. **▶ Testar daqui (F6)** abre o jogo direto na cena e, com ele aberto, o que você muda no editor aparece no jogo na hora. Um script Lua opcional encontra os objetos pelo nome (`self.objects.heroi`). Guia completo em **[docs/studio.md](docs/studio.md)**.
+
+![Cena visual no NN Studio](docs/imagens/nn-studio-cena.png)
 
 Tudo o que o NN Studio faz também dá para fazer pela linha de comando, com a ferramenta `nn`:
 
@@ -33,7 +37,7 @@ cargo nn novo ../meu-jogo   # cria um jogo pequeno e completo, pronto para mudar
 cargo nn ../meu-jogo        # joga
 ```
 
-O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado do jeito recomendado (cenas, ações de controle, menus). `--titulo "Meu Jogo"` escolhe o título e `--modelo minimo` cria só uma cena. Detalhes em [docs/lua.md](docs/lua.md#começando).
+O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado do jeito recomendado (cenas, ações de controle, menus). `--titulo "Meu Jogo"` escolhe o título, `--modelo visual` cria uma fase montada como cena visual e `--modelo minimo` cria só uma cena. Detalhes em [docs/lua.md](docs/lua.md#começando).
 
 ### Jogos de demonstração em Lua
 
@@ -136,7 +140,7 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-app` | Janela, loop principal, trait `Game`, cenas, assets, interface (menus), dados salvos, leitura dos controles ([gilrs](https://gitlab.com/gilrs-project/gilrs)) e modo sem janela (`Headless`) para testes |
 | `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, camadas, raycast |
 | `nn-tilemap` | Tilemaps com camadas, tilesets e objetos; importação do editor Tiled (JSON) |
-| `nn-script` | Scripting em Lua: API `nn.*`, cenas em Lua, recarga ao salvar, tela de erro |
+| `nn-script` | Scripting em Lua: API `nn.*`, cenas em Lua e cenas visuais (`.cena`), recarga ao salvar, ajuste ao vivo vindo do editor, tela de erro |
 | `nn-run` | Ferramenta `nn` (cria, roda e exporta projetos Lua, com os modelos de `nn novo`) e `nn-jogo`, o executável dos jogos exportados |
 | `nn-engine` (raiz) | Fachada que reexporta tudo, com `prelude` |
 

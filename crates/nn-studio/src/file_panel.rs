@@ -116,11 +116,15 @@ impl FilePanel {
         ui.horizontal(|ui| {
             ui.menu_button("➕ Novo", |ui| {
                 let dir = self.target_dir(tree).unwrap_or_default();
-                if ui.button("📜 Cena").on_hover_text("Uma tela do jogo (menu, fase, fim...)").clicked() {
+                if ui.button("🖼 Cena visual").on_hover_text("Uma tela do jogo montada com o mouse: arraste imagens, mapas e sons para ela").clicked() {
+                    actions.push(Action::NewItem { kind: NewKind::VisualScene, parent: scene_dir(tree, &dir) });
+                    ui.close();
+                }
+                if ui.button("📜 Cena em código").on_hover_text("Uma tela do jogo escrita em Lua").clicked() {
                     actions.push(Action::NewItem { kind: NewKind::Scene, parent: scene_dir(tree, &dir) });
                     ui.close();
                 }
-                if ui.button("🧩 Script (módulo)").on_hover_text("Código usado por várias cenas, com require").clicked() {
+                if ui.button("🔧 Script (módulo)").on_hover_text("Código usado por várias cenas, com require").clicked() {
                     actions.push(Action::NewItem { kind: NewKind::Module, parent: module_dir(tree, &dir) });
                     ui.close();
                 }
@@ -359,6 +363,22 @@ impl FilePanel {
             let r = if e.is_dir {
                 r
             } else {
+                // Arrastar o arquivo para a cena ou para um campo do Inspetor.
+                let r = r.interact(egui::Sense::drag());
+                r.dnd_set_drag_payload(crate::scene_view::FileDrag(e.rel.clone()));
+                if r.dragged()
+                    && let Some(p) = ui.ctx().pointer_interact_pos()
+                {
+                    egui::Area::new(egui::Id::new("arrastando-arquivo"))
+                        .order(egui::Order::Tooltip)
+                        .fixed_pos(p + Vec2::new(14.0, 8.0))
+                        .interactable(false)
+                        .show(ui.ctx(), |ui| {
+                            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                                ui.label(&e.name);
+                            });
+                        });
+                }
                 r.on_hover_text(format!(
                     "{}\n{} · {}",
                     e.rel,
@@ -450,14 +470,21 @@ impl FilePanel {
         _mode: Mode,
         actions: &mut Vec<Action>,
     ) {
-        if ui.button("📜 Nova cena aqui").clicked() {
+        if ui.button("🖼 Nova cena visual aqui").clicked() {
+            actions.push(Action::NewItem {
+                kind: NewKind::VisualScene,
+                parent: dir.to_string(),
+            });
+            ui.close();
+        }
+        if ui.button("📜 Nova cena em código aqui").clicked() {
             actions.push(Action::NewItem {
                 kind: NewKind::Scene,
                 parent: dir.to_string(),
             });
             ui.close();
         }
-        if ui.button("🧩 Novo script aqui").clicked() {
+        if ui.button("🔧 Novo script aqui").clicked() {
             actions.push(Action::NewItem {
                 kind: NewKind::Module,
                 parent: dir.to_string(),
@@ -549,6 +576,7 @@ pub fn paint_icon(painter: &egui::Painter, rect: egui::Rect, kind: FileKind, ope
     }
     let (fill, mark) = match kind {
         FileKind::Lua => (rgb(0x4A, 0x86, 0xD8), "lines"),
+        FileKind::Scene => (rgb(0xD9, 0x5B, 0x8A), "picture"),
         FileKind::Text => (rgb(0x8A, 0x93, 0x9E), "lines"),
         FileKind::Map => (rgb(0x4C, 0xA8, 0x5A), "grid"),
         FileKind::Tileset => (rgb(0x3E, 0x8E, 0x7E), "grid"),

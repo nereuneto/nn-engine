@@ -126,6 +126,73 @@ local pausa = { overlay = true }
 
 **Recarga:** ao salvar, as funções da cena são trocadas mas `self` é mantido. O `enter` não roda de novo; se precisar refazer algo, use `reload`.
 
+### Cenas visuais (.cena)
+
+Uma cena também pode ser um arquivo `.cena`, montado com o mouse no [NN Studio](studio.md#cenas-visuais). Ela é usada como qualquer cena: `start = "cenas/fase.cena"` no `config.lua`, `nn.scene.switch("cenas/fase.cena")`, `nn.scene.push(...)`. A engine cria os objetos, carrega as imagens e os sons, monta a física, segue a câmera e desenha tudo sozinha.
+
+O arquivo é uma tabela Lua legível, com um objeto por bloco e um componente por linha:
+
+```lua
+return {
+  format = 1,
+  script = "cenas/fase.lua",     -- opcional: o código da cena
+  background = "#5FB3E0",        -- opcional: cor de fundo (senão, a do config.lua)
+  gravity = -1800,               -- gravidade da física (negativa = cai)
+  objects = {
+    {
+      id = 4, name = "heroi",
+      x = 0, y = -180, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 2,
+      components = {
+        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64 },
+        { type = "body", body = "dynamic", shape = "box", w = 40, h = 60 },
+      },
+      children = { ... },          -- filhos andam, giram e escalam junto
+    },
+  },
+}
+```
+
+Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), `scale_x`, `scale_y`, `visible`, `locked` (só para o editor), `layer` (camada maior é desenhada por cima), `components` e `children`. Campos que faltam usam o valor padrão. Os componentes:
+
+| `type` | Campos (padrão) |
+|---|---|
+| `sprite` | `image`, `frame_w`, `frame_h` (0 = imagem inteira), `frame` (1), `w`, `h` (0 = tamanho da imagem), `color` ("#FFFFFF"), `flip_x`, `flip_y`, `pixel_art` (true) |
+| `text` | `text`, `size` (32), `color`, `anchor` ("center", "left", "right"...) |
+| `shape` | `shape` ("rect" ou "circle"), `w`, `h` (64), `radius` (32), `color` |
+| `body` | `body` ("dynamic", "static" ou "kinematic"), `shape` ("box" ou "circle"), `w`, `h` (32), `radius` (16), `sensor`, `one_way`, `bounce` (0), `gravity_scale` (1), `tag` (padrão: o nome do objeto) |
+| `map` | `map` (arquivo .tmj), `scale` (1), `collision` (true) |
+| `camera` | `follow` (nome do objeto a seguir), `smooth` (6), `zoom` (1), `limit_to_map` (true) |
+| `sound` | `sound`, `autoplay` (true), `loop`, `volume` (1), `channel` ("effects" ou "music") |
+| `particles` | `rate` (20), `lifetime` (1), `speed_min`, `speed_max`, `direction` (90, em graus), `spread` (360), `gravity`, `size_start`, `size_end`, `color_start`, `color_end`, `blend`, `emitting` |
+
+**O script da cena** é um arquivo `.lua` que devolve uma tabela com os callbacks de sempre (`enter`, `fixed_update`, `update`, `draw`, `exit`, `resume`, `reload`), chamados depois do que a engine faz sozinha. Os objetos já existem quando o `enter` roda:
+
+| No script | O que é |
+|---|---|
+| `self.objects.nome` | O objeto com esse nome (o primeiro, se houver vários). |
+| `self:find(nome)`, `self:find_all(nome)` | Um objeto / a lista de todos com o nome. |
+| `obj.x`, `obj.y`, `obj.rotation`, `obj.scale_x`, `obj.scale_y`, `obj.visible`, `obj.layer` | Leitura e escrita. Com corpo físico, `x` e `y` acompanham o corpo. |
+| `obj.sprite`, `obj.text`, `obj.shape`, `obj.camera` | O componente (primeiro do tipo): mude os campos à vontade (`obj.sprite.frame = 3`, `obj.text.text = "Fim"`, `obj.shape.color = "#FF0000"`). |
+| `obj.body` | O corpo físico ([nn.physics](#nnphysics)): `vx`, `vy`, `on_ground`, `:set_position`... |
+| `obj.map`, `obj.particles`, `obj.sound` | O mapa carregado, o emissor de partículas e o som. |
+| `obj:component(tipo)`, `obj.components` | Qualquer componente, pelo tipo / todos. |
+| `obj:world_transform()` | Posição, rotação e escala no mundo (somando os pais). |
+| `obj:destroy()` | Tira o objeto (e os filhos) da cena. |
+| `obj.parent`, `obj.children`, `obj.name`, `obj.id` | A árvore de objetos. |
+
+Para reagir a toques entre corpos, defina `contact`: ele recebe os eventos da física com os objetos em `e.object_a` e `e.object_b` (o sensor, se houver, vem em `a`):
+
+```lua
+function cena:contact(e)
+  if e.type == "enter" and e.object_a.name == "moeda" and e.object_b == self.objects.heroi then
+    e.object_a:destroy()
+  end
+end
+```
+
+Ao salvar o `.cena` ou o script com o jogo aberto, os objetos voltam ao que está no arquivo e o resto do estado do script (`self.pontos`...) continua.
+
 ## Referência da API
 
 Convenções:

@@ -1,0 +1,89 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  script = "cenas/fase.lua",
+  background = "#5FB3E0",
+  gravity = -1800,
+  objects = {
+    {
+      id = 1, name = "chao",
+      x = 0, y = -260, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 1400, h = 40, radius = 32, color = "#3E8948" },
+        { type = "body", body = "static", shape = "box", w = 1400, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 2, name = "plataforma",
+      x = -280, y = -110, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 240, h = 24, radius = 32, color = "#8B5E34" },
+        { type = "body", body = "static", shape = "box", w = 240, h = 24, radius = 16, sensor = false, one_way = true, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 3, name = "plataforma",
+      x = 260, y = 20, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 240, h = 24, radius = 32, color = "#8B5E34" },
+        { type = "body", body = "static", shape = "box", w = 240, h = 24, radius = 16, sensor = false, one_way = true, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 4, name = "heroi",
+      x = 0, y = -180, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 2,
+      components = {
+        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true },
+        { type = "body", body = "dynamic", shape = "box", w = 40, h = 60, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 5, name = "moeda",
+      x = -280, y = -50, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/moeda.png", frame_w = 16, frame_h = 16, frame = 1, w = 40, h = 40, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true },
+        { type = "body", body = "static", shape = "circle", w = 32, h = 32, radius = 18, sensor = true, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 6, name = "moeda",
+      x = 260, y = 80, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/moeda.png", frame_w = 16, frame_h = 16, frame = 1, w = 40, h = 40, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true },
+        { type = "body", body = "static", shape = "circle", w = 32, h = 32, radius = 18, sensor = true, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 7, name = "moeda",
+      x = 520, y = -200, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/moeda.png", frame_w = 16, frame_h = 16, frame = 1, w = 40, h = 40, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true },
+        { type = "body", body = "static", shape = "circle", w = 32, h = 32, radius = 18, sensor = true, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 8, name = "placar",
+      x = 0, y = 300, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5,
+      components = {
+        { type = "text", text = "Moedas: 0", size = 36, color = "#FFFFFF", anchor = "center" },
+      },
+    },
+    {
+      id = 9, name = "som_moeda",
+      x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sound", sound = "assets/sons/moeda.wav", autoplay = false, loop = false, volume = 1, channel = "effects" },
+      },
+    },
+  },
+}
