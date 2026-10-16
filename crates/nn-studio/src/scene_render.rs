@@ -563,7 +563,8 @@ pub struct SceneRenderer {
     device: wgpu::Device,
     egui: Arc<egui::mutex::RwLock<egui_wgpu::Renderer>>,
     renderer: Renderer,
-    textures: HashMap<(String, bool), Option<TextureId>>,
+    /// Imagem → textura (com e sem pixel art; `None` se não abriu).
+    textures: HashMap<String, [Option<Option<TextureId>>; 2]>,
     maps: HashMap<(String, u32), Option<nn_tilemap::TileMap>>,
     targets: HashMap<String, Target>,
     anims: crate::anim_file::AnimCache,
@@ -1043,29 +1044,33 @@ impl SceneRenderer {
 
     /// Um arquivo mudou no disco: imagens e mapas são lidos de novo.
     pub fn invalidate(&mut self, root: &Path, rel: &str) {
-        let keys: Vec<(String, bool)> = self
-            .textures
-            .keys()
-            .filter(|(r, _)| r == rel)
-            .cloned()
-            .collect();
-        for key in keys {
-            if let Some(Some(id)) = self.textures.get(&key).copied() {
-                let opts = if key.1 {
-                    TextureOptions::PIXEL_ART
-                } else {
-                    TextureOptions::default()
-                };
-                if let Ok(bytes) = std::fs::read(root.join(rel))
-                    && self
-                        .renderer
-                        .replace_texture_bytes(id, &bytes, opts)
-                        .is_ok()
-                {
-                    continue;
+        if let Some(entry) = self.textures.get(rel).copied() {
+            let mut keep = [None, None];
+            for (i, slot) in entry.into_iter().enumerate() {
+                if let Some(Some(id)) = slot {
+                    let opts = if i == 1 {
+                        TextureOptions::PIXEL_ART
+                    } else {
+                        TextureOptions::default()
+                    };
+                    if let Ok(bytes) = std::fs::read(root.join(rel))
+                        && self
+                            .renderer
+                            .replace_texture_bytes(id, &bytes, opts)
+                            .is_ok()
+                    {
+                        keep[i] = slot;
+                    }
                 }
             }
-            self.textures.remove(&key);
+            if keep == [None, None] {
+                self.textures.remove(rel);
+            } else {
+                self.textures.insert(rel.to_string(), keep);
+            }
+        }
+        if crate::files::FileKind::of(Path::new(rel)) == crate::files::FileKind::Anim {
+            self.anims.forget(rel);
         }
         // Mapas dependem de tilesets e imagens: lidos de novo.
         self.maps.clear();
@@ -1075,18 +1080,18 @@ impl SceneRenderer {
         if rel.is_empty() {
             return None;
         }
-        let renderer = &mut self.renderer;
-        *self
-            .textures
-            .entry((rel.to_string(), pixel_art))
-            .or_insert_with(|| {
-                let opts = if pixel_art {
-                    TextureOptions::PIXEL_ART
-                } else {
-                    TextureOptions::default()
-                };
-                renderer.load_texture(root.join(rel), opts).ok()
-            })
+        let i = usize::from(pixel_art);
+        if let Some(Some(t)) = self.textures.get(rel).map(|e| e[i]) {
+            return t;
+        }
+        let opts = if pixel_art {
+            TextureOptions::PIXEL_ART
+        } else {
+            TextureOptions::default()
+        };
+        let t = self.renderer.load_texture(root.join(rel), opts).ok();
+        self.textures.entry(rel.to_string()).or_default()[i] = Some(t);
+        t
     }
 
     /// Versão do mapa aberto no editor que está sendo desenhada.
@@ -1133,13 +1138,13 @@ impl SceneRenderer {
                 let ok = m
                     .load_textures(|p| {
                         let r = p.to_string_lossy().replace('\\', "/");
-                        match textures.get(&(r.clone(), true)) {
-                            Some(Some(id)) => Ok(*id),
+                        match textures.get(r.as_str()).and_then(|e| e[1]) {
+                            Some(Some(id)) => Ok(id),
                             _ => {
                                 let id =
                                     renderer.load_texture(root.join(p), TextureOptions::PIXEL_ART);
                                 if let Ok(id) = &id {
-                                    textures.insert((r, true), Some(*id));
+                                    textures.entry(r).or_default()[1] = Some(Some(*id));
                                 }
                                 id
                             }

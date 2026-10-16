@@ -1071,6 +1071,14 @@ pub fn var_names() -> Vec<String> {
     VIEW.with_borrow(|v| v.vars.iter().map(|(k, _)| k.clone()).collect())
 }
 
+/// Componente de interface (menus e HUD)?
+pub fn is_ui_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "panel" | "button" | "bar" | "icons" | "slider" | "checkbox" | "textfield"
+    )
+}
+
 /// Pontos da tela para prender o HUD: (nome, rótulo, fração x, fração y a
 /// partir do canto de cima à esquerda). Como `M.ANCHORS` do cena.lua.
 pub const SCREEN_ANCHORS: [(&str, &str, f64, f64); 9] = [

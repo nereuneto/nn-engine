@@ -131,8 +131,33 @@ impl HierarchyPanel {
                     ui.weak("A cena está vazia. Use ➕ ou arraste imagens do painel Arquivos para a cena.");
                 }
                 if self.filter.trim().is_empty() {
-                    let objects = doc.data.objects.clone();
-                    rows(ui, doc, &objects, 0, &mut drop, &mut out);
+                    // Só as linhas que aparecem são desenhadas (cenas com
+                    // milhares de objetos); as outras viram espaço.
+                    let mut flat = Vec::new();
+                    flatten(&doc.data.objects, 0, &doc.collapsed, &mut flat);
+                    let step_id = ui.id().with("altura-linha");
+                    let step: f32 = ui.data(|d| d.get_temp(step_id)).unwrap_or(21.0);
+                    // (Uma folga de linhas além das que aparecem.)
+                    let clip = ui.clip_rect().expand2(egui::vec2(0.0, step * 12.0));
+                    let mut measured = None;
+                    for (id, depth) in flat {
+                        let top = ui.cursor().top();
+                        if top + step < clip.top() || top > clip.bottom() {
+                            ui.add_space(step);
+                            continue;
+                        }
+                        let Some(o) = doc.data.find(id).cloned() else {
+                            continue;
+                        };
+                        row(ui, doc, &o, depth, &mut drop, &mut out);
+                        measured.get_or_insert(ui.cursor().top() - top);
+                    }
+                    if let Some(h) = measured
+                        && h > 4.0
+                        && (h - step).abs() > 0.1
+                    {
+                        ui.data_mut(|d| d.insert_temp(step_id, h));
+                    }
                 } else {
                     let mut found = Vec::new();
                     crate::scene_data::visit(&doc.data.objects, &mut |o| {
@@ -199,18 +224,18 @@ impl HierarchyPanel {
     }
 }
 
-fn rows(
-    ui: &mut egui::Ui,
-    doc: &mut SceneDoc,
+/// As linhas da Hierarquia em ordem: (objeto, profundidade), sem os filhos
+/// de quem está fechado.
+fn flatten(
     list: &[Object],
     depth: usize,
-    drop: &mut Option<(u32, u32, DropZone)>,
-    out: &mut Vec<HierarchyAction>,
+    collapsed: &std::collections::HashSet<u32>,
+    out: &mut Vec<(u32, usize)>,
 ) {
     for o in list {
-        row(ui, doc, o, depth, drop, out);
-        if !o.children.is_empty() && !doc.collapsed.contains(&o.id) {
-            rows(ui, doc, &o.children, depth + 1, drop, out);
+        out.push((o.id, depth));
+        if !o.children.is_empty() && !collapsed.contains(&o.id) {
+            flatten(&o.children, depth + 1, collapsed, out);
         }
     }
 }

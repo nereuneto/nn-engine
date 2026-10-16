@@ -1272,6 +1272,7 @@ fn eventos_pelo_painel_criar_desfazer_salvar_e_ver_como_codigo() {
     h.get_by_label("➕ ação").click();
     h.run();
     digitar(&mut h, "destruir");
+    tela(&mut h, "eventos-acao");
     h.key_press(Key::Enter);
     h.run();
     assert_eq!(objeto(&h, "quadrado").events[0].actions[0].id, "destruir");

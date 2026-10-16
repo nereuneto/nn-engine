@@ -95,7 +95,7 @@ pub fn default_layout() -> DockState<Tab> {
     let [center, files] = tree.split_left(NodeIndex::root(), 0.2, vec![Tab::Files]);
     let [_files, _hierarchy] = tree.split_below(files, 0.5, vec![Tab::Hierarchy]);
     let [center, _inspector] = tree.split_right(center, 0.72, vec![Tab::Inspector]);
-    let [_center, _console] = tree.split_below(center, 0.74, vec![Tab::Console, Tab::Events]);
+    let [_center, _console] = tree.split_below(center, 0.66, vec![Tab::Console, Tab::Events]);
     state
 }
 
@@ -1068,6 +1068,7 @@ impl ProjectWorkspace {
             }
             // O .anim mudou fora: a imagem dele relê (se não houver nada a perder).
             if FileKind::of(Path::new(rel)) == FileKind::Anim {
+                self.sizes.anims.forget(rel);
                 for v in self.pixels.values_mut() {
                     if crate::anim_file::anim_path(&v.rel) == *rel {
                         v.disk_changed(&root);

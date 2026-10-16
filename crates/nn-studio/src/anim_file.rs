@@ -298,8 +298,13 @@ fn lua_string(s: &str) -> String {
 /// nomes do Inspetor e dos eventos e para o tamanho do quadro na cena).
 #[derive(Debug, Default)]
 pub struct AnimCache {
-    files: HashMap<String, (Option<SystemTime>, Option<AnimFile>)>,
+    /// Imagem → (quando o .anim mudou, quando foi conferido, animações).
+    files: HashMap<String, (Option<SystemTime>, std::time::Instant, Option<AnimFile>)>,
 }
+
+/// De quanto em quanto tempo o `.anim` é conferido no disco (a cena desenha
+/// muitos objetos por quadro; não precisa olhar o arquivo para cada um).
+const RECHECK: std::time::Duration = std::time::Duration::from_millis(150);
 
 impl AnimCache {
     /// As animações da imagem `image` (ou `None` sem `.anim`).
@@ -307,15 +312,29 @@ impl AnimCache {
         if image.is_empty() {
             return None;
         }
-        let rel = anim_path(image);
-        let full = root.join(&rel);
-        let modified = std::fs::metadata(&full).and_then(|m| m.modified()).ok();
-        let stale = self.files.get(&rel).is_none_or(|(m, _)| *m != modified);
-        if stale {
-            let loaded = modified.and_then(|_| AnimFile::load(root, image).ok());
-            self.files.insert(rel.clone(), (modified, loaded));
+        let fresh = self
+            .files
+            .get(image)
+            .is_some_and(|(_, at, _)| at.elapsed() < RECHECK);
+        if !fresh {
+            let full = root.join(anim_path(image));
+            let modified = std::fs::metadata(&full).and_then(|m| m.modified()).ok();
+            let now = std::time::Instant::now();
+            match self.files.get_mut(image) {
+                Some((m, at, _)) if *m == modified => *at = now,
+                _ => {
+                    let loaded = modified.and_then(|_| AnimFile::load(root, image).ok());
+                    self.files
+                        .insert(image.to_string(), (modified, now, loaded));
+                }
+            }
         }
-        self.files.get(&rel).and_then(|(_, f)| f.as_ref())
+        self.files.get(image).and_then(|(_, _, f)| f.as_ref())
+    }
+
+    /// Esquece o que leu do `.anim` (ele mudou): a próxima leitura confere.
+    pub fn forget(&mut self, anim_rel: &str) {
+        self.files.retain(|image, _| anim_path(image) != anim_rel);
     }
 
     /// Nomes das animações da imagem.

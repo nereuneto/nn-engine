@@ -1226,7 +1226,12 @@ impl SceneDoc {
         for placed in &order {
             let (o, t) = (placed.object, &placed.world);
             // Ícone de objetos sem nada visível (vazio, som, câmera, partículas).
-            let (_, is_icon) = local_bounds(o, env.root, env.sizes, icon_size);
+            // (Medir só quem pode não ter nada visível: cenas grandes.)
+            let visual = o.components.iter().any(|c| {
+                matches!(c.kind.as_str(), "sprite" | "shape" | "text" | "map")
+                    || crate::scene_data::is_ui_kind(&c.kind)
+            });
+            let is_icon = !visual && local_bounds(o, env.root, env.sizes, icon_size).1;
             let center = cam.to_screen(rect, t.x, t.y);
             // (Partículas animando já aparecem: o ícone só com a prévia parada.)
             let fx_icon = self.particles_paused && o.component("particles").is_some();
