@@ -23,6 +23,7 @@ fn studio(dir: &Path, open: Option<PathBuf>, size: egui::Vec2) -> Harness<'stati
         settings_path: Some(dir.join("preferencias.json")),
         open,
         exe: None,
+        check_updates: false,
     };
     let mut h = Harness::builder()
         .with_size(size)

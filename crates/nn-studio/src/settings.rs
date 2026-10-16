@@ -66,6 +66,15 @@ pub struct Settings {
     pub clear_console_on_play: bool,
     /// Layout dos painéis (e abas abertas) de cada projeto, pela pasta.
     pub layouts: BTreeMap<String, egui_dock::DockState<Tab>>,
+    /// Avisar quando sai uma versão nova (consulta o GitHub uma vez por dia).
+    pub check_updates: bool,
+    /// Última consulta (segundos desde 1970).
+    pub last_update_check: u64,
+    /// A versão mais nova vista na última consulta, e a página dela.
+    pub latest_version: Option<String>,
+    pub latest_url: Option<String>,
+    /// Versão que a pessoa pediu para não lembrar mais.
+    pub skipped_version: Option<String>,
 }
 
 impl Default for Settings {
@@ -78,6 +87,11 @@ impl Default for Settings {
             projects_dir: None,
             clear_console_on_play: true,
             layouts: BTreeMap::new(),
+            check_updates: true,
+            last_update_check: 0,
+            latest_version: None,
+            latest_url: None,
+            skipped_version: None,
         }
     }
 }

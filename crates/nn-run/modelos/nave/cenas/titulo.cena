@@ -63,8 +63,7 @@ return {
       x = 0, y = -140, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Jogar", size = 40, color = "#FFFFFF", anchor = "center", font = "", hud = false },
-        { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/jogo.cena", foco = true },
+        { type = "button", text = "Jogar", size = 28, w = 240, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "cena", scene = "cenas/jogo.cena", sound = "", focus = true, enabled = true, hud = true },
       },
     },
     {
@@ -72,8 +71,7 @@ return {
       x = 0, y = -210, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Sair", size = 40, color = "#FFFFFF", anchor = "center", font = "", hud = false },
-        { type = "behavior", script = "nn:botao", acao = "sair" },
+        { type = "button", text = "Sair", size = 28, w = 240, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "sair", scene = "", sound = "", focus = false, enabled = true, hud = true },
       },
     },
   },

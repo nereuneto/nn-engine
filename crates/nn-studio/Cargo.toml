@@ -6,6 +6,7 @@ edition.workspace = true
 # A interface (egui 0.36) pede um Rust mais novo que o resto da engine.
 rust-version = "1.95"
 repository.workspace = true
+license.workspace = true
 default-run = "nn-studio"
 
 [[bin]]
@@ -35,6 +36,8 @@ serde_json.workspace = true
 
 eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "links", "persistence", "wayland", "wgpu", "x11"] }
 egui_dock = { version = "0.21.1", features = ["serde"] }
+# Aviso de versão nova: consulta as releases do GitHub (HTTPS sem OpenSSL).
+ureq = { version = "3", default-features = false, features = ["rustls"] }
 # Diálogos nativos (escolher pasta). No Linux, pelo portal do sistema.
 rfd = "0.17.2"
 # Excluir arquivos manda para a lixeira do sistema.

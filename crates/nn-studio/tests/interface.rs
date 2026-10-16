@@ -82,6 +82,7 @@ fn studio_with(
         settings_path: Some(dir.join("preferencias.json")),
         open,
         exe: Some(exe),
+        check_updates: false,
     };
     let mut builder = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
@@ -2198,6 +2199,7 @@ fn modelo_plataforma_abre_os_menus_no_editor() {
         settings_path: Some(dir.join("preferencias.json")),
         open: Some(proj.clone()),
         exe: Some(fake_game(&dir)),
+        check_updates: false,
     };
     let mut h = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
@@ -2432,6 +2434,7 @@ fn modelo_aventura_tochas_animam_no_editor() {
         settings_path: Some(dir.join("preferencias.json")),
         open: Some(proj.clone()),
         exe: Some(fake_game(&dir)),
+        check_updates: false,
     };
     let mut h = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
@@ -2502,4 +2505,27 @@ fn aviso_quando_o_editor_fechou_por_erro() {
     let mut h = studio(&dir, None);
     h.run();
     assert!(h.query_by_label("O NN Studio fechou por um erro").is_none());
+}
+
+#[test]
+fn aviso_de_versao_nova_no_gerenciador() {
+    let dir = temp("versao");
+    std::fs::write(
+        dir.join("preferencias.json"),
+        r#"{ "latest_version": "9.0.0", "latest_url": "https://example.com/v9", "last_update_check": 1 }"#,
+    )
+    .unwrap();
+    let mut h = studio(&dir, None);
+    h.get_by_label_contains("Saiu o NN Studio 9.0.0");
+    h.get_by_label("Ver o que mudou e baixar");
+    tela(&mut h, "versao-nova");
+    h.get_by_label("Agora não").click();
+    h.run();
+    assert!(h.query_by_label_contains("Saiu o NN Studio").is_none());
+    assert_eq!(h.state().settings.skipped_version.as_deref(), Some("9.0.0"));
+    // Desligado, também não aparece (nem consulta).
+    h.state_mut().settings.skipped_version = None;
+    h.state_mut().settings.check_updates = false;
+    h.run();
+    assert!(h.query_by_label_contains("Saiu o NN Studio").is_none());
 }
