@@ -6,6 +6,8 @@ Jogo feito com a [nn-engine](https://github.com/nereuneto/nn-engine), montado no
 
 Abra esta pasta no NN Studio e abra a fase (`cenas/fase.cena`): ela aparece na aba da cena, com os objetos na Hierarquia e as propriedades no Inspetor. Arraste imagens do painel Arquivos para a cena, mova com o mouse e aperte **F6** para testar a partir dela.
 
+O chão e as plataformas são um **mapa de tiles** (`mapas/fase.tmj`, objeto `mapa`). Selecione o mapa e clique em **✏ Pintar**: no painel **Tiles**, escolha o terreno **terra** e pinte; as bordas e a grama se encaixam sozinhas. A tábua é uma plataforma de mão única (dá para pular por baixo). Os tiles vêm de `assets/imagens/terreno.png`; o painel Tiles também marca quais bloqueiam, o tipo (lava, água...) e as animações.
+
 Cada objeto faz o que faz por causa dos **comportamentos** dele (no Inspetor):
 
 - `heroi`: Jogador de plataforma (anda e pula), Animação automática e Vida.

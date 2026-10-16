@@ -36,6 +36,10 @@ pub enum PropType {
     Behavior,
     /// Nome de uma animação da imagem (`.anim`).
     Anim,
+    /// Um tile do mapa (número; 0 = nenhum).
+    Tile,
+    /// O tipo de um tile (`tipo` no tileset: "lava", "agua"...).
+    TileType,
 }
 
 impl PropType {
@@ -55,6 +59,8 @@ impl PropType {
             "value" => Self::Value,
             "behavior" => Self::Behavior,
             "anim" => Self::Anim,
+            "tile" => Self::Tile,
+            "tiletype" => Self::TileType,
             _ => Self::Text,
         }
     }

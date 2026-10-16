@@ -114,3 +114,48 @@ fn tiles_animados_trocam_com_o_tempo() {
     mapa.update(0.25);
     assert_eq!(cor(&mapa), [0, 255, 0]);
 }
+
+#[test]
+fn tiles_girados_como_no_tiled() {
+    use nn_tilemap::{FLIP_D, FLIP_V};
+    let Some(gpu) = gpu() else { return };
+    let mut renderer = Renderer::new(&gpu, OffscreenTarget::FORMAT);
+    let target = OffscreenTarget::new(&gpu, UVec2::splat(64));
+    // Tile de 2×2: vermelho, verde (em cima), azul, branco (embaixo).
+    let (r, g, b, w) = (
+        [255u8, 0, 0, 255],
+        [0u8, 255, 0, 255],
+        [0u8, 0, 255, 255],
+        [255u8, 255, 255, 255],
+    );
+    let px: Vec<u8> = [r, g, b, w].concat();
+    let tex = renderer.create_texture(UVec2::new(2, 2), &px, TextureOptions::PIXEL_ART);
+    let sheet = renderer.sprite_sheet(tex, UVec2::new(2, 2));
+    let cantos = |renderer: &mut Renderer, bits: u32| -> [[u8; 4]; 4] {
+        let mut mapa = TileMap::from_ascii(&["a"], Vec2::splat(64.0), |c| match c {
+            'a' => Some(AsciiTile::Tile {
+                frame: 0,
+                cell: Cell::Empty,
+            }),
+            _ => None,
+        });
+        mapa.add_sheet(&sheet, UVec2::new(2, 2));
+        mapa.layers[0].tiles[0] |= bits;
+        let cam = Camera2D::new(Vec2::splat(32.0));
+        mapa.draw(renderer, &cam, Vec2::splat(64.0));
+        renderer.render(target.view(), UVec2::splat(64), &cam, Some(Color::BLACK));
+        let img = target.read_rgba(&gpu).unwrap();
+        let p = |x: u32, y: u32| -> [u8; 4] {
+            img[((y * 64 + x) * 4) as usize..][..4].try_into().unwrap()
+        };
+        // Em cima à esquerda, em cima à direita, embaixo à esquerda, embaixo à direita.
+        [p(16, 16), p(48, 16), p(16, 48), p(48, 48)]
+    };
+    assert_eq!(cantos(&mut renderer, 0), [r, g, b, w]);
+    // No Tiled, girar 90° no sentido horário grava D + H.
+    assert_eq!(cantos(&mut renderer, FLIP_D | FLIP_H), [b, r, w, g]);
+    // E no anti-horário, D + V.
+    assert_eq!(cantos(&mut renderer, FLIP_D | FLIP_V), [g, w, r, b]);
+    assert_eq!(cantos(&mut renderer, FLIP_H | FLIP_V), [w, b, g, r]);
+    assert_eq!(cantos(&mut renderer, FLIP_V), [b, w, r, g]);
+}

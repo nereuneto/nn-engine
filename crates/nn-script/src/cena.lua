@@ -401,6 +401,25 @@ function Object:mouse_over()
   return M.events.hit(self, wx, wy, sx, sy)
 end
 
+--- Tiles dos mapas da cena que o objeto está tocando (a borda dele, com uma
+--- margem): { map, owner, col, row, layer, tile, properties }.
+function Object:tiles_touching(margin)
+  margin = margin or 2
+  local out = {}
+  if not (self.alive and self.scene) then return out end
+  local x, y = self:world_transform()
+  local hw, hh = self:bounds()
+  for _, m in ipairs(self.scene.object_list or {}) do
+    if m.alive and m.map and m ~= self then
+      for _, tl in ipairs(m.map:tiles_in(x - hw - margin, y - hh - margin, x + hw + margin, y + hh + margin)) do
+        tl.map, tl.owner = m.map, m
+        table.insert(out, tl)
+      end
+    end
+  end
+  return out
+end
+
 --- Leva o objeto (e o corpo físico) para x, y.
 function Object:move_to(x, y)
   self.x, self.y = x, y
@@ -1079,6 +1098,15 @@ function M.live(scene, msg)
   end
   local o = scene._by_id and scene._by_id[msg.id]
   if not o then return end
+  if msg.field == "tiles" then
+    -- Pintura no editor: { { layer, col, row, tile }, ... } (col e row a partir de 1).
+    if o.map then
+      for _, c in ipairs(msg.value or {}) do
+        pcall(o.map.set_tile, o.map, c[2], c[3], c[4], c[1])
+      end
+    end
+    return
+  end
   if msg.component then
     local c = o.components[msg.component]
     if not c then return end

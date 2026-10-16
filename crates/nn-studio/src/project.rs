@@ -43,6 +43,8 @@ pub enum Tab {
     Inspector,
     /// Eventos "Quando... Então..." da cena ativa.
     Events,
+    /// Painel Tiles: pincel, camadas e tileset do mapa sendo pintado.
+    Tiles,
 }
 
 impl Tab {
@@ -80,7 +82,7 @@ impl Tab {
     pub fn is_document(&self) -> bool {
         !matches!(
             self,
-            Tab::Files | Tab::Console | Tab::Hierarchy | Tab::Inspector | Tab::Events
+            Tab::Files | Tab::Console | Tab::Hierarchy | Tab::Inspector | Tab::Events | Tab::Tiles
         )
     }
 }
@@ -185,6 +187,8 @@ pub enum Action {
     SavePalette,
     /// Dar o foco a esta aba (clicaram dentro dela).
     FocusTab(Tab),
+    /// Criar um mapa de tiles novo na cena ativa.
+    NewMap,
     /// Criar uma imagem nova para o componente `ci` do objeto `id`.
     NewImageFor {
         scene: String,
@@ -210,6 +214,8 @@ enum Dialog {
     ConfirmDelete(String),
     CloseTab(String),
     Export(ExportDialog),
+    /// Mapa de tiles novo, para pôr na cena (se houver).
+    NewMap(crate::new_map::NewMapForm, Option<String>),
 }
 
 struct ExportDialog {
@@ -260,6 +266,8 @@ pub struct ProjectWorkspace {
     palette: Option<Vec<crate::pixel_ops::Color>>,
     sounds: HashMap<String, SoundView>,
     maps: HashMap<String, MapView>,
+    /// Abas de mapas `.tmj` (o editor).
+    map_editors: HashMap<String, crate::map_editor::MapEditor>,
     pub console: Console,
     pub game: Option<GameProcess>,
     form: SettingsForm,
@@ -293,6 +301,15 @@ pub struct ProjectWorkspace {
     pub plays: u64,
     /// Imagens criadas com "Nova imagem" (o tutorial confere).
     pub created_images: Vec<String>,
+    /// Mapas abertos para pintar (na cena ou na aba do mapa).
+    pub map_docs: HashMap<String, crate::map_doc::MapDoc>,
+    /// Tilesets `.tsj` desses mapas.
+    pub tilesets: HashMap<String, crate::tileset::TilesetDoc>,
+    /// O pincel (ferramenta e tiles), do painel Tiles.
+    pub paint: crate::paint::PaintState,
+    tiles_panel: crate::tiles_view::TilesPanel,
+    /// O mapa que o painel Tiles mostra.
+    pub tiles_map: Option<String>,
 }
 
 impl std::fmt::Debug for ProjectWorkspace {
@@ -359,6 +376,7 @@ impl ProjectWorkspace {
             palette: None,
             sounds: HashMap::new(),
             maps: HashMap::new(),
+            map_editors: HashMap::new(),
             console: Console::default(),
             game: None,
             form: SettingsForm::default(),
@@ -382,6 +400,11 @@ impl ProjectWorkspace {
             started: std::time::Instant::now(),
             plays: 0,
             created_images: Vec::new(),
+            map_docs: HashMap::new(),
+            tilesets: HashMap::new(),
+            paint: Default::default(),
+            tiles_panel: Default::default(),
+            tiles_map: None,
         };
         ws.reload_config();
         ws.console.info(format!(
@@ -425,6 +448,18 @@ impl ProjectWorkspace {
                     .filter(|s| s.is_dirty())
                     .map(|s| s.rel.clone()),
             )
+            .chain(
+                self.map_docs
+                    .values()
+                    .filter(|s| s.is_dirty())
+                    .map(|s| s.rel.clone()),
+            )
+            .chain(
+                self.tilesets
+                    .values()
+                    .filter(|s| s.is_dirty())
+                    .map(|s| s.rel.clone()),
+            )
             .collect();
         v.sort();
         v
@@ -435,6 +470,14 @@ impl ProjectWorkspace {
         self.docs.get(rel).is_some_and(CodeDoc::is_dirty)
             || self.scenes.get(rel).is_some_and(SceneDoc::is_dirty)
             || self.pixels.get(rel).is_some_and(PixelDoc::is_dirty)
+            || self
+                .map_docs
+                .get(rel)
+                .is_some_and(crate::map_doc::MapDoc::is_dirty)
+            || self
+                .tilesets
+                .get(rel)
+                .is_some_and(crate::tileset::TilesetDoc::is_dirty)
     }
 
     /// O que o autocompletar precisa saber para o arquivo `rel`.
@@ -495,6 +538,8 @@ impl ProjectWorkspace {
         self.docs.clear();
         self.scenes.clear();
         self.pixels.clear();
+        self.map_docs.clear();
+        self.tilesets.clear();
     }
 
     /// Relê o config.lua (tamanho da tela e cor de fundo da cena).
@@ -527,6 +572,9 @@ impl ProjectWorkspace {
                 Err(e) => errors.push(format!("{}: {e}", img.rel)),
             }
         }
+        let (ok, err) = self.save_maps(None);
+        saved.extend(ok);
+        errors.extend(err);
         saved.sort();
         for rel in saved {
             self.console.info(format!("Salvo: {rel}"));
@@ -590,6 +638,26 @@ impl ProjectWorkspace {
                     0.78,
                     vec![Tab::Inspector],
                 );
+            }
+            Tab::Tiles => {
+                // Junto do Inspetor (na frente dele).
+                match self.dock.find_tab(&Tab::Inspector) {
+                    Some(path) => {
+                        if let Ok(leaf) = self.dock.leaf_mut(path.node_path()) {
+                            leaf.append_tab(Tab::Tiles);
+                        }
+                    }
+                    None => {
+                        self.dock.main_surface_mut().split_right(
+                            NodeIndex::root(),
+                            0.74,
+                            vec![Tab::Tiles],
+                        );
+                    }
+                }
+                if let Some(path) = self.dock.find_tab(&Tab::Tiles) {
+                    let _ = self.dock.set_active_tab(path);
+                }
             }
             Tab::Events => {
                 // Junto do Console, se ele estiver aberto.
@@ -667,6 +735,7 @@ impl ProjectWorkspace {
             }
             Tab::Map(r) => {
                 self.maps.remove(r);
+                self.map_editors.remove(r);
             }
             Tab::Scene(r) => {
                 self.scenes.remove(r);
@@ -739,7 +808,20 @@ impl ProjectWorkspace {
             self.ensure_scene_panels();
         }
         self.file_panel.reveal(rel);
+        let is_map = matches!(tab, Tab::Map(_));
         self.show_tab(tab);
+        if is_map {
+            self.tiles_map = Some(rel.to_string());
+            if self.dock.find_tab(&Tab::Tiles).is_none() {
+                self.show_tab(Tab::Tiles);
+                // A aba do mapa continua com o foco.
+                if let Some(path) = self.dock.find_tab(&Tab::Map(rel.to_string())) {
+                    self.dock.set_focused_node_and_surface(path.node_path());
+                }
+            } else if let Some(path) = self.dock.find_tab(&Tab::Tiles) {
+                let _ = self.dock.set_active_tab(path);
+            }
+        }
         if let (Some(line), Some(doc)) = (line, self.docs.get_mut(rel)) {
             doc.go_to_line(line);
         }
@@ -781,9 +863,63 @@ impl ProjectWorkspace {
         let active = self.active_scene.clone();
         match self.dock.find_active_focused() {
             Some((_, Tab::Scene(r))) => Some(r.clone()),
-            Some((_, Tab::Hierarchy | Tab::Inspector | Tab::Events)) => active,
+            Some((_, Tab::Hierarchy | Tab::Inspector | Tab::Events | Tab::Tiles)) => active,
             _ => None,
         }
+    }
+
+    /// Mapa que recebe desfazer: o da aba do mapa com foco, ou o que está
+    /// sendo pintado na cena com foco (ou do painel Tiles).
+    fn focused_map(&mut self) -> Option<String> {
+        if let Some((_, Tab::Map(r))) = self.dock.find_active_focused() {
+            let r = r.clone();
+            return self.map_docs.contains_key(&r).then_some(r);
+        }
+        let scene = self.focused_scene()?;
+        let doc = self.scenes.get(&scene)?;
+        let id = doc.painting?;
+        let rel = doc.data.find(id)?.component("map")?.str("map").to_string();
+        self.map_docs.contains_key(&rel).then_some(rel)
+    }
+
+    /// Desfaz (ou refaz) no mapa; se ele tinha crescido à esquerda ou
+    /// embaixo, o objeto do mapa na cena volta junto.
+    fn undo_map(&mut self, rel: &str, undo: bool) {
+        let Some(map) = self.map_docs.get_mut(rel) else {
+            return;
+        };
+        if undo {
+            map.undo();
+        } else {
+            map.redo();
+        }
+        let (dc, dr) = map.take_shift();
+        let (tw, th) = (map.tile_w as f64, map.tile_h as f64);
+        if (dc, dr) == (0, 0) {
+            return;
+        }
+        for doc in self.scenes.values_mut() {
+            let Some(id) = doc.painting else {
+                continue;
+            };
+            let Some(scale) = doc
+                .data
+                .find(id)
+                .and_then(|o| o.component("map"))
+                .filter(|c| c.str("map") == rel)
+                .map(|c| c.num("scale").max(0.01))
+            else {
+                continue;
+            };
+            doc.begin_frame();
+            if let Some(o) = doc.data.find_mut(id) {
+                o.x -= dc as f64 * tw * scale;
+                o.y -= dr as f64 * th * scale;
+            }
+            doc.end_frame();
+            break;
+        }
+        self.flush_live();
     }
 
     /// A imagem (PNG) de um arquivo `.anim`, se existir.
@@ -944,6 +1080,16 @@ impl ProjectWorkspace {
             if let Some(scene) = self.scenes.get_mut(rel) {
                 scene.disk_changed(&root);
             }
+            if let Some(map) = self.map_docs.get_mut(rel) {
+                map.disk_changed(&root);
+            }
+            if let Some(ts) = self.tilesets.get(rel)
+                && !ts.is_dirty()
+                && let Ok(new) = crate::tileset::TilesetDoc::open(&root, rel)
+                && new.text() != ts.text()
+            {
+                self.tilesets.insert(rel.clone(), new);
+            }
             if matches!(
                 FileKind::of(Path::new(rel)),
                 FileKind::Scene | FileKind::Prefab
@@ -1009,7 +1155,9 @@ impl ProjectWorkspace {
             },
             Command::Stop => self.stop(),
             Command::Undo | Command::Redo => {
-                if let Some(rel) = self.focused_image()
+                if let Some(map_rel) = self.focused_map() {
+                    self.undo_map(&map_rel, cmd == Command::Undo);
+                } else if let Some(rel) = self.focused_image()
                     && let Some(doc) = self.pixels.get_mut(&rel)
                 {
                     if cmd == Command::Undo {
@@ -1031,7 +1179,10 @@ impl ProjectWorkspace {
                 }
             }
             Command::Save => {
-                if let Some(rel) = self.focused_image() {
+                if let Some((_, Tab::Map(r))) = self.dock.find_active_focused() {
+                    let r = r.clone();
+                    self.save_doc(&r);
+                } else if let Some(rel) = self.focused_image() {
                     self.save_doc(&rel);
                 } else if let Some(rel) = self.focused_scene() {
                     self.save_doc(&rel);
@@ -1133,6 +1284,7 @@ impl ProjectWorkspace {
             Command::ShowHierarchy => self.show_tab(Tab::Hierarchy),
             Command::ShowInspector => self.show_tab(Tab::Inspector),
             Command::ShowEvents => self.show_tab(Tab::Events),
+            Command::ShowTiles => self.show_tab(Tab::Tiles),
             Command::ClearConsole => self.console.clear(),
             Command::ResetLayout => {
                 self.dock = default_layout();
@@ -1339,6 +1491,59 @@ impl ProjectWorkspace {
         self.open_file(&script, None);
     }
 
+    /// Salva os mapas (todos, ou só estes) com alterações e os tilesets deles.
+    fn save_maps(&mut self, only: Option<Vec<String>>) -> (Vec<String>, Vec<String>) {
+        let mut saved = Vec::new();
+        let mut errors = Vec::new();
+        let mut tilesets: Vec<String> = Vec::new();
+        for map in self.map_docs.values_mut() {
+            if only.as_ref().is_some_and(|o| !o.contains(&map.rel)) {
+                continue;
+            }
+            tilesets.extend(map.external_tilesets());
+            if !map.is_dirty() {
+                continue;
+            }
+            match map.save(&self.root) {
+                Ok(()) => saved.push(map.rel.clone()),
+                Err(e) => errors.push(format!("{}: {e}", map.rel)),
+            }
+        }
+        for ts in self.tilesets.values_mut() {
+            if only.is_some() && !tilesets.contains(&ts.rel) || !ts.is_dirty() {
+                continue;
+            }
+            match ts.save(&self.root) {
+                Ok(()) => saved.push(ts.rel.clone()),
+                Err(e) => errors.push(format!("{}: {e}", ts.rel)),
+            }
+        }
+        if !saved.is_empty() {
+            self.paint_grew_reset();
+        }
+        (saved, errors)
+    }
+
+    fn save_maps_logged(&mut self, only: Option<Vec<String>>) {
+        let (saved, errors) = self.save_maps(only);
+        for r in &saved {
+            self.console.info(format!("Salvo: {r}"));
+        }
+        for e in errors {
+            self.console.error(format!("Não foi possível salvar {e}"));
+        }
+        if !saved.is_empty() {
+            self.files.rescan();
+        }
+    }
+
+    /// Salvou os mapas: o jogo aberto relê, o aviso "salve para o jogo ver" sai.
+    fn paint_grew_reset(&mut self) {
+        for s in self.scenes.values_mut() {
+            s.paint_grew = false;
+        }
+    }
+
     fn save_doc(&mut self, rel: &str) {
         if let Some(img) = self.pixels.get_mut(rel) {
             match img.save(&self.root) {
@@ -1352,7 +1557,13 @@ impl ProjectWorkspace {
             }
             return;
         }
+        if self.map_docs.contains_key(rel) && !self.scenes.contains_key(rel) {
+            self.save_maps_logged(Some(vec![rel.to_string()]));
+            return;
+        }
         if let Some(scene) = self.scenes.get_mut(rel) {
+            // Os mapas pintados nesta cena salvam junto.
+            let maps = scene_maps(&scene.data);
             match scene.save(&self.root) {
                 Ok(()) => {
                     self.console.info(format!("Salvo: {rel}"));
@@ -1362,6 +1573,7 @@ impl ProjectWorkspace {
                     .console
                     .error(format!("Não foi possível salvar {rel}: {e}")),
             }
+            self.save_maps_logged(Some(maps));
             return;
         }
         let Some(doc) = self.docs.get_mut(rel) else {
@@ -1447,6 +1659,12 @@ impl ProjectWorkspace {
                 }
                 Action::ImportPaths { paths, dest } => self.import_paths(&paths, dest.as_deref()),
                 Action::Rename { rel, new_name } => self.rename(&rel, &new_name),
+                Action::NewMap => {
+                    self.dialog = Some(Dialog::NewMap(
+                        crate::new_map::NewMapForm::new(&self.files),
+                        self.active_scene.clone(),
+                    ));
+                }
                 Action::AskDelete(rel) => self.dialog = Some(Dialog::ConfirmDelete(rel)),
                 Action::AskCloseTab(rel) => self.dialog = Some(Dialog::CloseTab(rel)),
                 Action::Reveal(rel) => {
@@ -1700,6 +1918,11 @@ impl ProjectWorkspace {
                 file_panel: &mut self.file_panel,
                 docs: &mut self.docs,
                 pixels: &mut self.pixels,
+                map_docs: &mut self.map_docs,
+                tilesets: &mut self.tilesets,
+                paint: &mut self.paint,
+                tiles_panel: &mut self.tiles_panel,
+                tiles_map: &mut self.tiles_map,
                 palette: self.palette.get_or_insert_with(|| {
                     std::fs::read_to_string(self.root.join(crate::pixel_editor::PROJECT_PALETTE))
                         .map(|t| crate::pixel_ops::parse_hex_list(&t))
@@ -1707,6 +1930,7 @@ impl ProjectWorkspace {
                 }),
                 sounds: &mut self.sounds,
                 maps: &mut self.maps,
+                map_editors: &mut self.map_editors,
                 console: &mut self.console,
                 form: &mut self.form,
                 lua: &self.lua,
@@ -1985,6 +2209,58 @@ impl ProjectWorkspace {
                             rel: rel.clone(),
                             line: None,
                         });
+                    }
+                }
+            }
+            Dialog::NewMap(form, scene) => {
+                let mut done = None;
+                let response =
+                    egui::Modal::new(egui::Id::new("dialogo-novo-mapa")).show(ctx, |ui| {
+                        let (c, cancel) = form.ui(ui, &self.files);
+                        done = c;
+                        close |= cancel;
+                    });
+                close |= response.should_close();
+                if let Some(c) = done {
+                    close = true;
+                    for f in &c.files {
+                        self.console.info(format!("Criado: {f}"));
+                    }
+                    self.files.rescan();
+                    match scene.as_deref().and_then(|r| self.scenes.get_mut(r)) {
+                        Some(doc) => {
+                            let name = c
+                                .map
+                                .rsplit('/')
+                                .next()
+                                .unwrap_or("mapa")
+                                .trim_end_matches(".tmj")
+                                .to_string();
+                            let (cx, cy) = doc.view_center();
+                            let mut comp = crate::scene_data::Component::new("map");
+                            comp.set("map", crate::scene_data::Prop::Str(c.map.clone()));
+                            comp.set("scale", crate::scene_data::Prop::Num(c.scale));
+                            doc.begin_frame();
+                            let id = doc.add_object(
+                                &name,
+                                cx - c.world.0 / 2.0,
+                                cy - c.world.1 / 2.0,
+                                vec![comp],
+                            );
+                            if let Some(o) = doc.data.find_mut(id) {
+                                o.layer = -1;
+                            }
+                            doc.end_frame();
+                            doc.painting = Some(id);
+                            self.tiles_map = Some(c.map.clone());
+                            after = Some(Action::Command(Command::ShowTiles));
+                        }
+                        None => {
+                            after = Some(Action::OpenFile {
+                                rel: c.map.clone(),
+                                line: None,
+                            });
+                        }
                     }
                 }
             }
@@ -2378,8 +2654,14 @@ struct Viewer<'a> {
     docs: &'a mut HashMap<String, CodeDoc>,
     pixels: &'a mut HashMap<String, PixelDoc>,
     palette: &'a mut Vec<crate::pixel_ops::Color>,
+    map_docs: &'a mut HashMap<String, crate::map_doc::MapDoc>,
+    tilesets: &'a mut HashMap<String, crate::tileset::TilesetDoc>,
+    paint: &'a mut crate::paint::PaintState,
+    tiles_panel: &'a mut crate::tiles_view::TilesPanel,
+    tiles_map: &'a mut Option<String>,
     sounds: &'a mut HashMap<String, SoundView>,
     maps: &'a mut HashMap<String, MapView>,
+    map_editors: &'a mut HashMap<String, crate::map_editor::MapEditor>,
     console: &'a mut Console,
     form: &'a mut SettingsForm,
     lua: &'a mlua::Lua,
@@ -2433,11 +2715,26 @@ impl TabViewer for Viewer<'_> {
             Tab::Hierarchy => "Hierarquia".to_string(),
             Tab::Inspector => "Inspetor".to_string(),
             Tab::Events => "Eventos".to_string(),
+            Tab::Tiles => "Tiles".to_string(),
             Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) | Tab::Scene(r) => {
                 let name = r.rsplit('/').next().unwrap_or(r).to_string();
                 if self.docs.get(r.as_str()).is_some_and(CodeDoc::is_dirty)
                     || self.scenes.get(r.as_str()).is_some_and(SceneDoc::is_dirty)
                     || self.pixels.get(r.as_str()).is_some_and(PixelDoc::is_dirty)
+                    || self
+                        .map_docs
+                        .get(r.as_str())
+                        .is_some_and(crate::map_doc::MapDoc::is_dirty)
+                    || self.scenes.get(r.as_str()).is_some_and(|s| {
+                        scene_maps(&s.data).iter().any(|m| {
+                            self.map_docs.get(m).is_some_and(|d| {
+                                d.is_dirty()
+                                    || d.external_tilesets()
+                                        .iter()
+                                        .any(|t| self.tilesets.get(t).is_some_and(|t| t.is_dirty()))
+                            })
+                        })
+                    })
                 {
                     format!("{name} •")
                 } else {
@@ -2498,6 +2795,7 @@ impl TabViewer for Viewer<'_> {
             }
             Tab::Map(r) => {
                 self.maps.remove(r.as_str());
+                self.map_editors.remove(r.as_str());
                 OnCloseResponse::Close
             }
             _ => OnCloseResponse::Close,
@@ -2607,9 +2905,37 @@ impl TabViewer for Viewer<'_> {
                 }
             }
             Tab::Map(rel) => {
-                let view = self.maps.entry(rel.clone()).or_default();
-                if let Some(a) = view.ui(ui, self.root, rel) {
-                    self.viewer_action(a);
+                // O editor; se o mapa não abrir aqui (base64, infinito...),
+                // fica a prévia com o motivo.
+                match crate::paint::ensure_open(self.map_docs, self.tilesets, self.root, rel) {
+                    Ok(()) => {
+                        let ed = self.map_editors.entry(rel.clone()).or_default();
+                        for a in ed.ui(ui, self.root, rel, self.map_docs, self.tilesets, self.paint)
+                        {
+                            match a {
+                                crate::map_editor::MapAction::CopyText(t) => {
+                                    self.actions.push(Action::CopyText(t))
+                                }
+                                crate::map_editor::MapAction::OpenExternal(r) => {
+                                    self.actions.push(Action::OpenExternal(r))
+                                }
+                                crate::map_editor::MapAction::Focus => {
+                                    *self.tiles_map = Some(rel.clone());
+                                    self.actions.push(Action::FocusTab(Tab::Map(rel.clone())));
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        ui.colored_label(
+                            theme::WARNING,
+                            format!("Não dá para editar este mapa aqui: {e}"),
+                        );
+                        let view = self.maps.entry(rel.clone()).or_default();
+                        if let Some(a) = view.ui(ui, self.root, rel) {
+                            self.viewer_action(a);
+                        }
+                    }
                 }
             }
             Tab::Scene(rel) => self.scene(ui, rel),
@@ -2626,6 +2952,7 @@ impl TabViewer for Viewer<'_> {
                         HierarchyAction::OpenFile(rel) => {
                             self.actions.push(Action::OpenFile { rel, line: None });
                         }
+                        HierarchyAction::NewMap => self.actions.push(Action::NewMap),
                     }
                 }
             }
@@ -2640,10 +2967,51 @@ impl TabViewer for Viewer<'_> {
                     .map(|e| e.rel.clone())
                     .collect();
                 let anims = self.sizes.anims.all_names(self.root, &anim_files);
+                // Os tiles dos mapas da cena (para as regras de tiles).
+                let maps = doc
+                    .as_ref()
+                    .map(|d| scene_maps(&d.data))
+                    .unwrap_or_default();
+                let mut tile_kinds: Vec<String> = Vec::new();
+                let mut tile_sheet = None;
+                for m in &maps {
+                    if crate::paint::ensure_open(self.map_docs, self.tilesets, self.root, m)
+                        .is_err()
+                    {
+                        continue;
+                    }
+                    let map = &self.map_docs[m];
+                    for i in 0..map.tilesets.len() {
+                        let Some(data) = crate::paint::tileset_data(map, i, self.tilesets) else {
+                            continue;
+                        };
+                        for k in data.kinds() {
+                            if !tile_kinds.contains(&k) {
+                                tile_kinds.push(k);
+                            }
+                        }
+                        if tile_sheet.is_none()
+                            && let Some((texture, size)) =
+                                self.tiles_panel
+                                    .images()
+                                    .get(ui.ctx(), self.root, &data.image)
+                        {
+                            tile_sheet = Some(crate::events_view::TileSheet {
+                                texture,
+                                size,
+                                data: data.clone(),
+                                first_gid: map.tilesets[i].first_gid,
+                            });
+                        }
+                    }
+                }
+                tile_kinds.sort();
                 let env = crate::events_view::EventsEnv {
                     files: self.files,
                     vars: self.vars,
                     anims: &anims,
+                    tile_kinds: &tile_kinds,
+                    tile_sheet: tile_sheet.as_ref(),
                 };
                 for a in self.events.ui(ui, doc, &env) {
                     match a {
@@ -2653,9 +3021,11 @@ impl TabViewer for Viewer<'_> {
                     }
                 }
             }
+            Tab::Tiles => self.tiles(ui),
             Tab::Inspector => {
                 let active = self.active_scene.clone();
                 let doc = active.as_deref().and_then(|r| self.scenes.get_mut(r));
+                let painting_before = doc.as_ref().and_then(|d| d.painting);
                 let game = self
                     .game_state
                     .filter(|g| active.as_deref() == Some(g.scene.as_str()));
@@ -2695,6 +3065,14 @@ impl TabViewer for Viewer<'_> {
                         }
                     }
                 }
+                // Ligou o Pintar pelo Inspetor: o painel Tiles aparece.
+                let painting_after = active
+                    .as_deref()
+                    .and_then(|r| self.scenes.get(r))
+                    .and_then(|d| d.painting);
+                if painting_before.is_none() && painting_after.is_some() {
+                    self.actions.push(Action::Command(Command::ShowTiles));
+                }
             }
         }
     }
@@ -2712,6 +3090,42 @@ impl Viewer<'_> {
             *self.active_scene = Some(rel.to_string());
         }
         let doc = self.scenes.get_mut(rel).expect("cena aberta");
+        // Pintando: o mapa (e os tilesets) abertos no editor.
+        if let Some(id) = doc.painting {
+            let map_rel = doc
+                .data
+                .find(id)
+                .and_then(|o| o.component("map"))
+                .map(|c| c.str("map").to_string());
+            match map_rel {
+                Some(m) => {
+                    if let Err(e) =
+                        crate::paint::ensure_open(self.map_docs, self.tilesets, self.root, &m)
+                    {
+                        self.console
+                            .error(format!("Não foi possível abrir o mapa {m}: {e}"));
+                        doc.painting = None;
+                    }
+                }
+                None => doc.painting = None,
+            }
+        }
+        // Mapas abertos (talvez sem salvar) são desenhados como estão aqui.
+        for (m, map) in self.map_docs.iter() {
+            self.sizes.map_px.insert(
+                m.clone(),
+                (
+                    (map.width * map.tile_w) as f32,
+                    (map.height * map.tile_h) as f32,
+                ),
+            );
+            if let Some(sr) = self.scene_renderer.as_mut() {
+                let rev = crate::paint::combined_rev(map, self.tilesets);
+                if sr.map_source_rev(m) != Some(rev) {
+                    sr.set_map_source(m, rev, crate::paint::source_files(map, self.tilesets));
+                }
+            }
+        }
         let mut env = SceneEnv {
             root: self.root,
             sizes: self.sizes,
@@ -2721,14 +3135,27 @@ impl Viewer<'_> {
             connected: self.game_scene == Some(rel),
             time: self.time,
             game: self.game_state.filter(|g| g.scene == rel),
+            maps: self.map_docs,
+            tilesets: self.tilesets,
+            paint: self.paint,
         };
+        let was_painting = doc.painting;
         let actions = doc.ui(ui, &mut env);
+        if let Some(id) = doc.painting {
+            if let Some(m) = doc.data.find(id).and_then(|o| o.component("map")) {
+                *self.tiles_map = Some(m.str("map").to_string());
+            }
+            if was_painting.is_none() {
+                self.actions.push(Action::Command(Command::ShowTiles));
+            }
+        }
         for a in actions {
             match a {
                 SceneAction::TestHere => self.actions.push(Action::TestScene(rel.to_string())),
                 SceneAction::Reload => doc.reload(self.root),
                 SceneAction::OpenAsText => self.actions.push(Action::OpenAsText(rel.to_string())),
                 SceneAction::Game(cmd) => self.actions.push(Action::GameCommand(cmd)),
+                SceneAction::NewMap => self.actions.push(Action::NewMap),
             }
         }
         // Objetos com animação tocam na cena do editor também.
@@ -2746,6 +3173,84 @@ impl Viewer<'_> {
         // Clicou nesta cena: a Hierarquia e o Inspetor passam a mostrá-la.
         if ui.ui_contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
             *self.active_scene = Some(rel.to_string());
+        }
+    }
+
+    /// O painel Tiles: o mapa sendo pintado (ou o último).
+    fn tiles(&mut self, ui: &mut egui::Ui) {
+        let active = self.active_scene.clone();
+        // O mapa sendo pintado na cena ativa vem primeiro.
+        let painting = active
+            .as_deref()
+            .and_then(|r| self.scenes.get(r))
+            .and_then(|d| d.painting.and_then(|id| d.data.find(id)))
+            .and_then(|o| o.component("map"))
+            .map(|c| c.str("map").to_string());
+        if let Some(m) = &painting {
+            *self.tiles_map = Some(m.clone());
+        }
+        let map = self.tiles_map.clone().filter(|m| {
+            crate::paint::ensure_open(self.map_docs, self.tilesets, self.root, m).is_ok()
+        });
+        let mut env = crate::tiles_view::TilesEnv {
+            root: self.root,
+            map: map.as_deref(),
+            painting: painting.is_some() && painting == map,
+            maps: self.map_docs,
+            tilesets: self.tilesets,
+            paint: self.paint,
+        };
+        for a in self.tiles_panel.ui(ui, &mut env) {
+            match a {
+                crate::tiles_view::TilesAction::TogglePaint => {
+                    let Some(doc) = active.as_deref().and_then(|r| self.scenes.get_mut(r)) else {
+                        if let Some(m) = &map {
+                            self.actions.push(Action::OpenFile {
+                                rel: m.clone(),
+                                line: None,
+                            });
+                        }
+                        continue;
+                    };
+                    if doc.painting.is_some() {
+                        doc.painting = None;
+                        continue;
+                    }
+                    let Some(m) = &map else { continue };
+                    // O objeto selecionado com esse mapa, ou o primeiro que tiver.
+                    let uses = |o: &crate::scene_data::Object| {
+                        o.component("map")
+                            .is_some_and(|c| c.str("map") == m.as_str())
+                    };
+                    let mut found = doc
+                        .selection
+                        .iter()
+                        .copied()
+                        .find(|id| doc.data.find(*id).is_some_and(uses));
+                    if found.is_none() {
+                        crate::scene_data::visit(&doc.data.objects, &mut |o| {
+                            if found.is_none() && uses(o) {
+                                found = Some(o.id);
+                            }
+                        });
+                    }
+                    match found {
+                        Some(id) => {
+                            doc.painting = Some(id);
+                            doc.selection = vec![id];
+                        }
+                        None => self.actions.push(Action::OpenFile {
+                            rel: m.clone(),
+                            line: None,
+                        }),
+                    }
+                }
+                crate::tiles_view::TilesAction::NewMap => self.actions.push(Action::NewMap),
+                crate::tiles_view::TilesAction::OpenFile(rel) => {
+                    self.actions.push(Action::OpenFile { rel, line: None });
+                }
+                crate::tiles_view::TilesAction::ImageChanged(_) => {}
+            }
         }
     }
 
@@ -3044,6 +3549,20 @@ fn parse_hex(s: &str) -> Option<[u8; 3]> {
     }
     let b = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
     Some([b(0)?, b(2)?, b(4)?])
+}
+
+/// Os mapas (`.tmj`) que os objetos da cena usam.
+fn scene_maps(data: &crate::scene_data::SceneData) -> Vec<String> {
+    let mut out = Vec::new();
+    crate::scene_data::visit(&data.objects, &mut |o| {
+        if let Some(c) = o.component("map") {
+            let m = c.str("map");
+            if !m.is_empty() && !out.iter().any(|x: &String| x == m) {
+                out.push(m.to_string());
+            }
+        }
+    });
+    out
 }
 
 #[cfg(test)]

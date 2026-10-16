@@ -167,7 +167,7 @@ fn key_rule(rule: &scene_data::Rule, modo: &str) -> bool {
 /// Os tutoriais, na ordem do menu.
 pub fn all() -> &'static [Tutorial] {
     static LIST: std::sync::OnceLock<Vec<Tutorial>> = std::sync::OnceLock::new();
-    LIST.get_or_init(|| vec![primeiro_jogo(), eventos(), desenhe()])
+    LIST.get_or_init(|| vec![primeiro_jogo(), eventos(), desenhe(), tiles()])
 }
 
 pub fn find(id: &str) -> Option<&'static Tutorial> {
@@ -571,6 +571,151 @@ fn desenhe() -> Tutorial {
             Step {
                 title: "Pronto: um herói seu!",
                 text: "Próximos passos: desenhe animações parado, andar e pular e escolha os nomes na Animação automática (Aparência), que troca sozinha conforme o herói anda ou pula. Os eventos também têm Tocar animação. Para montar a fase, faça o tutorial Seu primeiro jogo.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// O mapa do primeiro objeto com Mapa da cena (aberto para pintar).
+fn scene_map(ws: &ProjectWorkspace) -> Option<&crate::map_doc::MapDoc> {
+    objects(ws)
+        .into_iter()
+        .filter_map(|o| o.component("map"))
+        .find_map(|c| ws.map_docs.get(c.str("map")))
+}
+
+/// Quantas células do mapa (em qualquer camada) têm um tile assim.
+fn count_tiles(ws: &ProjectWorkspace, f: impl Fn(&crate::tileset::TileInfo) -> bool) -> usize {
+    let Some(map) = scene_map(ws) else {
+        return 0;
+    };
+    let mut n = 0;
+    for li in map.tile_layers() {
+        for &gid in &map.tile_layer(li).unwrap().data {
+            let gid = gid & !crate::map_doc::FLIP_BITS;
+            if gid != 0 && f(&crate::tiles_view::tile_info(map, &ws.tilesets, gid)) {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+fn tiles() -> Tutorial {
+    Tutorial {
+        id: "fase-com-tiles",
+        title: "Monte uma fase com tiles",
+        summary: "Pinte o chão com um terreno que se encaixa sozinho, ponha plataformas, enfeites numa camada e lava que queima, com um evento.",
+        minutes: 12,
+        template: Template::Vazio,
+        project: "Fase com tiles",
+        steps: vec![
+            Step {
+                title: "Tiles",
+                text: "Uma fase de tiles é montada com quadradinhos (tiles) pintados numa grade, como num jogo de montar. Os tiles vêm de uma imagem só (aqui, assets/imagens/terreno.png), e o mapa guarda qual tile vai em cada casa.\n\nNeste tutorial você pinta uma fase inteira, sem posicionar bloco por bloco.",
+                target: None,
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Um mapa novo",
+                text: "Na barra da cena, clique em ➕ Objeto > Mapa de tiles... Os tiles já vêm do terreno.tsj: deixe como está e clique em Criar. O modo ✏ Pintar liga sozinho e o painel Tiles abre à direita.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| scene_map(ws).is_some()),
+            },
+            Step {
+                title: "O chão",
+                text: "No painel Tiles, em Terrenos, clique em terra. Agora segure o botão esquerdo e pinte uma faixa larga na parte de baixo da cena, com duas ou três linhas de altura. As bordas e a grama se encaixam sozinhas!\n\nErrou? Ctrl+Z desfaz; apagar (ao lado de terra) tira o terreno.",
+                target: Some("tiles.terreno:terra"),
+                show: Some(Tab::Tiles),
+                done: Some(|ws, _| count_tiles(ws, |t| t.solid) >= 15),
+            },
+            Step {
+                title: "Uma plataforma",
+                text: "Em Tileset, clique na tábua (o último tile da segunda linha) e pinte uma linha no ar, acima do chão. A tábua é uma plataforma de mão única: dá para pular por baixo dela e parar em cima.\n\nDica: role o mouse na cena para afastar ou aproximar; Espaço + arrastar move a vista.",
+                target: Some("tiles.tileset"),
+                show: Some(Tab::Tiles),
+                done: Some(|ws, _| count_tiles(ws, |t| t.one_way) >= 3),
+            },
+            Step {
+                title: "Enfeites numa camada",
+                text: "No fim do painel Tiles, em Camadas, clique em + Camada. Escolha no tileset a flor ou o mato e pinte alguns em cima da grama.\n\nNuma camada separada, os enfeites ficam por cima do chão sem trocar os tiles dele (e a borracha só apaga a camada escolhida).",
+                target: Some("tiles.camada"),
+                show: Some(Tab::Tiles),
+                done: Some(|ws, _| {
+                    scene_map(ws).is_some_and(|m| {
+                        m.tile_layers().iter().skip(1).any(|&i| {
+                            m.tile_layer(i)
+                                .unwrap()
+                                .data
+                                .iter()
+                                .filter(|g| **g != 0)
+                                .count()
+                                >= 2
+                        })
+                    })
+                }),
+            },
+            Step {
+                title: "Lava",
+                text: "No alto do painel Tiles, em Camada, volte para chao. Escolha a lava no tileset (o tile laranja da quinta linha) e pinte uma poça no chão, trocando um pedaço da terra. Ela já se mexe: é um tile animado.",
+                target: Some("tiles.tileset"),
+                show: Some(Tab::Tiles),
+                done: Some(|ws, _| count_tiles(ws, |t| t.animation.len() > 1) >= 2),
+            },
+            Step {
+                title: "Marque a lava",
+                text: "O jogo ainda não sabe que aquilo é lava. Em Tileset, clique em Tipo (acima dos tiles), escreva lava no campo Tipo e clique no tile de lava que você usou: ele ganha o nome lava.\n\nDo mesmo jeito, Sólido marca o que bloqueia e Plataforma marca o que é de mão única.",
+                target: Some("tiles.tileset"),
+                show: Some(Tab::Tiles),
+                done: Some(|ws, _| count_tiles(ws, |t| t.kind == "lava") >= 1),
+            },
+            Step {
+                title: "O herói",
+                text: "Aperte Esc (com o mouse na cena) para sair do modo Pintar. Arraste heroi.png, em assets > imagens, para a cena, acima do chão.",
+                target: Some("arquivo:assets/imagens/heroi.png"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| !with_image(ws, "heroi.png").is_empty()),
+            },
+            Step {
+                title: "Andar e pular",
+                text: "Com o herói selecionado, no Inspetor: ➕ Adicionar componente > Jogador > Jogador de plataforma. O corpo físico vem junto, e os tiles sólidos do mapa seguram ele.",
+                target: Some("inspetor.adicionar"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    with_image(ws, "heroi.png")
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:plataforma"))
+                }),
+            },
+            Step {
+                title: "Lava queima",
+                text: "No painel Eventos: ➕ Regra da cena > Toques > Encostar num tile. Deixe o jogador e o tipo lava. Em Então, ➕ ação > Cenas > Reiniciar a cena.",
+                target: Some("eventos.regra_cena"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    scene_rules(ws).iter().any(|r| {
+                        r.when
+                            .iter()
+                            .any(|c| c.id == "tile" && c.str("tipo") == "lava")
+                            && !r.actions.is_empty()
+                    })
+                }),
+            },
+            Step {
+                title: "Teste!",
+                text: "Aperte ▶ Testar daqui (F6): ande pelo chão, suba na tábua e pule na lava. Com o jogo aberto, volte ao ✏ Pintar e pinte: os tiles aparecem no jogo na hora.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: uma fase de tiles!",
+                text: "Testar salvou tudo: a cena e o mapa, em mapas/fase.tmj (no formato do Tiled; dá para abrir nele também). Ctrl+S salva os dois juntos.\n\nPróximos passos: no painel Tiles, + Terreno cria um terreno seu com um molde de 16 peças para desenhar no editor de pixel art. Ctrl + arrastar na cena copia um pedaço do mapa para o pincel; R gira e X espelha. O evento Trocar o tile tocado faz blocos que quebram.",
                 target: None,
                 show: None,
                 done: None,

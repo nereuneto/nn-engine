@@ -515,6 +515,11 @@ pub const OBJECT_MEMBERS: &[Member] = &[
         "Leva o objeto (e o corpo físico) para x, y.",
     ),
     m("mouse_over", "()", "O mouse está em cima do objeto?"),
+    m(
+        "tiles_touching",
+        "(margem)",
+        "Tiles dos mapas que o objeto toca: { col, row, layer, tile, properties }.",
+    ),
 ];
 
 /// Corpo físico (`obj.body` ou `mundo:body`).

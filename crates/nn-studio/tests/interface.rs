@@ -1641,3 +1641,340 @@ fn tutorial_desenhe_seu_heroi_com_o_editor_de_pixel_art() {
     h.run_steps(4);
     assert!(h.state().tutorial.is_none());
 }
+
+/// Centro da célula (col, row) do mapa pintado na cena, na tela.
+fn celula(h: &Harness<'_, StudioApp>, scene: &str, col: i64, row: i64) -> egui::Pos2 {
+    let ws = h.state().project().unwrap();
+    let doc = &ws.scenes[scene];
+    let id = doc.painting.expect("pintando");
+    let o = doc.data.find(id).unwrap();
+    let c = o.component("map").unwrap();
+    let map = &ws.map_docs[c.str("map")];
+    let s = c.num("scale");
+    let (tw, th) = (map.tile_w as f64 * s, map.tile_h as f64 * s);
+    let x = o.x + (col as f64 + 0.5) * tw;
+    let y = o.y + ((map.height as i64 - 1 - row) as f64 + 0.5) * th;
+    let rect = h.get_by_label("Vista da cena").rect();
+    doc.camera.to_screen(rect, x, y)
+}
+
+/// Um clique (apertar e soltar) num ponto.
+fn clique(h: &mut Harness<'_, StudioApp>, p: egui::Pos2) {
+    traco(h, &[p, p]);
+    h.run_steps(2);
+}
+
+#[test]
+fn tutorial_monte_uma_fase_com_tiles() {
+    use nn_studio::scene_data::{Component, EventItem, Object, Prop, Rule};
+    let dir = temp("tutorial-tiles");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("fase-com-tiles");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/fase-com-tiles");
+    assert!(projeto.join("assets/imagens/terreno.tsj").is_file());
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    const CENA: &str = "cenas/fase.cena";
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 1);
+
+    // ➕ Objeto > Mapa de tiles...: a janela já vem com o terreno.tsj.
+    h.get_by_label("➕ Objeto").click();
+    h.run_steps(2);
+    h.get_by_label("Mapa de tiles...").click();
+    h.run_steps(2);
+    tela(&mut h, "tiles-novo-mapa");
+    h.key_press(Key::Enter);
+    espera(&mut h, 2);
+    assert!(projeto.join("mapas/fase.tmj").is_file());
+    assert!(tabs(&h).contains(&Tab::Tiles), "o painel Tiles abriu");
+    assert!(h.state().project().unwrap().scenes[CENA].painting.is_some());
+
+    // Terreno terra: um traço de duas linhas embaixo.
+    let terra =
+        nn_studio::tutorial::anchor_rect(&h.ctx, "tiles.terreno:terra").expect("botão do terreno");
+    clique(&mut h, terra.center());
+    assert_eq!(
+        h.state().project().unwrap().paint.tool,
+        nn_studio::paint::PaintTool::Terrain
+    );
+    for row in [12, 13] {
+        let pontos: Vec<egui::Pos2> = (8..=20).map(|c| celula(&h, CENA, c, row)).collect();
+        traco(&mut h, &pontos);
+    }
+    espera(&mut h, 3);
+    tela(&mut h, "tiles-chao");
+    let mapa = |h: &Harness<'_, StudioApp>| {
+        h.state().project().unwrap().map_docs["mapas/fase.tmj"].clone()
+    };
+    // As células pintadas são terra cheia (o tile 15 do terreno.tsj); a de
+    // cima tem a grama (borda de cima).
+    assert_eq!(mapa(&h).get(0, 10, 13), 15);
+    assert_ne!(mapa(&h).get(0, 10, 11), 0);
+
+    // A tábua, escolhida no tileset (o último tile da segunda linha).
+    // (O painel muda de tamanho: a grade é procurada a cada vez.)
+    let tile = |h: &Harness<'_, StudioApp>, id: u32| {
+        let grade = nn_studio::tutorial::anchor_rect(&h.ctx, "tiles.tileset").expect("tileset");
+        let z = grade.width() / 128.0;
+        grade.min + egui::vec2((id % 8) as f32 * 16.0 + 8.0, (id / 8) as f32 * 16.0 + 8.0) * z
+    };
+    let p = tile(&h, 15);
+    clique(&mut h, p);
+    assert_eq!(h.state().project().unwrap().paint.stamp.tiles, [16]);
+    let pontos: Vec<egui::Pos2> = (11..=14).map(|c| celula(&h, CENA, c, 9)).collect();
+    traco(&mut h, &pontos);
+    espera(&mut h, 4);
+
+    // Camada de enfeites com flores.
+    h.get_by_label("+ Camada").click();
+    h.run_steps(2);
+    assert_eq!(
+        mapa(&h).tile_layer(mapa(&h).layer).unwrap().name,
+        "enfeites"
+    );
+    let p = tile(&h, 38);
+    clique(&mut h, p);
+    for c in [9, 15] {
+        let p = celula(&h, CENA, c, 11);
+        clique(&mut h, p);
+    }
+    espera(&mut h, 5);
+
+    // De volta à camada chao (direto), e a lava animada.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.map_docs.get_mut("mapas/fase.tmj").unwrap().layer = 0;
+    }
+    h.run_steps(2);
+    let p = tile(&h, 34);
+    clique(&mut h, p);
+    let pontos: Vec<egui::Pos2> = (16..=18).map(|c| celula(&h, CENA, c, 12)).collect();
+    traco(&mut h, &pontos);
+    espera(&mut h, 6);
+
+    // Marcar a lava: Tipo, escrever "lava" e clicar no tile.
+    h.get_by_label("Tipo").click();
+    h.run_steps(2);
+    h.get_by(|n| n.role() == Role::TextInput && n.placeholder() == Some("lava"))
+        .click();
+    h.run_steps(1);
+    // (A lava animada redesenha sempre: `run_steps` em vez de `run`.)
+    h.event(egui::Event::Text("lava".into()));
+    h.run_steps(2);
+    let p = tile(&h, 34);
+    clique(&mut h, p);
+    espera(&mut h, 7);
+    tela(&mut h, "tiles-tipo");
+    let ts = &h.state().project().unwrap().tilesets["assets/imagens/terreno.tsj"];
+    assert_eq!(ts.data.info(34).kind, "lava");
+    assert!(ts.is_dirty());
+
+    // Esc sai do Pintar; o herói (direto na cena) e o comportamento.
+    let centro = h.get_by_label("Vista da cena").rect().center();
+    h.hover_at(centro);
+    h.run_steps(1);
+    h.key_press(Key::Escape);
+    h.run_steps(2);
+    assert!(h.state().project().unwrap().scenes[CENA].painting.is_none());
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut(CENA).unwrap();
+        let mut o = Object::new(50, "heroi");
+        let mut s = Component::new("sprite");
+        s.set("image", Prop::Str("assets/imagens/heroi.png".into()));
+        o.components.push(s);
+        doc.data.objects.push(o);
+    }
+    espera(&mut h, 8);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut(CENA).unwrap();
+        let o = doc.data.objects.iter_mut().find(|o| o.id == 50).unwrap();
+        let mut b = Component::new("behavior");
+        b.set("script", Prop::Str("nn:plataforma".into()));
+        o.components.push(b);
+    }
+    espera(&mut h, 9);
+    // A regra da lava.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut(CENA).unwrap();
+        let mut quando = EventItem {
+            id: "tile".into(),
+            ..Default::default()
+        };
+        quando.set("quem", Prop::Str("@jogador".into()));
+        quando.set("tipo", Prop::Str("lava".into()));
+        doc.data.events.push(Rule {
+            when: vec![quando],
+            actions: vec![EventItem {
+                id: "reiniciar".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+    }
+    espera(&mut h, 10);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 11);
+    // Testar salvou tudo: o mapa e o tileset (com a lava marcada).
+    let tmj = std::fs::read_to_string(projeto.join("mapas/fase.tmj")).unwrap();
+    assert!(
+        tmj.contains("\"source\": \"../assets/imagens/terreno.tsj\""),
+        "{tmj}"
+    );
+    assert!(tmj.contains("\"name\": \"enfeites\""), "{tmj}");
+    let tsj = std::fs::read_to_string(projeto.join("assets/imagens/terreno.tsj")).unwrap();
+    assert!(tsj.contains("\"value\": \"lava\""), "{tsj}");
+    assert!(!h.state().project().unwrap().map_docs["mapas/fase.tmj"].is_dirty());
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}
+
+#[test]
+fn aba_do_mapa_pinta_desfaz_e_salva_no_formato_do_tiled() {
+    let dir = temp("aba-mapa");
+    let proj = plataforma(&dir);
+    let original = std::fs::read_to_string(proj.join("fases/fase1.tmj")).unwrap();
+    let mut h = studio(&dir, Some(proj.clone()));
+    const MAPA: &str = "fases/fase1.tmj";
+    h.state_mut().project_mut().unwrap().open_file(MAPA, None);
+    h.run_steps(4);
+    assert!(tabs(&h).contains(&Tab::Map(MAPA.into())));
+    assert!(tabs(&h).contains(&Tab::Tiles), "o painel Tiles abre junto");
+    assert_eq!(
+        h.state().project().unwrap().tiles_map.as_deref(),
+        Some(MAPA)
+    );
+    tela(&mut h, "aba-mapa");
+    let antes = h.state().project().unwrap().map_docs[MAPA].clone();
+    let camada = antes.layer;
+    // Um tile no canto de cima à esquerda da vista do mapa (céu).
+    let vista = nn_studio::tutorial::anchor_rect(&h.ctx, "mapa.vista").expect("vista do mapa");
+    let ws = h.state_mut().project_mut().unwrap();
+    ws.paint.stamp = nn_studio::map_doc::Stamp::single(3);
+    let _ = ws;
+    // Acha a célula vazia mais perto do centro, procurando pela tela.
+    let mut alvo = None;
+    for dy in 0..40 {
+        let p = vista.center() + egui::vec2(0.0, -(dy as f32) * 8.0);
+        alvo = Some(p);
+        clique(&mut h, p);
+        if h.state().project().unwrap().map_docs[MAPA].is_dirty() {
+            break;
+        }
+    }
+    let depois = h.state().project().unwrap().map_docs[MAPA].clone();
+    assert!(depois.is_dirty(), "pintou {alvo:?}");
+    let mudou = (0..depois.width as i64 * depois.height as i64)
+        .filter(|i| {
+            depois.get(camada, i % depois.width as i64, i / depois.width as i64)
+                != antes.get(camada, i % antes.width as i64, i / antes.width as i64)
+        })
+        .count();
+    assert_eq!(mudou, 1);
+    // Ctrl+Z com a aba do mapa em foco desfaz.
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    h.run_steps(3);
+    assert!(!h.state().project().unwrap().map_docs[MAPA].is_dirty());
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Y);
+    h.run_steps(3);
+    assert!(h.state().project().unwrap().map_docs[MAPA].is_dirty());
+    // Ctrl+S grava; o que o editor não conhece (objetos, propriedades) fica.
+    h.key_press_modifiers(Modifiers::COMMAND, Key::S);
+    h.run_steps(3);
+    assert!(!h.state().project().unwrap().map_docs[MAPA].is_dirty());
+    let salvo = std::fs::read_to_string(proj.join(MAPA)).unwrap();
+    assert_ne!(salvo, original);
+    let a: serde_json::Value = serde_json::from_str(&original).unwrap();
+    let b: serde_json::Value = serde_json::from_str(&salvo).unwrap();
+    assert_eq!(
+        a["layers"][4], b["layers"][4],
+        "a camada de objetos fica igual"
+    );
+    assert_eq!(a["tilesets"], b["tilesets"]);
+    // E a engine lê o mapa gravado.
+    let root = proj.clone();
+    nn_tilemap::load_tiled(
+        Path::new(MAPA),
+        |p: &Path| std::fs::read_to_string(root.join(p)).map_err(|e| e.to_string()),
+        1.0,
+    )
+    .expect("a engine lê o mapa");
+}
+
+#[cfg(unix)]
+#[test]
+fn pintar_na_cena_com_o_jogo_aberto_manda_os_tiles() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    let dir = temp("tiles-ao-vivo");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), jogo_ao_vivo(&dir), false);
+    com_cena(&mut h, &proj);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut("cenas/teste.cena").unwrap();
+        let mut o = Object::new(70, "mapa");
+        // A célula (2, 2) fica no meio da vista.
+        o.x = -40.0;
+        o.y = -200.0;
+        let mut c = Component::new("map");
+        c.set("map", Prop::Str("fases/fase1.tmj".into()));
+        c.set("scale", Prop::Num(1.0));
+        o.components.push(c);
+        doc.data.objects.push(o);
+        doc.selection = vec![70];
+    }
+    h.run_steps(2);
+    // (O botão está na barra da cena e no Inspetor.)
+    h.get_all_by_label("✏ Pintar").next().unwrap().click();
+    h.run_steps(3);
+    assert_eq!(cena(&h).painting, Some(70));
+    assert!(tabs(&h).contains(&Tab::Tiles));
+    h.key_press(Key::F6);
+    h.run_steps(3);
+    let start = std::time::Instant::now();
+    while h.state().project().unwrap().game_scene.is_none() {
+        assert!(start.elapsed().as_secs() < 20, "o jogo não avisou a cena");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.step();
+    }
+    h.run_steps(3);
+    // Testar salvou a cena; agora pinta um tile dentro do mapa.
+    h.state_mut().project_mut().unwrap().paint.stamp = nn_studio::map_doc::Stamp::single(7);
+    let p = celula(&h, "cenas/teste.cena", 2, 2);
+    clique(&mut h, p);
+    assert!(h.state().project().unwrap().map_docs["fases/fase1.tmj"].is_dirty());
+    let recebido = dir.join("recebido.txt");
+    let start = std::time::Instant::now();
+    let linha = loop {
+        let t = std::fs::read_to_string(&recebido).unwrap_or_default();
+        if let Some(l) = t.lines().find(|l| l.contains("\"tiles\"")) {
+            break l.to_string();
+        }
+        assert!(
+            start.elapsed().as_secs() < 10,
+            "o jogo não recebeu os tiles: {t}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.step();
+    };
+    let msg: serde_json::Value = serde_json::from_str(&linha).unwrap();
+    assert_eq!(msg["id"], 70);
+    // [camada, coluna, linha, tile], contando de 1.
+    let t = &msg["value"][0];
+    assert_eq!((t[1].as_i64(), t[2].as_i64()), (Some(3), Some(3)), "{msg}");
+    h.key_press_modifiers(Modifiers::SHIFT, Key::F5);
+    h.run_steps(3);
+}

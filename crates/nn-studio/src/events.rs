@@ -263,7 +263,11 @@ pub fn value_text(spec: Option<&PropSpec>, v: &Prop, in_object: bool) -> String 
                 s.rsplit('/').next().unwrap_or(s).to_string()
             }
         }
-        PropType::Var | PropType::Object if v.str().is_empty() => spec
+        PropType::Tile => match v.num() as i64 {
+            0 => "nenhum (apaga)".into(),
+            n => n.to_string(),
+        },
+        PropType::Var | PropType::Object | PropType::TileType if v.str().is_empty() => spec
             .allow_empty
             .clone()
             .unwrap_or_else(|| "(nenhum)".into()),

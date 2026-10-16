@@ -254,6 +254,71 @@ impl UserData for LTileMap {
             },
         );
 
+        m.add_method(
+            "tile_properties",
+            |lua, this, (col, row, layer): (i64, i64, Value)| {
+                let state = this.0.borrow();
+                let (c, r) = cell_from_lua(col, row, &state.map)?;
+                let index = Self::layer_index(&state.map, &layer)?;
+                match state.map.tile_properties(state.map.tile(index, c, r)) {
+                    Some(p) => Ok(Value::Table(properties_table(lua, p)?)),
+                    None => Ok(Value::Nil),
+                }
+            },
+        );
+
+        // Tiles (não vazios) das células que o retângulo do mundo toca, em
+        // todas as camadas: { col, row, layer, tile, properties }.
+        m.add_method(
+            "tiles_in",
+            |lua, this, (x0, y0, x1, y1): (f32, f32, f32, f32)| {
+                let state = this.0.borrow();
+                let map = &state.map;
+                let out = lua.create_table()?;
+                if map.width == 0 || map.height == 0 {
+                    return Ok(out);
+                }
+                let (lo, hi) = (
+                    Vec2::new(x0.min(x1), y0.min(y1)),
+                    Vec2::new(x0.max(x1), y0.max(y1)),
+                );
+                let a = (lo - map.origin) / map.tile_size;
+                let b = (hi - map.origin) / map.tile_size;
+                let clamp = |v: f32, n: u32| (v.floor() as i64).clamp(0, n as i64 - 1) as u32;
+                if b.x < 0.0 || b.y < 0.0 || a.x >= map.width as f32 || a.y >= map.height as f32 {
+                    return Ok(out);
+                }
+                let (c0, c1) = (clamp(a.x, map.width), clamp(b.x, map.width));
+                let (y0b, y1b) = (clamp(a.y, map.height), clamp(b.y, map.height));
+                let mut n = 0;
+                for (li, layer) in map.layers.iter().enumerate() {
+                    if layer.properties.contains_key("nn_collision_codes") {
+                        continue;
+                    }
+                    for yb in y0b..=y1b {
+                        let row = map.height - 1 - yb;
+                        for col in c0..=c1 {
+                            let gid = map.tile(li, col, row);
+                            if gid == 0 {
+                                continue;
+                            }
+                            let t = lua.create_table()?;
+                            t.set("col", col + 1)?;
+                            t.set("row", row + 1)?;
+                            t.set("layer", li + 1)?;
+                            t.set("tile", gid)?;
+                            if let Some(p) = map.tile_properties(gid) {
+                                t.set("properties", properties_table(lua, p)?)?;
+                            }
+                            n += 1;
+                            out.set(n, t)?;
+                        }
+                    }
+                }
+                Ok(out)
+            },
+        );
+
         m.add_method("solid", |_, this, (col, row): (i64, i64)| {
             let state = this.0.borrow();
             let (c, r) = cell_from_lua(col, row, &state.map)?;

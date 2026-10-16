@@ -497,6 +497,7 @@ impl StudioApp {
                     Command::ShowHierarchy,
                     Command::ShowInspector,
                     Command::ShowEvents,
+                    Command::ShowTiles,
                     Command::ShowConsole,
                 ] {
                     if self.command_button(ui, c) {

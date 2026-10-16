@@ -66,6 +66,10 @@ projeto continua aberto.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
   um personagem no [editor de pixel art](#editor-de-pixel-art), fazer um
   segundo quadro, animar e pôr na cena.
+- **Monte uma fase com tiles** (uns 12 minutos), a partir do modelo Vazio:
+  pintar o chão com um terreno que se encaixa sozinho, uma plataforma, uma
+  camada de enfeites, lava animada marcada com um tipo e o evento que faz a
+  lava queimar ([mapas de tiles](#mapas-de-tiles)).
 
 Eles ficam no Início (**🎓 Tutoriais**) e em **Ajuda > Tutoriais**.
 
@@ -210,7 +214,7 @@ desenhada por cima) e os **componentes**:
 | Texto | Escreve um texto no mundo. |
 | Forma | Retângulo ou círculo de uma cor. |
 | Corpo físico | Cai, colide, para no chão (dinâmico, estático ou cinemático; caixa ou círculo; sensor; plataforma de mão única). |
-| Mapa do Tiled | Desenha um mapa `.tmj`, com a colisão dos tiles. |
+| Mapa de tiles | Desenha um mapa `.tmj`, com a colisão dos tiles. **✏ Pintar** pinta o mapa ali na cena ([mapas de tiles](#mapas-de-tiles)); **Abrir o mapa** abre a aba dele. |
 | Câmera | Onde a câmera começa, ou quem ela segue (com suavidade e limite no mapa). |
 | Som | Toca um som ou música quando a cena começa. |
 | Partículas | Fumaça, faíscas, poeira, chuva... |
@@ -336,7 +340,7 @@ lidas como frases, com os campos no meio da frase.
 |---|---|
 | Cena e tempo | começar, a cada N segundos, depois de N segundos, sorte (chance em %) |
 | Controles | apertar, soltar ou estar segurando uma tecla (ou um grupo: pular, confirmar, voltar, setas...), clicar num objeto |
-| Toques | encostar em, parar de encostar, estar encostando, estar perto de |
+| Toques | encostar em, parar de encostar, estar encostando, estar perto de, encostar num tile (de um tipo) |
 | Variáveis | comparar uma variável do jogo (=, ≠, <, >, ≤, ≥) |
 | Objetos | não sobrar nenhum (com um nome), ser destruído, sair da tela, estar no chão ou no ar, estar visível ou escondido |
 | Mensagens | pegar um coletável, levar dano, a vida acabar, receber uma mensagem |
@@ -351,6 +355,7 @@ lidas como frases, com os campos no meio da frase.
 | Som | tocar um som, tocar ou parar a música |
 | Comportamentos | ligar ou desligar um comportamento, mandar uma mensagem |
 | Tempo | esperar, escrever no console |
+| Mapas | trocar o tile tocado, trocar o tile em um objeto (0 apaga; a colisão acompanha) |
 
 Algumas ações têm opções a mais no 🔧 (deslocamento ao criar, volume, força do
 tremor...). O formato no arquivo está no
@@ -489,14 +494,80 @@ terminar**; no Lua, `obj.sprite:play("andar")`
 ([guia do Lua](lua.md#animações-anim)). Os modelos Plataforma, Aventura e
 Vazio já vêm com `heroi.anim` e `moeda.anim`.
 
+## Mapas de tiles
+
+Um mapa de tiles é uma fase montada com quadradinhos (tiles) de uma imagem só,
+pintados numa grade. O NN Studio pinta os mapas **direto na cena** (ou na aba
+do mapa) e grava no formato do [Tiled](https://www.mapeditor.org/) (`.tmj`, com
+o tileset num `.tsj` ao lado da imagem): dá para abrir os mesmos arquivos no
+Tiled, e o que você faz lá aparece aqui.
+
+![Pintando o chão com o terreno "terra" na cena, com o painel Tiles à direita](imagens/nn-studio-tiles.png)
+
+- **Mapa novo:** na cena, **➕ Objeto > Mapa de tiles...** (ou no painel Tiles).
+  Escolha os tiles: um tileset do projeto, uma imagem (o `.tsj` é criado ao
+  lado dela) ou uma imagem nova em branco para desenhar. O mapa vai para
+  `mapas/` e o objeto já entra no modo Pintar. Os modelos Plataforma, Aventura
+  e Vazio trazem `assets/imagens/terreno.png` e `terreno.tsj`.
+- **✏ Pintar:** selecione o objeto do mapa e clique em **✏ Pintar** (na barra
+  da cena ou no Inspetor). O mouse passa a pintar tiles; **Esc** sai. Rolar o
+  mouse aproxima, botão do meio ou Espaço + arrastar move a vista. Pintar
+  fora do mapa faz ele **crescer** (à esquerda e embaixo, o objeto anda junto
+  para o desenho ficar no lugar).
+- **Ferramentas** (painel **Tiles**): **Pincel** (B), **Borracha** (E),
+  **Balde** (G), **Retângulo** (U), **Conta-gotas** (I, ou botão direito em
+  qualquer ferramenta) e **Terreno** (T). Clique num tile do tileset, ou
+  arraste para pegar vários: o pincel pinta o pedaço inteiro. **Ctrl +
+  arrastar** no mapa copia um pedaço para o pincel. **R** gira o pincel 90°,
+  **X** espelha (Shift+X, na vertical): os tiles ficam girados no mapa, como
+  no Tiled.
+- **Terrenos (autotile):** escolha um terreno (terra, grama, água) e pinte: as
+  bordas e os cantos se encaixam sozinhos, com 16 peças (cantos do Tiled).
+  **apagar** tira o terreno e acerta as bordas em volta. Uma célula pintada
+  com o terreno é o terreno inteiro; as peças das vizinhas só levam a borda
+  (a grama por cima, a areia na margem), então o que bloqueia é exatamente o
+  que você pintou. Peças com mais de uma opção são sorteadas pela
+  probabilidade de cada uma (uma grama com flores de vez em quando).
+- **+ Terreno** cria um terreno seu: as 16 peças entram no fim da imagem do
+  tileset, já com os cantos marcados e pintadas como guia. **Abrir a imagem**
+  leva ao [editor de pixel art](#editor-de-pixel-art) para desenhar por cima.
+- **Camadas:** o mapa tem camadas pintadas uma por cima da outra (o chão, os
+  enfeites, a frente). Cada uma pode ficar escondida, **travada** (não pinta)
+  ou ser uma camada de **colisão** (tudo nela bloqueia). Clique duas vezes
+  para renomear; **Subir**, **Descer**, **Excluir** e a **opacidade**. O
+  pincel pinta na camada escolhida (também no alto do painel).
+- **Marcar os tiles:** **Sólido** (bloqueia), **Plataforma** (de mão única:
+  dá para pular por baixo), **Tipo** (um nome como `lava`, `agua`, `tijolo`,
+  para os eventos), **Animação** (clique num tile e Ctrl+clique nos que vêm
+  depois; cada quadro tem a sua duração) e **Terreno** (clique nos cantos de
+  cada tile para dizer de qual terreno é cada canto). A marcação fica no
+  tileset e vale para todos os mapas que usam ele. **Colisão** mostra o que
+  bloqueia (vermelho) e as plataformas (azul) por cima do mapa.
+- **Ao vivo:** com o jogo aberto (F6), o que você pinta dentro do mapa aparece
+  no jogo na hora, com a colisão. Quando o mapa cresce, o jogo vê ao salvar.
+- **Aba do mapa:** clicar num `.tmj` abre o mapa sozinho, com o mesmo pincel.
+  **Abrir no Tiled** abre no programa padrão. Mapas que o editor não sabe
+  pintar (infinitos, camadas compactadas em base64, tilesets `.tsx`) mostram
+  a prévia e o motivo. Tilesets que estão dentro do mapa (do Tiled) se pintam
+  normalmente; para marcar tiles neles, **Separar num arquivo .tsj**.
+- **Desfazer e salvar:** Ctrl+Z desfaz cada pincelada (na cena, enquanto
+  pinta, ou na aba do mapa). Ctrl+S na cena salva a cena, os mapas dela e os
+  tilesets juntos; a aba da cena ganha o • quando o mapa tem alterações.
+
+Nos [eventos](#eventos-quando-então), **Encostar num tile** (de um tipo, ou
+qualquer um) e **Trocar o tile tocado** fazem lava, espinhos, água e blocos
+que quebram; **Trocar o tile em um objeto** troca o tile onde um objeto está.
+O campo de tile tem um **…** para escolher no tileset. No Lua:
+`obj:tiles_touching()`, `mapa:tiles_in(...)` e `mapa:tile_properties(...)`
+([guia do Lua](lua.md#nntilemap)).
+
 ## Imagens, sons e mapas
 
 - **Imagens:** abrem no [editor de pixel art](#editor-de-pixel-art). Imagens
   que não são PNG (a engine só lê PNG) mostram um aviso.
 - **Sons:** forma de onda, ▶ Tocar e o código `nn.assets.sound(...)`.
-- **Mapas do Tiled (.tmj):** prévia com os tiles e os objetos marcados (passe
-  o mouse para ver o tipo). **Editar no Tiled** abre o mapa no programa
-  padrão; ao salvar lá, a prévia atualiza.
+- **Mapas do Tiled (.tmj):** abrem no [editor de mapas](#mapas-de-tiles).
+  Ao salvar no Tiled, o editor e o jogo aberto atualizam.
 
 ## Jogar
 
@@ -547,7 +618,7 @@ mensagem diz onde está o erro.
 | F5 / Shift+F5 | Jogar (ou reiniciar) / Parar |
 | F6 | Testar a partir da cena visual aberta |
 | Ctrl+S / Ctrl+Shift+S | Salvar / Salvar tudo |
-| Ctrl+Z / Ctrl+Y | Desfazer / refazer (na cena visual e no editor de pixel art) |
+| Ctrl+Z / Ctrl+Y | Desfazer / refazer (na cena visual, nos mapas e no editor de pixel art) |
 | Ctrl+N | Nova cena visual |
 | Ctrl+Shift+N / Ctrl+O | Novo projeto / Abrir projeto |
 | Ctrl+Shift+P / Ctrl+P | Paleta de comandos / Abrir arquivo |
@@ -566,6 +637,9 @@ mensagem diz onde está o erro.
 | B E G L R O I M (na imagem) | Lápis, borracha, balde, linha, retângulo, círculo, conta-gotas, seleção |
 | X / [ ] / H (na imagem) | Trocar as cores / tamanho do pincel / espelhar |
 | , / . (na imagem) | Quadro anterior / próximo |
+| B E G U I T (pintando um mapa) | Pincel, borracha, balde, retângulo, conta-gotas, terreno |
+| R / X / Shift+X (pintando um mapa) | Girar / espelhar / espelhar na vertical o pincel |
+| Ctrl + arrastar / botão direito (pintando) | Copiar um pedaço / pegar o tile |
 | F1 | Guia do Lua |
 
 A lista também está em **Ajuda > Atalhos do teclado**.
@@ -616,6 +690,13 @@ o jogo.
 - O editor de pixel art guarda o desenho na memória e grava o PNG com a
   biblioteca `image`. Os arquivos `.anim` são tabelas Lua lidas pela própria
   engine (`cena.lua`, `parse_anims`) e pelo NN Studio no mesmo formato.
+- Os mapas são lidos e gravados no formato JSON do Tiled (o que o editor não
+  conhece, como objetos e propriedades, fica como estava). Na cena, o mapa
+  aberto é desenhado pelo renderer da engine a partir do que está na memória,
+  sem salvar; na aba do mapa, o egui desenha os tiles. Os giros seguem os bits
+  do Tiled (diagonal, horizontal, vertical). O ajuste ao vivo dos tiles vai
+  como `{"field": "tiles", "value": [["camada", coluna, linha, tile], ...]}`
+  e o jogo chama `set_tile`, que também acerta a colisão.
 - Repetir a imagem é feito no shader de sprites: cada sprite tem quantas
   vezes a região se repete, então um chão de 20 blocos continua sendo um
   desenho só.
@@ -623,5 +704,5 @@ o jogo.
 ## O que vem depois
 
 As próximas etapas do NN Studio trazem mais editores dentro do próprio
-editor: mapas de tiles (pintados direto na cena, com autotile), partículas e
-menus.
+editor: partículas e menus (componentes visuais para montar a interface que
+quiser).

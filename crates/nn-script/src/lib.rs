@@ -386,6 +386,9 @@ impl ScriptRuntime {
         files.extend(self.inner.source.files(SCENE_EXTENSION));
         files.extend(self.inner.source.files(PREFAB_EXTENSION));
         files.extend(self.inner.source.files(ANIM_EXTENSION));
+        // Mapas e tilesets: salvar no editor recarrega a cena.
+        files.extend(self.inner.source.files("tmj"));
+        files.extend(self.inner.source.files("tsj"));
         files.sort();
         files
     }
