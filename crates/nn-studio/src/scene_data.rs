@@ -914,7 +914,8 @@ mod tests {
     fn modelos_ja_vem_no_formato_do_editor() {
         // Abrir e salvar pelo editor não muda nada nas cenas que vêm prontas.
         for text in [
-            include_str!("../../nn-run/modelos/visual/cenas/fase.cena").to_string(),
+            // (No Windows, o git pode trazer o arquivo com CRLF.)
+            include_str!("../../nn-run/modelos/visual/cenas/fase.cena").replace("\r\n", "\n"),
             crate::files::visual_scene_template(),
         ] {
             let scene = read(&text, "modelo").unwrap();
