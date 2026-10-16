@@ -1,0 +1,9 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#5FB3E0",
+  gravity = -1800,
+  objects = {
+  },
+}

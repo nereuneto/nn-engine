@@ -1,0 +1,53 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#0B1026",
+  gravity = 0,
+  objects = {
+    {
+      id = 1, name = "titulo",
+      x = 0, y = 150, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Fim de jogo", size = 64, color = "#FF6B6B", anchor = "center", hud = false },
+      },
+    },
+    {
+      id = 2, name = "pontos",
+      x = 0, y = 50, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "", size = 36, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Pontos: {pontos}" },
+      },
+    },
+    {
+      id = 3, name = "recorde",
+      x = 0, y = -10, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "", size = 30, color = "#FFD166", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Recorde: {recorde}" },
+      },
+    },
+    {
+      id = 4, name = "jogar_de_novo",
+      x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Jogar de novo", size = 36, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/jogo.cena", foco = true },
+      },
+    },
+    {
+      id = 5, name = "menu",
+      x = 0, y = -180, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Menu", size = 36, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/titulo.cena" },
+      },
+    },
+  },
+}

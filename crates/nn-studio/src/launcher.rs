@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use eframe::egui::{self, RichText};
+use eframe::egui::{self, Color32, RichText};
 use nn_run::Template;
 
 use crate::commands::Command;
@@ -24,26 +24,113 @@ struct NewProjectForm {
     template: Template,
     error: Option<String>,
     focus: bool,
+    /// Clique duplo num modelo: cria na hora.
+    submit: bool,
 }
 
-#[derive(Debug, Default)]
+/// Um cartão de modelo: miniatura e nome. Clique escolhe.
+fn template_card(
+    ui: &mut egui::Ui,
+    name: &str,
+    thumb: Option<&egui::TextureHandle>,
+    selected: bool,
+) -> egui::Response {
+    let size = egui::vec2(176.0, 99.0);
+    let (rect, r) = ui.allocate_exact_size(size + egui::vec2(0.0, 24.0), egui::Sense::click());
+    let painter = ui.painter_at(rect.expand(3.0));
+    let img = egui::Rect::from_min_size(rect.min, size);
+    match thumb {
+        Some(t) => {
+            painter.image(
+                t.id(),
+                img,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                Color32::WHITE,
+            );
+        }
+        None => {
+            painter.rect_filled(img, 4.0, ui.visuals().faint_bg_color);
+        }
+    }
+    let stroke = if selected {
+        egui::Stroke::new(3.0, theme::ACCENT)
+    } else if r.hovered() {
+        egui::Stroke::new(1.5, ui.visuals().widgets.hovered.fg_stroke.color)
+    } else {
+        egui::Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color)
+    };
+    painter.rect_stroke(img, 4.0, stroke, egui::StrokeKind::Outside);
+    let text = if selected {
+        RichText::new(name).strong().color(theme::ACCENT)
+    } else {
+        RichText::new(name).strong()
+    };
+    let galley = egui::WidgetText::from(text).into_galley(
+        ui,
+        Some(egui::TextWrapMode::Truncate),
+        size.x,
+        egui::TextStyle::Body,
+    );
+    let pos = egui::pos2(rect.center().x - galley.size().x / 2.0, img.bottom() + 4.0);
+    painter.galley(pos, galley, ui.visuals().text_color());
+    r.widget_info(|| {
+        egui::WidgetInfo::selected(egui::WidgetType::RadioButton, true, selected, name)
+    });
+    r
+}
+
+#[derive(Default)]
 pub struct Launcher {
     new_form: Option<NewProjectForm>,
     examples: bool,
     /// Mensagem de erro mostrada no topo (projeto inválido, por exemplo).
     pub error: Option<String>,
+    /// Miniaturas dos modelos (carregadas na primeira vez).
+    thumbs: Vec<(Template, egui::TextureHandle)>,
+}
+
+impl std::fmt::Debug for Launcher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Launcher")
+            .field("error", &self.error)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Miniatura de cada modelo (uma imagem do jogo que ele cria).
+fn thumb_png(t: Template) -> &'static [u8] {
+    match t {
+        Template::Padrao => include_bytes!("../assets/modelos/padrao.png"),
+        Template::Visual => include_bytes!("../assets/modelos/visual.png"),
+        Template::Aventura => include_bytes!("../assets/modelos/aventura.png"),
+        Template::Nave => include_bytes!("../assets/modelos/nave.png"),
+        Template::Vazio => include_bytes!("../assets/modelos/vazio.png"),
+        Template::Minimo => include_bytes!("../assets/modelos/minimo.png"),
+    }
 }
 
 /// Descrição curta de cada modelo.
 fn template_info(t: Template) -> (&'static str, &'static str) {
     match t {
         Template::Padrao => (
-            "Padrão",
-            "Um jogo pequeno e completo: título com menu, partida, pausa, fim e recorde salvo. O melhor jeito de começar.",
+            "Em código",
+            "Um jogo pequeno e completo escrito em Lua: título com menu, partida, pausa, fim e recorde salvo.",
         ),
         Template::Visual => (
-            "Cena visual",
-            "Uma fase de plataforma montada no editor, sem código: herói, inimigo, moedas e placar, cada um com seus comportamentos prontos.",
+            "Plataforma",
+            "Fase de plataforma montada no editor, sem código: herói, inimigo, moedas, placar e uma saída que só abre com todas as moedas.",
+        ),
+        Template::Aventura => (
+            "Aventura",
+            "Visto de cima, sem código: pegue a chave, abra a porta e ache o tesouro, fugindo das lesmas e dos morcegos.",
+        ),
+        Template::Nave => (
+            "Nave",
+            "Atire nos asteroides, sem código: pontos, vidas e recorde salvo no computador.",
+        ),
+        Template::Vazio => (
+            "Vazio",
+            "Uma cena vazia e um pacote de imagens e sons para montar do seu jeito (o tutorial começa daqui).",
         ),
         Template::Minimo => (
             "Mínimo",
@@ -58,6 +145,7 @@ impl Launcher {
             title: "Meu jogo".into(),
             parent: settings::display_path(&settings.default_projects_dir()),
             template: Template::Padrao,
+            submit: false,
             error: None,
             focus: true,
         });
@@ -226,7 +314,7 @@ impl Launcher {
         let mut close = false;
         let mut action = None;
         let response = egui::Modal::new(egui::Id::new("novo-projeto")).show(ctx, |ui| {
-            ui.set_width(460.0);
+            ui.set_width(560.0);
             ui.heading("✨ Novo projeto");
             ui.add_space(8.0);
             ui.label("Nome do jogo:");
@@ -257,20 +345,52 @@ impl Launcher {
             ));
             ui.add_space(8.0);
             ui.label("Modelo:");
-            for t in Template::ALL {
-                let (name, desc) = template_info(t);
-                ui.radio_value(&mut form.template, t, RichText::new(name).strong());
-                ui.indent(("modelo", name), |ui| {
-                    ui.weak(desc);
-                });
+            if self.thumbs.is_empty() {
+                for t in Template::ALL {
+                    if let Ok(img) = image::load_from_memory(thumb_png(t)) {
+                        let tex = ui.ctx().load_texture(
+                            format!("modelo-{}", t.name()),
+                            crate::viewers::to_color_image(&img.to_rgba8()),
+                            egui::TextureOptions::LINEAR,
+                        );
+                        self.thumbs.push((t, tex));
+                    }
+                }
             }
+            // Cartões: miniatura, nome e (embaixo) o que o escolhido traz.
+            egui::Grid::new("modelos")
+                .num_columns(3)
+                .spacing([8.0, 8.0])
+                .show(ui, |ui| {
+                    for (i, t) in Template::ALL.into_iter().enumerate() {
+                        let (name, desc) = template_info(t);
+                        let selected = form.template == t;
+                        let thumb = self.thumbs.iter().find(|(x, _)| *x == t).map(|(_, h)| h);
+                        let r = template_card(ui, name, thumb, selected).on_hover_text(desc);
+                        if r.clicked() {
+                            form.template = t;
+                        }
+                        if r.double_clicked() {
+                            form.template = t;
+                            form.submit = true;
+                        }
+                        if i % 3 == 2 {
+                            ui.end_row();
+                        }
+                    }
+                });
+            let (name, desc) = template_info(form.template);
+            ui.add_space(4.0);
+            ui.label(RichText::new(name).strong());
+            ui.weak(desc);
             if let Some(e) = &form.error {
                 ui.add_space(4.0);
                 ui.colored_label(theme::ERROR, e.as_str());
             }
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                let enter = ui.input(|i| i.key_pressed(egui::Key::Enter));
+                let enter = ui.input(|i| i.key_pressed(egui::Key::Enter))
+                    || std::mem::take(&mut form.submit);
                 if ui
                     .add(
                         egui::Button::new("Criar projeto").fill(theme::ACCENT.gamma_multiply(0.75)),

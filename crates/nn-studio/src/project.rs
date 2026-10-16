@@ -362,6 +362,13 @@ impl ProjectWorkspace {
             && ws.root.join(&start).is_file()
         {
             ws.open_file(&start, None);
+            // Começa num título: a fase também abre (e fica na frente).
+            if let Some(fase) = ["cenas/fase.cena", "cenas/mapa.cena", "cenas/jogo.cena"]
+                .into_iter()
+                .find(|r| *r != start && ws.root.join(r).is_file())
+            {
+                ws.open_file(fase, None);
+            }
         }
         ws
     }

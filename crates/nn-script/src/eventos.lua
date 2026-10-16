@@ -290,7 +290,7 @@ E.CONDITIONS = {
       local cur, new = {}, {}
       for _, a in ipairs(resolve(ctx.scene, p.quem, b0)) do
         for _, o in ipairs(resolve(ctx.scene, p.em, b0)) do
-          if a:touching(o, 0) then
+          if a:touching(o) then
             local k = pair_key(a, o)
             cur[k] = true
             if not (st.prev and st.prev[k]) then table.insert(new, { este = a, outro = o }) end
@@ -311,7 +311,7 @@ E.CONDITIONS = {
       local cur, pairs_now = {}, {}
       for _, a in ipairs(resolve(ctx.scene, p.quem, b0)) do
         for _, o in ipairs(resolve(ctx.scene, p.em, b0)) do
-          if a:touching(o, 0) then
+          if a:touching(o) then
             local k = pair_key(a, o)
             cur[k] = true
             pairs_now[k] = { este = a, outro = o }
@@ -335,7 +335,7 @@ E.CONDITIONS = {
       local out = {}
       for _, a in ipairs(resolve(ctx.scene, p.quem, b)) do
         for _, o in ipairs(resolve(ctx.scene, p.em, b)) do
-          if a:touching(o, 0) then table.insert(out, { este = a, outro = o }) end
+          if a:touching(o) then table.insert(out, { este = a, outro = o }) end
         end
       end
       return out
@@ -631,6 +631,13 @@ E.ACTIONS = {
         if v ~= nil then nn.vars[p.var] = v end
       end
     end,
+  },
+  {
+    id = "zerar", name = "Zerar as variáveis", category = "Variáveis",
+    text = "voltar as variáveis do jogo ao começo",
+    help = "Todas voltam aos valores das Configurações do projeto (para começar um jogo novo).",
+    lua = "nn.reset_vars()",
+    run = function() nn.reset_vars() end,
   },
   -- Cenas
   {

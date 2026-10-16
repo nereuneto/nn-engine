@@ -146,7 +146,7 @@ fn modelo_visual_roda_a_fase_e_pega_moedas() {
     .unwrap();
     assert!(r.files.contains(&"cenas/fase.cena".to_string()));
     let project = Project::open(&dir).unwrap();
-    assert_eq!(project.start, "cenas/fase.cena");
+    assert_eq!(project.start, "cenas/titulo.cena");
     assert!(ScriptRuntime::new(&dir).unwrap().check_syntax().is_empty());
 
     let rt = ScriptRuntime::new(&dir).unwrap();
@@ -223,4 +223,259 @@ fn nao_sobrescreve_pasta_com_arquivos() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
     std::fs::remove_dir_all(&vazia).unwrap();
+}
+
+/// Uma cena visual do projeto rodando sozinha, com a tabela dela na global
+/// `cena` do Lua.
+fn cena_do_modelo(dir: &Path, path: &str) -> Option<(Headless<Uma>, ScriptRuntime)> {
+    let project = Project::open(dir).unwrap();
+    let rt = ScriptRuntime::new(dir).unwrap();
+    let rt2 = rt.clone();
+    let config = project
+        .config
+        .clone()
+        .size(320, 180)
+        .save_dir(dir.join("dados"))
+        .hot_reload(false);
+    let path = path.to_string();
+    let h = Headless::new(config, move |ctx| {
+        let mut s = rt.scene(path);
+        s.enter(ctx);
+        Uma(s)
+    });
+    match h {
+        Ok(h) => {
+            rt2.lua()
+                .globals()
+                .set("cena", h.game.0.table().unwrap())
+                .unwrap();
+            Some((h, rt2))
+        }
+        Err(e) => {
+            assert!(
+                !std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1"),
+                "GPU obrigatória: {e}"
+            );
+            None
+        }
+    }
+}
+
+fn lua<T: mlua::FromLua>(rt: &ScriptRuntime, code: &str) -> T {
+    rt.lua().load(code).eval().unwrap()
+}
+
+#[test]
+fn todos_os_modelos_rodam_todas_as_cenas() {
+    for template in Template::ALL {
+        let dir = temp(&format!("todas-{}", template.name()));
+        create_project(&NewOptions {
+            dir: dir.clone(),
+            title: Some("Teste \"Aspas\"".into()),
+            template,
+        })
+        .unwrap();
+        assert!(
+            ScriptRuntime::new(&dir).unwrap().check_syntax().is_empty(),
+            "{}",
+            template.name()
+        );
+        // A cena inicial e todas as cenas visuais (as cenas em código podem
+        // depender do que a anterior preparou).
+        let mut scenes = vec![Project::open(&dir).unwrap().start];
+        if let Ok(list) = std::fs::read_dir(dir.join("cenas")) {
+            for e in list.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                let rel = format!("cenas/{name}");
+                if name.ends_with(".cena") && !scenes.contains(&rel) {
+                    scenes.push(rel);
+                }
+            }
+        }
+        assert!(!scenes.is_empty(), "{}", template.name());
+        for s in scenes {
+            let Some((mut h, _rt)) = cena_do_modelo(&dir, &s) else {
+                return;
+            };
+            h.run_frames(90);
+            assert_eq!(h.game.0.error(), None, "{} {s}", template.name());
+        }
+        // O título vai para dentro das cenas também.
+        if template == Template::Aventura {
+            let t = std::fs::read_to_string(dir.join("cenas/titulo.cena")).unwrap();
+            assert!(t.contains("text = \"Teste \\\"Aspas\\\"\""), "{t}");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
+#[test]
+fn modelo_aventura_chave_abre_a_porta_e_o_bau_termina() {
+    let dir = temp("aventura");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: None,
+        template: Template::Aventura,
+    })
+    .unwrap();
+    let Some((mut h, rt)) = cena_do_modelo(&dir, "cenas/mapa.cena") else {
+        return;
+    };
+    // Sem inimigos, para o teste não depender de onde eles andam.
+    let sem_inimigos = "for _, n in ipairs({ 'lesma', 'morcego' }) do \
+        for _, o in ipairs(cena:find_all(n)) do o:destroy() end end";
+    rt.lua().load(sem_inimigos).exec().unwrap();
+    h.run_frames(2);
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.chaves"), 0);
+    // Sem chave, a porta avisa.
+    rt.lua()
+        .load("cena.objects.heroi:move_to(60, 0)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert!(lua::<bool>(&rt, "return cena.objects.porta ~= nil"));
+    assert!(lua::<String>(&rt, "return cena.objects.aviso.text.text").contains("trancada"));
+    // Pega a chave e volta à porta: ela abre e gasta a chave.
+    rt.lua()
+        .load("cena.objects.heroi:move_to(-480, 200)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.chaves"), 1);
+    rt.lua()
+        .load("cena.objects.heroi:move_to(60, 0)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert!(
+        lua::<bool>(&rt, "return cena.objects.porta == nil"),
+        "a porta abriu"
+    );
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.chaves"), 0);
+    // O baú abre.
+    rt.lua()
+        .load("cena.objects.heroi:move_to(430, 0)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert_eq!(lua::<i64>(&rt, "return cena.objects.bau.sprite.frame"), 2);
+    h.run_frames(120);
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn modelo_nave_tiro_da_pontos_e_o_recorde_vai_para_o_disco() {
+    let dir = temp("nave");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: None,
+        template: Template::Nave,
+    })
+    .unwrap();
+    let Some((mut h, rt)) = cena_do_modelo(&dir, "cenas/jogo.cena") else {
+        return;
+    };
+    h.run_frames(2);
+    // Sem asteroides sorteados: só o que o teste cria.
+    rt.lua()
+        .load("cena.objects.gerador:behavior('gerador').enabled = false")
+        .exec()
+        .unwrap();
+    rt.lua()
+        .load("for _, o in ipairs(cena:find_all('asteroide')) do o:destroy() end")
+        .exec()
+        .unwrap();
+    // Asteroides sob encomenda: K cria um na frente da nave, J em cima dela
+    // (regras mandadas pelo canal ao vivo, como o editor faz).
+    assert!(nn_script::live::push(
+        r#"{"scene":"cenas/jogo.cena","id":3,"field":"events","value":[
+          {"when":[{"cond":"tecla","modo":"apertar","tecla":"k"}],
+           "actions":[{"act":"criar","prefab":"prefabs/asteroide.prefab","onde":"nave","dx":420}]},
+          {"when":[{"cond":"tecla","modo":"apertar","tecla":"j"}],
+           "actions":[{"act":"criar","prefab":"prefabs/asteroide.prefab","onde":"nave"}]}]}"#
+    ));
+    h.run_frames(1);
+    toque_uma(&mut h, KeyCode::KeyK);
+    h.ctx.input.press_key(KeyCode::Space);
+    h.run_frames(40);
+    h.ctx.input.release_key(KeyCode::Space);
+    h.run_frames(2);
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.pontos"), 10);
+    // Três asteroides na nave: a vida acaba e o recorde é salvo.
+    for _ in 0..3 {
+        toque_uma(&mut h, KeyCode::KeyJ);
+        h.run_frames(90);
+    }
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.vidas"), 0);
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.recorde"), 10);
+    assert_eq!(h.ctx.save.get_as::<i64>("vars.recorde"), Some(10));
+    // Gravado no arquivo (o evento "salvar no disco" grava na hora).
+    let path = h.ctx.save.path().unwrap().to_path_buf();
+    assert!(!h.ctx.save.is_dirty());
+    assert!(
+        std::fs::read_to_string(path)
+            .unwrap()
+            .contains("vars.recorde")
+    );
+    assert!(lua::<bool>(&rt, "return cena.objects.nave == nil"));
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn toque_uma(h: &mut Headless<Uma>, k: KeyCode) {
+    h.ctx.input.press_key(k);
+    h.run_frames(1);
+    h.ctx.input.release_key(k);
+    h.run_frames(1);
+}
+
+/// Ferramenta: grava as miniaturas dos modelos que o NN Studio mostra no
+/// "Novo projeto" (`cargo test -p nn-run --test novo miniaturas -- --ignored`).
+/// A do modelo Vazio (que não tem nada na cena) é montada à parte.
+#[test]
+#[ignore]
+fn miniaturas_dos_modelos() {
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../nn-studio/assets/modelos");
+    std::fs::create_dir_all(&out).unwrap();
+    for template in Template::ALL {
+        if template == Template::Vazio {
+            continue;
+        }
+        let dir = temp(&format!("miniatura-{}", template.name()));
+        create_project(&NewOptions {
+            dir: dir.clone(),
+            title: Some("Meu jogo".into()),
+            template,
+        })
+        .unwrap();
+        let project = Project::open(&dir).unwrap();
+        let scene = ["cenas/fase.cena", "cenas/mapa.cena", "cenas/jogo.cena"]
+            .into_iter()
+            .map(str::to_string)
+            .find(|r| dir.join(r).is_file())
+            .unwrap_or(project.start.clone());
+        let rt = ScriptRuntime::new(&dir).unwrap();
+        // Todos do mesmo jeito: o jogo em 1280×720 reduzido para 320×180.
+        let config = project
+            .config
+            .clone()
+            .size(320, 180)
+            .resolution(1280, 720)
+            .save_dir(dir.join("dados"))
+            .hot_reload(false);
+        let Ok(mut h) = Headless::new(config, move |ctx| {
+            let mut s = rt.scene(scene);
+            s.enter(ctx);
+            Uma(s)
+        }) else {
+            return;
+        };
+        h.run_frames(if template == Template::Nave { 150 } else { 40 });
+        h.save_png(out.join(format!("{}.png", template.name())))
+            .unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

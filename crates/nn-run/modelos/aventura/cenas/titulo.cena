@@ -1,0 +1,60 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#1B2838",
+  gravity = 0,
+  events = {
+    { comment = "Tela de título: o jogo começa do zero." },
+    { when = {
+        { cond = "comecou" },
+      }, actions = {
+        { act = "zerar" },
+      } },
+  },
+  objects = {
+    {
+      id = 1, name = "titulo",
+      x = 0, y = 170, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "{{TITULO}}", size = 72, color = "#FFD166", anchor = "center", hud = false },
+      },
+    },
+    {
+      id = 2, name = "dica",
+      x = 0, y = 80, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Pegue a chave, abra a porta e encontre o tesouro", size = 26, color = "#B8C4D6", anchor = "center", hud = false },
+      },
+    },
+    {
+      id = 3, name = "bau",
+      x = 0, y = -10, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sprite", image = "assets/imagens/bau.png", frame_w = 16, frame_h = 16, frame = 2, w = 96, h = 96, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "behavior", script = "nn:movimento", altura = 8, duracao = 1.8, tipo = "flutuar" },
+      },
+    },
+    {
+      id = 4, name = "jogar",
+      x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Jogar", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/mapa.cena", foco = true },
+      },
+    },
+    {
+      id = 5, name = "sair",
+      x = 0, y = -190, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Sair", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:botao", acao = "sair" },
+      },
+    },
+  },
+}

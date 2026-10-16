@@ -1535,22 +1535,66 @@ mod tests {
         assert!(!write(&s).contains("events"));
     }
 
+    /// Ferramenta: regrava as cenas e prefabs dos modelos no formato do
+    /// editor (`cargo test -p nn-studio --lib reescrever_modelos -- --ignored`).
+    #[test]
+    #[ignore]
+    fn reescrever_modelos() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../nn-run/modelos");
+        fn walk(dir: &std::path::Path) {
+            for e in std::fs::read_dir(dir).unwrap() {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    walk(&p);
+                    continue;
+                }
+                let name = p.to_string_lossy().to_string();
+                let text = std::fs::read_to_string(&p).unwrap_or_default();
+                let out = if name.ends_with(".cena") {
+                    write(&read(&text, &name).unwrap())
+                } else if name.ends_with(".prefab") {
+                    write_prefab(&read_prefab(&text, &name).unwrap())
+                } else {
+                    continue;
+                };
+                std::fs::write(&p, out).unwrap();
+            }
+        }
+        walk(&root);
+    }
+
     #[test]
     fn modelos_ja_vem_no_formato_do_editor() {
-        // Abrir e salvar pelo editor não muda nada nas cenas que vêm prontas.
-        for text in [
-            // (No Windows, o git pode trazer o arquivo com CRLF.)
-            include_str!("../../nn-run/modelos/visual/cenas/fase.cena").replace("\r\n", "\n"),
-            include_str!("../../nn-run/modelos/visual/cenas/fim.cena").replace("\r\n", "\n"),
-            crate::files::visual_scene_template(),
-        ] {
-            let scene = read(&text, "modelo").unwrap();
-            assert_eq!(write(&scene), text);
+        // Abrir e salvar pelo editor não muda nada nas cenas e prefabs que
+        // vêm prontos nos modelos.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../nn-run/modelos");
+        let mut files = Vec::new();
+        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(dir).unwrap() {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    walk(&p, out);
+                } else if p.extension().is_some_and(|x| x == "cena" || x == "prefab") {
+                    out.push(p);
+                }
+            }
         }
-        let prefab =
-            include_str!("../../nn-run/modelos/visual/prefabs/moeda.prefab").replace("\r\n", "\n");
-        let obj = read_prefab(&prefab, "moeda").unwrap();
-        assert_eq!(write_prefab(&obj), prefab);
+        walk(&root, &mut files);
+        assert!(files.len() >= 12, "{files:?}");
+        for p in files {
+            // (No Windows, o git pode trazer o arquivo com CRLF.)
+            let text = std::fs::read_to_string(&p).unwrap().replace("\r\n", "\n");
+            let name = p.to_string_lossy().to_string();
+            if name.ends_with(".prefab") {
+                let obj = read_prefab(&text, &name).unwrap();
+                assert_eq!(write_prefab(&obj), text, "{name}");
+            } else {
+                let scene = read(&text, &name).unwrap();
+                assert_eq!(write(&scene), text, "{name}");
+            }
+        }
+        let template = crate::files::visual_scene_template();
+        assert_eq!(write(&read(&template, "novo").unwrap()), template);
     }
 
     #[test]

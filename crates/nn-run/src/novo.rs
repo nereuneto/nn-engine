@@ -12,19 +12,36 @@ pub enum Template {
     /// Só uma cena com um quadrado que anda.
     Minimo,
     /// Fase de plataforma montada no NN Studio (cena visual `.cena`), sem
-    /// código: comportamentos prontos e um prefab. O jeito de começar pelo
-    /// editor.
+    /// código: comportamentos prontos, eventos e um prefab. O jeito de
+    /// começar pelo editor.
     Visual,
+    /// Aventura vista de cima, sem código: chave, porta, inimigos e tesouro.
+    Aventura,
+    /// Jogo de nave, sem código: tiros, asteroides, pontos e recorde salvo.
+    Nave,
+    /// Cena visual vazia com um pacote de imagens e sons (o tutorial começa
+    /// daqui).
+    Vazio,
 }
 
 impl Template {
-    pub const ALL: [Template; 3] = [Template::Padrao, Template::Visual, Template::Minimo];
+    pub const ALL: [Template; 6] = [
+        Template::Padrao,
+        Template::Visual,
+        Template::Aventura,
+        Template::Nave,
+        Template::Vazio,
+        Template::Minimo,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             Template::Padrao => "padrao",
             Template::Minimo => "minimo",
             Template::Visual => "visual",
+            Template::Aventura => "aventura",
+            Template::Nave => "nave",
+            Template::Vazio => "vazio",
         }
     }
 
@@ -33,14 +50,25 @@ impl Template {
             "padrao" | "padrão" => Some(Template::Padrao),
             "minimo" | "mínimo" => Some(Template::Minimo),
             "visual" => Some(Template::Visual),
+            "aventura" => Some(Template::Aventura),
+            "nave" => Some(Template::Nave),
+            "vazio" => Some(Template::Vazio),
             _ => None,
         }
     }
 
     fn files(self) -> &'static [(&'static str, &'static [u8])] {
+        // Cada arquivo: "caminho" (do próprio modelo) ou ="caminho" "origem"
+        // (de outra pasta de modelos: as imagens e sons são compartilhados).
         macro_rules! modelo {
-            ($dir:literal: $($path:literal),* $(,)?) => {
-                &[$(($path, include_bytes!(concat!("../modelos/", $dir, "/", $path)))),*]
+            ($dir:literal: $($(=$dest:literal)? $path:literal),* $(,)?) => {
+                &[$(modelo!(@one $dir, $(=$dest)? $path)),*]
+            };
+            (@one $dir:literal, $path:literal) => {
+                ($path, include_bytes!(concat!("../modelos/", $dir, "/", $path)))
+            };
+            (@one $dir:literal, =$dest:literal $src:literal) => {
+                ($dest, include_bytes!(concat!("../modelos/", $src)))
             };
         }
         match self {
@@ -60,35 +88,64 @@ impl Template {
                 "assets/sons/confirmar.wav",
             ),
             Template::Minimo => modelo!("minimo": "config.lua", "main.lua"),
-            Template::Visual => &[
-                ("config.lua", include_bytes!("../modelos/visual/config.lua")),
-                ("LEIAME.md", include_bytes!("../modelos/visual/LEIAME.md")),
-                (
-                    "cenas/fase.cena",
-                    include_bytes!("../modelos/visual/cenas/fase.cena"),
-                ),
-                (
-                    "cenas/fim.cena",
-                    include_bytes!("../modelos/visual/cenas/fim.cena"),
-                ),
-                (
-                    "prefabs/moeda.prefab",
-                    include_bytes!("../modelos/visual/prefabs/moeda.prefab"),
-                ),
-                // As imagens e o som são os mesmos do modelo padrão.
-                (
-                    "assets/imagens/heroi.png",
-                    include_bytes!("../modelos/padrao/assets/imagens/heroi.png"),
-                ),
-                (
-                    "assets/imagens/moeda.png",
-                    include_bytes!("../modelos/padrao/assets/imagens/moeda.png"),
-                ),
-                (
-                    "assets/sons/moeda.wav",
-                    include_bytes!("../modelos/padrao/assets/sons/moeda.wav"),
-                ),
-            ],
+            Template::Visual => modelo!("visual":
+                "config.lua",
+                "LEIAME.md",
+                "cenas/titulo.cena",
+                "cenas/fase.cena",
+                "cenas/fim.cena",
+                "prefabs/moeda.prefab",
+                ="assets/imagens/heroi.png" "padrao/assets/imagens/heroi.png",
+                ="assets/imagens/moeda.png" "padrao/assets/imagens/moeda.png",
+                ="assets/sons/moeda.wav" "padrao/assets/sons/moeda.wav",
+            ),
+            Template::Aventura => modelo!("aventura":
+                "config.lua",
+                "LEIAME.md",
+                "cenas/titulo.cena",
+                "cenas/mapa.cena",
+                "cenas/fim.cena",
+                ="assets/imagens/heroi.png" "padrao/assets/imagens/heroi.png",
+                ="assets/imagens/chave.png" "comum/imagens/chave.png",
+                ="assets/imagens/porta.png" "comum/imagens/porta.png",
+                ="assets/imagens/bau.png" "comum/imagens/bau.png",
+                ="assets/imagens/inimigos.png" "comum/imagens/inimigos.png",
+                ="assets/imagens/tiles.png" "comum/imagens/tiles.png",
+                ="assets/sons/chave.wav" "comum/sons/chave.wav",
+                ="assets/sons/porta.wav" "comum/sons/porta.wav",
+                ="assets/sons/dano.wav" "comum/sons/dano.wav",
+                ="assets/sons/vitoria.wav" "comum/sons/vitoria.wav",
+            ),
+            Template::Nave => modelo!("nave":
+                "config.lua",
+                "LEIAME.md",
+                "cenas/titulo.cena",
+                "cenas/jogo.cena",
+                "cenas/fim.cena",
+                "prefabs/asteroide.prefab",
+                "prefabs/tiro.prefab",
+                "prefabs/estrela.prefab",
+                ="assets/imagens/nave.png" "comum/imagens/nave.png",
+                ="assets/imagens/asteroide.png" "comum/imagens/asteroide.png",
+                ="assets/imagens/tiro.png" "comum/imagens/tiro.png",
+                ="assets/sons/tiro.wav" "comum/sons/tiro.wav",
+                ="assets/sons/explosao.wav" "comum/sons/explosao.wav",
+            ),
+            Template::Vazio => modelo!("vazio":
+                "config.lua",
+                "LEIAME.md",
+                "cenas/fase.cena",
+                ="assets/imagens/heroi.png" "padrao/assets/imagens/heroi.png",
+                ="assets/imagens/moeda.png" "padrao/assets/imagens/moeda.png",
+                ="assets/imagens/bloco.png" "comum/imagens/bloco.png",
+                ="assets/imagens/bandeira.png" "comum/imagens/bandeira.png",
+                ="assets/imagens/inimigos.png" "comum/imagens/inimigos.png",
+                ="assets/imagens/chave.png" "comum/imagens/chave.png",
+                ="assets/sons/moeda.wav" "padrao/assets/sons/moeda.wav",
+                ="assets/sons/pulo.wav" "comum/sons/pulo.wav",
+                ="assets/sons/dano.wav" "comum/sons/dano.wav",
+                ="assets/sons/vitoria.wav" "comum/sons/vitoria.wav",
+            ),
         }
     }
 }
@@ -168,14 +225,17 @@ pub fn create_project(opts: &NewOptions) -> Result<NewReport, String> {
 /// Troca os marcadores do modelo. Em `.lua`, o título vai dentro de uma
 /// string Lua, então aspas e barras são escapadas.
 fn fill(path: &str, bytes: &[u8], title: &str, id: &str) -> Vec<u8> {
-    let is_text = path.ends_with(".lua") || path.ends_with(".md");
+    let is_lua = [".lua", ".cena", ".prefab"]
+        .iter()
+        .any(|e| path.ends_with(e));
+    let is_text = is_lua || path.ends_with(".md");
     let Ok(text) = std::str::from_utf8(bytes) else {
         return bytes.to_vec();
     };
     if !is_text {
         return bytes.to_vec();
     }
-    let title = if path.ends_with(".lua") {
+    let title = if is_lua {
         title
             .replace('\\', "\\\\")
             .replace('"', "\\\"")
