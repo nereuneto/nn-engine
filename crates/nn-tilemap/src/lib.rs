@@ -555,12 +555,10 @@ impl TileMap {
                     local = frame;
                 }
                 let size = ts.tile_size.as_vec2() * self.scale();
+                let (flip_x, quarter) = flip_transform(raw);
                 let mut sprite_size = size;
-                if raw & FLIP_H != 0 {
+                if flip_x {
                     sprite_size.x = -sprite_size.x;
-                }
-                if raw & FLIP_V != 0 {
-                    sprite_size.y = -sprite_size.y;
                 }
                 // Tiles maiores que a célula ficam alinhados pelo canto inferior esquerdo, como no Tiled.
                 let bottom_left = self.origin
@@ -570,6 +568,7 @@ impl TileMap {
                         .at(bottom_left + size / 2.0)
                         .size(sprite_size)
                         .region(ts.region(local))
+                        .rotation(quarter as f32 * std::f32::consts::FRAC_PI_2)
                         .color(tint),
                 );
             }
@@ -606,6 +605,56 @@ impl TileMap {
     pub fn object(&self, name: &str) -> Option<&MapObject> {
         self.objects.iter().find(|o| o.name == name)
     }
+}
+
+/// Como desenhar os bits de espelhamento do Tiled (H, V e D, a diagonal:
+/// girar 90° com espelho) com um sprite: espelhar na horizontal (antes) e
+/// quantos quartos de volta girar no sentido anti-horário.
+///
+/// O Tiled aplica a diagonal primeiro, depois H e V. Com as matrizes que levam
+/// os eixos da imagem (direita, baixo) para a tela (direita, baixo), procura a
+/// combinação de giro e espelho que dá o mesmo resultado.
+pub fn flip_transform(raw: u32) -> (bool, u32) {
+    type M = [[i32; 2]; 2];
+    fn mul(a: M, b: M) -> M {
+        [
+            [
+                a[0][0] * b[0][0] + a[0][1] * b[1][0],
+                a[0][0] * b[0][1] + a[0][1] * b[1][1],
+            ],
+            [
+                a[1][0] * b[0][0] + a[1][1] * b[1][0],
+                a[1][0] * b[0][1] + a[1][1] * b[1][1],
+            ],
+        ]
+    }
+    const I: M = [[1, 0], [0, 1]];
+    const D: M = [[0, 1], [1, 0]];
+    const H: M = [[-1, 0], [0, 1]];
+    const V: M = [[1, 0], [0, -1]];
+    // Um quarto de volta anti-horário no mundo (Y para cima), visto na tela.
+    const R: M = [[0, 1], [-1, 0]];
+    let mut target = I;
+    if raw & FLIP_D != 0 {
+        target = mul(D, target);
+    }
+    if raw & FLIP_H != 0 {
+        target = mul(H, target);
+    }
+    if raw & FLIP_V != 0 {
+        target = mul(V, target);
+    }
+    let mut rot = I;
+    for quarter in 0..4 {
+        if rot == target {
+            return (false, quarter);
+        }
+        if mul(rot, H) == target {
+            return (true, quarter);
+        }
+        rot = mul(R, rot);
+    }
+    (false, 0)
 }
 
 fn cell_code(cell: Cell) -> u32 {
@@ -715,6 +764,21 @@ mod tests {
         assert!(m.set_tile(colisao, 2, 2, 0));
         assert_eq!(m.collision_cell(2, 2), Cell::Empty);
         assert!(!m.set_tile(0, 99, 0, 1));
+    }
+
+    #[test]
+    fn giros_do_tiled() {
+        assert_eq!(flip_transform(5), (false, 0));
+        assert_eq!(flip_transform(5 | FLIP_H), (true, 0));
+        // Só V: espelho horizontal e meia volta.
+        assert_eq!(flip_transform(5 | FLIP_V), (true, 2));
+        assert_eq!(flip_transform(5 | FLIP_H | FLIP_V), (false, 2));
+        // Girar 90° no sentido horário, no Tiled, é D + H.
+        assert_eq!(flip_transform(5 | FLIP_D | FLIP_H), (false, 3));
+        // 90° anti-horário é D + V.
+        assert_eq!(flip_transform(5 | FLIP_D | FLIP_V), (false, 1));
+        assert_eq!(flip_transform(5 | FLIP_D), (true, 1));
+        assert_eq!(flip_transform(5 | FLIP_D | FLIP_H | FLIP_V), (true, 3));
     }
 
     #[test]

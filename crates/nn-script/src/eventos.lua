@@ -342,6 +342,25 @@ E.CONDITIONS = {
     end,
   },
   {
+    id = "tile", name = "Encostar num tile", category = "Toques",
+    text = "{quem} estiver encostando num tile {tipo}",
+    help = "Tiles de um mapa com esse tipo (marcado no tileset: \"lava\", \"agua\", \"tijolo\"). Vazio = qualquer tile. Com Quando, acontece ao começar a encostar.",
+    props = { who("quem"), { "tipo", "lava", type = "tiletype", label = "Tipo", allow_empty = "qualquer" } },
+    lua = "-- {quem}:tiles_touching() com properties.tipo == \"{tipo}\"",
+    test = function(ctx, p, st, b)
+      local out = {}
+      for _, o in ipairs(resolve(ctx.scene, p.quem, b)) do
+        local hit = {}
+        for _, tl in ipairs(o:tiles_touching()) do
+          local kind = tl.properties and tl.properties.tipo
+          if p.tipo == "" or kind == p.tipo then table.insert(hit, tl) end
+        end
+        if #hit > 0 then table.insert(out, { este = o, tiles = hit }) end
+      end
+      return out
+    end,
+  },
+  {
     id = "perto", name = "Estiver perto de", category = "Toques",
     text = "{quem} estiver a menos de {distancia} de {alvo}",
     props = { who("quem"), { "distancia", 200, min = 0 }, who("alvo", "@jogador", "De") },
@@ -812,6 +831,46 @@ E.ACTIONS = {
     end,
   },
   {
+    id = "trocar_tile", name = "Trocar o tile tocado", category = "Mapas",
+    text = "trocar o tile tocado pelo tile {tile}",
+    help = "Os tiles da condição \"Encostar num tile\" (blocos que quebram, moedas no mapa). 0 apaga; a colisão acompanha.",
+    props = { { "tile", 0, type = "tile", min = 0, integer = true, label = "Tile" } },
+    lua = "mapa:set_tile(col, row, {tile})",
+    run = function(ctx, p, b)
+      for _, tl in ipairs(b.tiles or {}) do
+        pcall(tl.map.set_tile, tl.map, tl.col, tl.row, math.floor(number(p.tile)), tl.layer)
+      end
+    end,
+  },
+  {
+    id = "trocar_tile_em", name = "Trocar o tile em um objeto", category = "Mapas",
+    text = "trocar o tile em {alvo} pelo tile {tile}",
+    help = "O tile do mapa no centro do objeto (na camada de cima que tiver tile ali). 0 apaga.",
+    props = { who("alvo"), { "tile", 0, type = "tile", min = 0, integer = true, label = "Tile" },
+      { "camada", "", label = "Camada", advanced = true, help = "Nome da camada (vazio: a de cima que tiver tile ali, ou a primeira)." } },
+    lua = "mapa:set_tile(mapa:cell_at({alvo}.x, {alvo}.y), {tile})",
+    run = function(ctx, p, b)
+      each(ctx, p.alvo, b, function(o)
+        local x, y = o:world_transform()
+        for _, m in ipairs(ctx.scene.object_list) do
+          if m.alive and m.map then
+            local col, row = m.map:cell_at(x, y)
+            if col then
+              local layer = p.camada ~= "" and p.camada or nil
+              if not layer then
+                layer = 1
+                for li = #m.map.layers, 1, -1 do
+                  if m.map:tile(col, row, li) ~= 0 then layer = li break end
+                end
+              end
+              pcall(m.map.set_tile, m.map, col, row, math.floor(number(p.tile)), layer)
+            end
+          end
+        end
+      end)
+    end,
+  },
+  {
     id = "cor", name = "Mudar cor", category = "Aparência",
     text = "mudar a cor de {alvo} para {cor}",
     props = { who("alvo"), { "cor", "#FF6B6B", type = "color" } },
@@ -1066,7 +1125,7 @@ local function eval_rule(ctx, rule, rs, dt)
       if r then
         if list and not w.nao then
           for _, m in ipairs(list) do
-            local nb = { este = b.este or m.este, outro = b.outro or m.outro }
+            local nb = { este = b.este or m.este, outro = b.outro or m.outro, tiles = b.tiles or m.tiles }
             local k = binding_key(nb)
             if not seen[k] then
               seen[k] = true
