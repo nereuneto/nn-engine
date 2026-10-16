@@ -8,9 +8,16 @@ projetos em Lua da ferramenta `nn`, então dá para alternar entre os dois.
 
 ## Abrindo
 
-- **Versão pronta:** baixe o pacote do seu sistema na página de *releases*
-  (`nn-windows.zip` ou `nn-linux.tar.gz`) e abra o `nn-studio`. Deixe o
-  `nn-jogo` na mesma pasta: ele é usado para exportar os jogos.
+- **Versão pronta:** baixe na página da
+  [última versão](https://github.com/nereuneto/nn-engine/releases/latest)
+  (veja [Baixar](../README.md#baixar)):
+  - **Windows:** o instalador `NN-Studio-<versão>-setup.exe` (não pede
+    administrador; cria o atalho no menu Iniciar) ou o `.zip` portátil.
+  - **Linux:** o `.AppImage` (marque como executável e abra) ou o `.tar.gz`.
+
+  O `nn` e o `nn-jogo` vêm junto; o `nn-jogo` é usado para exportar os
+  jogos. O NN Studio avisa na tela inicial quando sai uma versão nova
+  (**Avisar versões novas**, para desligar).
 - **A partir do código:** `cargo studio` (precisa do Rust 1.95 ou mais novo).
   Para abrir direto um projeto: `cargo studio jogos/plataforma`.
 

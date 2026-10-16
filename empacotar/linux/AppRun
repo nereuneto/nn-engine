@@ -1,0 +1,5 @@
+#!/bin/sh
+# Entrada do AppImage: abre o NN Studio (o nn e o nn-jogo ficam ao lado dele).
+HERE="$(dirname "$(readlink -f "$0")")"
+export PATH="$HERE/usr/bin:$PATH"
+exec "$HERE/usr/bin/nn-studio" "$@"

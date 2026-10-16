@@ -1,9 +1,14 @@
-name: Runtimes
+name: Release
 
-# Compila o NN Studio (editor), o `nn` (ferramenta de linha de comando) e o
-# `nn-jogo` (executável dos jogos) otimizados para Windows e Linux. Os três vão
-# juntos: o NN Studio usa o `nn-jogo` ao lado dele para exportar os jogos. Dá
-# para exportar para o outro sistema com `nn exportar <pasta> --runtime nn-jogo.exe`.
+# Compila o NN Studio (editor), o `nn` (linha de comando) e o `nn-jogo`
+# (executável dos jogos) otimizados para Windows e Linux, monta os
+# instaladores e confere que eles funcionam numa máquina limpa.
+#
+# - Rodando à mão (Actions > Release > Run workflow): só gera os arquivos,
+#   para baixar e conferir (aba Summary > Artifacts). Não publica nada.
+# - Com uma tag `v*` (ex.: `git tag v0.1.0 && git push origin v0.1.0`):
+#   publica a release com os arquivos e as notas do CHANGELOG.md. A tag
+#   precisa ser igual à versão do Cargo.toml.
 on:
   push:
     tags: ["v*"]
@@ -12,6 +17,9 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -19,7 +27,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Ubuntu 22.04: o glibc mais antigo deixa os executáveis rodarem
+          # em mais distribuições.
+          - os: ubuntu-22.04
             name: linux
           - os: windows-latest
             name: windows
@@ -28,27 +38,143 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: ALSA
+
+      - name: Versão
+        shell: bash
+        run: |
+          VERSAO=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          echo "VERSAO=$VERSAO" >> "$GITHUB_ENV"
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" != "v$VERSAO" ]]; then
+            echo "::error::A tag $GITHUB_REF_NAME não bate com a versão do Cargo.toml ($VERSAO)."
+            exit 1
+          fi
+
+      - name: ALSA e udev
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
-      - name: Build
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libfuse2
+
+      - name: Compilar
         run: cargo build --release -p nn-run --bins -p nn-studio
 
-      - name: Empacotar (Linux)
+      # Linux ------------------------------------------------------------
+      - name: Pacote .tar.gz (Linux)
         if: runner.os == 'Linux'
-        run: tar -czf nn-linux.tar.gz -C target/release nn-studio nn nn-jogo
-      - name: Empacotar (Windows)
+        run: |
+          D="NN-Studio-$VERSAO-linux-x86_64"
+          mkdir -p "dist/$D"
+          cp target/release/nn-studio target/release/nn target/release/nn-jogo \
+             LICENSE-MIT LICENSE-APACHE CHANGELOG.md "dist/$D/"
+          tar -czf "dist/$D.tar.gz" -C dist "$D"
+          rm -rf "dist/$D"
+
+      - name: AppImage (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          curl -fsSL -o appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          # (Sem FUSE no CI: o AppImage se extrai e roda.)
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          APPIMAGETOOL="$PWD/appimagetool" empacotar/linux/appimage.sh "$VERSAO"
+
+      - name: Conferir numa pasta limpa (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          T=$(mktemp -d)
+          tar -xzf "dist/NN-Studio-$VERSAO-linux-x86_64.tar.gz" -C "$T"
+          B="$T/NN-Studio-$VERSAO-linux-x86_64"
+          "$B/nn" --versao | grep -q "$VERSAO"
+          "$B/nn-studio" --help > /dev/null
+          # Um jogo novo e exportado com o nn-jogo que veio junto.
+          "$B/nn" novo "$T/teste" --modelo minimo
+          "$B/nn" exportar "$T/teste" --saida "$T/saida"
+          ls -la "$T/saida"
+          test -x "$T/saida/teste"
+          # O AppImage abre (sem janela: só a ajuda).
+          chmod +x "dist/NN-Studio-$VERSAO-x86_64.AppImage"
+          "dist/NN-Studio-$VERSAO-x86_64.AppImage" --appimage-extract-and-run --help > /dev/null
+
+      # Windows ----------------------------------------------------------
+      - name: Pacote portátil .zip (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path target/release/nn-studio.exe, target/release/nn.exe, target/release/nn-jogo.exe -DestinationPath nn-windows.zip
+        run: |
+          $d = "dist/NN-Studio-$env:VERSAO-windows-portatil"
+          New-Item -ItemType Directory -Force -Path $d | Out-Null
+          Copy-Item target/release/nn-studio.exe, target/release/nn.exe, target/release/nn-jogo.exe, CHANGELOG.md -Destination $d
+          Copy-Item LICENSE-MIT "$d/LICENSE-MIT.txt"
+          Copy-Item LICENSE-APACHE "$d/LICENSE-APACHE.txt"
+          Compress-Archive -Path "$d/*" -DestinationPath "$d.zip"
+          Remove-Item -Recurse $d
+
+      - name: Instalador (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+            choco install innosetup -y --no-progress
+            $env:PATH += ";${env:ProgramFiles(x86)}\Inno Setup 6"
+          }
+          iscc /DAppVersion=$env:VERSAO empacotar\windows\nn-studio.iss
+
+      - name: Conferir a instalação (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $setup = "dist/NN-Studio-$env:VERSAO-setup.exe"
+          Start-Process -Wait -FilePath $setup -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"
+          $app = "$env:LOCALAPPDATA\Programs\NN Studio"
+          foreach ($f in "nn-studio.exe", "nn.exe", "nn-jogo.exe", "unins000.exe") {
+            if (-not (Test-Path "$app\$f")) { throw "faltou $f na instalação" }
+          }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\NN Studio.lnk")) {
+            throw "faltou o atalho no menu Iniciar"
+          }
+          $v = & "$app\nn.exe" --versao
+          if ($v -notmatch $env:VERSAO) { throw "versão errada: $v" }
+          $t = New-Item -ItemType Directory -Path (Join-Path $env:RUNNER_TEMP "teste-nn")
+          & "$app\nn.exe" novo "$t\jogo" --modelo minimo
+          & "$app\nn.exe" exportar "$t\jogo" --saida "$t\saida"
+          if (-not (Test-Path "$t\saida\jogo.exe")) { throw "o jogo exportado não apareceu" }
+          # Desinstalar tira tudo.
+          Start-Process -Wait -FilePath "$app\unins000.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES"
+          # (O desinstalador termina numa cópia dele mesmo: espera um pouco.)
+          for ($i = 0; $i -lt 30 -and (Test-Path "$app\nn-studio.exe"); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path "$app\nn-studio.exe") { throw "a desinstalação deixou o editor" }
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nn-${{ matrix.name }}
-          path: nn-${{ matrix.name }}.*
+          name: nn-studio-${{ matrix.name }}
+          path: dist/*
 
-      - name: Anexar à release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+  release:
+    name: Publicar
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
-          files: nn-${{ matrix.name }}.*
+          path: dist
+          merge-multiple: true
+      - name: Notas e somas de verificação
+        run: |
+          VERSAO="${GITHUB_REF_NAME#v}"
+          awk -v v="## $VERSAO" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notas.md
+          test -s notas.md || { echo "::error::O CHANGELOG.md não tem a seção ## $VERSAO"; exit 1; }
+          cat >> notas.md <<'FIM'
+
+          ### Baixar
+
+          - **Windows:** `NN-Studio-*-setup.exe` (instalador, sem pedir administrador) ou `NN-Studio-*-windows-portatil.zip`. Na primeira vez o Windows pode avisar "O Windows protegeu o computador": clique em **Mais informações > Executar assim mesmo** (o instalador ainda não tem assinatura digital).
+          - **Linux:** `NN-Studio-*-x86_64.AppImage` (marque como executável e abra) ou `NN-Studio-*-linux-x86_64.tar.gz`.
+          FIM
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+          ls -la dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: NN Studio ${{ github.ref_name }}
+          body_path: notas.md
+          files: dist/*
