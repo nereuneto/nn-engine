@@ -1,0 +1,80 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#0B1026",
+  gravity = 0,
+  events = {
+    { comment = "Jogo novo: variáveis do começo, mas o recorde vem do disco." },
+    { when = {
+        { cond = "comecou" },
+      }, actions = {
+        { act = "zerar" },
+        { act = "carregar", var = "recorde" },
+      } },
+  },
+  objects = {
+    {
+      id = 1, name = "estrelas",
+      x = 680, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = false, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 8, h = 8, radius = 32, color = "#FFFFFF", hud = false },
+        { type = "behavior", script = "nn:gerador", comecar_ja = true, espalhar_y = 360, intervalo = 0.08, maximo = 80, prefab = "prefabs/estrela.prefab" },
+      },
+    },
+    {
+      id = 2, name = "titulo",
+      x = 0, y = 170, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "{{TITULO}}", size = 72, color = "#7FD3FF", anchor = "center", hud = false },
+      },
+    },
+    {
+      id = 3, name = "dica",
+      x = 0, y = 90, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Setas ou WASD para mover, espaço para atirar", size = 26, color = "#B8C4D6", anchor = "center", hud = false },
+      },
+    },
+    {
+      id = 4, name = "nave",
+      x = 0, y = 10, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sprite", image = "assets/imagens/nave.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 96, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "behavior", script = "nn:movimento", altura = 8, duracao = 1.6, tipo = "flutuar" },
+        { type = "behavior", script = "nn:animacao", espelhar = false, fps = 12, parado = "1-2" },
+      },
+    },
+    {
+      id = 5, name = "recorde",
+      x = 0, y = -60, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Recorde: 0", size = 28, color = "#FFD166", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Recorde: {recorde}" },
+      },
+    },
+    {
+      id = 6, name = "jogar",
+      x = 0, y = -140, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Jogar", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/jogo.cena", foco = true },
+      },
+    },
+    {
+      id = 7, name = "sair",
+      x = 0, y = -210, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Sair", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:botao", acao = "sair" },
+      },
+    },
+  },
+}

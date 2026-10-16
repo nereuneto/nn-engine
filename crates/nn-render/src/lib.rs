@@ -7,6 +7,7 @@
 //! - [`ParticleEmitter`]: partículas (poeira, faíscas, explosões).
 //! - [`Camera2D`]: câmera ortográfica com Y para cima.
 //! - [`OffscreenTarget`]: renderiza em memória (testes e capturas).
+//! - [`Presentation`]: tamanho fixo do jogo ajustado à janela.
 
 mod animation;
 mod camera;
@@ -14,6 +15,7 @@ mod context;
 mod offscreen;
 mod parallax;
 mod particles;
+mod present;
 mod renderer;
 mod sprite;
 mod text;
@@ -25,6 +27,7 @@ pub use context::GpuContext;
 pub use offscreen::OffscreenTarget;
 pub use parallax::Parallax;
 pub use particles::{EmitArea, ParticleConfig, ParticleEmitter};
+pub use present::{Presentation, ScaleMode};
 pub use renderer::{RenderStats, Renderer, ScreenPainter};
 pub use sprite::{Blend, Rect, Sprite};
 pub use text::{Align, Anchor, FontId, Text};

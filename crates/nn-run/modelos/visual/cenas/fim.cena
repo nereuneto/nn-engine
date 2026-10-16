@@ -22,5 +22,14 @@ return {
         { type = "behavior", script = "nn:mostrar_valor", texto = "Moedas: {moedas}" },
       },
     },
+    {
+      id = 3, name = "jogar_de_novo",
+      x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Jogar de novo", size = 36, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/titulo.cena", foco = true },
+      },
+    },
   },
 }

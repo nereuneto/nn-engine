@@ -137,6 +137,11 @@ function Object:destroy()
   for _, b in ipairs(self.behaviors) do
     if type(b.destroyed) == "function" then b:destroyed() end
   end
+  if self.scene and M.events then
+    -- As regras "for destruído" (inclusive as do próprio objeto) ainda rodam
+    -- neste quadro.
+    M.events.signal(self.scene, { kind = "destruido", obj = self })
+  end
   self.alive = false
   if self.body and self.body.alive then self.body:remove() end
   for _, ch in ipairs(self.children) do ch:destroy() end
@@ -168,6 +173,9 @@ end
 --- Chama `msg(...)` em todos os comportamentos do objeto que tiverem essa
 --- função (ex.: `jogador:send("dano", 1)`). Devolve o primeiro resultado.
 function Object:send(msg, ...)
+  if self.scene and M.events then
+    M.events.signal(self.scene, { kind = "mensagem", obj = self, msg = msg, arg = (...) })
+  end
   local result
   for _, b in ipairs(self.behaviors) do
     local f = b[msg]
@@ -215,6 +223,14 @@ function Object:touching(other, margin)
   local aw, ah = self:bounds()
   local bw, bh = other:bounds()
   return math.abs(ax - bx) <= aw + bw + margin and math.abs(ay - by) <= ah + bh + margin
+end
+
+--- O mouse está em cima do objeto? (Objetos de HUD usam a posição na tela.)
+function Object:mouse_over()
+  if not (self.alive and self:shown()) then return false end
+  local wx, wy = nn.input.mouse_world()
+  local sx, sy = nn.input.mouse()
+  return M.events.hit(self, wx, wy, sx, sy)
 end
 
 --- Leva o objeto (e o corpo físico) para x, y.
@@ -314,6 +330,7 @@ local function build_object(scene, data, parent, fresh, depth)
   o.scene, o.parent, o.alive = scene, parent, true
   o.components, o.children, o.behaviors = {}, {}, {}
   o.start_x, o.start_y = o.x, o.y
+  o._rules = data.events
   for _, c in ipairs(data.components or {}) do
     local comp = copy_component(c)
     table.insert(o.components, comp)
@@ -608,6 +625,10 @@ local function prepare_all(scene, list)
     for _, c in ipairs(o.components) do
       if c.type == M.BEHAVIOR then make_behavior(scene, o, c) end
     end
+    for _, b in ipairs(o.behaviors) do
+      if b.player then o._player = true end
+    end
+    M.events.add_object(scene, o)
   end
 end
 
@@ -635,6 +656,7 @@ function M.setup(scene, data, path)
   scene._camera, scene._first_map = nil, nil
   scene._prefabs, scene._defs, scene._fx, scene._next_id = nil, nil, nil, nil
   scene._gravity = data.gravity or -1800
+  M.events.setup(scene, data, path)
   scene.background = (data.background ~= nil and data.background ~= "") and data.background or nil
 
   for _, od in ipairs(data.objects or {}) do build_object(scene, od, nil) end
@@ -774,6 +796,8 @@ function M.update(scene, dt)
   refresh_list(scene)
   each_behavior(scene, "update", dt)
   refresh_list(scene)
+  M.events.step(scene, dt)
+  refresh_list(scene)
   for _, o in ipairs(scene.object_list) do
     if o.particles then
       local x, y = o:world_transform()
@@ -854,6 +878,16 @@ end
 
 --- Ajuste ao vivo vindo do editor: muda um campo de um objeto ou componente.
 function M.live(scene, msg)
+  if msg.field == "events" then
+    -- Regras da cena (id 0) ou de um objeto.
+    local owner = nil
+    if msg.id ~= 0 then
+      owner = scene._by_id and scene._by_id[msg.id]
+      if not owner then return end
+    end
+    M.events.live(scene, owner, msg.value or {})
+    return
+  end
   local o = scene._by_id and scene._by_id[msg.id]
   if not o then return end
   if msg.component then
@@ -935,7 +969,7 @@ function M.state(scene)
   for k, v in pairs(nn.vars or {}) do
     if type(k) == "string" and simple(v) then vars[k] = v end
   end
-  return { scene = scene._path, objects = objects, vars = vars }
+  return { scene = scene._path, objects = objects, vars = vars, fired = M.events.take_fired(scene) }
 end
 
 --- O objeto da cena (do arquivo) sob o ponto x, y do mundo.

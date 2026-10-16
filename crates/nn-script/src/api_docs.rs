@@ -508,6 +508,7 @@ pub const OBJECT_MEMBERS: &[Member] = &[
         "(x, y)",
         "Leva o objeto (e o corpo físico) para x, y.",
     ),
+    m("mouse_over", "()", "O mouse está em cima do objeto?"),
 ];
 
 /// Corpo físico (`obj.body` ou `mundo:body`).

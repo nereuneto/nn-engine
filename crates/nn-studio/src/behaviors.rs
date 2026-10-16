@@ -26,6 +26,14 @@ pub enum PropType {
     Prefab,
     Sound,
     Image,
+    /// Quem/alvo de um evento: "@este", "@outro", "@jogador" ou um nome.
+    Target,
+    /// Variável do jogo.
+    Var,
+    /// Número, texto ou `{variavel}`.
+    Value,
+    /// Comportamento ("plataforma", ou o caminho do script).
+    Behavior,
 }
 
 impl PropType {
@@ -40,6 +48,10 @@ impl PropType {
             "prefab" => Self::Prefab,
             "sound" => Self::Sound,
             "image" => Self::Image,
+            "target" => Self::Target,
+            "var" => Self::Var,
+            "value" => Self::Value,
+            "behavior" => Self::Behavior,
             _ => Self::Text,
         }
     }
@@ -61,6 +73,8 @@ pub struct PropSpec {
     pub advanced: bool,
     /// Só aparece quando outra propriedade tem um destes valores.
     pub show_if: Option<(String, Vec<String>)>,
+    /// Pode ficar vazio; o texto é o que mostrar nesse caso ("todas").
+    pub allow_empty: Option<String>,
 }
 
 /// Um comportamento: o script e o que ele declara.
@@ -123,6 +137,67 @@ fn opt_str(t: &Table, key: &str) -> String {
         .unwrap_or_default()
 }
 
+/// Lê a lista de propriedades já normalizada pela engine
+/// (`normalize_props`): `{ key, default, type, label, ... }`.
+pub fn read_props(props: &Table) -> Vec<PropSpec> {
+    let mut out = Vec::new();
+    for p in props.sequence_values::<Table>().filter_map(Result::ok) {
+        let key = opt_str(&p, "key");
+        let default = p
+            .get::<Value>("default")
+            .ok()
+            .and_then(|v| to_prop(&v))
+            .unwrap_or(Prop::Str(String::new()));
+        let mut options = Vec::new();
+        if let Ok(Some(list)) = p.get::<Option<Table>>("options") {
+            for o in list.sequence_values::<Value>().filter_map(Result::ok) {
+                match o {
+                    Value::String(s) => {
+                        let s = s.to_string_lossy();
+                        options.push((s.clone(), s));
+                    }
+                    Value::Table(pair) => {
+                        let v: String = pair.get(1).unwrap_or_default();
+                        let l: String = pair.get(2).unwrap_or_else(|_| v.clone());
+                        options.push((v, l));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let show_if = p
+            .get::<Option<Table>>("show_if")
+            .ok()
+            .flatten()
+            .and_then(|t| {
+                let mut it = t.sequence_values::<String>().filter_map(Result::ok);
+                let key = it.next()?;
+                Some((key, it.collect()))
+            });
+        let label = opt_str(&p, "label");
+        let flag = |k: &str| p.get::<Option<bool>>(k).ok().flatten().unwrap_or(false);
+        let allow_empty = match p.get::<Value>("allow_empty") {
+            Ok(Value::String(s)) => Some(s.to_string_lossy()),
+            _ => None,
+        };
+        out.push(PropSpec {
+            label: if label.is_empty() { key.clone() } else { label },
+            kind: PropType::parse(&opt_str(&p, "type")),
+            help: opt_str(&p, "help"),
+            min: opt_num(&p, "min"),
+            max: opt_num(&p, "max"),
+            integer: flag("integer"),
+            advanced: flag("advanced"),
+            options,
+            show_if,
+            allow_empty,
+            key,
+            default,
+        });
+    }
+    out
+}
+
 fn describe_with(describe: &mlua::Function, src: &str, script: &str) -> BehaviorInfo {
     let mut info = BehaviorInfo {
         script: script.to_string(),
@@ -155,62 +230,7 @@ fn describe_with(describe: &mlua::Function, src: &str, script: &str) -> Behavior
             .collect();
     }
     if let Ok(Some(props)) = t.get::<Option<Table>>("props") {
-        for p in props.sequence_values::<Table>().filter_map(Result::ok) {
-            let key = opt_str(&p, "key");
-            let default = p
-                .get::<Value>("default")
-                .ok()
-                .and_then(|v| to_prop(&v))
-                .unwrap_or(Prop::Str(String::new()));
-            let mut options = Vec::new();
-            if let Ok(Some(list)) = p.get::<Option<Table>>("options") {
-                for o in list.sequence_values::<Value>().filter_map(Result::ok) {
-                    match o {
-                        Value::String(s) => {
-                            let s = s.to_string_lossy();
-                            options.push((s.clone(), s));
-                        }
-                        Value::Table(pair) => {
-                            let v: String = pair.get(1).unwrap_or_default();
-                            let l: String = pair.get(2).unwrap_or_else(|_| v.clone());
-                            options.push((v, l));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            let show_if = p
-                .get::<Option<Table>>("show_if")
-                .ok()
-                .flatten()
-                .and_then(|t| {
-                    let mut it = t.sequence_values::<String>().filter_map(Result::ok);
-                    let key = it.next()?;
-                    Some((key, it.collect()))
-                });
-            let label = opt_str(&p, "label");
-            info.props.push(PropSpec {
-                label: if label.is_empty() { key.clone() } else { label },
-                kind: PropType::parse(&opt_str(&p, "type")),
-                help: opt_str(&p, "help"),
-                min: opt_num(&p, "min"),
-                max: opt_num(&p, "max"),
-                integer: p
-                    .get::<Option<bool>>("integer")
-                    .ok()
-                    .flatten()
-                    .unwrap_or(false),
-                advanced: p
-                    .get::<Option<bool>>("advanced")
-                    .ok()
-                    .flatten()
-                    .unwrap_or(false),
-                options,
-                show_if,
-                key,
-                default,
-            });
-        }
+        info.props = read_props(&props);
     }
     info
 }

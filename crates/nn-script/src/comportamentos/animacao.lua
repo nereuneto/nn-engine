@@ -35,7 +35,7 @@ local RESERVA = { caindo = "pulando", pulando = "andando", andando = "parado" }
 function B:start()
   self.cache = {}
   self.tempo = 0
-  self.ultimo_x = self.obj.x
+  self.ultimo_x, self.ultimo_y = self.obj.x, self.obj.y
 end
 
 function B:quadros(estado)
@@ -57,14 +57,21 @@ function B:update(dt)
   local spr = o.sprite
   if not spr then return end
   local vx, vy, chao = 0, 0, true
+  -- Sem gravidade (jogo visto de cima): andar vale para todos os lados.
+  local de_cima = false
   if o.body and o.body.alive then
     vx, vy, chao = o.body.vx, o.body.vy, o.body.on_ground
+    de_cima = o.body.gravity_scale == 0 or (self.scene._gravity or -1800) == 0
   elseif dt > 0 then
     vx = (o.x - self.ultimo_x) / dt
+    vy = (o.y - (self.ultimo_y or o.y)) / dt
+    de_cima = true
   end
-  self.ultimo_x = o.x
+  self.ultimo_x, self.ultimo_y = o.x, o.y
   local estado = "parado"
-  if not chao then
+  if de_cima then
+    if math.abs(vx) > 5 or math.abs(vy) > 5 then estado = "andando" end
+  elseif not chao then
     estado = vy > 0 and "pulando" or "caindo"
   elseif math.abs(vx) > 5 then
     estado = "andando"

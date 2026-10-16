@@ -1,0 +1,244 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#4F9A4A",
+  gravity = 0,
+  events = {
+    { comment = "Visto de cima: sem gravidade. As regras estão nos objetos (porta e baú)." },
+  },
+  objects = {
+    {
+      id = 1, name = "parede",
+      x = 0, y = 340, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 1280, h = 40, radius = 32, color = "#3B4252", hud = false },
+        { type = "body", body = "static", shape = "box", w = 1280, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 2, name = "parede",
+      x = 0, y = -340, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 1280, h = 40, radius = 32, color = "#3B4252", hud = false },
+        { type = "body", body = "static", shape = "box", w = 1280, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 3, name = "parede",
+      x = -620, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 40, h = 720, radius = 32, color = "#3B4252", hud = false },
+        { type = "body", body = "static", shape = "box", w = 40, h = 720, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 4, name = "parede",
+      x = 620, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 40, h = 720, radius = 32, color = "#3B4252", hud = false },
+        { type = "body", body = "static", shape = "box", w = 40, h = 720, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 5, name = "parede",
+      x = 100, y = 202, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 40, h = 276, radius = 32, color = "#3B4252", hud = false },
+        { type = "body", body = "static", shape = "box", w = 40, h = 276, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 6, name = "parede",
+      x = 100, y = -202, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 40, h = 276, radius = 32, color = "#3B4252", hud = false },
+        { type = "body", body = "static", shape = "box", w = 40, h = 276, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 30, name = "arbusto",
+      x = -560, y = 280, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+      },
+    },
+    {
+      id = 31, name = "arbusto",
+      x = -200, y = -280, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+      },
+    },
+    {
+      id = 32, name = "arbusto",
+      x = 40, y = 280, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+      },
+    },
+    {
+      id = 33, name = "arbusto",
+      x = 560, y = -280, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+      },
+    },
+    {
+      id = 34, name = "arbusto",
+      x = 200, y = 280, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+      },
+    },
+    {
+      id = 7, name = "porta",
+      x = 100, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/porta.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 128, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "body", body = "static", shape = "box", w = 40, h = 128, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+      events = {
+        { comment = "Com uma chave, a porta abre (e gasta a chave)." },
+        { when = {
+            { cond = "encostando", quem = "@jogador", em = "@este" },
+            { cond = "variavel", var = "chaves", op = ">=", valor = 1 },
+          }, actions = {
+            { act = "variavel", var = "chaves", op = "subtrair", valor = 1 },
+            { act = "som", som = "assets/sons/porta.wav" },
+            { act = "faiscas", alvo = "@este", cor = "#C9874A", quantidade = 20 },
+            { act = "destruir", alvo = "@este" },
+          } },
+        { comment = "Sem chave: um aviso na tela por 2 segundos." },
+        { when = {
+            { cond = "encostar", quem = "@jogador", em = "@este" },
+            { cond = "variavel", var = "chaves", op = "<", valor = 1 },
+          }, actions = {
+            { act = "texto", alvo = "aviso", texto = "A porta está trancada. Ache a chave!" },
+            { act = "esperar", segundos = 2 },
+            { act = "texto", alvo = "aviso", texto = "" },
+          } },
+      },
+    },
+    {
+      id = 8, name = "chave",
+      x = -480, y = 230, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/chave.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "behavior", script = "nn:coletavel", som = "assets/sons/chave.wav", valor = 1, variavel = "chaves" },
+        { type = "behavior", script = "nn:animacao", espelhar = false, fps = 6, parado = "1-4" },
+      },
+    },
+    {
+      id = 9, name = "heroi",
+      x = -480, y = -220, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 2,
+      components = {
+        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "body", body = "dynamic", shape = "box", w = 40, h = 56, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "behavior", script = "nn:topdown", velocidade = 280 },
+        { type = "behavior", script = "nn:animacao", andando = "5-8", fps = 8, parado = "1-2" },
+        { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", variavel = "vidas", vidas = 3 },
+      },
+    },
+    {
+      id = 10, name = "lesma",
+      x = -160, y = 160, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "body", body = "dynamic", shape = "box", w = 44, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "behavior", script = "nn:perseguir", velocidade = 90, visao = 260, voar = true },
+        { type = "behavior", script = "nn:perigo", empurrao = 400 },
+        { type = "behavior", script = "nn:animacao", andando = "1-2", fps = 4, parado = "1-2" },
+      },
+    },
+    {
+      id = 11, name = "lesma",
+      x = -160, y = -160, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "body", body = "dynamic", shape = "box", w = 44, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "behavior", script = "nn:perseguir", velocidade = 90, visao = 260, voar = true },
+        { type = "behavior", script = "nn:perigo", empurrao = 400 },
+        { type = "behavior", script = "nn:animacao", andando = "1-2", fps = 4, parado = "1-2" },
+      },
+    },
+    {
+      id = 12, name = "morcego",
+      x = 360, y = 160, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 5, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "body", body = "dynamic", shape = "box", w = 48, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "behavior", script = "nn:patrulha", beirada = false, velocidade = 160 },
+        { type = "behavior", script = "nn:perigo", empurrao = 400 },
+        { type = "behavior", script = "nn:animacao", andando = "5-7", fps = 8, parado = "5-7" },
+      },
+    },
+    {
+      id = 13, name = "morcego",
+      x = 360, y = -160, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 5, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "body", body = "dynamic", shape = "box", w = 48, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "behavior", script = "nn:patrulha", beirada = false, direcao = "esquerda", velocidade = 160 },
+        { type = "behavior", script = "nn:perigo", empurrao = 400 },
+        { type = "behavior", script = "nn:animacao", andando = "5-7", fps = 8, parado = "5-7" },
+      },
+    },
+    {
+      id = 14, name = "bau",
+      x = 480, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "sprite", image = "assets/imagens/bau.png", frame_w = 16, frame_h = 16, frame = 1, w = 72, h = 72, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+      },
+      events = {
+        { when = {
+            { cond = "encostar", quem = "@jogador", em = "@este" },
+          }, actions = {
+            { act = "quadro", alvo = "@este", quadro = 2 },
+            { act = "som", som = "assets/sons/vitoria.wav" },
+            { act = "faiscas", alvo = "@este", cor = "#FFD166", quantidade = 40 },
+            { act = "comportamento", acao = "desligar", nome = "topdown", alvo = "@jogador" },
+            { act = "velocidade", modo = "definir", alvo = "@jogador", vx = 0, vy = 0 },
+            { act = "esperar", segundos = 1.5 },
+            { act = "ir_para_cena", cena = "cenas/fim.cena", escurecer = 0.6 },
+          } },
+      },
+    },
+    {
+      id = 15, name = "placar",
+      x = 0, y = 316, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5,
+      components = {
+        { type = "text", text = "Chaves: 0", size = 30, color = "#FFFFFF", anchor = "center", hud = true },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Chaves: {chaves}    Vidas: {vidas}" },
+      },
+    },
+    {
+      id = 16, name = "aviso",
+      x = 0, y = -300, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5,
+      components = {
+        { type = "text", text = "", size = 28, color = "#FFD166", anchor = "center", hud = true },
+      },
+    },
+  },
+}

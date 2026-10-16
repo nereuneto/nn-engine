@@ -60,6 +60,11 @@ pub use errors::translate_error;
 /// componentes e seus campos padrão (`FIELDS`), que o NN Studio usa.
 pub const SCENE_RUNTIME: &str = include_str!("cena.lua");
 
+/// Eventos "Quando... Então..." das cenas visuais. Recebe o módulo das cenas
+/// (`SCENE_RUNTIME`) e devolve o módulo dos eventos, com o catálogo de
+/// condições e ações (`catalog()`), que o NN Studio também lê.
+pub const EVENTS_RUNTIME: &str = include_str!("eventos.lua");
+
 /// Extensão dos arquivos de cena visual.
 pub const SCENE_EXTENSION: &str = "cena";
 
@@ -90,6 +95,7 @@ pub const BEHAVIORS: &[(&str, &str)] = &[
         "mostrar_valor",
         include_str!("comportamentos/mostrar_valor.lua"),
     ),
+    ("botao", include_str!("comportamentos/botao.lua")),
 ];
 
 /// Variáveis do jogo (`nn.vars`): começam com o `vars` do config.lua e valem
@@ -189,6 +195,11 @@ impl ScriptRuntime {
         for (id, src) in BEHAVIORS {
             builtin.set(*id, *src)?;
         }
+        let events: Table = lua
+            .load(EVENTS_RUNTIME)
+            .set_name("@nn/eventos.lua")
+            .call(scene_runtime.clone())?;
+        scene_runtime.set("events", events)?;
         lua.set_named_registry_value(SCENE_RUNTIME_KEY, scene_runtime)?;
         let vars = config_vars(&lua, source.as_ref());
         lua.load(VARS_LUA)
@@ -799,8 +810,9 @@ pub struct Project {
 
 impl Project {
     /// Lê a pasta do projeto. O arquivo `config.lua` é opcional e devolve uma
-    /// tabela com `title`, `id`, `width`, `height`, `fullscreen`, `vsync`,
-    /// `fixed_hz`, `clear_color`, `resizable`, `hot_reload` e `start`.
+    /// tabela com `title`, `id`, `width`, `height`, `resolution`, `scale`,
+    /// `fullscreen`, `vsync`, `fixed_hz`, `clear_color`, `resizable`,
+    /// `hot_reload` e `start`.
     pub fn open(dir: impl AsRef<Path>) -> Result<Self, ScriptError> {
         let dir = dir.as_ref();
         if !dir.is_dir() {
@@ -881,6 +893,40 @@ impl Project {
                 }
                 if let Some(hz) = num(&get("fixed_hz")?) {
                     config.fixed_hz = hz.max(1);
+                }
+                // Tamanho fixo do jogo: resolution = { 640, 360 }.
+                match get("resolution")? {
+                    Value::Nil | Value::Boolean(false) => {}
+                    Value::Table(r) => {
+                        let w = num(&r.get::<Value>(1).unwrap_or(Value::Nil));
+                        let h = num(&r.get::<Value>(2).unwrap_or(Value::Nil));
+                        match (w, h) {
+                            (Some(w), Some(h)) if w > 0 && h > 0 => {
+                                config = config.resolution(w, h);
+                            }
+                            _ => {
+                                return Err(ScriptError(
+                                    "config.lua: resolution deve ser { largura, altura }, \
+                                     por exemplo { 640, 360 }"
+                                        .into(),
+                                ));
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(ScriptError(
+                            "config.lua: resolution deve ser { largura, altura }, por exemplo { 640, 360 }"
+                                .into(),
+                        ));
+                    }
+                }
+                if let Value::String(s) = get("scale")? {
+                    let s = s.to_string_lossy();
+                    config.scale_mode = nn_render::ScaleMode::from_name(&s).ok_or_else(|| {
+                        ScriptError(format!(
+                            "config.lua: scale = \"{s}\" não existe (use \"fit\", \"stretch\" ou \"pixel\")"
+                        ))
+                    })?;
                 }
                 let clear = get("clear_color")?;
                 if !clear.is_nil() {

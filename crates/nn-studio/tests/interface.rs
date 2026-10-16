@@ -1244,3 +1244,246 @@ fn variaveis_do_jogo_nas_configuracoes() {
     let text = std::fs::read_to_string(proj.join("config.lua")).unwrap();
     assert!(text.contains("vars = { pontos = 0 }"), "{text}");
 }
+
+#[test]
+fn eventos_pelo_painel_criar_desfazer_salvar_e_ver_como_codigo() {
+    let dir = temp("eventos");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    h.get_by_label("quadrado").click();
+    h.run();
+    // O Inspetor mostra o resumo e leva ao painel Eventos.
+    h.get_by_label("➕ Criar").click();
+    h.run();
+    assert!(tabs(&h).contains(&Tab::Events));
+    // Nova regra do quadrado: busca "encostar" e Enter escolhe.
+    h.get_by_label("➕ Regra de quadrado").click();
+    h.run();
+    digitar(&mut h, "encostar");
+    tela(&mut h, "eventos-menu");
+    h.key_press(Key::Enter);
+    h.run();
+    let regras = objeto(&h, "quadrado").events.clone();
+    assert_eq!(regras.len(), 1);
+    assert_eq!(regras[0].when[0].id, "encostar");
+    assert_eq!(regras[0].when[0].str("quem"), "@este");
+    // Então: destruir (o outro).
+    h.get_by_label("➕ ação").click();
+    h.run();
+    digitar(&mut h, "destruir");
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(objeto(&h, "quadrado").events[0].actions[0].id, "destruir");
+    tela(&mut h, "eventos");
+    // Desfazer tira a ação; refazer volta.
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(objeto(&h, "quadrado").events[0].actions.is_empty());
+    atalho(&mut h, Modifiers::COMMAND, Key::Y);
+    assert_eq!(objeto(&h, "quadrado").events[0].actions.len(), 1);
+    // Salvar grava as regras no objeto.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(
+        text.contains("{ cond = \"encostar\", quem = \"@este\", em = \"@jogador\" },"),
+        "{text}"
+    );
+    assert!(
+        text.contains("{ act = \"destruir\", alvo = \"@este\" },"),
+        "{text}"
+    );
+    // Ver como código.
+    h.get_by_label("Ver como código").click();
+    h.run();
+    h.get_by_label_contains("Como código: quadrado");
+    let code = h
+        .get_by(|n| n.role() == Role::MultilineTextInput)
+        .value()
+        .unwrap_or_default();
+    assert!(code.contains("self.obj:destroy()"), "{code}");
+    tela(&mut h, "eventos-codigo");
+}
+
+#[test]
+fn tutorial_primeiro_jogo_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, Object, Prop, Rule};
+    let dir = temp("tutorial");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("primeiro-jogo");
+    h.run_steps(4);
+    assert!(dir.join("projetos/primeiro-jogo/cenas/fase.cena").is_file());
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    let passo = |h: &Harness<'_, StudioApp>| h.state().tutorial.as_ref().map(|t| t.step);
+    tela(&mut h, "tutorial-1");
+    // Passo de leitura: Próximo.
+    h.get_by_label("Próximo").click();
+    h.run_steps(4);
+    assert_eq!(passo(&h), Some(1));
+    // Cada passo confere a cena: muda a cena como a pessoa faria e o
+    // tutorial avança sozinho.
+    fn cena_mut<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/fase.cena").unwrap()
+    }
+    fn sprite(id: u32, name: &str, image: &str) -> Object {
+        let mut o = Object::new(id, name);
+        let mut c = Component::new("sprite");
+        c.set("image", Prop::Str(image.into()));
+        o.components.push(c);
+        o
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    cena_mut(&mut h)
+        .data
+        .objects
+        .push(sprite(1, "bloco", "assets/imagens/bloco.png"));
+    espera(&mut h, 2);
+    cena_mut(&mut h).data.objects[0].scale_x = 20.0;
+    espera(&mut h, 3);
+    cena_mut(&mut h).data.objects[0]
+        .components
+        .push(Component::new("body"));
+    espera(&mut h, 4);
+    cena_mut(&mut h).data.objects[0].components[1].set("body", Prop::Str("static".into()));
+    espera(&mut h, 5);
+    cena_mut(&mut h)
+        .data
+        .objects
+        .push(sprite(2, "heroi", "assets/imagens/heroi.png"));
+    espera(&mut h, 6);
+    cena_mut(&mut h).data.objects[1]
+        .components
+        .push(Component::behavior("nn:plataforma", &[]));
+    espera(&mut h, 7);
+    // Testar daqui (o "jogo" do teste é um script que sai logo).
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 8);
+    cena_mut(&mut h).data.objects[1]
+        .components
+        .push(Component::behavior("nn:animacao", &[]));
+    espera(&mut h, 9);
+    let mut moeda = sprite(3, "moeda", "assets/imagens/moeda.png");
+    moeda
+        .components
+        .push(Component::behavior("nn:coletavel", &[]));
+    cena_mut(&mut h).data.objects.push(moeda);
+    espera(&mut h, 10);
+    for id in [4, 5, 6] {
+        let mut m = Object::new(id, "moeda");
+        m.prefab = Some(nn_studio::scene_data::PrefabLink {
+            path: "prefabs/moeda.prefab".into(),
+            base: None,
+            raw: Vec::new(),
+        });
+        cena_mut(&mut h).data.objects.push(m);
+    }
+    espera(&mut h, 11);
+    let mut placar = Object::new(7, "placar");
+    let mut texto = Component::new("text");
+    texto.set("hud", Prop::Bool(true));
+    placar.components.push(texto);
+    placar
+        .components
+        .push(Component::behavior("nn:mostrar_valor", &[]));
+    cena_mut(&mut h).data.objects.push(placar);
+    espera(&mut h, 12);
+    // O passo do evento mostra o painel Eventos.
+    assert!(tabs(&h).contains(&Tab::Events));
+    let cat = nn_studio::events::catalog();
+    let mut acabou = cat.condition("acabaram").unwrap().new_item(false);
+    acabou.set("nome", Prop::Str("moeda".into()));
+    cena_mut(&mut h).data.events.push(Rule {
+        when: vec![acabou],
+        actions: vec![cat.action("reiniciar").unwrap().new_item(false)],
+        ..Default::default()
+    });
+    espera(&mut h, 13);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 14);
+    assert!(!cena_mut(&mut h).is_dirty(), "Testar daqui salvou");
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 15);
+    tela(&mut h, "tutorial-fim");
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}
+
+#[test]
+fn tutorial_de_eventos_avanca_com_as_regras() {
+    use nn_studio::scene_data::{Prop, Rule};
+    let dir = temp("tutorial-eventos");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("eventos");
+    h.run_steps(4);
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(h.state().tutorial.as_ref().map(|t| t.step), Some(esperado));
+    }
+    fn mapa<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        // A fase abre na frente.
+        assert_eq!(ws.active_scene.as_deref(), Some("cenas/mapa.cena"));
+        ws.scenes.get_mut("cenas/mapa.cena").unwrap()
+    }
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 1);
+    let porta = mapa(&mut h)
+        .data
+        .objects
+        .iter()
+        .find(|o| o.name == "porta")
+        .unwrap()
+        .id;
+    mapa(&mut h).selection = vec![porta];
+    espera(&mut h, 2);
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 3);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 4);
+    let cat = nn_studio::events::catalog();
+    let tecla = |modo: &str| {
+        let mut c = cat.condition("tecla").unwrap().new_item(false);
+        c.set("modo", Prop::Str(modo.into()));
+        c.set("tecla", Prop::Str("shift".into()));
+        c
+    };
+    mapa(&mut h).data.events.push(Rule {
+        when: vec![tecla("segurar")],
+        repeat: true,
+        ..Default::default()
+    });
+    espera(&mut h, 5);
+    let cor = cat.action("cor").unwrap().new_item(false);
+    mapa(&mut h)
+        .data
+        .events
+        .last_mut()
+        .unwrap()
+        .actions
+        .push(cor.clone());
+    espera(&mut h, 6);
+    mapa(&mut h).data.events.push(Rule {
+        when: vec![tecla("soltar")],
+        actions: vec![cor],
+        ..Default::default()
+    });
+    espera(&mut h, 7);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 8);
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 9);
+    h.get_by_label("Concluir").click();
+    h.run_steps(2);
+    assert!(h.state().tutorial.is_none());
+}

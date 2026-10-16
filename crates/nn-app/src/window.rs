@@ -162,7 +162,7 @@ impl State {
         self.surface_config.height = height;
         self.surface
             .configure(&self.gpu.device, &self.surface_config);
-        self.ctx.viewport = UVec2::new(width, height);
+        self.ctx.set_window_size(UVec2::new(width, height));
     }
 
     fn frame<G: Game>(&mut self, game: &mut G) {

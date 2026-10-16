@@ -14,6 +14,7 @@ local B = {
         { "checkpoint", "volta ao checkpoint" },
         { "cena", "vai para outra cena" },
         { "destruir", "some (para inimigos)" },
+        { "nada", "nada (um evento decide)" },
       } },
     { "cena", "", type = "scene", label = "Cena", show_if = { "ao_acabar", "cena" } },
     { "piscar", true, label = "Pisca quando invencível", advanced = true },
@@ -40,6 +41,7 @@ end
 function B:dano(n)
   if self.inv > 0 or self.atual <= 0 then return false end
   self:mudar(self.atual - (n or 1))
+  self.obj:send("levou_dano", n or 1)
   if self.atual <= 0 then
     self:acabou()
   else
@@ -61,7 +63,11 @@ end
 
 function B:acabou()
   self.obj.visible = true
-  if self.ao_acabar == "destruir" then
+  -- Para os eventos ("Quando a vida de ... acabar").
+  self.obj:send("vida_acabou")
+  if self.ao_acabar == "nada" then
+    return
+  elseif self.ao_acabar == "destruir" then
     local x, y = self.obj:world_transform()
     self.scene:burst(x, y, "#FF6B6B", 24)
     self.obj:destroy()

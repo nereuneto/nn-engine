@@ -36,7 +36,12 @@ pub struct Context {
     pub(crate) fullscreen: bool,
     pub(crate) fullscreen_request: Option<bool>,
     pub(crate) timestep: FixedTimestep,
+    /// Tamanho do jogo (o da janela, ou o fixo do config).
     pub(crate) viewport: UVec2,
+    /// Tamanho da janela (ou do alvo) em pixels.
+    pub(crate) window: UVec2,
+    /// Tamanho fixo do jogo e como ajustar.
+    pub(crate) fixed: Option<(UVec2, nn_render::ScaleMode)>,
     pub(crate) exit_requested: bool,
 }
 
@@ -48,7 +53,7 @@ impl Context {
         viewport: UVec2,
         save: Storage,
     ) -> Self {
-        Self {
+        let mut ctx = Self {
             input: Input::new(),
             time: Time::default(),
             renderer,
@@ -66,8 +71,38 @@ impl Context {
             fullscreen_request: None,
             timestep: FixedTimestep::from_hz(config.fixed_hz),
             viewport,
+            window: viewport,
+            fixed: config
+                .resolution
+                .map(|(w, h)| (UVec2::new(w, h), config.scale_mode)),
             exit_requested: false,
+        };
+        ctx.set_window_size(viewport);
+        ctx
+    }
+
+    /// A janela mudou de tamanho: recalcula onde o jogo aparece nela.
+    pub(crate) fn set_window_size(&mut self, size: UVec2) {
+        self.window = size.max(UVec2::ONE);
+        match self.fixed {
+            Some((logical, mode)) => {
+                let p = nn_render::Presentation::new(self.window, logical, mode);
+                self.viewport = p.logical;
+                self.renderer.set_presentation(Some(p));
+                self.input.set_cursor_transform(Some((p.origin, p.scale())));
+            }
+            None => {
+                self.viewport = self.window;
+                self.renderer.set_presentation(None);
+                self.input.set_cursor_transform(None);
+            }
         }
+    }
+
+    /// Tamanho da janela em pixels (com tamanho fixo do jogo, maior ou menor
+    /// que [`Context::viewport`]).
+    pub fn window_size(&self) -> UVec2 {
+        self.window
     }
 
     /// Tamanho de cada passo de [`Game::fixed_update`], em segundos.
@@ -82,7 +117,8 @@ impl Context {
         self.timestep.alpha()
     }
 
-    /// Tamanho da área de desenho em pixels físicos.
+    /// Tamanho da área do jogo: o tamanho fixo do config, ou o da janela em
+    /// pixels físicos.
     pub fn viewport(&self) -> UVec2 {
         self.viewport
     }
@@ -155,6 +191,6 @@ pub(crate) fn draw<G: Game>(
     ctx.draw_overlays();
     let clear = ctx.clear_color;
     let camera = ctx.render_camera();
-    let viewport = ctx.viewport;
-    ctx.renderer.render(target, viewport, &camera, Some(clear));
+    let window = ctx.window;
+    ctx.renderer.render(target, window, &camera, Some(clear));
 }

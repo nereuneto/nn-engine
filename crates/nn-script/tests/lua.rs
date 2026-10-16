@@ -2080,3 +2080,105 @@ fn cena_visual_com_todos_os_componentes_roda() {
     let cam_x: f64 = h.game.0.field("cam_x").unwrap();
     assert!(cam_x > 20.0, "câmera em {cam_x}");
 }
+
+// ----------------------------------------------------------------------
+// Sprint 13: tamanho fixo do jogo
+// ----------------------------------------------------------------------
+
+#[test]
+fn tamanho_fixo_do_jogo_com_faixas_e_texto() {
+    let dir = projeto(
+        "resolucao",
+        &[
+            (
+                "config.lua",
+                r#"return { width = 320, height = 240, resolution = { 160, 90 }, scale = "fit" }"#,
+            ),
+            (
+                "main.lua",
+                r##"
+                local c = {}
+                function c:update()
+                  largura, altura = nn.window.size()
+                  x0, y0, x1, y1 = nn.camera.view()
+                end
+                function c:draw()
+                  nn.screen.rect(0, 0, 160, 90, "#FF0000")
+                  nn.screen.text("Oi", 80, 45, { size = 10, anchor = "center" })
+                end
+                return c
+                "##,
+            ),
+        ],
+    );
+    let project = nn_script::Project::open(&dir).unwrap();
+    assert_eq!(project.config.resolution, Some((160, 90)));
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let config = project.config.clone().hot_reload(false);
+    let h = Headless::new(config, move |ctx| {
+        let mut s = rt.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    });
+    let mut h = match h {
+        Ok(h) => h,
+        Err(e) => {
+            assert!(
+                !std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1"),
+                "GPU obrigatória: {e}"
+            );
+            return;
+        }
+    };
+    h.run_frames(2);
+    // O jogo enxerga o tamanho fixo.
+    let size: (f64, f64) = rt2.lua().load("return largura, altura").eval().unwrap();
+    assert_eq!(size, (160.0, 90.0));
+    let view: (f64, f64, f64, f64) = rt2.lua().load("return x0, y0, x1, y1").eval().unwrap();
+    assert_eq!(view, (-80.0, -45.0, 80.0, 45.0));
+    // 160×90 cabe 2× em 320×240: faixas pretas em cima e embaixo (30 px).
+    let px = h.pixels().unwrap();
+    let at = |x: usize, y: usize| -> [u8; 4] {
+        let i = (y * 320 + x) * 4;
+        px[i..i + 4].try_into().unwrap()
+    };
+    assert_eq!(at(10, 10), [0, 0, 0, 255], "faixa de cima");
+    assert_eq!(at(10, 235), [0, 0, 0, 255], "faixa de baixo");
+    assert_eq!(at(10, 40), [255, 0, 0, 255], "jogo");
+    assert_eq!(at(310, 200), [255, 0, 0, 255], "jogo");
+    // O texto foi rasterizado no tamanho da tela: tem pixels brancos.
+    let white = (100..140)
+        .flat_map(|y| (140..180).map(move |x| (x, y)))
+        .filter(|&(x, y)| at(x, y)[1] > 200)
+        .count();
+    assert!(white > 20, "texto: {white} pixels");
+}
+
+#[test]
+fn config_com_resolucao_errada_explica() {
+    let dir = projeto(
+        "resolucao-errada",
+        &[
+            ("config.lua", r#"return { resolution = 640 }"#),
+            ("main.lua", "return {}"),
+        ],
+    );
+    let err = nn_script::Project::open(&dir).unwrap_err().0;
+    assert!(
+        err.contains("resolution deve ser { largura, altura }"),
+        "{err}"
+    );
+    let dir = projeto(
+        "escala-errada",
+        &[
+            ("config.lua", r#"return { scale = "grande" }"#),
+            ("main.lua", "return {}"),
+        ],
+    );
+    let err = nn_script::Project::open(&dir).unwrap_err().0;
+    assert!(
+        err.contains("use \"fit\", \"stretch\" ou \"pixel\""),
+        "{err}"
+    );
+}

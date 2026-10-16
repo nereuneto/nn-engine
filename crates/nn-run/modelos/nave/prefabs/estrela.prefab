@@ -1,0 +1,21 @@
+-- Prefab do NN Studio: um objeto pronto para usar em várias cenas.
+-- Dá para editar à mão; ao salvar pelo editor, comentários se perdem.
+return {
+  format = 1,
+  object = {
+    id = 1, name = "estrela",
+    x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+    visible = true, layer = -1,
+    components = {
+      { type = "shape", shape = "circle", w = 64, h = 64, radius = 2, color = "#C8D2FF", hud = false },
+      { type = "behavior", script = "nn:temporario", fora_da_tela = false, tempo = 6 },
+    },
+    events = {
+      { when = {
+          { cond = "comecou" },
+        }, actions = {
+          { act = "velocidade", modo = "definir", alvo = "@este", vx = -240, vy = 0 },
+        } },
+    },
+  },
+}

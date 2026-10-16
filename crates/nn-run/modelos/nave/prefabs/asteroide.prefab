@@ -1,0 +1,37 @@
+-- Prefab do NN Studio: um objeto pronto para usar em várias cenas.
+-- Dá para editar à mão; ao salvar pelo editor, comentários se perdem.
+return {
+  format = 1,
+  object = {
+    id = 1, name = "asteroide",
+    x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+    visible = true, layer = 2,
+    components = {
+      { type = "sprite", image = "assets/imagens/asteroide.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+      { type = "behavior", script = "nn:perigo", empurrao = 0, some = true },
+      { type = "behavior", script = "nn:movimento", tipo = "girar", velocidade = 60 },
+    },
+    events = {
+      { when = {
+          { cond = "comecou" },
+        }, actions = {
+          { act = "velocidade", modo = "definir", alvo = "@este", vx = -280, vy = 0 },
+        } },
+      { comment = "Acertado por um tiro: some, faz faíscas e vale 10 pontos." },
+      { when = {
+          { cond = "encostar", quem = "@este", em = "tiro" },
+        }, actions = {
+          { act = "destruir", alvo = "@outro" },
+          { act = "faiscas", alvo = "@este", cor = "#FF9F43", quantidade = 24 },
+          { act = "som", som = "assets/sons/explosao.wav", volume = 0.6 },
+          { act = "variavel", var = "pontos", op = "somar", valor = 10 },
+          { act = "destruir", alvo = "@este" },
+        } },
+      { when = {
+          { cond = "saiu_da_tela", quem = "@este" },
+        }, actions = {
+          { act = "destruir", alvo = "@este" },
+        } },
+    },
+  },
+}

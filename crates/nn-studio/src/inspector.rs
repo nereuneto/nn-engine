@@ -403,6 +403,45 @@ pub enum InspectorAction {
     CreateScript,
     /// Criar um script de comportamento novo e pôr neste objeto.
     NewBehaviorScript(u32),
+    /// Mostrar o painel Eventos.
+    ShowEvents,
+}
+
+/// Resumo das regras de eventos, com o botão para editar. Devolve `true` se
+/// pediu para abrir o painel Eventos.
+fn events_summary(ui: &mut egui::Ui, rules: &[crate::scene_data::Rule], in_object: bool) -> bool {
+    ui.add_space(8.0);
+    let mut open = false;
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Eventos").strong());
+        ui.weak(match rules.len() {
+            0 => "nenhuma regra".to_string(),
+            1 => "1 regra".to_string(),
+            n => format!("{n} regras"),
+        });
+        open = ui
+            .button(if rules.is_empty() {
+                "➕ Criar"
+            } else {
+                "Editar"
+            })
+            .on_hover_text("Regras \"Quando... Então...\": abre o painel Eventos")
+            .clicked();
+    });
+    for r in rules.iter().take(4) {
+        let text = crate::events::rule_summary(r, in_object);
+        let short: String = if text.chars().count() > 70 {
+            text.chars().take(69).chain(std::iter::once('…')).collect()
+        } else {
+            text.clone()
+        };
+        ui.add(egui::Label::new(RichText::new(short).small().weak()).truncate())
+            .on_hover_text(text);
+    }
+    if rules.len() > 4 {
+        ui.weak(format!("... e mais {}", rules.len() - 4));
+    }
+    open
 }
 
 #[derive(Default)]
@@ -414,6 +453,8 @@ pub struct Inspector {
     actions_out: Vec<InspectorAction>,
     /// O jogo aberto (se mostra a cena deste inspetor).
     game: Option<GameState>,
+    /// Componente novo: no próximo quadro, rola até o fim para mostrá-lo.
+    scroll_to_end: bool,
 }
 
 /// Cor do que vem do jogo aberto.
@@ -617,6 +658,7 @@ fn behavior_spec(info: &BehaviorInfo, p: &behaviors::PropSpec) -> Spec {
         PropType::Prefab => Wd::File(FileKind::Prefab),
         PropType::Sound => Wd::File(FileKind::Sound),
         PropType::Image => Wd::File(FileKind::Image),
+        PropType::Target | PropType::Var | PropType::Value | PropType::Behavior => Wd::Text,
     };
     Spec {
         key: p.key.clone(),
@@ -666,6 +708,7 @@ impl Inspector {
         if doc.error.is_some() {
             return actions;
         }
+        crate::tutorial::anchor(ui.ctx(), "inspetor", ui.max_rect());
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| match doc.selection.len() {
@@ -789,6 +832,9 @@ impl Inspector {
                     ui.end_row();
                 }
             });
+        if !doc.is_prefab() && events_summary(ui, &doc.data.events, false) {
+            self.actions_out.push(InspectorAction::ShowEvents);
+        }
         if let Some(game) = &self.game {
             ui.add_space(10.0);
             ui.label(RichText::new("No jogo agora").strong().color(GAME));
@@ -1107,13 +1153,18 @@ impl Inspector {
                 obj.components.extend(add);
             }
         }
+        if let Some(obj) = doc.data.find(id)
+            && events_summary(ui, &obj.events, true)
+        {
+            self.actions_out.push(InspectorAction::ShowEvents);
+        }
         ui.add_space(8.0);
         if instance.is_some() {
             ui.weak("Para pôr ou tirar componentes, abra o prefab: a mudança vale para todas as cópias.");
             return;
         }
         let mut chosen: Vec<Component> = Vec::new();
-        ui.menu_button("➕ Adicionar componente", |ui| {
+        let add_menu = ui.menu_button("➕ Adicionar componente", |ui| {
             for kind in &crate::scene_data::schema().order {
                 let (title, desc) = component_info(kind);
                 let exists = o.component(kind).is_some();
@@ -1185,11 +1236,15 @@ impl Inspector {
                 }
             });
         });
+        crate::tutorial::anchor_in(ui, "inspetor.adicionar", add_menu.response.rect);
         if !chosen.is_empty() {
             doc.record(None);
             if let Some(obj) = doc.data.find_mut(id) {
                 obj.components.extend(chosen);
             }
+            self.scroll_to_end = true;
+        } else if std::mem::take(&mut self.scroll_to_end) {
+            ui.scroll_to_cursor(Some(egui::Align::Max));
         }
     }
 

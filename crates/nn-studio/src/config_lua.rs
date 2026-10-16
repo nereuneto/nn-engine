@@ -22,6 +22,17 @@ pub struct ConfigValues {
     pub start: String,
     /// Variáveis do jogo (`vars`), em ordem alfabética.
     pub vars: Vec<(String, Prop)>,
+    /// Tamanho fixo do jogo (`resolution = { 640, 360 }`).
+    pub resolution: Option<(u32, u32)>,
+    /// Como o tamanho fixo se ajusta à janela: "fit", "stretch" ou "pixel".
+    pub scale: String,
+}
+
+impl ConfigValues {
+    /// O tamanho que a câmera e a tela do jogo enxergam.
+    pub fn game_size(&self) -> (u32, u32) {
+        self.resolution.unwrap_or((self.width, self.height))
+    }
 }
 
 impl Default for ConfigValues {
@@ -39,6 +50,8 @@ impl Default for ConfigValues {
             clear_color: "#1E1E28".into(),
             start: "main.lua".into(),
             vars: Vec::new(),
+            resolution: None,
+            scale: "fit".into(),
         }
     }
 }
@@ -126,6 +139,19 @@ pub fn read(text: &str, default_title: &str) -> Result<ConfigValues, String> {
     if let Some(n) = num(get("fixed_hz")) {
         v.fixed_hz = n.max(1);
     }
+    if let Value::Table(r) = get("resolution")
+        && let (Some(w), Some(h)) = (
+            num(r.get::<Value>(1).unwrap_or(Value::Nil)),
+            num(r.get::<Value>(2).unwrap_or(Value::Nil)),
+        )
+        && w > 0
+        && h > 0
+    {
+        v.resolution = Some((w, h));
+    }
+    if let Value::String(s) = get("scale") {
+        v.scale = s.to_string_lossy();
+    }
     if let Value::Table(vars) = get("vars") {
         for (k, val) in vars.pairs::<String, Value>().filter_map(Result::ok) {
             let p = match val {
@@ -164,6 +190,10 @@ pub fn changes(old: &ConfigValues, new: &ConfigValues) -> Vec<(&'static str, Lua
     s("id", &old.id, &new.id);
     s("clear_color", &old.clear_color, &new.clear_color);
     s("start", &old.start, &new.start);
+    s("scale", &old.scale, &new.scale);
+    if old.resolution != new.resolution {
+        out.push(("resolution", resolution_lua(new.resolution)));
+    }
     let mut n = |k, a: u32, b: u32| {
         if a != b {
             out.push((k, LuaValue::Int(b as i64)));
@@ -185,6 +215,14 @@ pub fn changes(old: &ConfigValues, new: &ConfigValues) -> Vec<(&'static str, Lua
         out.push(("vars", LuaValue::Raw(vars_lua(&new.vars))));
     }
     out
+}
+
+/// `{ 640, 360 }`, ou `false` sem tamanho fixo.
+fn resolution_lua(r: Option<(u32, u32)>) -> LuaValue {
+    match r {
+        Some((w, h)) => LuaValue::Raw(format!("{{ {w}, {h} }}")),
+        None => LuaValue::Bool(false),
+    }
 }
 
 /// Nome de variável válido no Lua (`moedas`, `vidas_extra`).
@@ -243,6 +281,8 @@ fn value_of(v: &ConfigValues, key: &str) -> Option<LuaValue> {
         "vsync" => LuaValue::Bool(v.vsync),
         "hot_reload" => LuaValue::Bool(v.hot_reload),
         "vars" => LuaValue::Raw(vars_lua(&v.vars)),
+        "resolution" => resolution_lua(v.resolution),
+        "scale" => LuaValue::Str(v.scale.clone()),
         _ => return None,
     })
 }
@@ -261,6 +301,10 @@ pub fn generate(v: &ConfigValues) -> String {
     }
     line("width", LuaValue::Int(v.width as i64));
     line("height", LuaValue::Int(v.height as i64));
+    if v.resolution.is_some() {
+        line("resolution", resolution_lua(v.resolution));
+        line("scale", LuaValue::Str(v.scale.clone()));
+    }
     line("clear_color", LuaValue::Str(v.clear_color.clone()));
     line("start", LuaValue::Str(v.start.clone()));
     if v.fullscreen != d.fullscreen {
@@ -431,6 +475,29 @@ mod tests {
     use super::*;
 
     const PADRAO: &str = "-- Configuração do jogo.\nreturn {\n  title = \"Meu jogo\",\n  -- Não mude depois de distribuir.\n  id = \"meu-jogo\",\n  width = 1280,\n  height = 720,\n  clear_color = \"#14202E\",\n  start = \"cenas/titulo.lua\",\n}\n";
+
+    #[test]
+    fn tamanho_fixo_do_jogo() {
+        let text = "return {\n  title = \"X\",\n  width = 1280,\n  height = 720,\n}\n";
+        let old = read(text, "x").unwrap();
+        assert_eq!(old.resolution, None);
+        assert_eq!(old.game_size(), (1280, 720));
+        let mut new = old.clone();
+        new.resolution = Some((640, 360));
+        new.scale = "pixel".into();
+        let out = update(text, &changes(&old, &new), &new);
+        assert!(out.contains("resolution = { 640, 360 },"), "{out}");
+        assert!(out.contains("scale = \"pixel\","), "{out}");
+        let back = read(&out, "x").unwrap();
+        assert_eq!(back.game_size(), (640, 360));
+        assert_eq!(back.scale, "pixel");
+        // Desligar volta ao tamanho da janela.
+        let mut off = back.clone();
+        off.resolution = None;
+        let out2 = update(&out, &changes(&back, &off), &off);
+        assert!(out2.contains("resolution = false,"), "{out2}");
+        assert_eq!(read(&out2, "x").unwrap().resolution, None);
+    }
 
     #[test]
     fn variaveis_do_jogo() {

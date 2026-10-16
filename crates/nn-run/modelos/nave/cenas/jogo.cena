@@ -1,0 +1,111 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#0B1026",
+  gravity = 0,
+  events = {
+    { comment = "Começo de cada partida: pontos zerados." },
+    { when = {
+        { cond = "comecou" },
+      }, actions = {
+        { act = "variavel", var = "pontos", op = "definir", valor = 0 },
+      } },
+    { comment = "Fim: guarda o recorde no disco e vai para a tela de fim." },
+    { when = {
+        { cond = "vida_acabou", quem = "@jogador" },
+      }, actions = {
+        { act = "variavel", var = "recorde", op = "maior", valor = "{pontos}" },
+        { act = "salvar", var = "recorde" },
+        { act = "faiscas", alvo = "@jogador", cor = "#FF6B6B", quantidade = 40 },
+        { act = "som", som = "assets/sons/explosao.wav" },
+        { act = "tremer", forca = 14, tempo = 0.5 },
+        { act = "destruir", alvo = "@jogador" },
+        { act = "esperar", segundos = 1.2 },
+        { act = "ir_para_cena", cena = "cenas/fim.cena", escurecer = 0.6 },
+      } },
+  },
+  objects = {
+    {
+      id = 1, name = "estrelas",
+      x = 680, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = false, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 8, h = 8, radius = 32, color = "#FFFFFF", hud = false },
+        { type = "behavior", script = "nn:gerador", comecar_ja = true, espalhar_y = 360, intervalo = 0.08, maximo = 80, prefab = "prefabs/estrela.prefab" },
+      },
+    },
+    {
+      id = 2, name = "nave",
+      x = -500, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 3,
+      components = {
+        { type = "sprite", image = "assets/imagens/nave.png", frame_w = 16, frame_h = 16, frame = 1, w = 80, h = 80, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "body", body = "dynamic", shape = "box", w = 64, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "behavior", script = "nn:topdown", velocidade = 380 },
+        { type = "behavior", script = "nn:atirar", direcao = "direita", distancia = 44, intervalo = 0.22, prefab = "prefabs/tiro.prefab", som = "assets/sons/tiro.wav", tecla = "space", velocidade = 900 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "nada", invencivel = 1.2, variavel = "vidas", vidas = 3 },
+        { type = "behavior", script = "nn:animacao", andando = "1-2", espelhar = false, fps = 12, parado = "1-2" },
+      },
+    },
+    {
+      id = 3, name = "gerador",
+      x = 700, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = false, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 8, h = 8, radius = 32, color = "#FFFFFF", hud = false },
+        { type = "behavior", script = "nn:gerador", comecar_ja = true, espalhar_y = 300, intervalo = 0.9, maximo = 25, prefab = "prefabs/asteroide.prefab" },
+      },
+    },
+    {
+      id = 4, name = "limite",
+      x = 0, y = 380, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "body", body = "static", shape = "box", w = 1400, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 5, name = "limite",
+      x = 0, y = -380, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "body", body = "static", shape = "box", w = 1400, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 6, name = "limite",
+      x = -660, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "body", body = "static", shape = "box", w = 40, h = 800, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 7, name = "limite",
+      x = 200, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "body", body = "static", shape = "box", w = 40, h = 800, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 8, name = "placar",
+      x = -620, y = 320, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5,
+      components = {
+        { type = "text", text = "Pontos: 0", size = 30, color = "#FFFFFF", anchor = "left", hud = true },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Pontos: {pontos}    Vidas: {vidas}" },
+      },
+    },
+    {
+      id = 9, name = "recorde",
+      x = 620, y = 320, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5,
+      components = {
+        { type = "text", text = "Recorde: 0", size = 30, color = "#FFD166", anchor = "right", hud = true },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Recorde: {recorde}" },
+      },
+    },
+  },
+}

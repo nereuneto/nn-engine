@@ -36,6 +36,12 @@ pub struct AppConfig {
     /// Origem dos assets. `None` usa a pasta [`AppConfig::assets_dir`] no disco;
     /// jogos exportados usam o pacote dentro do executável.
     pub asset_source: Option<Arc<dyn crate::AssetSource>>,
+    /// Tamanho fixo do jogo (largura, altura): a câmera e a tela enxergam
+    /// sempre este tamanho, ajustado à janela por [`AppConfig::scale_mode`].
+    /// `None` usa o tamanho da janela.
+    pub resolution: Option<(u32, u32)>,
+    /// Como o tamanho fixo se ajusta à janela.
+    pub scale_mode: nn_render::ScaleMode,
 }
 
 impl Default for AppConfig {
@@ -53,6 +59,8 @@ impl Default for AppConfig {
             assets_dir: PathBuf::from("assets"),
             hot_reload: cfg!(debug_assertions),
             asset_source: None,
+            resolution: None,
+            scale_mode: nn_render::ScaleMode::Fit,
         }
     }
 }
@@ -67,6 +75,17 @@ impl AppConfig {
 
     pub fn size(mut self, width: u32, height: u32) -> Self {
         self.size = (width, height);
+        self
+    }
+
+    /// Tamanho fixo do jogo, ajustado à janela (veja [`nn_render::ScaleMode`]).
+    pub fn resolution(mut self, width: u32, height: u32) -> Self {
+        self.resolution = Some((width.max(1), height.max(1)));
+        self
+    }
+
+    pub fn scale_mode(mut self, mode: nn_render::ScaleMode) -> Self {
+        self.scale_mode = mode;
         self
     }
 

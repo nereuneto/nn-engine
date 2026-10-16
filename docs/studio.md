@@ -20,18 +20,51 @@ projetos em Lua da ferramenta `nn`, então dá para alternar entre os dois.
 
 - **Projetos recentes:** clique para abrir. O ✖ só tira da lista (não apaga
   nada). Pastas que sumiram aparecem como "pasta não encontrada".
-- **✨ Novo projeto:** escolha o nome do jogo, onde criar e o modelo:
-  - **Padrão:** um jogo pequeno e completo (título com menu, partida, pausa, fim
-    e recorde salvo). É o melhor jeito de começar pelo código.
-  - **Cena visual:** uma fase de plataforma montada no editor, **sem
-    nenhuma linha de código**: herói, plataformas (uma delas móvel), moedas
-    (um prefab), inimigo, abismo, saída para a tela de fim e placar, tudo com
-    comportamentos prontos. O jeito de começar pelo editor.
+- **✨ Novo projeto:** escolha o nome do jogo, onde criar e o modelo (cada
+  cartão mostra uma imagem do jogo que ele cria; clique duas vezes para criar
+  na hora):
+  - **Em código:** um jogo pequeno e completo escrito em Lua (título com
+    menu, partida, pausa, fim e recorde salvo). O melhor jeito de começar pelo
+    código.
+  - **Plataforma:** uma fase montada no editor, **sem nenhuma linha de
+    código**: tela de título, herói, plataformas (uma delas móvel), moedas (um
+    prefab), inimigo, abismo, placar e uma saída que só abre depois de pegar
+    todas as moedas (um evento).
+  - **Aventura:** visto de cima, sem código: pegue a chave, abra a porta e ache
+    o tesouro, fugindo das lesmas e dos morcegos. A porta e o baú funcionam
+    com eventos.
+  - **Nave:** sem código: tiros, asteroides que vêm de um gerador, pontos,
+    vidas e recorde salvo no computador.
+  - **Vazio:** uma cena vazia e um pacote de imagens e sons, para montar do
+    seu jeito (o tutorial começa daqui).
   - **Mínimo:** só uma cena com um quadrado que anda.
+
+  ![Novo projeto: os modelos](imagens/nn-studio-modelos.png)
+- **🎓 Tutoriais:** veja [Tutoriais](#tutoriais). Quem abre o NN Studio pela
+  primeira vez já vê o convite para o tutorial *Seu primeiro jogo*.
 - **📂 Abrir projeto:** escolha a pasta do jogo (a que tem o `config.lua` ou o
   `main.lua`). Também dá para **arrastar a pasta** para a janela.
 - **🎮 Exemplos:** abre uma cópia do jogo de plataforma ou da demonstração,
   para mexer à vontade sem estragar o original.
+
+## Tutoriais
+
+Um tutorial cria um projeto novo (na pasta de projetos) e abre uma janelinha
+que mostra um passo de cada vez. O NN Studio **destaca** o painel ou botão de
+cada passo e **avança sozinho** quando você faz o que o passo pede: ele confere
+o projeto (se o chão tem corpo físico, se o herói tem o Jogador de plataforma,
+se a regra existe...). Dá para voltar, pular e sair a qualquer momento; o
+projeto continua aberto.
+
+![Tutorial "Seu primeiro jogo" destacando o Adicionar componente](imagens/nn-studio-tutorial.png)
+
+- **Seu primeiro jogo** (uns 15 minutos), a partir do modelo Vazio: chão com
+  corpo físico, herói que anda e pula, animação, moedas (e um prefab delas),
+  placar no HUD e um evento para vencer.
+- **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
+  testar e criar regras suas com *Quando* e *Enquanto*.
+
+Eles ficam no Início (**🎓 Tutoriais**) e em **Ajuda > Tutoriais**.
 
 ## A janela do projeto
 
@@ -41,6 +74,8 @@ original, use **Exibir > Restaurar layout padrão**.
 
 - **Arquivos** (à esquerda, em cima): a pasta do projeto.
 - **Hierarquia** (à esquerda, embaixo): os objetos da cena visual aberta.
+- **Eventos** (embaixo, ao lado do Console): as regras "Quando... Então..."
+  da cena aberta (**Exibir > Mostrar Eventos**).
 - **Início, cenas, código, imagens, sons e mapas** (no centro).
 - **Inspetor** (à direita): as propriedades do objeto selecionado.
 - **Console** (embaixo): mensagens do jogo e do editor.
@@ -112,14 +147,15 @@ só arquivos. A busca ignora acentos e aceita letras soltas ("cfg" acha
 ## Cenas visuais
 
 Uma cena visual (arquivo `.cena`) é montada com o mouse: você põe objetos,
-arruma no lugar, ajusta as propriedades e dá a eles **comportamentos prontos**
-(andar e pular, patrulhar, ser coletado, machucar, levar para outra fase...),
-sem escrever código. Ela roda na
+arruma no lugar, ajusta as propriedades, dá a eles **comportamentos prontos**
+(andar e pular, patrulhar, ser coletado, machucar, levar para outra fase...)
+e junta tudo com **eventos** ("Quando o jogador encostar na chave, então...").
+Sem escrever código. Ela roda na
 engine como qualquer outra cena (`nn.scene.switch("cenas/fase.cena")`, cena
 inicial no `config.lua`, exportação, recarregar ao salvar). Crie uma com
 **Ctrl+N** ou **➕ Novo > Cena visual**.
 
-![Cena visual do modelo "Cena visual" aberta no NN Studio](imagens/nn-studio-cena.png)
+![Cena visual do modelo Plataforma aberta no NN Studio](imagens/nn-studio-cena.png)
 
 ### A aba da cena
 
@@ -191,7 +227,7 @@ Inspetor: **➕ Adicionar componente** mostra os comportamentos por categoria.
 Cada um tem suas propriedades (velocidade, altura do pulo, quantas vidas...),
 com explicação ao passar o mouse.
 
-![Herói do modelo "Cena visual" com os comportamentos no Inspetor](imagens/nn-studio-comportamentos.png)
+![Herói do modelo Plataforma com os comportamentos no Inspetor](imagens/nn-studio-comportamentos.png)
 
 | Categoria | Comportamento | O que faz |
 |---|---|---|
@@ -210,6 +246,7 @@ com explicação ao passar o mouse.
 | Ações | Atirar | Cria um tiro (um prefab) ao apertar uma tecla ou sozinho, de tempos em tempos. |
 | Ações | Gerador | Cria objetos (um prefab) de tempos em tempos. |
 | Ações | Destruir depois | Some depois de um tempo ou ao sair da tela. |
+| Interface | Botão | Para menus: destaca ao passar o mouse (ou com as setas) e, ao clicar ou apertar Enter, vai para uma cena, reinicia ou fecha o jogo (ou deixa um evento decidir). |
 
 "Quem" e "Alvo", quando ficam vazios, querem dizer **o jogador** (o objeto com
 um comportamento de jogador). Se um comportamento precisa de algo que o objeto
@@ -258,6 +295,62 @@ jogo** (ficam no `config.lua`, em `vars`) e:
 Para um placar: um objeto de texto com **HUD** marcado e o comportamento
 **Mostrar valor** com `Moedas: {moedas}  Vidas: {vidas}`.
 
+### Eventos: "Quando... Então..."
+
+Os comportamentos fazem cada objeto funcionar; os **eventos** são as regras do
+seu jogo: *quando* o jogador pegar todas as moedas, *então* a saída abre;
+*quando* a vida acabar, *então* guarde o recorde e vá para a tela de fim. Ficam
+no painel **Eventos** (embaixo, ao lado do Console), uma regra por cartão,
+lidas como frases, com os campos no meio da frase.
+
+![Eventos da porta no modelo Aventura](imagens/nn-studio-eventos.png)
+
+- **➕ Regra da cena** cria uma regra que vale para a cena toda. Com um objeto
+  selecionado, **➕ Regra de <objeto>** cria uma regra **do objeto**: ela vai
+  junto com ele (e com todas as cópias, se ele for um prefab). Na regra de um
+  objeto, *este objeto* é ele mesmo.
+- O menu de cada **➕** tem as condições ou ações por categoria e uma busca
+  (digite e aperte Enter para a primeira).
+- Uma regra pode ter várias condições (**e**: todas precisam valer) e várias
+  ações (feitas em ordem). O **não** no fim da linha inverte uma condição.
+- **Quando** acontece uma vez, no momento em que as condições passam a valer
+  (ou a cada vez que um gatilho, como "apertar uma tecla", acontece).
+  **Enquanto** acontece a cada quadro, enquanto tudo vale.
+- **O outro** é com quem a condição aconteceu: em quem o jogador encostou, o
+  item que ele pegou. Ex.: *Quando o jogador encostar em chave, então destruir
+  o outro*.
+- **Esperar N segundos** atrasa as ações seguintes da regra.
+- O ☑ desliga a regra sem apagar; o ☰ duplica, sobe, desce, põe um
+  **comentário** acima ou exclui. Desfazer e refazer valem para tudo.
+- Nomes de objetos, variáveis ou arquivos que não existem ficam com um
+  contorno amarelo e a explicação ao passar o mouse.
+- **Ver como código** mostra o Lua que faz o mesmo que as regras (só para ler
+  e aprender: o jogo usa as regras).
+
+| Condições (Quando) | |
+|---|---|
+| Cena e tempo | começar, a cada N segundos, depois de N segundos, sorte (chance em %) |
+| Controles | apertar, soltar ou estar segurando uma tecla (ou um grupo: pular, confirmar, voltar, setas...), clicar num objeto |
+| Toques | encostar em, parar de encostar, estar encostando, estar perto de |
+| Variáveis | comparar uma variável do jogo (=, ≠, <, >, ≤, ≥) |
+| Objetos | não sobrar nenhum (com um nome), ser destruído, sair da tela, estar no chão ou no ar, estar visível ou escondido |
+| Mensagens | pegar um coletável, levar dano, a vida acabar, receber uma mensagem |
+
+| Ações (Então) | |
+|---|---|
+| Variáveis | mudar (somar, subtrair, mudar para, ficar com o maior/menor), salvar no disco, carregar do disco, zerar todas |
+| Cenas | ir para outra cena, reiniciar (do começo ou do checkpoint), fechar o jogo |
+| Objetos | criar um prefab, destruir, mostrar ou esconder |
+| Movimento | levar para uma posição, mudar a velocidade ou empurrar |
+| Aparência | mudar texto (com `{variavel}`), imagem, quadro ou cor, soltar faíscas, tremer a câmera |
+| Som | tocar um som, tocar ou parar a música |
+| Comportamentos | ligar ou desligar um comportamento, mandar uma mensagem |
+| Tempo | esperar, escrever no console |
+
+Algumas ações têm opções a mais no 🔧 (deslocamento ao criar, volume, força do
+tremor...). O formato no arquivo está no
+[guia do Lua](lua.md#eventos-quando-então).
+
 ### Desfazer e salvar
 
 **Ctrl+Z** desfaz e **Ctrl+Y** (ou Ctrl+Shift+Z) refaz o que foi feito na cena,
@@ -288,6 +381,9 @@ E o caminho de volta, do jogo para o editor:
 - **Pausar / Continuar / Avançar 1 quadro**, na barra da cena, congelam o
   jogo para olhar com calma.
 - **Ctrl+clique** num objeto, na janela do jogo, seleciona ele no editor.
+- **Eventos ao vivo:** o que você muda nas regras também vale na hora, e cada
+  regra **acende** no painel Eventos quando dispara no jogo. Ótimo para
+  entender por que algo aconteceu (ou não).
 
 ### O script da cena
 
@@ -343,13 +439,22 @@ A referência completa está no [guia do Lua](lua.md#cenas-visuais-cena).
 ## Configurações do projeto
 
 **Editar > Configurações do projeto** (ou o botão no Início) mostra um
-formulário com o título, o tamanho da janela, tela cheia, cor de fundo e a cena
-inicial (uma cena em código ou uma cena visual), além das
+formulário com o título, o tamanho da janela, o **tamanho do jogo**, tela
+cheia, cor de fundo e a cena inicial (uma cena em código ou uma cena visual),
+além das
 [variáveis do jogo](#variáveis-do-jogo-e-hud): nome e valor inicial (número,
 texto ou sim/não). No modo Completo também o identificador dos saves, VSync,
 janela redimensionável, recarregar ao salvar e passos fixos por segundo. Tudo
 fica no `config.lua`: o NN Studio troca só os valores, sem mexer nos seus
 comentários.
+
+**Tamanho do jogo:** com **Fixo** marcado, o jogo enxerga sempre o mesmo
+tamanho (por exemplo 1280 × 720 ou 640 × 360) e se ajusta à janela, maior ou
+menor, sem cortar nada: **Ajustar** mantém a proporção (com faixas pretas
+quando a janela é de outra proporção), **Esticar** ocupa tudo e **Pixel art**
+só aumenta em números inteiros (2×, 3×...), para os pixels ficarem nítidos. O
+retângulo "tela do jogo" na cena passa a ter esse tamanho. Os modelos novos já
+vêm com 1280 × 720.
 
 ## Exportar
 
@@ -420,9 +525,16 @@ o jogo.
   o módulo num Lua separado, sem o jogo.
 - O autocompletar e as descrições vêm de `nn_script::api_docs`, a mesma lista
   que um teste confere contra a API de verdade.
+- Os eventos rodam num módulo Lua da engine
+  (`crates/nn-script/src/eventos.lua`), que também descreve cada condição e
+  ação (frase, campos e o Lua equivalente). O painel Eventos monta os menus e
+  as frases a partir dessa descrição. Mudanças nas regras vão para o jogo
+  aberto como `{"id": 0, "field": "events", "value": [...]}` (id 0 = regras
+  da cena), e o estado que o jogo manda diz quais regras dispararam.
+- O tutorial confere o projeto a cada quadro; os painéis marcam onde estão os
+  botões que ele destaca.
 
 ## O que vem depois
 
-As próximas etapas do NN Studio trazem eventos "Quando... Então..." (regras
-montadas sem código), o tutorial guiado, mais modelos de jogo e editores de
-pixel art, animação, mapas, partículas e menus dentro do próprio editor.
+As próximas etapas do NN Studio trazem editores dentro do próprio editor:
+pixel art, animação, mapas, partículas e menus.

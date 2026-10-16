@@ -33,6 +33,7 @@ pub enum Command {
     ShowHome,
     ShowHierarchy,
     ShowInspector,
+    ShowEvents,
     ClearConsole,
     ResetLayout,
     ToggleTheme,
@@ -43,6 +44,7 @@ pub enum Command {
     Palette,
     QuickOpen,
     Docs,
+    Tutorials,
     Shortcuts,
     About,
     Quit,
@@ -78,6 +80,7 @@ impl Command {
         Command::ShowHome,
         Command::ShowHierarchy,
         Command::ShowInspector,
+        Command::ShowEvents,
         Command::ClearConsole,
         Command::ResetLayout,
         Command::ToggleTheme,
@@ -88,6 +91,7 @@ impl Command {
         Command::Palette,
         Command::QuickOpen,
         Command::Docs,
+        Command::Tutorials,
         Command::Shortcuts,
         Command::About,
         Command::Quit,
@@ -124,6 +128,7 @@ impl Command {
             Command::ShowHome => "Mostrar Início",
             Command::ShowHierarchy => "Mostrar Hierarquia",
             Command::ShowInspector => "Mostrar Inspetor",
+            Command::ShowEvents => "Mostrar Eventos",
             Command::ClearConsole => "Limpar o console",
             Command::ResetLayout => "Restaurar layout padrão",
             Command::ToggleTheme => "Alternar tema claro/escuro",
@@ -136,6 +141,7 @@ impl Command {
             Command::Docs => "Guia do Lua (documentação)",
             Command::Shortcuts => "Atalhos do teclado",
             Command::About => "Sobre o NN Studio",
+            Command::Tutorials => "Tutoriais (passo a passo)",
             Command::Quit => "Sair",
         }
     }
@@ -159,6 +165,8 @@ impl Command {
             Command::NewScript => "criar arquivo lua modulo biblioteca",
             Command::ShowHierarchy => "objetos arvore lista cena",
             Command::ShowInspector => "propriedades componentes objeto",
+            Command::ShowEvents => "quando entao regras sem codigo",
+            Command::Tutorials => "aprender tutorial passo a passo primeiro jogo ajuda",
             Command::ImportFiles => "adicionar imagem som",
             Command::QuickOpen => "arquivo ir",
             Command::Docs => "ajuda manual api funcoes",
@@ -211,6 +219,7 @@ impl Command {
                 | Command::ZoomReset
                 | Command::Palette
                 | Command::Docs
+                | Command::Tutorials
                 | Command::Shortcuts
                 | Command::About
                 | Command::Quit

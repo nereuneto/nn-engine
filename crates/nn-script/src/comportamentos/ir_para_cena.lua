@@ -6,7 +6,7 @@ local B = {
   props = {
     { "cena", "", type = "scene", label = "Cena" },
     { "quem", "", type = "object", label = "Quem ativa", help = "Vazio = o jogador." },
-    { "tecla", false, label = "Precisa apertar para cima", help = "Como uma porta: encoste e aperte ↑." },
+    { "tecla", false, label = "Precisa apertar para cima", help = "Como uma porta: encoste e aperte para cima." },
     { "escurecer", 0.5, label = "Escurecer (segundos)", min = 0, advanced = true },
   },
 }

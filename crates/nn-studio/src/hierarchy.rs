@@ -88,6 +88,7 @@ pub struct HierarchyPanel {
 impl HierarchyPanel {
     pub fn ui(&mut self, ui: &mut egui::Ui, doc: Option<&mut SceneDoc>) -> Vec<HierarchyAction> {
         let mut out = Vec::new();
+        crate::tutorial::anchor(ui.ctx(), "hierarquia", ui.max_rect());
         let Some(doc) = doc else {
             ui.add_space(8.0);
             ui.weak("Abra uma cena visual (.cena) para ver os objetos dela aqui.");
@@ -301,6 +302,7 @@ fn row(
                 .min_size(Vec2::new(ui.available_width(), 0.0))
                 .sense(Sense::click_and_drag()),
         );
+        crate::tutorial::anchor_first(ui, &format!("hierarquia:{}", o.name), r.rect);
         Some(r)
     });
     let Some(label) = row.inner else { return };
