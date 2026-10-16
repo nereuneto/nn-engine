@@ -14,7 +14,7 @@ use glam::{UVec2, Vec2};
 use nn_core::Color;
 use nn_render::{Anchor, Camera2D, Renderer, Sprite, Text, TextureId, TextureOptions};
 
-use crate::scene_data::{Object, SceneData, Transform};
+use crate::scene_data::{Component, Object, SceneData, Transform};
 
 /// Cor "#RRGGBB" ou "#RRGGBBAA" (como no Lua). Inválida vira branco.
 pub fn parse_color(s: &str) -> Color {
@@ -63,6 +63,8 @@ pub fn anchor_of(name: &str) -> Anchor {
 pub struct Sizes {
     images: HashMap<String, Option<(f32, f32)>>,
     maps: HashMap<(String, u32), Option<(f32, f32)>>,
+    /// Animações (`.anim`) das imagens: nomes e tamanho do quadro.
+    pub anims: crate::anim_file::AnimCache,
 }
 
 impl Sizes {
@@ -142,6 +144,19 @@ impl LocalRect {
     }
 }
 
+/// Tamanho do quadro de uma imagem: o do componente ou, sem ele, o do
+/// `.anim` da imagem (como a engine faz).
+pub fn sprite_frame(c: &Component, anim: impl FnOnce(&str) -> Option<(u32, u32)>) -> (f64, f64) {
+    let (fw, fh) = (c.num("frame_w"), c.num("frame_h"));
+    if fw > 0.0 && fh > 0.0 {
+        return (fw, fh);
+    }
+    match anim(c.str("image")) {
+        Some((w, h)) if w > 0 && h > 0 => (w as f64, h as f64),
+        _ => (fw, fh),
+    }
+}
+
 /// Tamanho de um objeto sem nada visível (ícone), em pixels da tela.
 pub const ICON_SIZE: f64 = 22.0;
 
@@ -158,7 +173,9 @@ pub fn local_bounds(o: &Object, root: &Path, sizes: &mut Sizes, icon: f64) -> (L
     for c in &o.components {
         match c.kind.as_str() {
             "sprite" => {
-                let (fw, fh) = (c.num("frame_w"), c.num("frame_h"));
+                let (fw, fh) = sprite_frame(c, |img| {
+                    sizes.anims.get(root, img).map(|a| (a.frame_w, a.frame_h))
+                });
                 let natural = if fw > 0.0 && fh > 0.0 {
                     Some((fw, fh))
                 } else {
@@ -324,6 +341,7 @@ pub struct SceneRenderer {
     textures: HashMap<(String, bool), Option<TextureId>>,
     maps: HashMap<(String, u32), Option<nn_tilemap::TileMap>>,
     targets: HashMap<String, Target>,
+    anims: crate::anim_file::AnimCache,
 }
 
 impl std::fmt::Debug for SceneRenderer {
@@ -346,6 +364,7 @@ impl SceneRenderer {
             textures: HashMap::new(),
             maps: HashMap::new(),
             targets: HashMap::new(),
+            anims: Default::default(),
         }
     }
 
@@ -453,10 +472,24 @@ impl SceneRenderer {
                         let Some(tex) = self.texture(root, c.str("image"), pixel_art) else {
                             continue;
                         };
-                        let (fw, fh) = (c.num("frame_w") as u32, c.num("frame_h") as u32);
-                        let (sprite, natural) = if fw > 0 && fh > 0 {
+                        let anims = &mut self.anims;
+                        let (fw, fh) = sprite_frame(c, |img| {
+                            anims.get(root, img).map(|a| (a.frame_w, a.frame_h))
+                        });
+                        let (fw, fh) = (fw as u32, fh as u32);
+                        let tex_size = self.renderer.texture_size(tex);
+                        let (sprite, natural) = if fw > 0 && fh > 0 && fw <= tex_size.x && fh <= tex_size.y {
                             let sheet = self.renderer.sprite_sheet(tex, UVec2::new(fw, fh));
-                            let frame = c.num("frame").max(1.0) as u32;
+                            // Com animação, o editor já mostra ela tocando.
+                            let playing = Some(c.str("animation"))
+                                .filter(|a| !a.is_empty())
+                                .and_then(|name| {
+                                    let file = self.anims.get(root, c.str("image"))?;
+                                    let a = file.find(name)?;
+                                    let pos = a.position_at(time as f64)?;
+                                    Some(a.frames[pos].index)
+                                });
+                            let frame = playing.unwrap_or(c.num("frame").max(1.0) as u32);
                             if frame > sheet.frame_count() {
                                 continue;
                             }
@@ -482,12 +515,19 @@ impl SceneRenderer {
                         if c.bool("flip_y") {
                             sz.y = -sz.y;
                         }
+                        // Repetir: a escala diz quantas cópias cabem.
+                        let repeat = if c.str("fill") == "repeat" {
+                            Vec2::new(w.scale_x.abs() as f32, w.scale_y.abs() as f32)
+                        } else {
+                            Vec2::ONE
+                        };
                         self.renderer.draw(
                             &sprite
                                 .at(pos)
                                 .size(sz)
                                 .rotation((w.rotation as f32).to_radians())
-                                .color(parse_color(c.str("color"))),
+                                .color(parse_color(c.str("color")))
+                                .repeat(repeat),
                         );
                     }
                     "shape" => {

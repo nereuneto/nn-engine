@@ -34,7 +34,7 @@ return {
       x = -260, y = -60, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 96, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 96, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "behavior", script = "nn:movimento", altura = 10, duracao = 1.6, tipo = "flutuar" },
       },
     },

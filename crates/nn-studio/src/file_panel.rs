@@ -124,6 +124,12 @@ impl FilePanel {
                     actions.push(Action::NewItem { kind: NewKind::Scene, parent: scene_dir(tree, &dir) });
                     ui.close();
                 }
+                let r = ui.button("🎨 Imagem (pixel art)").on_hover_text("Uma imagem nova para desenhar no editor de pixel art (personagem, item, cenário...)");
+                crate::tutorial::anchor_in(ui, "arquivos:nova-imagem", r.rect);
+                if r.clicked() {
+                    actions.push(Action::NewItem { kind: NewKind::Image, parent: image_dir(tree, &dir) });
+                    ui.close();
+                }
                 if ui.button("🔧 Script (módulo)").on_hover_text("Código usado por várias cenas, com require").clicked() {
                     actions.push(Action::NewItem { kind: NewKind::Module, parent: module_dir(tree, &dir) });
                     ui.close();
@@ -489,6 +495,13 @@ impl FilePanel {
             });
             ui.close();
         }
+        if ui.button("🎨 Nova imagem aqui").clicked() {
+            actions.push(Action::NewItem {
+                kind: NewKind::Image,
+                parent: dir.to_string(),
+            });
+            ui.close();
+        }
         if ui.button("🔧 Novo script aqui").clicked() {
             actions.push(Action::NewItem {
                 kind: NewKind::Module,
@@ -529,6 +542,18 @@ fn scene_dir(tree: &FileTree, chosen: &str) -> String {
     } else {
         "cenas".into()
     }
+}
+
+/// Pasta sugerida para imagens novas: a escolhida, ou `assets/imagens`.
+pub fn image_dir(tree: &FileTree, chosen: &str) -> String {
+    if !chosen.is_empty() {
+        return chosen.to_string();
+    }
+    ["assets/imagens", "assets"]
+        .iter()
+        .find(|d| tree.get(d).is_some_and(|e| e.is_dir))
+        .map(|d| d.to_string())
+        .unwrap_or_default()
 }
 
 /// Pasta sugerida para módulos novos: a escolhida, ou `lib`, se existir.

@@ -33,6 +33,8 @@ enum W {
     Choice(&'static [(&'static str, &'static str)]),
     File(FileKind),
     Object,
+    /// Nome de uma animação da imagem do objeto.
+    Anim,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -130,6 +132,18 @@ const SPRITE_FIELDS: &[F] = &[
     help(
         f("color", "Cor", W::Color),
         "Tinge a imagem. Branco = cores originais.",
+    ),
+    help(
+        f("animation", "Animação", W::Anim),
+        "Animação da imagem que toca ao começar (feita no editor de animação, na aba da imagem).",
+    ),
+    help(
+        f(
+            "fill",
+            "Preencher",
+            W::Choice(&[("stretch", "Esticar"), ("repeat", "Repetir")]),
+        ),
+        "Repetir: a imagem se repete lado a lado em vez de esticar; a escala do objeto diz quantas vezes (chão, paredes, fundos).",
     ),
     f("flip_x", "Espelhar na horizontal", W::Bool),
     adv("flip_y", "Espelhar na vertical", W::Bool),
@@ -405,6 +419,8 @@ pub enum InspectorAction {
     NewBehaviorScript(u32),
     /// Mostrar o painel Eventos.
     ShowEvents,
+    /// Criar uma imagem nova (pixel art) para o componente `ci` do objeto.
+    NewImage { id: u32, ci: usize, name: String },
 }
 
 /// Resumo das regras de eventos, com o botão para editar. Devolve `true` se
@@ -586,6 +602,9 @@ enum Wd {
     Scene,
     /// Objeto da cena; o texto é o que mostrar quando vazio.
     Object(&'static str),
+    /// Animação da imagem do objeto (ou, num comportamento, também uma
+    /// lista de quadros).
+    Anim,
 }
 
 impl From<&F> for Spec {
@@ -614,6 +633,7 @@ impl From<&F> for Spec {
             ),
             W::File(k) => Wd::File(k),
             W::Object => Wd::Object("(nenhum)"),
+            W::Anim => Wd::Anim,
         };
         Spec {
             key: f.key.to_string(),
@@ -658,6 +678,7 @@ fn behavior_spec(info: &BehaviorInfo, p: &behaviors::PropSpec) -> Spec {
         PropType::Prefab => Wd::File(FileKind::Prefab),
         PropType::Sound => Wd::File(FileKind::Sound),
         PropType::Image => Wd::File(FileKind::Image),
+        PropType::Anim => Wd::Anim,
         PropType::Target | PropType::Var | PropType::Value | PropType::Behavior => Wd::Text,
     };
     Spec {
@@ -1265,7 +1286,13 @@ impl Inspector {
         add: &mut Vec<Component>,
     ) {
         let id = o.id;
-        let _ = sizes;
+        // Para campos de animação: as animações da imagem do objeto.
+        let anims = o
+            .components
+            .iter()
+            .find(|c| c.kind == "sprite")
+            .map(|c| sizes.anims.names(files.root(), c.str("image")))
+            .unwrap_or_default();
         let mut changes: Vec<(String, Prop)> = Vec::new();
         let mut reverts: Vec<String> = Vec::new();
         let script = comp.str("script").to_string();
@@ -1328,7 +1355,8 @@ impl Inspector {
                     }
                     let current = value(&p.key);
                     ui.horizontal(|ui| {
-                        if let Some(new) = field_widget(ui, &spec, &current, files, names, (id, ci))
+                        if let Some(new) =
+                            field_widget(ui, &spec, &current, files, names, &anims, (id, ci))
                         {
                             changes.push((p.key.clone(), new));
                         }
@@ -1397,6 +1425,11 @@ impl Inspector {
         let obj = object.as_ref();
         let is_instance = obj.is_some_and(|x| x.prefab.is_some());
         let circle = comp.str("shape") == "circle";
+        let anims = if comp.kind == "sprite" {
+            sizes.anims.names(files.root(), comp.str("image"))
+        } else {
+            Vec::new()
+        };
         egui::Grid::new(("grade-componente", id, ci))
             .num_columns(2)
             .spacing([8.0, 4.0])
@@ -1422,13 +1455,42 @@ impl Inspector {
                         is_instance && obj.is_some_and(|x| x.is_overridden(ci, &spec.key));
                     field_row(ui, &spec, overridden, &mut reverts);
                     let current = comp.get(&spec.key).cloned().unwrap_or(Prop::Num(0.0));
-                    if let Some(new) = field_widget(ui, &spec, &current, files, names, (id, ci)) {
+                    if let Some(new) =
+                        field_widget(ui, &spec, &current, files, names, &anims, (id, ci))
+                    {
                         changes.push((spec.key.clone(), new));
                     }
                     ui.end_row();
                 }
             });
 
+        // Desenhar no editor de pixel art.
+        if comp.kind == "sprite" {
+            ui.horizontal_wrapped(|ui| {
+                if comp.str("image").is_empty() {
+                    let r = ui
+                        .button("🎨 Desenhar uma imagem nova")
+                        .on_hover_text("Cria uma imagem e abre no editor de pixel art");
+                    crate::tutorial::anchor_in(ui, "inspetor:desenhar", r.rect);
+                    if r.clicked() {
+                        self.actions_out.push(InspectorAction::NewImage {
+                            id,
+                            ci,
+                            name: obj.map(|o| o.name.clone()).unwrap_or_default(),
+                        });
+                    }
+                } else {
+                    let r = ui
+                        .button("🎨 Editar imagem")
+                        .on_hover_text("Abre a imagem no editor de pixel art (e as animações dela)");
+                    crate::tutorial::anchor_in(ui, "inspetor:editar-imagem", r.rect);
+                    if r.clicked() {
+                        self.actions_out
+                            .push(InspectorAction::OpenFile(comp.str("image").to_string()));
+                    }
+                }
+            });
+        }
         // Ajudas da imagem: tamanho original, ×2, quadros.
         if comp.kind == "sprite" && !comp.str("image").is_empty() {
             let natural = sizes.image(files.root(), comp.str("image"));
@@ -1614,6 +1676,7 @@ fn field_widget(
     current: &Prop,
     files: &FileTree,
     names: &[String],
+    anims: &[String],
     salt: (u32, usize),
 ) -> Option<Prop> {
     let width = ui.available_width().clamp(80.0, 180.0);
@@ -1714,6 +1777,7 @@ fn field_widget(
                 });
             changed.then_some(Prop::Str(v))
         }
+        Wd::Anim => anim_field(ui, spec, current, anims, salt, width),
         Wd::Scene => {
             let list: Vec<String> = files
                 .files_of(FileKind::Scene)
@@ -1740,6 +1804,52 @@ fn field_widget(
             })
         }
     }
+}
+
+/// Nome de animação: escrever ou escolher entre as da imagem.
+fn anim_field(
+    ui: &mut egui::Ui,
+    spec: &Spec,
+    current: &Prop,
+    anims: &[String],
+    salt: (u32, usize),
+    width: f32,
+) -> Option<Prop> {
+    let mut v = current.str().to_string();
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        let w = if anims.is_empty() { width } else { width - 28.0 };
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut v)
+                .desired_width(w.max(40.0))
+                .hint_text(if anims.is_empty() { "" } else { "(nenhuma)" }),
+        );
+        changed |= r.changed();
+        if !v.is_empty() && !anims.is_empty() && !anims.contains(&v) && !v.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+            r.on_hover_text(format!("A imagem não tem a animação \"{v}\". Tem: {}", anims.join(", ")));
+        }
+        if !anims.is_empty() {
+            ui.push_id(("anim", salt, &spec.key), |ui| {
+                ui.menu_button("☰", |ui| {
+                    if ui.button("(nenhuma)").clicked() {
+                        v.clear();
+                        changed = true;
+                        ui.close();
+                    }
+                    for n in anims {
+                        if ui.selectable_label(v == *n, n).clicked() {
+                            v = n.clone();
+                            changed = true;
+                            ui.close();
+                        }
+                    }
+                })
+                .response
+                .on_hover_text("Animações da imagem");
+            });
+        }
+    });
+    changed.then_some(Prop::Str(v))
 }
 
 /// Lista de arquivos, aceitando arrastar do painel Arquivos.

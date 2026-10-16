@@ -44,7 +44,7 @@ return {
       x = 0, y = 10, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "sprite", image = "assets/imagens/nave.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 96, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/nave.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 96, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "behavior", script = "nn:movimento", altura = 8, duracao = 1.6, tipo = "flutuar" },
         { type = "behavior", script = "nn:animacao", espelhar = false, fps = 12, parado = "1-2" },
       },

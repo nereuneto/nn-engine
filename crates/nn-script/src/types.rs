@@ -129,7 +129,12 @@ impl UserData for LSound {
 pub(crate) struct LAnimation(pub Animation);
 
 impl LAnimation {
-    pub fn from_lua(frames: &Table, fps: f32, mode: Option<&str>) -> Result<Self> {
+    pub fn from_lua(
+        frames: &Table,
+        fps: f32,
+        mode: Option<&str>,
+        times: Option<&Table>,
+    ) -> Result<Self> {
         let mut list = Vec::new();
         for v in frames.sequence_values::<i64>() {
             let v = v.map_err(|_| err("os quadros da animação devem ser números"))?;
@@ -154,6 +159,18 @@ impl LAnimation {
                     "modo de animação inválido: \"{other}\" (use loop, once ou pingpong)"
                 )));
             }
+        };
+        let anim = match times {
+            Some(t) => {
+                let mut list = Vec::new();
+                for v in t.sequence_values::<f32>() {
+                    list.push(v.map_err(|_| {
+                        err("as durações da animação devem ser números (segundos)")
+                    })?);
+                }
+                anim.with_times(list)
+            }
+            None => anim,
         };
         Ok(Self(anim))
     }

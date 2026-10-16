@@ -131,6 +131,11 @@ impl Assets {
         })
     }
 
+    /// O arquivo existe nos assets?
+    pub fn exists(&self, path: impl AsRef<Path>) -> bool {
+        self.source.read(path.as_ref()).is_ok()
+    }
+
     /// Lê um arquivo de texto (UTF-8) dos assets.
     pub fn read_to_string(&self, path: impl AsRef<Path>) -> Result<String, AssetError> {
         let path = path.as_ref();

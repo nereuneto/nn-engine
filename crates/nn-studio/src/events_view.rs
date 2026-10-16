@@ -29,6 +29,8 @@ pub struct EventsEnv<'a> {
     pub files: &'a FileTree,
     /// Variáveis do jogo (config.lua).
     pub vars: &'a [String],
+    /// Nomes das animações do projeto (arquivos `.anim`).
+    pub anims: &'a [String],
 }
 
 impl std::fmt::Debug for EventsEnv<'_> {
@@ -1078,6 +1080,56 @@ fn field(
                 warn = Some(format!(
                     "\"{shown}\" não está nas variáveis do jogo (Configurações do projeto): ela começa vazia."
                 ));
+            }
+            r
+        }
+        PropType::Anim => {
+            let mut v = current.str().to_string();
+            let hint = spec
+                .allow_empty
+                .clone()
+                .unwrap_or_else(|| "animação".into());
+            let w = text_width(&v).max(70.0);
+            let r = ui.add(
+                egui::TextEdit::singleline(&mut v)
+                    .hint_text(hint.clone())
+                    .desired_width(w),
+            );
+            if r.changed() {
+                new = Some(Prop::Str(v.trim().to_string()));
+            }
+            let mut chosen = None;
+            ui.menu_button("…", |ui| {
+                if spec.allow_empty.is_some() && ui.button(format!("({hint})")).clicked() {
+                    chosen = Some(String::new());
+                    ui.close();
+                }
+                if ctx.env.anims.is_empty() {
+                    ui.weak("Nenhuma animação ainda: crie na aba de uma imagem (Animações).");
+                }
+                for name in ctx.env.anims {
+                    if ui.button(name).clicked() {
+                        chosen = Some(name.clone());
+                        ui.close();
+                    }
+                }
+            })
+            .response
+            .on_hover_text("Animações das imagens do projeto");
+            if let Some(c) = chosen {
+                new = Some(Prop::Str(c));
+                structural = true;
+            }
+            let shown = new
+                .as_ref()
+                .map(|p| p.str().to_string())
+                .unwrap_or_else(|| current.str().to_string());
+            if !shown.is_empty() && !ctx.env.anims.contains(&shown) {
+                warn = Some(format!(
+                    "Nenhuma imagem do projeto tem a animação \"{shown}\"."
+                ));
+            } else if shown.is_empty() && spec.allow_empty.is_none() {
+                warn = Some("Escolha uma animação.".into());
             }
             r
         }

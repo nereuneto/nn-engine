@@ -122,6 +122,13 @@ fn build_sprite(
         opt::<f32>(opts, "w")?.unwrap_or(natural.x * scale),
         opt::<f32>(opts, "h")?.unwrap_or(natural.y * scale),
     );
+    // Repetir em vez de esticar: cada cópia tem `tile_w` × `tile_h`.
+    let tile_w = opt::<f32>(opts, "tile_w")?.filter(|v| *v > 0.0);
+    let tile_h = opt::<f32>(opts, "tile_h")?.filter(|v| *v > 0.0);
+    let repeat = Vec2::new(
+        tile_w.map_or(1.0, |t| size.x.abs() / t),
+        tile_h.map_or(1.0, |t| size.y.abs() / t),
+    );
     if opt::<bool>(opts, "flip_x")?.unwrap_or(false) {
         size.x = -size.x;
     }
@@ -144,7 +151,8 @@ fn build_sprite(
             opt::<f32>(opts, "origin_y")?.unwrap_or(default_origin),
         ))
         .rotation(opt::<f32>(opts, "rotation")?.unwrap_or(0.0))
-        .color(tint);
+        .color(tint)
+        .repeat(repeat);
     Ok(sprite)
 }
 
@@ -620,6 +628,10 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
             })
         })?,
     )?;
+    assets.set(
+        "exists",
+        lua.create_function(|lua, path: String| with_ctx(lua, |c| Ok(c.assets.exists(&path))))?,
+    )?;
     nn.set("assets", assets)?;
 
     // --- Áudio ---
@@ -661,9 +673,11 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     // --- Animação ---
     nn.set(
         "animation",
-        lua.create_function(|_, (frames, fps, mode): (Table, f32, Option<String>)| {
-            LAnimation::from_lua(&frames, fps, mode.as_deref())
-        })?,
+        lua.create_function(
+            |_, (frames, fps, mode, times): (Table, f32, Option<String>, Option<Table>)| {
+                LAnimation::from_lua(&frames, fps, mode.as_deref(), times.as_ref())
+            },
+        )?,
     )?;
     nn.set(
         "animator",

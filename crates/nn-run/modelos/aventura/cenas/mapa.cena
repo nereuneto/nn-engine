@@ -67,7 +67,7 @@ return {
       x = -560, y = 280, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
       },
     },
     {
@@ -75,7 +75,7 @@ return {
       x = -200, y = -280, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
       },
     },
     {
@@ -83,7 +83,7 @@ return {
       x = 40, y = 280, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
       },
     },
     {
@@ -91,7 +91,7 @@ return {
       x = 560, y = -280, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
       },
     },
     {
@@ -99,7 +99,7 @@ return {
       x = 200, y = 280, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/tiles.png", frame_w = 16, frame_h = 16, frame = 6, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
       },
     },
     {
@@ -107,7 +107,7 @@ return {
       x = 100, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/porta.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 128, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/porta.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 128, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "body", body = "static", shape = "box", w = 40, h = 128, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
       events = {
@@ -137,7 +137,7 @@ return {
       x = -480, y = 230, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/chave.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/chave.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "behavior", script = "nn:coletavel", som = "assets/sons/chave.wav", valor = 1, variavel = "chaves" },
         { type = "behavior", script = "nn:animacao", espelhar = false, fps = 6, parado = "1-4" },
       },
@@ -147,7 +147,7 @@ return {
       x = -480, y = -220, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 2,
       components = {
-        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "body", body = "dynamic", shape = "box", w = 40, h = 56, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:topdown", velocidade = 280 },
         { type = "behavior", script = "nn:animacao", andando = "5-8", fps = 8, parado = "1-2" },
@@ -159,7 +159,7 @@ return {
       x = -160, y = 160, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "body", body = "dynamic", shape = "box", w = 44, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:perseguir", velocidade = 90, visao = 260, voar = true },
         { type = "behavior", script = "nn:perigo", empurrao = 400 },
@@ -171,7 +171,7 @@ return {
       x = -160, y = -160, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "body", body = "dynamic", shape = "box", w = 44, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:perseguir", velocidade = 90, visao = 260, voar = true },
         { type = "behavior", script = "nn:perigo", empurrao = 400 },
@@ -183,7 +183,7 @@ return {
       x = 360, y = 160, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 5, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 5, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "body", body = "dynamic", shape = "box", w = 48, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:patrulha", beirada = false, velocidade = 160 },
         { type = "behavior", script = "nn:perigo", empurrao = 400 },
@@ -195,7 +195,7 @@ return {
       x = 360, y = -160, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 5, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 5, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "body", body = "dynamic", shape = "box", w = 48, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:patrulha", beirada = false, direcao = "esquerda", velocidade = 160 },
         { type = "behavior", script = "nn:perigo", empurrao = 400 },
@@ -207,7 +207,7 @@ return {
       x = 480, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/bau.png", frame_w = 16, frame_h = 16, frame = 1, w = 72, h = 72, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/bau.png", frame_w = 16, frame_h = 16, frame = 1, w = 72, h = 72, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
       },
       events = {
         { when = {

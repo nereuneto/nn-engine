@@ -494,6 +494,23 @@ E.CONDITIONS = {
     end,
   },
   {
+    id = "animacao_terminou", name = "Animação terminar", category = "Objetos", trigger = true,
+    text = "{quem} terminar a animação {nome}",
+    help = "Só animações que tocam uma vez (modo \"uma vez\" no editor de animação). Vazio = qualquer uma.",
+    props = { who("quem"), { "nome", "", type = "anim", label = "Animação", allow_empty = "qualquer uma" } },
+    lua = "{quem}.sprite:finished()",
+    test = function(ctx, p, st, b)
+      local set = set_of(resolve(ctx.scene, p.quem, b, true))
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "animacao_terminou")) do
+        if set[s.obj] and (p.nome == "" or s.arg == p.nome) then
+          table.insert(out, { este = s.obj })
+        end
+      end
+      return out
+    end,
+  },
+  {
     id = "levou_dano", name = "Levar dano", category = "Mensagens", trigger = true,
     text = "{quem} levar dano",
     help = "Precisa do comportamento Vida.",
@@ -776,6 +793,21 @@ E.ACTIONS = {
     run = function(ctx, p, b)
       each(ctx, p.alvo, b, function(o)
         if o.sprite then o.sprite.frame = math.floor(number(p.quadro)) end
+      end)
+    end,
+  },
+  {
+    id = "animacao", name = "Tocar animação", category = "Aparência",
+    text = "tocar a animação {nome} em {alvo}",
+    help = "Uma animação do .anim da imagem (feita no editor de animação). Se já estiver tocando, continua.",
+    props = { { "nome", "andar", type = "anim", label = "Animação" }, who("alvo"),
+      { "reiniciar", false, label = "Do começo", advanced = true,
+        help = "Começa do primeiro quadro mesmo se já estiver tocando." } },
+    lua = "{alvo}.sprite:play(\"{nome}\")",
+    run = function(ctx, p, b)
+      each(ctx, p.alvo, b, function(o)
+        local s = o.sprite
+        if s and s._anims and s._anims.by_name[p.nome] then s:play(p.nome, p.reiniciar) end
       end)
     end,
   },
