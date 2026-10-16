@@ -62,6 +62,59 @@ pub const SCENE_RUNTIME: &str = include_str!("cena.lua");
 /// Extensão dos arquivos de cena visual.
 pub const SCENE_EXTENSION: &str = "cena";
 
+/// Extensão dos prefabs (um objeto pronto para usar em várias cenas).
+pub const PREFAB_EXTENSION: &str = "prefab";
+
+/// Comportamentos prontos (`"nn:<id>"` no componente `behavior`): id e
+/// código Lua. O NN Studio lê as propriedades de cada um.
+pub const BEHAVIORS: &[(&str, &str)] = &[
+    ("plataforma", include_str!("comportamentos/plataforma.lua")),
+    ("topdown", include_str!("comportamentos/topdown.lua")),
+    ("patrulha", include_str!("comportamentos/patrulha.lua")),
+    ("perseguir", include_str!("comportamentos/perseguir.lua")),
+    ("coletavel", include_str!("comportamentos/coletavel.lua")),
+    ("perigo", include_str!("comportamentos/perigo.lua")),
+    ("vida", include_str!("comportamentos/vida.lua")),
+    ("checkpoint", include_str!("comportamentos/checkpoint.lua")),
+    (
+        "ir_para_cena",
+        include_str!("comportamentos/ir_para_cena.lua"),
+    ),
+    ("animacao", include_str!("comportamentos/animacao.lua")),
+    ("movimento", include_str!("comportamentos/movimento.lua")),
+    ("atirar", include_str!("comportamentos/atirar.lua")),
+    ("gerador", include_str!("comportamentos/gerador.lua")),
+    ("temporario", include_str!("comportamentos/temporario.lua")),
+    (
+        "mostrar_valor",
+        include_str!("comportamentos/mostrar_valor.lua"),
+    ),
+];
+
+/// Variáveis do jogo (`nn.vars`): começam com o `vars` do config.lua e valem
+/// entre as cenas.
+const VARS_LUA: &str = r#"
+local initial = ...
+local function copy(v)
+  if type(v) ~= "table" then return v end
+  local t = {}
+  for k, x in pairs(v) do t[k] = copy(x) end
+  return t
+end
+nn.vars = copy(initial)
+--- Volta as variáveis do jogo aos valores do config.lua.
+function nn.reset_vars()
+  for k in pairs(nn.vars) do nn.vars[k] = nil end
+  for k, v in pairs(copy(initial)) do nn.vars[k] = v end
+end
+-- O config.lua mudou com o jogo aberto: variáveis novas aparecem.
+function nn._merge_vars(new)
+  initial = new
+  for k, v in pairs(new) do
+    if nn.vars[k] == nil then nn.vars[k] = copy(v) end
+  end
+end
+"#;
 /// Chave do registro Lua com o módulo das cenas visuais.
 const SCENE_RUNTIME_KEY: &str = "nn.cena";
 
@@ -131,7 +184,15 @@ impl ScriptRuntime {
         api::install(&lua)?;
         install_require(&lua, source.clone())?;
         let scene_runtime: Table = lua.load(SCENE_RUNTIME).set_name("@nn/cena.lua").eval()?;
+        let builtin: Table = scene_runtime.get("BUILTIN")?;
+        for (id, src) in BEHAVIORS {
+            builtin.set(*id, *src)?;
+        }
         lua.set_named_registry_value(SCENE_RUNTIME_KEY, scene_runtime)?;
+        let vars = config_vars(&lua, source.as_ref());
+        lua.load(VARS_LUA)
+            .set_name("@nn/vars.lua")
+            .call::<()>(vars)?;
 
         let loaded: Table = lua.globals().get::<Table>("package")?.get("loaded")?;
         let builtin_modules = loaded
@@ -175,6 +236,7 @@ impl ScriptRuntime {
         let mut errors = Vec::new();
         let mut files = self.inner.source.files("lua");
         files.extend(self.inner.source.files(SCENE_EXTENSION));
+        files.extend(self.inner.source.files(PREFAB_EXTENSION));
         for (path, _) in files {
             let result = self
                 .inner
@@ -248,6 +310,21 @@ impl ScriptRuntime {
         }
     }
 
+    /// Variáveis novas no config.lua passam a existir em `nn.vars`.
+    fn merge_config_vars(&self) {
+        let lua = &self.inner.lua;
+        let vars = config_vars(lua, self.inner.source.as_ref());
+        let merge = lua
+            .globals()
+            .get::<Table>("nn")
+            .and_then(|nn| nn.get::<Function>("_merge_vars"));
+        if let Ok(f) = merge
+            && let Err(e) = f.call::<()>(vars)
+        {
+            log::warn!("variáveis do config.lua: {e}");
+        }
+    }
+
     /// Descarrega os módulos do projeto (`require`) para que sejam lidos de novo.
     fn forget_project_modules(&self) -> mlua::Result<()> {
         let loaded: Table = self
@@ -273,6 +350,7 @@ impl ScriptRuntime {
         }
         let mut files = self.inner.source.files("lua");
         files.extend(self.inner.source.files(SCENE_EXTENSION));
+        files.extend(self.inner.source.files(PREFAB_EXTENSION));
         files.sort();
         files
     }
@@ -309,6 +387,16 @@ impl ScriptRuntime {
         }
         self.inner.generation.get()
     }
+}
+
+/// A tabela `vars` do config.lua (vazia se não houver).
+fn config_vars(lua: &Lua, source: &dyn AssetSource) -> Table {
+    let read = || -> Option<Table> {
+        let bytes = source.read(Path::new("config.lua")).ok()?;
+        let config: Table = lua.load(&bytes).set_name("@config.lua").eval().ok()?;
+        config.get::<Option<Table>>("vars").ok().flatten()
+    };
+    read().unwrap_or_else(|| lua.create_table().expect("tabela Lua"))
 }
 
 /// Troca a busca de módulos do `require` por uma que lê da mesma origem dos
@@ -401,6 +489,11 @@ impl LuaScene {
             .flatten()
     }
 
+    /// A tabela `self` da cena (para ferramentas e testes).
+    pub fn table(&self) -> Option<Table> {
+        self.instance.clone()
+    }
+
     fn set_error(&mut self, e: &mlua::Error) {
         let msg = format_error(e);
         log::error!("erro em {}:\n{msg}", self.path);
@@ -479,6 +572,7 @@ impl LuaScene {
                 self.set_error(&e);
                 return;
             }
+            self.runtime.merge_config_vars();
             log::info!("recarregando cena {}", self.path);
             self.load(ctx);
         }
