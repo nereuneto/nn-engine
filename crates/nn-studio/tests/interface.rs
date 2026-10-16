@@ -1055,3 +1055,68 @@ fn autocompletar_no_editor_de_codigo() {
             .is_none()
     );
 }
+
+/// "Jogo" que conta o estado da cena, pede para selecionar um objeto e
+/// guarda o que recebe.
+#[cfg(unix)]
+fn jogo_que_conta(dir: &Path) -> PathBuf {
+    let p = dir.join("jogo-conta.sh");
+    let recebido = dir.join("comandos.txt");
+    let estado = r#"estado: {\"scene\":\"cenas/teste.cena\",\"paused\":false,\"objects\":[{\"id\":2,\"x\":50,\"y\":0,\"rotation\":0,\"scale_x\":1,\"scale_y\":1,\"wx\":50,\"wy\":0,\"wr\":0,\"wsx\":1,\"wsy\":1,\"visible\":true,\"props\":{}}],\"vars\":{\"moedas\":7}}"#;
+    std::fs::write(
+        &p,
+        format!(
+            "#!/bin/sh\n\
+             printf '%s\\n' '@nn {{\"n\":\"Info\",\"a\":\"nn_script::live\",\"m\":\"cena: cenas/teste.cena\"}}'\n\
+             printf '%s\\n' '@nn {{\"n\":\"Info\",\"a\":\"nn_script::live\",\"m\":\"{estado}\"}}'\n\
+             printf '%s\\n' '@nn {{\"n\":\"Info\",\"a\":\"nn_script::live\",\"m\":\"selecionar: 2\"}}'\n\
+             while read -r linha; do echo \"$linha\" >> '{}'; done\n",
+            recebido.display()
+        ),
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    p
+}
+
+#[cfg(unix)]
+#[test]
+fn jogo_conta_onde_estao_os_objetos_e_o_editor_pausa() {
+    let dir = temp("jogo-conta");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), jogo_que_conta(&dir), false);
+    com_cena(&mut h, &proj);
+    h.key_press(Key::F6);
+    h.run_steps(3);
+    let start = std::time::Instant::now();
+    while h.state().project().unwrap().game_state.is_none() || cena(&h).selection.is_empty() {
+        assert!(start.elapsed().as_secs() < 20, "o jogo não contou o estado");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.step();
+    }
+    h.run_steps(3);
+    // Ctrl+clique no jogo selecionou o quadrado aqui.
+    assert_eq!(cena(&h).selection, vec![2]);
+    // O Inspetor mostra onde ele está no jogo e deixa trazer para a cena.
+    h.get_by_label("No jogo");
+    tela(&mut h, "jogo-conta");
+    h.get_by_label("Manter").click();
+    h.run_steps(3);
+    assert_eq!(objeto(&h, "quadrado").x, 50.0);
+    // Pausar manda o comando para o jogo.
+    h.get_by_label("Pausar").click();
+    h.run_steps(3);
+    let arquivo = dir.join("comandos.txt");
+    let start = std::time::Instant::now();
+    loop {
+        let t = std::fs::read_to_string(&arquivo).unwrap_or_default();
+        if t.contains(r#"{"cmd":"pause"}"#) {
+            break;
+        }
+        assert!(start.elapsed().as_secs() < 10, "não chegou: {t}");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    h.key_press_modifiers(Modifiers::SHIFT, Key::F5);
+    h.run_steps(3);
+}

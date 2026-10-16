@@ -170,6 +170,8 @@ pub enum Action {
         id: u32,
         dir: Option<String>,
     },
+    /// Comando para o jogo aberto ("pause", "resume", "step").
+    GameCommand(&'static str),
 }
 
 enum Dialog {
@@ -250,6 +252,8 @@ pub struct ProjectWorkspace {
     inspector: Inspector,
     /// Cena que o jogo aberto está mostrando (para o ajuste ao vivo).
     pub game_scene: Option<String>,
+    /// O que o jogo aberto conta da cena da frente.
+    pub game_state: Option<crate::scene_view::GameState>,
     /// Valores do config.lua (tamanho da tela e cor de fundo).
     config: ConfigValues,
     /// Para o autocompletar: script → nomes dos objetos das cenas que o
@@ -337,6 +341,7 @@ impl ProjectWorkspace {
             hierarchy: HierarchyPanel::default(),
             inspector: Inspector::default(),
             game_scene: None,
+            game_state: None,
             config: ConfigValues::default(),
             script_objects: None,
             started: std::time::Instant::now(),
@@ -744,11 +749,24 @@ impl ProjectWorkspace {
         let exit = game.exited();
         let errors_before = self.console.count(crate::console::Category::Error);
         for line in lines {
-            if let Some(scene) = crate::console::live_scene(&line) {
-                self.game_scene = Some(scene);
-                continue;
+            use crate::console::LiveMessage;
+            match crate::console::live_message(&line) {
+                Some(LiveMessage::Scene(scene)) => self.game_scene = Some(scene),
+                Some(LiveMessage::State(v)) => {
+                    self.game_state = crate::scene_view::GameState::parse(&v);
+                }
+                Some(LiveMessage::Select(id)) => {
+                    // Ctrl+clique no jogo: seleciona o objeto aqui.
+                    if let Some(scene) = self.game_scene.clone()
+                        && let Some(doc) = self.scenes.get_mut(&scene)
+                        && doc.data.find(id).is_some()
+                    {
+                        doc.selection = vec![id];
+                        self.active_scene = Some(scene);
+                    }
+                }
+                None => self.console.push_game_line(&line),
             }
-            self.console.push_game_line(&line);
         }
         if let Some(status) = exit {
             // O que ainda estava no caminho.
@@ -764,6 +782,7 @@ impl ProjectWorkspace {
             }
             self.game = None;
             self.game_scene = None;
+            self.game_state = None;
         }
         // Erro novo com o console escondido: mostra o console.
         if self.console.count(crate::console::Category::Error) > errors_before
@@ -1288,6 +1307,11 @@ impl ProjectWorkspace {
                 Action::CreateSceneScript(rel) => self.create_scene_script(&rel),
                 Action::NewBehaviorScript { scene, id } => self.new_behavior_script(&scene, id),
                 Action::CreatePrefab { id, dir } => self.create_prefab(id, dir),
+                Action::GameCommand(cmd) => {
+                    if let Some(g) = &mut self.game {
+                        g.send(&serde_json::json!({ "cmd": cmd }).to_string());
+                    }
+                }
                 Action::OpenAsText(rel) => {
                     self.file_panel.reveal(&rel);
                     self.show_tab(Tab::Code(rel));
@@ -1501,6 +1525,9 @@ impl ProjectWorkspace {
                 clear_color: &self.config.clear_color,
                 time: self.started.elapsed().as_secs_f32(),
                 code_env: code_env.as_ref(),
+                game_state: self.game_state.as_ref().filter(|g| {
+                    self.game.is_some() && self.game_scene.as_deref() == Some(g.scene.as_str())
+                }),
             };
             let mut style = egui_dock::Style::from_egui(ui.style().as_ref());
             style.tab_bar.fill_tab_bar = false;
@@ -2024,6 +2051,8 @@ struct Viewer<'a> {
     time: f32,
     /// Autocompletar do código com o foco: (arquivo, o que ele sabe).
     code_env: Option<&'a (String, crate::complete::Env)>,
+    /// O que o jogo aberto conta da cena da frente.
+    game_state: Option<&'a crate::scene_view::GameState>,
 }
 
 impl TabViewer for Viewer<'_> {
@@ -2226,9 +2255,12 @@ impl TabViewer for Viewer<'_> {
             Tab::Inspector => {
                 let active = self.active_scene.clone();
                 let doc = active.as_deref().and_then(|r| self.scenes.get_mut(r));
+                let game = self
+                    .game_state
+                    .filter(|g| active.as_deref() == Some(g.scene.as_str()));
                 for a in self
                     .inspector
-                    .ui(ui, doc, self.files, self.sizes, self.mode)
+                    .ui(ui, doc, self.files, self.sizes, self.mode, game)
                 {
                     match a {
                         InspectorAction::OpenFile(rel) => {
@@ -2274,6 +2306,7 @@ impl Viewer<'_> {
             clear_color: self.clear_color,
             connected: self.game_scene == Some(rel),
             time: self.time,
+            game: self.game_state.filter(|g| g.scene == rel),
         };
         let actions = doc.ui(ui, &mut env);
         for a in actions {
@@ -2281,6 +2314,7 @@ impl Viewer<'_> {
                 SceneAction::TestHere => self.actions.push(Action::TestScene(rel.to_string())),
                 SceneAction::Reload => doc.reload(self.root),
                 SceneAction::OpenAsText => self.actions.push(Action::OpenAsText(rel.to_string())),
+                SceneAction::Game(cmd) => self.actions.push(Action::GameCommand(cmd)),
             }
         }
         // Clicou nesta cena: a Hierarquia e o Inspetor passam a mostrá-la.

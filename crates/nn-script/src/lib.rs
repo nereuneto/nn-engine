@@ -446,6 +446,8 @@ pub struct LuaScene {
     entered: bool,
     error: Option<String>,
     generation: u64,
+    /// Pausado pelo editor e pediram para avançar: roda um passo fixo.
+    step_fixed: bool,
 }
 
 impl std::fmt::Debug for LuaScene {
@@ -468,6 +470,7 @@ impl LuaScene {
             entered: false,
             error: None,
             generation,
+            step_fixed: false,
         }
     }
 
@@ -579,6 +582,38 @@ impl LuaScene {
         }
     }
 
+    /// Cena da frente, aberta pelo editor: manda o estado dela e o Ctrl+clique.
+    fn live_tick(&mut self, ctx: &mut Context) {
+        if self.error.is_some() {
+            return;
+        }
+        let Some(instance) = self.instance.clone() else {
+            return;
+        };
+        let lua = self.runtime.lua().clone();
+        let result = self.runtime.with_ctx(ctx, |_| {
+            let Some(f) = instance.get::<Option<Function>>("_live_tick")? else {
+                return Ok((Value::Nil, None));
+            };
+            f.call::<(Value, Option<i64>)>(instance.clone())
+        });
+        match result {
+            Ok((state, picked)) => {
+                if let Value::Table(_) = &state
+                    && let Ok(mut json) =
+                        mlua::LuaSerdeExt::from_value::<serde_json::Value>(&lua, state)
+                {
+                    json["paused"] = serde_json::Value::Bool(live::paused());
+                    live::report(&json);
+                }
+                if let Some(id) = picked {
+                    live::select(id);
+                }
+            }
+            Err(e) => log::debug!("estado ao vivo: {}", format_error(&e)),
+        }
+    }
+
     /// Ajustes ao vivo vindos do editor (só cenas visuais os recebem).
     fn apply_live(&mut self, ctx: &mut Context) {
         if self.error.is_some() {
@@ -662,14 +697,31 @@ impl Scene for LuaScene {
     }
 
     fn fixed_update(&mut self, ctx: &mut Context) {
+        // Pausado pelo editor: só anda o passo pedido com "avançar".
+        if live::paused() {
+            if !self.step_fixed {
+                return;
+            }
+            self.step_fixed = false;
+        }
         let dt = ctx.fixed_dt();
         self.call(ctx, "fixed_update", dt);
     }
 
     fn update(&mut self, ctx: &mut Context) -> Transition {
         self.reload_if_changed(ctx);
+        if live::enabled() {
+            self.live_tick(ctx);
+        }
+        let run = !live::paused() || {
+            let step = live::take_step();
+            self.step_fixed = step;
+            step
+        };
         let dt = ctx.time.delta_secs();
-        self.call(ctx, "update", dt);
+        if run {
+            self.call(ctx, "update", dt);
+        }
 
         // Com erro na tela, Esc fecha o jogo (não há outra saída).
         if self.error.is_some() && ctx.input.key_pressed(nn_input::KeyCode::Escape) {

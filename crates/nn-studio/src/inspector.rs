@@ -10,7 +10,7 @@ use eframe::egui::{self, Color32, RichText, Vec2};
 use crate::behaviors::{self, BehaviorInfo, Catalog, PropType};
 use crate::files::{FileKind, FileTree};
 use crate::scene_data::{Component, Object, Prop};
-use crate::scene_view::{FileDrag, SceneDoc};
+use crate::scene_view::{FileDrag, GameState, SceneDoc};
 use crate::settings::Mode;
 
 /// Tipo de controle de um campo.
@@ -412,6 +412,32 @@ pub struct Inspector {
     pub catalog: Catalog,
     /// Pedidos feitos enquanto desenha.
     actions_out: Vec<InspectorAction>,
+    /// O jogo aberto (se mostra a cena deste inspetor).
+    game: Option<GameState>,
+}
+
+/// Cor do que vem do jogo aberto.
+pub const GAME: Color32 = Color32::from_rgb(0x5A, 0xD8, 0xE8);
+
+fn round2(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
+
+/// Valor como texto curto.
+fn prop_text(p: &Prop) -> String {
+    match p {
+        Prop::Num(n) => crate::scene_data::format_num(round2(*n)),
+        Prop::Bool(b) => if *b { "sim" } else { "não" }.to_string(),
+        Prop::Str(s) => format!("\"{s}\""),
+    }
+}
+
+/// Mesmo valor (números com uma folga pequena)?
+fn same_value(a: &Prop, b: &Prop) -> bool {
+    match (a, b) {
+        (Prop::Num(x), Prop::Num(y)) => (x - y).abs() < 1e-6,
+        _ => a == b,
+    }
 }
 
 /// Cor das instâncias de prefab.
@@ -628,8 +654,10 @@ impl Inspector {
         files: &FileTree,
         sizes: &mut crate::scene_render::Sizes,
         mode: Mode,
+        game: Option<&GameState>,
     ) -> Vec<InspectorAction> {
         let mut actions = Vec::new();
+        self.game = game.cloned();
         let Some(doc) = doc else {
             ui.add_space(8.0);
             ui.weak("Selecione um objeto numa cena visual para ver as propriedades dele aqui.");
@@ -761,6 +789,25 @@ impl Inspector {
                     ui.end_row();
                 }
             });
+        if let Some(game) = &self.game {
+            ui.add_space(10.0);
+            ui.label(RichText::new("No jogo agora").strong().color(GAME));
+            if game.vars.is_empty() {
+                ui.weak("Nenhuma variável do jogo.");
+            }
+            egui::Grid::new("vars-no-jogo")
+                .num_columns(2)
+                .show(ui, |ui| {
+                    for (k, v) in &game.vars {
+                        ui.label(k);
+                        ui.label(RichText::new(prop_text(v)).color(GAME));
+                        ui.end_row();
+                    }
+                });
+            if game.paused {
+                ui.weak("O jogo está pausado.");
+            }
+        }
         ui.add_space(10.0);
         ui.weak("Selecione um objeto na cena ou na Hierarquia para ver as propriedades dele.");
     }
@@ -842,6 +889,44 @@ impl Inspector {
                             .on_hover_text("Objetos de camada maior são desenhados por cima.");
                         ui.add(egui::DragValue::new(&mut t.5).speed(0.1));
                         ui.end_row();
+                        // Onde está no jogo aberto, se mudou.
+                        if let Some(g) = self.game.as_ref().and_then(|g| g.objects.get(&id)) {
+                            let l = g.local;
+                            let differs = (l.x - o.x).abs() > 0.01
+                                || (l.y - o.y).abs() > 0.01
+                                || (l.rotation - o.rotation).abs() > 0.01
+                                || (l.scale_x - o.scale_x).abs() > 0.001
+                                || (l.scale_y - o.scale_y).abs() > 0.001;
+                            if differs {
+                                ui.label(RichText::new("No jogo").color(GAME));
+                                ui.horizontal(|ui| {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "x {}  y {}  {}°",
+                                            crate::scene_data::format_num(round2(l.x)),
+                                            crate::scene_data::format_num(round2(l.y)),
+                                            crate::scene_data::format_num(round2(l.rotation)),
+                                        ))
+                                        .color(GAME),
+                                    );
+                                    if ui
+                                        .small_button("Manter")
+                                        .on_hover_text("Traz a posição, a rotação e a escala do jogo para a cena")
+                                        .clicked()
+                                    {
+                                        t = (
+                                            round2(l.x),
+                                            round2(l.y),
+                                            round2(l.rotation),
+                                            l.scale_x,
+                                            l.scale_y,
+                                            t.5,
+                                        );
+                                    }
+                                });
+                                ui.end_row();
+                            }
+                        }
                         if t != (o.x, o.y, o.rotation, o.scale_x, o.scale_y, o.layer) {
                             doc.record(Some(&format!("{id}:transformacao")));
                             if let Some(obj) = doc.data.find_mut(id) {
@@ -1187,9 +1272,25 @@ impl Inspector {
                         // (a linha mostrou o rótulo)
                     }
                     let current = value(&p.key);
-                    if let Some(new) = field_widget(ui, &spec, &current, files, names, (id, ci)) {
-                        changes.push((p.key.clone(), new));
-                    }
+                    ui.horizontal(|ui| {
+                        if let Some(new) = field_widget(ui, &spec, &current, files, names, (id, ci))
+                        {
+                            changes.push((p.key.clone(), new));
+                        }
+                        // Valor no jogo aberto, se mudou (o jogo pode mexer nele).
+                        if let Some(g) = self.game.as_ref().and_then(|g| g.prop(id, ci, &p.key))
+                            && !same_value(g, &current)
+                        {
+                            ui.label(RichText::new(format!("jogo: {}", prop_text(g))).color(GAME));
+                            if ui
+                                .small_button("Manter")
+                                .on_hover_text("Usa o valor do jogo na cena")
+                                .clicked()
+                            {
+                                changes.push((p.key.clone(), g.clone()));
+                            }
+                        }
+                    });
                     ui.end_row();
                 }
             });

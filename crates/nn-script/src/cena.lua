@@ -896,6 +896,67 @@ function M.live(scene, msg)
   end
 end
 
+-- Editor ao vivo -------------------------------------------------------------
+
+local function simple(v)
+  local t = type(v)
+  return t == "number" or t == "string" or t == "boolean"
+end
+
+--- Onde estão os objetos da cena (e as propriedades dos comportamentos e as
+--- variáveis do jogo), para o NN Studio mostrar enquanto o jogo roda.
+function M.state(scene)
+  local objects = {}
+  for _, o in ipairs(scene.object_list or {}) do
+    if o.alive and o.id > 0 then
+      local wx, wy, wr, wsx, wsy = o:world_transform()
+      local e = {
+        id = o.id, x = o.x, y = o.y, rotation = o.rotation,
+        scale_x = o.scale_x, scale_y = o.scale_y, visible = o.visible,
+        wx = wx, wy = wy, wr = wr, wsx = wsx, wsy = wsy,
+      }
+      local props = {}
+      for ci, c in ipairs(o.components) do
+        local inst = c._inst
+        if inst then
+          local p = {}
+          for _, d in ipairs(inst._props or {}) do
+            local v = inst[d.key]
+            if simple(v) then p[d.key] = v end
+          end
+          props[tostring(ci)] = p
+        end
+      end
+      e.props = props
+      table.insert(objects, e)
+    end
+  end
+  local vars = {}
+  for k, v in pairs(nn.vars or {}) do
+    if type(k) == "string" and simple(v) then vars[k] = v end
+  end
+  return { scene = scene._path, objects = objects, vars = vars }
+end
+
+--- O objeto da cena (do arquivo) sob o ponto x, y do mundo.
+function M.pick(scene, x, y)
+  local list = scene._draw_list or {}
+  for i = #list, 1, -1 do
+    local o = list[i]
+    if o.alive and o:shown() then
+      local ox, oy = o:world_transform()
+      local hw, hh = o:bounds()
+      if math.abs(x - ox) <= hw and math.abs(y - oy) <= hh then
+        -- Parte de um prefab ou criado pelo jogo: o dono que está no arquivo.
+        local owner = o
+        while owner and owner.id <= 0 do owner = owner.parent end
+        if owner then return owner.id end
+      end
+    end
+  end
+  return nil
+end
+
 -- Liga tudo numa cena comum ---------------------------------------------------
 
 local function load_script(path)
@@ -1019,6 +1080,22 @@ function M.new(data, path)
 
   function scene:_live(msg)
     M.live(self, msg)
+  end
+
+  -- Chamado pela engine a cada quadro quando o jogo foi aberto pelo editor.
+  function scene:_live_tick()
+    local now = nn.time.elapsed()
+    local state
+    if not self._last_report or now - self._last_report >= 0.1 then
+      self._last_report = now
+      state = M.state(self)
+    end
+    local picked
+    if nn.input.down("ctrl") and nn.input.mouse_pressed("left") then
+      local x, y = nn.input.mouse_world()
+      if x then picked = M.pick(self, x, y) end
+    end
+    return state, picked
   end
 
   return scene

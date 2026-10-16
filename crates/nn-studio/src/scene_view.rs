@@ -202,6 +202,8 @@ pub enum SceneAction {
     TestHere,
     Reload,
     OpenAsText,
+    /// Comando para o jogo aberto: "pause", "resume" ou "step".
+    Game(&'static str),
 }
 
 /// O que a aba precisa do espaço de trabalho.
@@ -216,11 +218,124 @@ pub struct SceneEnv<'a> {
     /// O jogo aberto está mostrando esta cena.
     pub connected: bool,
     pub time: f32,
+    /// Onde os objetos estão no jogo aberto (se ele mostra esta cena).
+    pub game: Option<&'a GameState>,
 }
 
 impl std::fmt::Debug for SceneEnv<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SceneEnv").finish_non_exhaustive()
+    }
+}
+
+/// Um objeto da cena como está no jogo aberto.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GameObject {
+    /// Posição, rotação e escala (relativas ao pai), como no arquivo.
+    pub local: Transform,
+    /// No mundo.
+    pub world: Transform,
+    pub visible: bool,
+    /// Propriedades dos comportamentos: (componente, campos).
+    pub props: Vec<(usize, Vec<(String, Prop)>)>,
+}
+
+/// O que o jogo aberto pelo editor conta da cena da frente.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct GameState {
+    pub scene: String,
+    pub paused: bool,
+    pub objects: std::collections::HashMap<u32, GameObject>,
+    pub vars: Vec<(String, Prop)>,
+}
+
+fn json_prop(v: &serde_json::Value) -> Option<Prop> {
+    Some(match v {
+        serde_json::Value::Number(n) => Prop::Num(n.as_f64()?),
+        serde_json::Value::Bool(b) => Prop::Bool(*b),
+        serde_json::Value::String(s) => Prop::Str(s.clone()),
+        _ => return None,
+    })
+}
+
+impl GameState {
+    /// Lê a mensagem `estado` do jogo.
+    pub fn parse(v: &serde_json::Value) -> Option<Self> {
+        let num = |o: &serde_json::Value, k: &str| o.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
+        let mut state = GameState {
+            scene: v.get("scene")?.as_str()?.to_string(),
+            paused: v.get("paused").and_then(|p| p.as_bool()).unwrap_or(false),
+            ..Default::default()
+        };
+        // Lista vazia chega como {} (tabela Lua vazia).
+        if let Some(list) = v.get("objects").and_then(|o| o.as_array()) {
+            for o in list {
+                let Some(id) = o.get("id").and_then(|i| i.as_u64()) else {
+                    continue;
+                };
+                let mut props = Vec::new();
+                if let Some(map) = o.get("props").and_then(|p| p.as_object()) {
+                    for (ci, fields) in map {
+                        let Ok(ci) = ci.parse::<usize>() else {
+                            continue;
+                        };
+                        let mut list: Vec<(String, Prop)> = fields
+                            .as_object()
+                            .map(|f| {
+                                f.iter()
+                                    .filter_map(|(k, v)| json_prop(v).map(|p| (k.clone(), p)))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        list.sort_by(|a, b| a.0.cmp(&b.0));
+                        props.push((ci.saturating_sub(1), list));
+                    }
+                }
+                props.sort_by_key(|(ci, _)| *ci);
+                state.objects.insert(
+                    id as u32,
+                    GameObject {
+                        local: Transform {
+                            x: num(o, "x"),
+                            y: num(o, "y"),
+                            rotation: num(o, "rotation"),
+                            scale_x: num(o, "scale_x"),
+                            scale_y: num(o, "scale_y"),
+                        },
+                        world: Transform {
+                            x: num(o, "wx"),
+                            y: num(o, "wy"),
+                            rotation: num(o, "wr"),
+                            scale_x: num(o, "wsx"),
+                            scale_y: num(o, "wsy"),
+                        },
+                        visible: o.get("visible").and_then(|b| b.as_bool()).unwrap_or(true),
+                        props,
+                    },
+                );
+            }
+        }
+        if let Some(map) = v.get("vars").and_then(|o| o.as_object()) {
+            state.vars = map
+                .iter()
+                .filter_map(|(k, v)| json_prop(v).map(|p| (k.clone(), p)))
+                .collect();
+            state.vars.sort_by(|a, b| a.0.cmp(&b.0));
+        }
+        Some(state)
+    }
+
+    /// Valor de uma propriedade de comportamento no jogo.
+    pub fn prop(&self, id: u32, component: usize, key: &str) -> Option<&Prop> {
+        self.objects
+            .get(&id)?
+            .props
+            .iter()
+            .find(|(c, _)| *c == component)?
+            .1
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v)
     }
 }
 
@@ -802,8 +917,23 @@ impl SceneDoc {
             }
             if env.connected {
                 ui.colored_label(GREEN, "• Ao vivo").on_hover_text(
-                    "O jogo aberto está nesta cena: o que você mudar aparece nele na hora, sem salvar.",
+                    "O jogo aberto está nesta cena: o que você mudar aparece nele na hora, sem salvar. Os contornos tracejados mostram onde os objetos estão no jogo. Ctrl+clique num objeto na janela do jogo seleciona ele aqui.",
                 );
+                let paused = env.game.is_some_and(|g| g.paused);
+                if paused {
+                    if ui.button("Continuar").on_hover_text("Volta a rodar o jogo").clicked() {
+                        actions.push(SceneAction::Game("resume"));
+                    }
+                    if ui.button("Avançar 1 quadro").clicked() {
+                        actions.push(SceneAction::Game("step"));
+                    }
+                } else if ui
+                    .button("Pausar")
+                    .on_hover_text("Congela o jogo aberto (para ver onde as coisas estão)")
+                    .clicked()
+                {
+                    actions.push(SceneAction::Game("pause"));
+                }
             }
             ui.separator();
             for (tool, label, tip) in [
@@ -974,6 +1104,52 @@ impl SceneDoc {
                 c.to_vec(),
                 Stroke::new(1.0, SELECT.gamma_multiply(0.6)),
             ));
+        }
+        // Onde os objetos estão no jogo aberto (quando estão em outro lugar).
+        if let Some(game) = env.game {
+            let icon = scene_render::ICON_SIZE / cam.zoom;
+            let color = Color32::from_rgb(0x5A, 0xD8, 0xE8);
+            for (id, g) in &game.objects {
+                let (Some(o), Some(t)) = (self.data.find(*id), self.data.world_transform(*id))
+                else {
+                    continue;
+                };
+                let w = g.world;
+                let moved = (w.x - t.x).abs() > 0.5
+                    || (w.y - t.y).abs() > 0.5
+                    || (w.rotation - t.rotation).abs() > 0.5;
+                if !moved || !g.visible {
+                    continue;
+                }
+                let (r, _) = local_bounds(o, env.root, env.sizes, icon);
+                let pts: Vec<Pos2> = r
+                    .corners()
+                    .iter()
+                    .map(|(cx, cy)| {
+                        let (wx, wy) = w.point_to_world(cx * w.scale_x, cy * w.scale_y);
+                        cam.to_screen(rect, wx, wy)
+                    })
+                    .collect();
+                for i in 0..pts.len() {
+                    let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+                    // Sombra escura embaixo: aparece em qualquer fundo.
+                    painter.add(egui::Shape::dashed_line(
+                        &[a, b],
+                        Stroke::new(3.5, Color32::from_black_alpha(150)),
+                        6.0,
+                        4.0,
+                    ));
+                    painter.add(egui::Shape::dashed_line(
+                        &[a, b],
+                        Stroke::new(1.5, color),
+                        6.0,
+                        4.0,
+                    ));
+                }
+                let from = cam.to_screen(rect, t.x, t.y);
+                let to = cam.to_screen(rect, w.x, w.y);
+                painter.line_segment([from, to], Stroke::new(1.0, color.gamma_multiply(0.5)));
+            }
         }
         // Selecionados.
         for id in &self.selection {
