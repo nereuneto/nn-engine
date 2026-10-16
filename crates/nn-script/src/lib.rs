@@ -60,6 +60,11 @@ pub use errors::translate_error;
 /// componentes e seus campos padrão (`FIELDS`), que o NN Studio usa.
 pub const SCENE_RUNTIME: &str = include_str!("cena.lua");
 
+/// Eventos "Quando... Então..." das cenas visuais. Recebe o módulo das cenas
+/// (`SCENE_RUNTIME`) e devolve o módulo dos eventos, com o catálogo de
+/// condições e ações (`catalog()`), que o NN Studio também lê.
+pub const EVENTS_RUNTIME: &str = include_str!("eventos.lua");
+
 /// Extensão dos arquivos de cena visual.
 pub const SCENE_EXTENSION: &str = "cena";
 
@@ -90,6 +95,7 @@ pub const BEHAVIORS: &[(&str, &str)] = &[
         "mostrar_valor",
         include_str!("comportamentos/mostrar_valor.lua"),
     ),
+    ("botao", include_str!("comportamentos/botao.lua")),
 ];
 
 /// Variáveis do jogo (`nn.vars`): começam com o `vars` do config.lua e valem
@@ -189,6 +195,11 @@ impl ScriptRuntime {
         for (id, src) in BEHAVIORS {
             builtin.set(*id, *src)?;
         }
+        let events: Table = lua
+            .load(EVENTS_RUNTIME)
+            .set_name("@nn/eventos.lua")
+            .call(scene_runtime.clone())?;
+        scene_runtime.set("events", events)?;
         lua.set_named_registry_value(SCENE_RUNTIME_KEY, scene_runtime)?;
         let vars = config_vars(&lua, source.as_ref());
         lua.load(VARS_LUA)
