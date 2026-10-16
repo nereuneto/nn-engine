@@ -1878,12 +1878,6 @@ impl PixelDoc {
                             self.float_grab = None;
                         }
                     }
-                    egui::Event::PointerGone => {
-                        // Saiu da janela segurando: termina o traço.
-                        if self.stroke.is_some() && !ui.input(|i| i.pointer.any_down()) {
-                            self.end_stroke();
-                        }
-                    }
                     _ => {}
                 }
             }
