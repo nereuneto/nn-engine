@@ -96,6 +96,17 @@ pub fn big_button(text: &str, fill: Color32) -> egui::Button<'_> {
     .corner_radius(6.0)
 }
 
+/// Pede um redesenho para animar (cena, mapa, partículas, prévia). Com a
+/// janela minimizada ou sem foco, não anima: o editor fica quieto enquanto
+/// você usa outra coisa (o jogo, por exemplo).
+pub fn animate(ctx: &egui::Context, after: std::time::Duration) {
+    let (focused, minimized) = ctx.input(|i| (i.viewport().focused, i.viewport().minimized));
+    if minimized == Some(true) || focused == Some(false) {
+        return;
+    }
+    ctx.request_repaint_after(after);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1068,6 +1068,7 @@ impl ProjectWorkspace {
             }
             // O .anim mudou fora: a imagem dele relê (se não houver nada a perder).
             if FileKind::of(Path::new(rel)) == FileKind::Anim {
+                self.sizes.anims.forget(rel);
                 for v in self.pixels.values_mut() {
                     if crate::anim_file::anim_path(&v.rel) == *rel {
                         v.disk_changed(&root);
@@ -3196,11 +3197,13 @@ impl Viewer<'_> {
                 .iter()
                 .any(|c| c.kind == "sprite" && !c.str("animation").is_empty());
         });
-        // As partículas também animam (a não ser com a prévia parada).
-        animated |= !doc.particles_paused && doc.has_particles();
-        if animated {
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(33));
+        // As partículas também animam (a não ser com a prévia parada), mais
+        // lisas; com a janela sem foco, nada anima.
+        let fx = !doc.particles_paused && doc.has_particles();
+        if fx {
+            crate::theme::animate(ui.ctx(), std::time::Duration::from_millis(16));
+        } else if animated {
+            crate::theme::animate(ui.ctx(), std::time::Duration::from_millis(33));
         }
         // Clicou nesta cena: a Hierarquia e o Inspetor passam a mostrá-la.
         if ui.ui_contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {

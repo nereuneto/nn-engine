@@ -197,10 +197,15 @@ impl Launcher {
     }
 
     pub fn open_new_project(&mut self, settings: &Settings) {
+        self.open_new_project_with(settings, Template::Padrao, "Meu jogo");
+    }
+
+    /// O formulário de projeto novo, já com um modelo escolhido.
+    pub fn open_new_project_with(&mut self, settings: &Settings, template: Template, title: &str) {
         self.new_form = Some(NewProjectForm {
-            title: "Meu jogo".into(),
+            title: title.into(),
             parent: settings::display_path(&settings.default_projects_dir()),
-            template: Template::Padrao,
+            template,
             submit: false,
             error: None,
             focus: true,
@@ -303,20 +308,60 @@ impl Launcher {
                     ui.add_space(8.0);
                     if settings.recent.is_empty() {
                         ui.add_space(12.0);
-                        // Primeira vez: o tutorial é o melhor começo.
+                        // Primeira vez: três jeitos de começar.
                         egui::Frame::group(ui.style())
                             .fill(theme::ACCENT.gamma_multiply(0.15))
+                            .inner_margin(14.0)
                             .show(ui, |ui| {
-                                ui.set_width(ui.available_width().min(560.0));
-                                ui.label(RichText::new("Primeira vez aqui?").size(18.0).strong());
-                                ui.label("Faça o tutorial Seu primeiro jogo: em uns 15 minutos você monta uma fase de plataforma, sem escrever código, com o editor mostrando cada passo.");
-                                ui.add_space(4.0);
-                                if ui
-                                    .add(egui::Button::new(RichText::new("🎓 Começar o tutorial").size(15.0)).fill(theme::ACCENT.gamma_multiply(0.75)))
-                                    .clicked()
-                                {
-                                    action = Some(LauncherAction::StartTutorial("primeiro-jogo"));
-                                }
+                                ui.set_width(ui.available_width().min(760.0));
+                                ui.label(RichText::new("Bem-vindo ao NN Studio!").size(20.0).strong());
+                                ui.label("Por onde você quer começar?");
+                                ui.add_space(8.0);
+                                let w = ((ui.available_width() - 16.0) / 3.0).clamp(150.0, 240.0);
+                                ui.horizontal_top(|ui| {
+                                    let card = |ui: &mut egui::Ui, title: &str, text: &str, accent: bool| {
+                                        let b = egui::Button::new(
+                                            RichText::new(format!("{title}\n\n{text}")).size(14.0),
+                                        )
+                                        .wrap()
+                                        .min_size(egui::vec2(w, 116.0))
+                                        .corner_radius(8.0);
+                                        let b = if accent {
+                                            b.fill(theme::ACCENT.gamma_multiply(0.6))
+                                        } else {
+                                            b
+                                        };
+                                        ui.add_sized(egui::vec2(w, 116.0), b)
+                                    };
+                                    let r = card(
+                                        ui,
+                                        "🎓 Fazer o tutorial",
+                                        "Seu primeiro jogo: uma fase de plataforma em uns 15 minutos, com o editor mostrando cada passo.",
+                                        true,
+                                    );
+                                    crate::tutorial::anchor_in(ui, "boas-vindas:tutorial", r.rect);
+                                    if r.clicked() {
+                                        action = Some(LauncherAction::StartTutorial("primeiro-jogo"));
+                                    }
+                                    let r = card(
+                                        ui,
+                                        "🎮 Abrir um jogo pronto",
+                                        "O modelo Plataforma, completo e sem código, para ver como é feito e mudar o que quiser.",
+                                        false,
+                                    );
+                                    if r.clicked() {
+                                        self.open_new_project_with(settings, Template::Visual, "Meu jogo");
+                                    }
+                                    let r = card(
+                                        ui,
+                                        "📄 Começar do zero",
+                                        "Uma cena vazia e um pacote de imagens e sons para montar do seu jeito.",
+                                        false,
+                                    );
+                                    if r.clicked() {
+                                        self.open_new_project_with(settings, Template::Vazio, "Meu jogo");
+                                    }
+                                });
                             });
                         ui.add_space(12.0);
                         ui.label("Nenhum projeto ainda.");

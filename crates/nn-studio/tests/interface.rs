@@ -1272,6 +1272,7 @@ fn eventos_pelo_painel_criar_desfazer_salvar_e_ver_como_codigo() {
     h.get_by_label("➕ ação").click();
     h.run();
     digitar(&mut h, "destruir");
+    tela(&mut h, "eventos-acao");
     h.key_press(Key::Enter);
     h.run();
     assert_eq!(objeto(&h, "quadrado").events[0].actions[0].id, "destruir");
@@ -2461,4 +2462,44 @@ fn modelo_aventura_tochas_animam_no_editor() {
     }
     h.get_by_label("✨ Efeito pronto");
     tela(&mut h, "modelo-tochas");
+}
+
+#[test]
+fn boas_vindas_comecam_um_jogo_pronto() {
+    let dir = temp("boas-vindas");
+    let mut h = studio(&dir, None);
+    h.get_by_label("Bem-vindo ao NN Studio!");
+    tela(&mut h, "boas-vindas");
+    h.get_by_label_contains("Abrir um jogo pronto").click();
+    h.run();
+    h.get_all_by_role(Role::TextInput).nth(1).unwrap().focus();
+    selecionar_tudo(&mut h);
+    digitar(&mut h, &dir.join("jogos").to_string_lossy());
+    h.get_by_label("Criar projeto").click();
+    h.run_steps(6);
+    let p = h.state().project().expect("o projeto abriu");
+    // O modelo Plataforma (cenas visuais).
+    assert!(p.files.exists("cenas/fase.cena"), "modelo errado");
+}
+
+#[test]
+fn aviso_quando_o_editor_fechou_por_erro() {
+    let dir = temp("travou");
+    std::fs::write(
+        dir.join(nn_studio::crash::CRASH_FILE),
+        "NN Studio 0.1.0 (linux x86_64)\nalgo deu errado\nem src/x.rs:1\n",
+    )
+    .unwrap();
+    let mut h = studio(&dir, None);
+    h.get_by_label("O NN Studio fechou por um erro");
+    h.get_by_label_contains("algo deu errado");
+    tela(&mut h, "travou");
+    h.get_by_label("Fechar").click();
+    h.run();
+    assert!(h.query_by_label("O NN Studio fechou por um erro").is_none());
+    // Não avisa de novo.
+    drop(h);
+    let mut h = studio(&dir, None);
+    h.run();
+    assert!(h.query_by_label("O NN Studio fechou por um erro").is_none());
 }

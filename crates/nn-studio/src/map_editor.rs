@@ -314,8 +314,7 @@ impl MapEditor {
             time_ms,
         );
         if has_animation(map, tilesets) {
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(50));
+            crate::theme::animate(ui.ctx(), std::time::Duration::from_millis(50));
         }
         painter.rect_stroke(
             area,

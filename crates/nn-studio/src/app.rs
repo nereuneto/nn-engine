@@ -62,6 +62,8 @@ pub struct StudioApp {
     pending: Option<Pending>,
     allow_close: bool,
     about: bool,
+    /// O erro que fechou o editor da última vez (aviso ao abrir).
+    crash: Option<String>,
     shortcuts: bool,
     logo: Option<egui::TextureHandle>,
     window_title: String,
@@ -111,6 +113,14 @@ impl StudioApp {
         self.render_state = state;
     }
 
+    /// A pasta das preferências e do log (se houver).
+    fn config_dir(&self) -> Option<PathBuf> {
+        self.settings_path
+            .as_deref()
+            .and_then(|p| p.parent())
+            .map(Path::to_path_buf)
+    }
+
     pub fn new(ctx: &egui::Context, options: StudioOptions) -> Self {
         let settings = options
             .settings_path
@@ -141,6 +151,7 @@ impl StudioApp {
             pending: None,
             allow_close: false,
             about: false,
+            crash: None,
             shortcuts: false,
             logo,
             window_title: String::new(),
@@ -148,6 +159,9 @@ impl StudioApp {
             tutorial: None,
         };
         theme::apply(ctx, app.settings.theme, app.settings.zoom);
+        app.crash = app
+            .config_dir()
+            .and_then(|d| crate::crash::take_last_crash(&d));
         if let Some(dir) = options.open {
             app.open_project(&dir);
         }
@@ -788,6 +802,38 @@ impl StudioApp {
     }
 
     fn info_dialogs(&mut self, ctx: &egui::Context) {
+        if let Some(text) = self.crash.clone() {
+            let dir = self.config_dir();
+            let r = egui::Modal::new(egui::Id::new("travou")).show(ctx, |ui| {
+                ui.set_width(460.0);
+                ui.heading("O NN Studio fechou por um erro");
+                ui.add_space(4.0);
+                ui.label("Da última vez, o editor fechou sozinho. Desculpe! Seus arquivos salvos estão no lugar; o que não tinha sido salvo pode ter se perdido.");
+                ui.add_space(4.0);
+                let first: String = text.lines().skip(1).take(2).collect::<Vec<_>>().join("\n");
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    ui.add(egui::Label::new(egui::RichText::new(first).monospace().small()).wrap());
+                });
+                ui.weak("Se quiser ajudar a corrigir, mande o erro (e o que você estava fazendo) em github.com/nereuneto/nn-engine/issues.");
+                ui.add_space(6.0);
+                let mut close = false;
+                ui.horizontal(|ui| {
+                    if ui.button("📋 Copiar o erro").clicked() {
+                        ui.ctx().copy_text(text.clone());
+                    }
+                    if let Some(dir) = &dir
+                        && ui.button("📂 Pasta do log").clicked()
+                    {
+                        let _ = opener::open(dir);
+                    }
+                    close = ui.button("Fechar").clicked();
+                });
+                close
+            });
+            if r.inner || r.should_close() {
+                self.crash = None;
+            }
+        }
         if self.about {
             let r = egui::Modal::new(egui::Id::new("sobre")).show(ctx, |ui| {
                 ui.set_width(360.0);
@@ -801,13 +847,35 @@ impl StudioApp {
                     });
                 });
                 ui.add_space(6.0);
-                ui.label("O editor da nn-engine, para criar jogos 2D em Lua.");
+                ui.label("O editor da nn-engine, para criar jogos 2D: cenas montadas com o mouse, eventos sem código e Lua para quem quiser programar.");
                 ui.hyperlink_to(
                     "github.com/nereuneto/nn-engine",
                     "https://github.com/nereuneto/nn-engine",
                 );
+                ui.weak(format!(
+                    "{} {} · licença MIT ou Apache-2.0",
+                    std::env::consts::OS,
+                    std::env::consts::ARCH
+                ));
                 ui.add_space(6.0);
-                ui.button("Fechar").clicked()
+                let dir = self.config_dir();
+                let mut close = false;
+                ui.horizontal(|ui| {
+                    if let Some(dir) = &dir
+                        && ui
+                            .button("📂 Pasta do log")
+                            .on_hover_text(format!(
+                                "Preferências e o log ({}) ficam em {}",
+                                crate::crash::LOG_FILE,
+                                dir.display()
+                            ))
+                            .clicked()
+                    {
+                        let _ = opener::open(dir);
+                    }
+                    close = ui.button("Fechar").clicked();
+                });
+                close
             });
             if r.inner || r.should_close() {
                 self.about = false;

@@ -44,10 +44,9 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         other => {
-            env_logger::Builder::from_env(
-                env_logger::Env::default().default_filter_or("warn,nn_studio=info"),
-            )
-            .init();
+            // Log no terminal e em nn-studio.log; erro que fecha o editor
+            // fica guardado para o aviso da próxima vez.
+            nn_studio::crash::init(settings_dir().as_deref());
             let options = StudioOptions {
                 settings_path: settings_dir().map(|d| d.join(SETTINGS_FILE)),
                 open: other.map(PathBuf::from),

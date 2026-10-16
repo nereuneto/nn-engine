@@ -915,7 +915,7 @@ impl PixelDoc {
         }
         self.sync_textures(ui.ctx());
         if self.playing && self.anim_sel.is_some() {
-            ui.ctx().request_repaint();
+            crate::theme::animate(ui.ctx(), std::time::Duration::from_millis(16));
         }
         actions
     }

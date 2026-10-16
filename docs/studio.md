@@ -27,21 +27,25 @@ projetos em Lua da ferramenta `nn`, então dá para alternar entre os dois.
     menu, partida, pausa, fim e recorde salvo). O melhor jeito de começar pelo
     código.
   - **Plataforma:** uma fase montada no editor, **sem nenhuma linha de
-    código**: tela de título, herói, plataformas (uma delas móvel), moedas (um
-    prefab), inimigo, abismo, placar e uma saída que só abre depois de pegar
-    todas as moedas (um evento).
+    código**: tela de título com botões, herói, plataformas (uma delas
+    móvel), moedas (um prefab), inimigo, abismo, HUD com corações, pausa com
+    Esc, opções de volume, poeira e brilho de partículas e uma saída que só
+    abre depois de pegar todas as moedas (um evento).
   - **Aventura:** visto de cima, sem código: pegue a chave, abra a porta e ache
     o tesouro, fugindo das lesmas e dos morcegos. A porta e o baú funcionam
     com eventos.
-  - **Nave:** sem código: tiros, asteroides que vêm de um gerador, pontos,
-    vidas e recorde salvo no computador.
+  - **Nave:** sem código: tiros, asteroides que vêm de um gerador,
+    explosões de partículas, pontos, vidas e recorde salvo no computador.
   - **Vazio:** uma cena vazia e um pacote de imagens e sons, para montar do
     seu jeito (o tutorial começa daqui).
   - **Mínimo:** só uma cena com um quadrado que anda.
 
   ![Novo projeto: os modelos](imagens/nn-studio-modelos.png)
-- **🎓 Tutoriais:** veja [Tutoriais](#tutoriais). Quem abre o NN Studio pela
-  primeira vez já vê o convite para o tutorial *Seu primeiro jogo*.
+- **🎓 Tutoriais:** veja [Tutoriais](#tutoriais).
+- **Primeira vez:** sem nenhum projeto ainda, a tela de boas-vindas mostra
+  três jeitos de começar: **Fazer o tutorial** (*Seu primeiro jogo*),
+  **Abrir um jogo pronto** (o modelo Plataforma) e **Começar do zero** (o
+  modelo Vazio).
 - **📂 Abrir projeto:** escolha a pasta do jogo (a que tem o `config.lua` ou o
   `main.lua`). Também dá para **arrastar a pasta** para a janela.
 - **🎮 Exemplos:** abre uma cópia do jogo de plataforma ou da demonstração,
@@ -763,6 +767,15 @@ arquivo `preferencias.json` na pasta de configuração do usuário
 (`%APPDATA%\NN Studio\config` no Windows, `~/.config/nnstudio` no Linux). Os
 projetos não ganham nenhum arquivo do editor: a pasta do jogo continua só com
 o jogo.
+
+Na mesma pasta fica o **log** do editor, `nn-studio.log` (o da vez anterior
+fica em `nn-studio.log.1`). Se o NN Studio fechar por um erro, na próxima vez
+que abrir ele avisa, com o erro para copiar e um botão para abrir a pasta do
+log. **Ajuda > Sobre** mostra a versão e também abre essa pasta.
+
+Com a janela do editor sem foco ou minimizada (enquanto você joga, por
+exemplo), as animações e partículas da cena param de redesenhar e o editor
+quase não usa o processador.
 
 ## Como funciona por dentro
 

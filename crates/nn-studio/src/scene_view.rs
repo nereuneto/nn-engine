@@ -735,6 +735,14 @@ impl SceneDoc {
                 max = (max.0.max(wx), max.1.max(wy));
             }
         }
+        // A cena toda (sem seleção) também mostra a tela do jogo inteira.
+        if self.selection.is_empty() {
+            let (cx, cy, zoom) = self.data.camera_start();
+            let (sw, sh) = scene_data::screen_size();
+            let (hw, hh) = (sw / zoom / 2.0, sh / zoom / 2.0);
+            min = (min.0.min(cx - hw), min.1.min(cy - hh));
+            max = (max.0.max(cx + hw), max.1.max(cy + hh));
+        }
         if min.0 > max.0 {
             self.camera = ViewCamera::default();
             return;
@@ -1218,7 +1226,12 @@ impl SceneDoc {
         for placed in &order {
             let (o, t) = (placed.object, &placed.world);
             // Ícone de objetos sem nada visível (vazio, som, câmera, partículas).
-            let (_, is_icon) = local_bounds(o, env.root, env.sizes, icon_size);
+            // (Medir só quem pode não ter nada visível: cenas grandes.)
+            let visual = o.components.iter().any(|c| {
+                matches!(c.kind.as_str(), "sprite" | "shape" | "text" | "map")
+                    || crate::scene_data::is_ui_kind(&c.kind)
+            });
+            let is_icon = !visual && local_bounds(o, env.root, env.sizes, icon_size).1;
             let center = cam.to_screen(rect, t.x, t.y);
             // (Partículas animando já aparecem: o ícone só com a prévia parada.)
             let fx_icon = self.particles_paused && o.component("particles").is_some();
