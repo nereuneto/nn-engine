@@ -54,9 +54,16 @@ pub fn paused() -> bool {
 /// Com o jogo pausado, o editor pediu para avançar um quadro? (Consome o
 /// pedido.)
 pub(crate) fn take_step() -> bool {
-    STEPS
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
-        .is_ok()
+    // Laço de compare_exchange em vez de `fetch_update`, que foi renomeado
+    // (e marcado como obsoleto) depois da versão mínima do Rust da engine.
+    let mut n = STEPS.load(Ordering::Relaxed);
+    while n > 0 {
+        match STEPS.compare_exchange_weak(n, n - 1, Ordering::Relaxed, Ordering::Relaxed) {
+            Ok(_) => return true,
+            Err(atual) => n = atual,
+        }
+    }
+    false
 }
 
 /// Coloca uma mensagem (uma linha JSON) na fila. Devolve `false` se a linha
