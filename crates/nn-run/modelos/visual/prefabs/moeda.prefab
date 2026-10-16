@@ -8,7 +8,7 @@ return {
     visible = true, layer = 1,
     components = {
       { type = "sprite", image = "assets/imagens/moeda.png", frame_w = 16, frame_h = 16, frame = 1, w = 40, h = 40, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "girar", hud = false },
-      { type = "behavior", script = "nn:coletavel", brilho = true, cor_brilho = "#FFD166", quem = "", som = "assets/sons/moeda.wav", valor = 1, variavel = "moedas" },
+      { type = "behavior", script = "nn:coletavel", brilho = false, cor_brilho = "#FFD166", quem = "", som = "assets/sons/moeda.wav", valor = 1, variavel = "moedas" },
     },
   },
 }

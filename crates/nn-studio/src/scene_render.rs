@@ -13,7 +13,8 @@ use eframe::egui_wgpu::{self, wgpu};
 use glam::{UVec2, Vec2};
 use nn_core::Color;
 use nn_render::{
-    Anchor, Camera2D, FontId, Panel, PanelImage, Renderer, Sprite, Text, TextureId, TextureOptions,
+    Anchor, Blend, Camera2D, EmitArea, FontId, Panel, PanelImage, ParticleConfig, ParticleEmitter,
+    Rect as UvRect, Renderer, Sprite, Text, TextureId, TextureOptions,
 };
 
 use crate::scene_data::{Component, Object, SceneData, Transform};
@@ -500,6 +501,62 @@ pub struct RenderView {
     pub size: UVec2,
     pub background: Color,
     pub time: f32,
+    /// As partículas animam (senão, ficam paradas).
+    pub particles: bool,
+    /// Objetos com partículas para soltar agora (botão 💥 Soltar).
+    pub bursts: Vec<u32>,
+}
+
+/// As opções de partículas de um componente, como a engine monta
+/// (`M.particle_options` do cena.lua). `image` é a textura e a região.
+pub fn particle_config(c: &Component, image: Option<(TextureId, UvRect)>) -> ParticleConfig {
+    let num = |k: &str| c.num(k) as f32;
+    let burst = c.str("mode") == "explosao";
+    let mut colors = vec![parse_color(c.str("color_start"))];
+    if !c.str("color_mid").is_empty() {
+        colors.push(parse_color(c.str("color_mid")));
+    }
+    colors.push(parse_color(c.str("color_end")));
+    let life = num("lifetime");
+    let spin = num("spin").to_radians();
+    ParticleConfig {
+        texture: image.map(|i| i.0),
+        region: image.map_or(UvRect::FULL, |i| i.1),
+        rate: if burst { 0.0 } else { num("rate") },
+        lifetime: (life * (1.0 - num("lifetime_var").clamp(0.0, 1.0)), life),
+        speed: (num("speed_min"), num("speed_max")),
+        direction: num("direction").to_radians(),
+        spread: num("spread").to_radians(),
+        gravity: Vec2::new(0.0, num("gravity")),
+        drag: num("drag"),
+        size: (num("size_start"), num("size_end")),
+        size_variation: num("size_var"),
+        colors,
+        spin: (-spin, spin),
+        area: match c.str("area") {
+            "retangulo" => EmitArea::Rect(Vec2::new(num("area_w"), num("area_h")) / 2.0),
+            "circulo" => EmitArea::Circle(num("area_radius")),
+            _ => EmitArea::Point,
+        },
+        blend: if c.str("blend") == "add" {
+            Blend::Add
+        } else {
+            Blend::Alpha
+        },
+        max: (c.num("max").max(1.0) as usize).min(20_000),
+        follow: c.bool("follow"),
+    }
+}
+
+/// Prévia de um emissor na cena do editor.
+struct Preview {
+    /// Os campos do componente quando o emissor foi feito.
+    props: String,
+    emitter: ParticleEmitter,
+    /// Último relógio visto.
+    time: f32,
+    /// Explosão: quando soltar de novo (a prévia repete).
+    next: f32,
 }
 
 pub struct SceneRenderer {
@@ -514,6 +571,8 @@ pub struct SceneRenderer {
     map_sources: HashMap<String, (u64, HashMap<String, String>)>,
     /// Fontes dos textos e botões (arquivo → fonte; `None` se não abriu).
     fonts: HashMap<String, Option<FontId>>,
+    /// Partículas animando na cena: (aba, objeto, componente) → emissor.
+    previews: HashMap<(String, u32, usize), Preview>,
 }
 
 impl std::fmt::Debug for SceneRenderer {
@@ -539,7 +598,78 @@ impl SceneRenderer {
             anims: Default::default(),
             map_sources: HashMap::new(),
             fonts: HashMap::new(),
+            previews: HashMap::new(),
         }
+    }
+
+    /// Anima e desenha as partículas de um componente.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_particles(
+        &mut self,
+        key: &str,
+        root: &Path,
+        id: u32,
+        ci: usize,
+        c: &Component,
+        pos: Vec2,
+        view: &RenderView,
+        seen: &mut Vec<(String, u32, usize)>,
+    ) {
+        let image = if c.str("image").is_empty() {
+            None
+        } else {
+            self.texture(root, c.str("image"), true).map(|tex| {
+                let (fw, fh) = (c.num("frame_w") as u32, c.num("frame_h") as u32);
+                let size = self.renderer.texture_size(tex);
+                if fw > 0 && fh > 0 && fw <= size.x && fh <= size.y {
+                    let sheet = self.renderer.sprite_sheet(tex, UVec2::new(fw, fh));
+                    let frame = (c.num("frame").max(1.0) as u32).min(sheet.frame_count());
+                    (tex, sheet.region(frame - 1))
+                } else {
+                    (tex, UvRect::FULL)
+                }
+            })
+        };
+        let k = (key.to_string(), id, ci);
+        seen.push(k.clone());
+        let props = format!("{:?}", c.props);
+        let burst = c.str("mode") == "explosao";
+        let amount = c.num("amount").max(0.0) as u32;
+        let time = view.time;
+        let p = self.previews.entry(k).or_insert_with(|| Preview {
+            props: String::new(),
+            emitter: ParticleEmitter::new(ParticleConfig::default()),
+            time,
+            next: time,
+        });
+        if p.props != props {
+            // Mudou no Inspetor: o emissor começa de novo.
+            p.props = props;
+            p.emitter = ParticleEmitter::new(particle_config(c, image));
+            p.emitter.position = pos;
+            p.emitter.emitting = !burst && c.bool("emitting");
+            p.next = time;
+            if burst && !c.bool("on_start") {
+                p.next = f32::INFINITY;
+            }
+        }
+        p.emitter.position = pos;
+        let dt = (time - p.time).clamp(0.0, 0.1);
+        p.time = time;
+        if view.bursts.contains(&id) {
+            p.emitter.burst(amount.max(1));
+        }
+        if view.particles {
+            // Explosão: solta e, depois que acaba, solta de novo (para ver).
+            if burst && time >= p.next {
+                p.emitter.burst(amount);
+                let interval = c.num("interval") as f32;
+                let life = c.num("lifetime") as f32;
+                p.next = time + if interval > 0.0 { interval } else { life + 0.8 };
+            }
+            p.emitter.update(dt);
+        }
+        p.emitter.draw(&mut self.renderer);
     }
 
     /// A fonte do arquivo (vazio: a do tema, ou a padrão).
@@ -1039,17 +1169,31 @@ impl SceneRenderer {
             size,
             background,
             time,
+            ..
         } = view;
         let (camera, background, time) = (camera, *background, *time);
         let size = size.max(UVec2::ONE);
         self.ensure_target(key, size);
 
         let viewport = size.as_vec2();
+        let mut seen = Vec::new();
         for placed in draw_order(scene) {
             let w = placed.world;
             let pos = Vec2::new(w.x as f32, w.y as f32);
-            for c in &placed.object.components {
+            for (ci, c) in placed.object.components.iter().enumerate() {
                 match c.kind.as_str() {
+                    "particles" => {
+                        self.draw_particles(
+                            key,
+                            root,
+                            placed.object.id,
+                            ci,
+                            c,
+                            pos,
+                            view,
+                            &mut seen,
+                        );
+                    }
                     "sprite" => {
                         let pixel_art = c.bool("pixel_art");
                         let Some(tex) = self.texture(root, c.str("image"), pixel_art) else {
@@ -1152,6 +1296,8 @@ impl SceneRenderer {
                 }
             }
         }
+        // Emissores que sumiram desta aba (objeto apagado, componente tirado).
+        self.previews.retain(|k, _| k.0 != key || seen.contains(k));
         let target = &self.targets[key];
         self.renderer
             .render(&target.view, size, camera, Some(background));

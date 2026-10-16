@@ -3196,6 +3196,8 @@ impl Viewer<'_> {
                 .iter()
                 .any(|c| c.kind == "sprite" && !c.str("animation").is_empty());
         });
+        // As partículas também animam (a não ser com a prévia parada).
+        animated |= !doc.particles_paused && doc.has_particles();
         if animated {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(33));

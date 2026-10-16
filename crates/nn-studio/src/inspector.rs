@@ -43,6 +43,8 @@ enum W {
     Font,
     /// Cena (.cena ou .lua).
     Scene,
+    /// Cor opcional (vazia = sem).
+    OptColor,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -323,11 +325,111 @@ const SOUND_FIELDS: &[F] = &[
     ),
 ];
 
+/// Título de um grupo de campos (não é um campo).
+const fn section(label: &'static str) -> F {
+    F {
+        key: "",
+        label,
+        w: W::Bool,
+        advanced: false,
+        help: "",
+    }
+}
+
+const DEGREES: W = W::Num {
+    speed: 1.0,
+    min: -360.0,
+    max: 360.0,
+    suffix: "°",
+};
+const FRACTION: W = W::Num {
+    speed: 0.01,
+    min: 0.0,
+    max: 1.0,
+    suffix: "",
+};
+
 const PARTICLES_FIELDS: &[F] = &[
+    section("Emissão"),
+    help(
+        f(
+            "mode",
+            "Modo",
+            W::Choice(&[
+                ("continuo", "Contínuo (fogo, chuva)"),
+                ("explosao", "De uma vez (explosão)"),
+            ]),
+        ),
+        "Contínuo solta sem parar; de uma vez solta várias juntas (ao começar, por um evento ou repetindo).",
+    ),
     f("rate", "Por segundo", SIZE),
+    help(
+        f("emitting", "Emitindo", W::Bool),
+        "Desligado, só começa com a ação \"Ligar ou desligar partículas\".",
+    ),
+    f(
+        "amount",
+        "Quantidade",
+        W::Int {
+            min: 1.0,
+            max: 5000.0,
+        },
+    ),
+    help(
+        f("on_start", "Soltar ao começar", W::Bool),
+        "Desligado, solta só com a ação \"Soltar partículas\" (poeira ao pular).",
+    ),
+    help(
+        adv(
+            "interval",
+            "Repetir a cada",
+            W::Num {
+                speed: 0.05,
+                min: 0.0,
+                max: 600.0,
+                suffix: " s",
+            },
+        ),
+        "0 = não repete.",
+    ),
+    help(
+        f(
+            "when_done",
+            "Ao terminar",
+            W::Choice(&[("nada", "Nada"), ("destruir", "Destruir o objeto")]),
+        ),
+        "Para efeitos em prefab: a explosão aparece, termina e some sozinha.",
+    ),
+    help(
+        adv(
+            "area",
+            "Nascem em",
+            W::Choice(&[
+                ("ponto", "Um ponto"),
+                ("retangulo", "Um retângulo"),
+                ("circulo", "Um círculo"),
+            ]),
+        ),
+        "Chuva e neve: um retângulo largo no alto da tela.",
+    ),
+    adv("area_w", "Largura da área", SIZE),
+    adv("area_h", "Altura da área", SIZE),
+    adv("area_radius", "Raio da área", SIZE),
+    help(
+        adv(
+            "max",
+            "Máximo vivas",
+            W::Int {
+                min: 1.0,
+                max: 20_000.0,
+            },
+        ),
+        "Limite de partículas ao mesmo tempo.",
+    ),
+    section("Movimento"),
     f(
         "lifetime",
-        "Vida (segundos)",
+        "Vida",
         W::Num {
             speed: 0.05,
             min: 0.0,
@@ -335,20 +437,15 @@ const PARTICLES_FIELDS: &[F] = &[
             suffix: " s",
         },
     ),
+    help(
+        adv("lifetime_var", "Variação da vida", FRACTION),
+        "0,5 = umas vivem até a metade do tempo.",
+    ),
     f("speed_min", "Velocidade mínima", ANY),
     f("speed_max", "Velocidade máxima", ANY),
     help(
-        f(
-            "direction",
-            "Direção",
-            W::Num {
-                speed: 1.0,
-                min: -360.0,
-                max: 360.0,
-                suffix: "°",
-            },
-        ),
-        "90 = para cima.",
+        f("direction", "Direção", DEGREES),
+        "90 = para cima. Dá para arrastar a seta na cena.",
     ),
     help(
         f(
@@ -363,17 +460,86 @@ const PARTICLES_FIELDS: &[F] = &[
         ),
         "360 = para todos os lados.",
     ),
-    f("gravity", "Gravidade", ANY),
+    help(
+        f("gravity", "Gravidade", ANY),
+        "Negativa = caem; positiva = sobem (fumaça).",
+    ),
+    help(
+        adv(
+            "drag",
+            "Freio",
+            W::Num {
+                speed: 0.05,
+                min: 0.0,
+                max: 50.0,
+                suffix: "",
+            },
+        ),
+        "Quanto perdem de velocidade por segundo (explosões: 3 ou 4).",
+    ),
+    help(
+        adv("follow", "Acompanham o objeto", W::Bool),
+        "Ligado, as partículas andam junto com o objeto (jato de uma nave). Desligado, ficam onde nasceram (rastro).",
+    ),
+    section("Aparência"),
     f("size_start", "Tamanho inicial", SIZE),
     f("size_end", "Tamanho final", SIZE),
+    adv("size_var", "Variação do tamanho", FRACTION),
     f("color_start", "Cor inicial", W::Color),
-    f("color_end", "Cor final", W::Color),
-    f(
-        "blend",
-        "Mistura",
-        W::Choice(&[("alpha", "Normal"), ("add", "Luz (somar cores)")]),
+    help(
+        f("color_mid", "Cor do meio", W::OptColor),
+        "Opcional: uma cor no meio da vida (fogo: amarelo, laranja, vermelho).",
     ),
-    f("emitting", "Emitindo", W::Bool),
+    f("color_end", "Cor final", W::Color),
+    help(
+        f(
+            "blend",
+            "Mistura",
+            W::Choice(&[("alpha", "Normal"), ("add", "Luz (somar cores)")]),
+        ),
+        "Luz deixa fogo, faíscas e brilho mais fortes.",
+    ),
+    help(
+        adv("image", "Imagem", W::File(FileKind::Image)),
+        "Vazio = um círculo suave. Com imagem: folhas, estrelas, pixel art.",
+    ),
+    adv(
+        "frame_w",
+        "Largura do quadro",
+        W::Int {
+            min: 0.0,
+            max: 4096.0,
+        },
+    ),
+    adv(
+        "frame_h",
+        "Altura do quadro",
+        W::Int {
+            min: 0.0,
+            max: 4096.0,
+        },
+    ),
+    adv(
+        "frame",
+        "Quadro",
+        W::Int {
+            min: 1.0,
+            max: 100_000.0,
+        },
+    ),
+    help(
+        adv(
+            "spin",
+            "Giro",
+            W::Num {
+                speed: 1.0,
+                min: 0.0,
+                max: 3600.0,
+                suffix: "°/s",
+            },
+        ),
+        "Cada partícula gira até essa velocidade, para um lado ou para o outro.",
+    ),
 ];
 
 // Interface (menus e HUD) ------------------------------------------------
@@ -771,6 +937,12 @@ fn hidden_ui_field(c: &Component, key: &str) -> bool {
         ("icons", "frame") => c.num("frame_w") <= 0.0,
         ("panel" | "button", "slice" | "slice_scale") => c.str("image").is_empty(),
         ("layout", "columns") => c.str("arrange") != "grid",
+        ("particles", "rate" | "emitting") => c.str("mode") == "explosao",
+        ("particles", "amount" | "on_start" | "interval") => c.str("mode") != "explosao",
+        ("particles", "area_w" | "area_h") => c.str("area") != "retangulo",
+        ("particles", "area_radius") => c.str("area") != "circulo",
+        ("particles", "frame_w" | "frame_h") => c.str("image").is_empty(),
+        ("particles", "frame") => c.str("image").is_empty() || c.num("frame_w") <= 0.0,
         ("layout", "spacing" | "align") => c.str("arrange") == "none",
         _ => false,
     }
@@ -1042,6 +1214,8 @@ enum Wd {
     Var,
     /// Fonte (.ttf ou .otf).
     Font,
+    /// Cor opcional (vazia = sem).
+    OptColor,
 }
 
 impl From<&F> for Spec {
@@ -1075,6 +1249,7 @@ impl From<&F> for Spec {
             W::Var => Wd::Var,
             W::Font => Wd::Font,
             W::Scene => Wd::Scene,
+            W::OptColor => Wd::OptColor,
         };
         Spec {
             key: f.key.to_string(),
@@ -1960,6 +2135,33 @@ impl Inspector {
         } else {
             Vec::new()
         };
+        // Partículas: efeitos prontos e soltar na prévia.
+        if comp.kind == "particles" {
+            ui.horizontal_wrapped(|ui| {
+                let r = ui.menu_button("✨ Efeito pronto", |ui| {
+                    for p in crate::particle_presets::PRESETS {
+                        let r = ui.button(p.label).on_hover_text(p.tip);
+                        crate::tutorial::anchor_in(ui, &format!("inspetor:fx:{}", p.id), r.rect);
+                        if r.clicked() {
+                            let c = p.component();
+                            for (k, v) in &c.props {
+                                changes.push((k.clone(), v.clone()));
+                            }
+                            ui.close();
+                        }
+                    }
+                });
+                r.response
+                    .on_hover_text("Troca os valores pelos de um efeito pronto (Ctrl+Z desfaz)");
+                let r = ui
+                    .button("💥 Soltar")
+                    .on_hover_text("Solta partículas de uma vez na prévia da cena");
+                crate::tutorial::anchor_in(ui, "inspetor:soltar", r.rect);
+                if r.clicked() {
+                    doc.burst_requests.push(id);
+                }
+            });
+        }
         egui::Grid::new(("grade-componente", id, ci))
             .num_columns(2)
             .spacing([8.0, 4.0])
@@ -1981,6 +2183,11 @@ impl Inspector {
                         continue;
                     }
                     if hidden_ui_field(comp, spec.key) {
+                        continue;
+                    }
+                    if spec.key.is_empty() {
+                        ui.label(RichText::new(spec.label).small().strong().weak());
+                        ui.end_row();
                         continue;
                     }
                     let spec = Spec::from(spec);
@@ -2334,6 +2541,23 @@ fn field_widget(
         Wd::Anim => anim_field(ui, spec, current, anims, salt, width),
         Wd::ThemeColor(key) => theme_color_field(ui, current, key),
         Wd::Var => var_field(ui, current, width),
+        Wd::OptColor => {
+            let value = current.str();
+            let mut out = None;
+            ui.horizontal(|ui| {
+                let mut on = !value.is_empty();
+                if ui.checkbox(&mut on, "").changed() {
+                    out = Some(Prop::Str(if on { "#FFFFFF".into() } else { String::new() }));
+                }
+                if on {
+                    let mut c = hex_to_rgba(value);
+                    if ui.color_edit_button_srgba_unmultiplied(&mut c).changed() {
+                        out = Some(Prop::Str(rgba_to_hex(c)));
+                    }
+                }
+            });
+            out
+        }
         Wd::Font => {
             let list: Vec<String> = files
                 .files_of(FileKind::Font)
@@ -2622,7 +2846,11 @@ mod tests {
                 .iter()
                 .map(|(k, _)| k.as_str())
                 .collect();
-            let ours: Vec<&str> = fields(kind).iter().map(|f| f.key).collect();
+            let ours: Vec<&str> = fields(kind)
+                .iter()
+                .map(|f| f.key)
+                .filter(|k| !k.is_empty())
+                .collect();
             for k in &ours {
                 assert!(engine.contains(k), "{kind}.{k} não existe na engine");
             }

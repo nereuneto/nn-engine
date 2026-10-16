@@ -22,7 +22,7 @@ return {
           { cond = "encostar", quem = "@este", em = "tiro" },
         }, actions = {
           { act = "destruir", alvo = "@outro" },
-          { act = "faiscas", alvo = "@este", cor = "#FF9F43", quantidade = 24 },
+          { act = "criar", prefab = "prefabs/explosao.prefab", onde = "@este", dx = 0, dy = 0, vx = 0, vy = 0 },
           { act = "som", som = "assets/sons/explosao.wav", volume = 0.6 },
           { act = "variavel", var = "pontos", op = "somar", valor = 10 },
           { act = "destruir", alvo = "@este" },

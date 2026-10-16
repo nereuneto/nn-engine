@@ -138,6 +138,42 @@ return {
       },
     },
     {
+      id = 19, name = "tocha",
+      x = 96, y = 112, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 2,
+      components = {
+        { type = "shape", shape = "rect", w = 8, h = 26, radius = 32, color = "#6B4423", hud = false },
+      },
+      children = {
+        {
+          id = 20, name = "fogo",
+          x = 0, y = 16, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 3,
+          components = {
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 20, speed_max = 60, direction = 90, spread = 25, gravity = 60, drag = 0, area = "circulo", area_w = 100, area_h = 100, area_radius = 4, size_start = 16, size_end = 3, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500 },
+          },
+        },
+      },
+    },
+    {
+      id = 21, name = "tocha",
+      x = 96, y = -112, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 2,
+      components = {
+        { type = "shape", shape = "rect", w = 8, h = 26, radius = 32, color = "#6B4423", hud = false },
+      },
+      children = {
+        {
+          id = 22, name = "fogo",
+          x = 0, y = 16, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 3,
+          components = {
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 20, speed_max = 60, direction = 90, spread = 25, gravity = 60, drag = 0, area = "circulo", area_w = 100, area_h = 100, area_radius = 4, size_start = 16, size_end = 3, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500 },
+          },
+        },
+      },
+    },
+    {
       id = 15, name = "vidas",
       x = 32, y = -42, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 5, anchor = "top_left",
