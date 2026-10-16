@@ -147,6 +147,8 @@ pub struct Renderer {
     instance_buffer: wgpu::Buffer,
     instance_capacity: usize,
     last_stats: RenderStats,
+    /// Tamanho fixo do jogo dentro do alvo (ou `None`: o alvo inteiro).
+    presentation: Option<crate::Presentation>,
 }
 
 impl Renderer {
@@ -299,6 +301,7 @@ impl Renderer {
             instance_buffer,
             instance_capacity: Self::INITIAL_CAPACITY,
             last_stats: RenderStats::default(),
+            presentation: None,
         };
         renderer.white =
             renderer.create_texture(UVec2::ONE, &[255, 255, 255, 255], TextureOptions::default());
@@ -477,7 +480,41 @@ impl Renderer {
 
     /// Tamanho da caixa que o texto ocupa (largura, altura), sem desenhá-lo.
     pub fn measure_text(&self, text: &Text<'_>) -> Vec2 {
-        self.text.layout(text).size
+        let k = self.text_scale();
+        if k == 1.0 {
+            return self.text.layout(text).size;
+        }
+        let mut scaled = *text;
+        scaled.size = text.size * k;
+        self.text.layout(&scaled).size / k
+    }
+
+    /// Desenha o jogo num tamanho fixo ajustado ao alvo (veja
+    /// [`crate::Presentation`]), ou no alvo inteiro com `None`. Vale para os
+    /// próximos [`Renderer::render`]; o texto é rasterizado no tamanho da
+    /// tela de verdade, para ficar nítido.
+    pub fn set_presentation(&mut self, presentation: Option<crate::Presentation>) {
+        self.presentation = presentation;
+    }
+
+    pub fn presentation(&self) -> Option<crate::Presentation> {
+        self.presentation
+    }
+
+    /// Pixels de verdade por unidade do jogo, para rasterizar o texto.
+    fn text_scale(&self) -> f32 {
+        match &self.presentation {
+            Some(p) => {
+                let s = p.scale();
+                let k = s.x.min(s.y);
+                if (k - 1.0).abs() < 1e-3 {
+                    1.0
+                } else {
+                    k.clamp(0.25, 16.0)
+                }
+            }
+            None => 1.0,
+        }
     }
 
     // ------------------------------------------------------------------
@@ -543,7 +580,12 @@ impl Renderer {
     }
 
     fn push_text(&mut self, space: Space, text: &Text<'_>) {
-        let layout = self.text.layout(text);
+        // Com tamanho fixo do jogo, as letras são rasterizadas no tamanho em
+        // que aparecem na tela (`k` pixels por unidade) e encolhidas de volta.
+        let k = self.text_scale();
+        let mut scaled = *text;
+        scaled.size = text.size * k;
+        let layout = self.text.layout(&scaled);
         let color = self.gpu_color(text.color).to_array();
         // Canto superior esquerdo da caixa, relativo a `position`, com Y para baixo.
         let box_offset = -text.anchor_fraction() * layout.size;
@@ -560,16 +602,16 @@ impl Renderer {
             };
             let local = box_offset + placed.top_left;
             let (position, origin) = match space {
-                // Pixels inteiros deixam as letras nítidas.
-                Space::Screen => ((text.position + local).round(), Vec2::ZERO),
+                // Pixels inteiros (da tela de verdade) deixam as letras nítidas.
+                Space::Screen => ((text.position * k + local).round() / k, Vec2::ZERO),
                 Space::World => (
-                    (text.position + Vec2::new(local.x, -local.y)).round(),
+                    (text.position * k + Vec2::new(local.x, -local.y)).round() / k,
                     Vec2::new(0.0, 1.0),
                 ),
             };
             let instance = SpriteInstance {
                 position: position.to_array(),
-                size: placed.size.to_array(),
+                size: (placed.size / k).to_array(),
                 origin: origin.to_array(),
                 rotation: 0.0,
                 region: glyph.region.to_array(),
@@ -599,6 +641,8 @@ impl Renderer {
     ///
     /// `viewport` é o tamanho de `target` em pixels. Se `clear` for `Some`,
     /// o alvo é limpo com essa cor antes; caso contrário o conteúdo é mantido.
+    /// Com [`Renderer::set_presentation`], o jogo ocupa só a área dele (o
+    /// resto fica preto) e a câmera e a tela usam o tamanho do jogo.
     pub fn render(
         &mut self,
         target: &wgpu::TextureView,
@@ -606,12 +650,14 @@ impl Renderer {
         camera: &Camera2D,
         clear: Option<Color>,
     ) -> RenderStats {
+        let present = self.presentation;
+        let logical = present.map(|p| p.logical).unwrap_or(viewport);
         let world = ViewUniform {
-            view_proj: camera.view_projection(viewport.as_vec2()).to_cols_array(),
+            view_proj: camera.view_projection(logical.as_vec2()).to_cols_array(),
             y_down: 0.0,
             _padding: [0.0; 3],
         };
-        let size = viewport.max(UVec2::ONE).as_vec2();
+        let size = logical.max(UVec2::ONE).as_vec2();
         let screen = ViewUniform {
             view_proj: screen_projection(size).to_cols_array(),
             y_down: 1.0,
@@ -624,6 +670,20 @@ impl Renderer {
 
         let world_count = self.world.instances.len();
         let total = world_count + self.screen.instances.len();
+        // Com tamanho fixo, o fundo do jogo é um retângulo (a janela toda é
+        // limpa de preto, para as faixas).
+        let background = match (present, clear) {
+            (Some(_), Some(c)) => Some(SpriteInstance {
+                position: [0.0, 0.0],
+                size: size.to_array(),
+                origin: [0.0, 0.0],
+                rotation: 0.0,
+                region: crate::Rect::FULL.to_array(),
+                color: self.gpu_color(c).to_array(),
+            }),
+            _ => None,
+        };
+        let total = total + usize::from(background.is_some());
         if total > self.instance_capacity {
             self.instance_capacity = total.next_power_of_two();
             self.instance_buffer =
@@ -643,8 +703,17 @@ impl Renderer {
                 bytemuck::cast_slice(&self.screen.instances),
             );
         }
+        let background_index = (world_count + self.screen.instances.len()) as u32;
+        if let Some(bg) = &background {
+            self.queue.write_buffer(
+                &self.instance_buffer,
+                (background_index as usize * size_of::<SpriteInstance>()) as wgpu::BufferAddress,
+                bytemuck::bytes_of(bg),
+            );
+        }
 
         let load = match clear {
+            Some(_) if present.is_some() => wgpu::LoadOp::Clear(wgpu::Color::BLACK),
             Some(c) => {
                 let c = self.gpu_color(c);
                 wgpu::LoadOp::Clear(wgpu::Color {
@@ -681,6 +750,30 @@ impl Renderer {
             });
             pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
             let mut current_blend = None;
+            if let Some(p) = present {
+                let vw = viewport.max(UVec2::ONE).as_vec2();
+                let min = p.origin.clamp(Vec2::ZERO, vw);
+                let max = (p.origin + p.size).clamp(Vec2::ZERO, vw);
+                pass.set_viewport(p.origin.x, p.origin.y, p.size.x, p.size.y, 0.0, 1.0);
+                let (x, y) = (min.x as u32, min.y as u32);
+                let (w, h) = ((max.x - min.x) as u32, (max.y - min.y) as u32);
+                if w == 0 || h == 0 {
+                    drop(pass);
+                    self.queue.submit([encoder.finish()]);
+                    self.world.clear();
+                    self.screen.clear();
+                    return self.last_stats;
+                }
+                pass.set_scissor_rect(x, y, w, h);
+                if background.is_some() {
+                    pass.set_pipeline(&self.pipeline);
+                    current_blend = Some(Blend::Alpha);
+                    pass.set_bind_group(0, &self.screen_view.bind_group, &[]);
+                    let white = &self.textures[self.white.0 as usize];
+                    pass.set_bind_group(1, &white.bind_group, &[]);
+                    pass.draw(0..6, background_index..background_index + 1);
+                }
+            }
 
             let passes = [
                 (&self.world_view, &self.world, 0u32),

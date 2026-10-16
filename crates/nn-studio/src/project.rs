@@ -1562,7 +1562,10 @@ impl ProjectWorkspace {
                 events: &mut self.events,
                 vars: &vars,
                 game_scene: self.game_scene.as_deref(),
-                design: (f64::from(self.config.width), f64::from(self.config.height)),
+                design: {
+                    let (w, h) = self.config.game_size();
+                    (f64::from(w), f64::from(h))
+                },
                 clear_color: &self.config.clear_color,
                 time: self.started.elapsed().as_secs_f32(),
                 code_env: code_env.as_ref(),
@@ -2539,6 +2542,42 @@ impl Viewer<'_> {
                                 }
                             }
                         });
+                });
+                ui.end_row();
+
+                ui.label("Tamanho do jogo:")
+                    .on_hover_text("Com tamanho fixo, o jogo enxerga sempre o mesmo tamanho e se ajusta à janela (maior ou menor), sem cortar nada.");
+                ui.horizontal_wrapped(|ui| {
+                    let mut fixed = v.resolution.is_some();
+                    if ui
+                        .checkbox(&mut fixed, "Fixo")
+                        .on_hover_text("Desligado: o jogo enxerga o tamanho da janela (janela maior mostra mais coisa).")
+                        .changed()
+                    {
+                        v.resolution = fixed.then_some((v.width, v.height));
+                    }
+                    if let Some((w, h)) = &mut v.resolution {
+                        ui.add(egui::DragValue::new(w).range(16..=7680));
+                        ui.label("×");
+                        ui.add(egui::DragValue::new(h).range(16..=4320));
+                        let names = [
+                            ("fit", "Ajustar (faixas pretas)"),
+                            ("stretch", "Esticar (ocupa tudo)"),
+                            ("pixel", "Pixel art (só 2×, 3×...)"),
+                        ];
+                        let current = names
+                            .iter()
+                            .find(|(k, _)| *k == v.scale)
+                            .map(|(_, l)| *l)
+                            .unwrap_or("Ajustar (faixas pretas)");
+                        egui::ComboBox::from_id_salt("escala")
+                            .selected_text(current)
+                            .show_ui(ui, |ui| {
+                                for (k, l) in names {
+                                    ui.selectable_value(&mut v.scale, k.to_string(), l);
+                                }
+                            });
+                    }
                 });
                 ui.end_row();
 

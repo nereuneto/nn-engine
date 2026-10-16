@@ -810,8 +810,9 @@ pub struct Project {
 
 impl Project {
     /// Lê a pasta do projeto. O arquivo `config.lua` é opcional e devolve uma
-    /// tabela com `title`, `id`, `width`, `height`, `fullscreen`, `vsync`,
-    /// `fixed_hz`, `clear_color`, `resizable`, `hot_reload` e `start`.
+    /// tabela com `title`, `id`, `width`, `height`, `resolution`, `scale`,
+    /// `fullscreen`, `vsync`, `fixed_hz`, `clear_color`, `resizable`,
+    /// `hot_reload` e `start`.
     pub fn open(dir: impl AsRef<Path>) -> Result<Self, ScriptError> {
         let dir = dir.as_ref();
         if !dir.is_dir() {
@@ -892,6 +893,40 @@ impl Project {
                 }
                 if let Some(hz) = num(&get("fixed_hz")?) {
                     config.fixed_hz = hz.max(1);
+                }
+                // Tamanho fixo do jogo: resolution = { 640, 360 }.
+                match get("resolution")? {
+                    Value::Nil | Value::Boolean(false) => {}
+                    Value::Table(r) => {
+                        let w = num(&r.get::<Value>(1).unwrap_or(Value::Nil));
+                        let h = num(&r.get::<Value>(2).unwrap_or(Value::Nil));
+                        match (w, h) {
+                            (Some(w), Some(h)) if w > 0 && h > 0 => {
+                                config = config.resolution(w, h);
+                            }
+                            _ => {
+                                return Err(ScriptError(
+                                    "config.lua: resolution deve ser { largura, altura }, \
+                                     por exemplo { 640, 360 }"
+                                        .into(),
+                                ));
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(ScriptError(
+                            "config.lua: resolution deve ser { largura, altura }, por exemplo { 640, 360 }"
+                                .into(),
+                        ));
+                    }
+                }
+                if let Value::String(s) = get("scale")? {
+                    let s = s.to_string_lossy();
+                    config.scale_mode = nn_render::ScaleMode::from_name(&s).ok_or_else(|| {
+                        ScriptError(format!(
+                            "config.lua: scale = \"{s}\" não existe (use \"fit\", \"stretch\" ou \"pixel\")"
+                        ))
+                    })?;
                 }
                 let clear = get("clear_color")?;
                 if !clear.is_nil() {

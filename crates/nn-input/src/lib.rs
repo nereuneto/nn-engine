@@ -102,6 +102,7 @@ pub struct Input {
     keys: ButtonSet<KeyCode>,
     mouse: ButtonSet<MouseButton>,
     cursor: Option<Vec2>,
+    cursor_transform: Option<(Vec2, Vec2)>,
     scroll: Vec2,
     pads: Vec<Gamepad>,
     deadzone: f32,
@@ -115,6 +116,7 @@ impl Default for Input {
             keys: ButtonSet::default(),
             mouse: ButtonSet::default(),
             cursor: None,
+            cursor_transform: None,
             scroll: Vec2::ZERO,
             pads: Vec::new(),
             deadzone: DEFAULT_DEADZONE,
@@ -166,7 +168,8 @@ impl Input {
         self.mouse.released.contains(&button)
     }
 
-    /// Posição do cursor em pixels físicos da janela (origem no canto superior
+    /// Posição do cursor na área do jogo (pixels físicos, ou unidades do
+    /// tamanho fixo do jogo; origem no canto superior
     /// esquerdo, Y para baixo). `None` se o cursor está fora da janela.
     pub fn cursor_position(&self) -> Option<Vec2> {
         self.cursor
@@ -251,6 +254,13 @@ impl Input {
         self.mouse.release(button);
     }
 
+    /// Com tamanho fixo do jogo: a área do jogo começa em `origin` (pixels da
+    /// janela) e cada unidade do jogo tem `scale` pixels. O cursor passa a
+    /// vir em unidades do jogo. Normalmente chamado pela engine.
+    pub fn set_cursor_transform(&mut self, transform: Option<(Vec2, Vec2)>) {
+        self.cursor_transform = transform;
+    }
+
     /// Move o cursor (pixels físicos, Y para baixo). Normalmente chamado pela engine.
     pub fn set_cursor(&mut self, position: Option<Vec2>) {
         if let (Some(new), Some(old)) = (position, self.cursor)
@@ -290,7 +300,11 @@ impl Input {
                 ElementState::Released => self.release_mouse(*button),
             },
             WindowEvent::CursorMoved { position, .. } => {
-                self.set_cursor(Some(Vec2::new(position.x as f32, position.y as f32)));
+                let mut p = Vec2::new(position.x as f32, position.y as f32);
+                if let Some((origin, scale)) = self.cursor_transform {
+                    p = (p - origin) / scale;
+                }
+                self.set_cursor(Some(p));
             }
             WindowEvent::CursorLeft { .. } => self.cursor = None,
             WindowEvent::MouseWheel { delta, .. } => {
