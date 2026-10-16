@@ -27,6 +27,7 @@
 //! corrigido é salvo.
 
 mod api;
+pub mod api_docs;
 mod convert;
 mod errors;
 mod input;

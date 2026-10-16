@@ -9,6 +9,7 @@ pub mod app;
 pub mod behaviors;
 pub mod code;
 pub mod commands;
+pub mod complete;
 pub mod config_lua;
 pub mod console;
 pub mod examples;

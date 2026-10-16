@@ -252,6 +252,9 @@ pub struct ProjectWorkspace {
     pub game_scene: Option<String>,
     /// Valores do config.lua (tamanho da tela e cor de fundo).
     config: ConfigValues,
+    /// Para o autocompletar: script → nomes dos objetos das cenas que o
+    /// usam. Refeito quando alguma cena muda.
+    script_objects: Option<HashMap<String, Vec<String>>>,
     started: std::time::Instant,
 }
 
@@ -335,6 +338,7 @@ impl ProjectWorkspace {
             inspector: Inspector::default(),
             game_scene: None,
             config: ConfigValues::default(),
+            script_objects: None,
             started: std::time::Instant::now(),
         };
         ws.reload_config();
@@ -375,6 +379,59 @@ impl ProjectWorkspace {
     pub fn is_dirty(&self, rel: &str) -> bool {
         self.docs.get(rel).is_some_and(CodeDoc::is_dirty)
             || self.scenes.get(rel).is_some_and(SceneDoc::is_dirty)
+    }
+
+    /// O que o autocompletar precisa saber para o arquivo `rel`.
+    fn completion_env(&mut self, rel: &str) -> crate::complete::Env {
+        use crate::complete::{Env, ScriptKind};
+        let map = self.script_objects.get_or_insert_with(|| {
+            let mut map: HashMap<String, Vec<String>> = HashMap::new();
+            for e in self.files.files_of(FileKind::Scene) {
+                let Ok(text) = std::fs::read_to_string(self.root.join(&e.rel)) else {
+                    continue;
+                };
+                let Ok(scene) = crate::scene_data::read(&text, &e.rel) else {
+                    continue;
+                };
+                if scene.script.is_empty() {
+                    continue;
+                }
+                let names = map.entry(scene.script.clone()).or_default();
+                crate::scene_data::visit(&scene.objects, &mut |o| names.push(o.name.clone()));
+            }
+            map
+        });
+        let mut objects = map.get(rel).cloned().unwrap_or_default();
+        let mut scene_script = map.contains_key(rel);
+        // Cenas abertas (talvez ainda não salvas) também contam.
+        for doc in self.scenes.values() {
+            if doc.data.script == rel {
+                scene_script = true;
+                crate::scene_data::visit(&doc.data.objects, &mut |o| objects.push(o.name.clone()));
+            }
+        }
+        objects.sort();
+        objects.dedup();
+        let text = self.docs.get(rel).map(|d| d.text.as_str()).unwrap_or("");
+        let kind = if text.contains("props") && !scene_script {
+            ScriptKind::Behavior
+        } else if scene_script {
+            ScriptKind::SceneScript
+        } else {
+            ScriptKind::Other
+        };
+        Env {
+            files: self
+                .files
+                .entries()
+                .iter()
+                .filter(|e| !e.is_dir)
+                .map(|e| e.rel.clone())
+                .collect(),
+            objects,
+            vars: self.config.vars.iter().map(|(k, _)| k.clone()).collect(),
+            kind,
+        }
     }
 
     /// Esquece as alterações não salvas (antes de fechar sem salvar).
@@ -740,6 +797,12 @@ impl ProjectWorkspace {
             }
             if let Some(scene) = self.scenes.get_mut(rel) {
                 scene.disk_changed(&root);
+            }
+            if matches!(
+                FileKind::of(Path::new(rel)),
+                FileKind::Scene | FileKind::Prefab
+            ) {
+                self.script_objects = None;
             }
             if FileKind::of(Path::new(rel)) == FileKind::Prefab {
                 // As cópias do prefab nas cenas abertas passam a usar o novo.
@@ -1397,6 +1460,14 @@ impl ProjectWorkspace {
         for doc in self.scenes.values_mut() {
             doc.begin_frame();
         }
+        // Autocompletar: só para o código com o foco.
+        let mut code_env = None;
+        if let Some(rel) = self.focused_code.clone()
+            && rel.ends_with(".lua")
+            && self.docs.contains_key(&rel)
+        {
+            code_env = Some((rel.clone(), self.completion_env(&rel)));
+        }
         {
             let mut viewer = Viewer {
                 root: &self.root,
@@ -1429,6 +1500,7 @@ impl ProjectWorkspace {
                 design: (f64::from(self.config.width), f64::from(self.config.height)),
                 clear_color: &self.config.clear_color,
                 time: self.started.elapsed().as_secs_f32(),
+                code_env: code_env.as_ref(),
             };
             let mut style = egui_dock::Style::from_egui(ui.style().as_ref());
             style.tab_bar.fill_tab_bar = false;
@@ -1950,6 +2022,8 @@ struct Viewer<'a> {
     design: (f64, f64),
     clear_color: &'a str,
     time: f32,
+    /// Autocompletar do código com o foco: (arquivo, o que ele sabe).
+    code_env: Option<&'a (String, crate::complete::Env)>,
 }
 
 impl TabViewer for Viewer<'_> {
@@ -2097,7 +2171,11 @@ impl TabViewer for Viewer<'_> {
                     }
                 }
                 let doc = self.docs.get_mut(rel.as_str()).expect("documento aberto");
-                for a in doc.ui(ui, self.lua, self.zoom_code) {
+                let env = self
+                    .code_env
+                    .filter(|(r, _)| r == rel.as_str())
+                    .map(|(_, e)| e);
+                for a in doc.ui(ui, self.lua, self.zoom_code, env) {
                     match a {
                         CodeAction::Save => self.actions.push(Action::SaveDoc(rel.clone())),
                         CodeAction::Reload => self.actions.push(Action::ReloadDoc(rel.clone())),

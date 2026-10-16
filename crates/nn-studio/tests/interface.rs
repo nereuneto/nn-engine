@@ -992,3 +992,66 @@ fn cena_visual_desenhada_pela_engine() {
     }
     assert!(found, "o quadrado não apareceu; fundo {fundo:?}");
 }
+
+#[test]
+fn autocompletar_no_editor_de_codigo() {
+    let dir = temp("autocompletar");
+    let proj = plataforma(&dir);
+    std::fs::create_dir_all(proj.join("scripts")).unwrap();
+    std::fs::write(proj.join("scripts/fase.lua"), "").unwrap();
+    std::fs::write(
+        proj.join("cenas/teste.cena"),
+        "return { script = 'scripts/fase.lua', objects = { { id = 1, name = 'heroi' } } }",
+    )
+    .unwrap();
+    let mut h = studio(&dir, Some(proj.clone()));
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("scripts/fase.lua", None);
+    h.run();
+    let editor = h.get_by_role(Role::MultilineTextInput);
+    editor.focus();
+    h.run();
+    let texto = |h: &Harness<'_, StudioApp>| {
+        h.state().project().unwrap().docs["scripts/fase.lua"]
+            .text
+            .clone()
+    };
+
+    // "nn.dr" sugere "draw"; Enter aceita.
+    digitar(&mut h, "nn.dr");
+    h.get_by_label("{}  draw");
+    tela(&mut h, "autocompletar");
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(texto(&h), "nn.draw");
+    // Depois do ponto, as funções; aceitar uma função abre o parêntese.
+    digitar(&mut h, ".rec");
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(texto(&h), "nn.draw.rect(");
+    // A dica mostra os parâmetros enquanto se digita os argumentos.
+    h.get_by_label_contains("nn.draw.rect(x, y, w, h, cor)");
+    digitar(&mut h, "0, 0, 8, 8)\n");
+
+    // Objetos da cena que usa este script.
+    digitar(&mut h, "self.objects.he");
+    h.key_press(Key::Tab);
+    h.run();
+    assert!(texto(&h).ends_with("self.objects.heroi"), "{}", texto(&h));
+    // Esc fecha sem mudar nada.
+    digitar(&mut h, ".bo");
+    h.key_press(Key::Escape);
+    h.run();
+    assert!(
+        texto(&h).ends_with("self.objects.heroi.bo"),
+        "{}",
+        texto(&h)
+    );
+    assert!(
+        h.state().project().unwrap().docs["scripts/fase.lua"]
+            .suggest
+            .is_none()
+    );
+}
