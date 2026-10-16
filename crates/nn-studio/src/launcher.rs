@@ -15,6 +15,8 @@ use crate::theme;
 pub enum LauncherAction {
     Open(PathBuf),
     Command(Command),
+    /// Criar o projeto de um tutorial e começar.
+    StartTutorial(&'static str),
 }
 
 #[derive(Debug)]
@@ -87,6 +89,8 @@ pub struct Launcher {
     pub error: Option<String>,
     /// Miniaturas dos modelos (carregadas na primeira vez).
     thumbs: Vec<(Template, egui::TextureHandle)>,
+    /// Janela com a lista dos tutoriais.
+    tutorials: bool,
 }
 
 impl std::fmt::Debug for Launcher {
@@ -140,6 +144,58 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
 }
 
 impl Launcher {
+    /// Mostra a lista de tutoriais.
+    pub fn show_tutorials(&mut self) {
+        self.tutorials = true;
+    }
+
+    fn tutorials_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        settings: &Settings,
+    ) -> Option<LauncherAction> {
+        if !self.tutorials {
+            return None;
+        }
+        let mut action = None;
+        let mut close = false;
+        let r = egui::Modal::new(egui::Id::new("tutoriais")).show(ctx, |ui| {
+            ui.set_width(480.0);
+            ui.heading("🎓 Tutoriais");
+            ui.weak(format!(
+                "Cada tutorial cria um projeto novo em {} e mostra o que fazer, passo a passo.",
+                settings::display_path(&settings.default_projects_dir())
+            ));
+            ui.add_space(8.0);
+            for t in crate::tutorial::all() {
+                egui::Frame::group(ui.style()).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(t.title).size(17.0).strong());
+                        ui.weak(format!("cerca de {} minutos", t.minutes));
+                    });
+                    ui.label(t.summary);
+                    if ui
+                        .add(egui::Button::new("Começar").fill(theme::ACCENT.gamma_multiply(0.75)))
+                        .clicked()
+                    {
+                        action = Some(LauncherAction::StartTutorial(t.id));
+                        close = true;
+                    }
+                });
+                ui.add_space(4.0);
+            }
+            ui.add_space(4.0);
+            if ui.button("Fechar").clicked() {
+                close = true;
+            }
+        });
+        if close || r.should_close() {
+            self.tutorials = false;
+        }
+        action
+    }
+
     pub fn open_new_project(&mut self, settings: &Settings) {
         self.new_form = Some(NewProjectForm {
             title: "Meu jogo".into(),
@@ -193,6 +249,14 @@ impl Launcher {
                         if ui.add(big("🎮 Exemplos")).clicked() {
                             self.examples = true;
                         }
+                        ui.add_space(4.0);
+                        if ui
+                            .add(big("🎓 Tutoriais"))
+                            .on_hover_text("Aprenda fazendo: um passo de cada vez")
+                            .clicked()
+                        {
+                            self.tutorials = true;
+                        }
                         ui.add_space(28.0);
                         ui.separator();
                         ui.add_space(6.0);
@@ -238,7 +302,23 @@ impl Launcher {
                     ui.weak("Dica: arraste a pasta de um projeto para esta janela para abri-lo.");
                     ui.add_space(8.0);
                     if settings.recent.is_empty() {
-                        ui.add_space(20.0);
+                        ui.add_space(12.0);
+                        // Primeira vez: o tutorial é o melhor começo.
+                        egui::Frame::group(ui.style())
+                            .fill(theme::ACCENT.gamma_multiply(0.15))
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width().min(560.0));
+                                ui.label(RichText::new("Primeira vez aqui?").size(18.0).strong());
+                                ui.label("Faça o tutorial Seu primeiro jogo: em uns 15 minutos você monta uma fase de plataforma, sem escrever código, com o editor mostrando cada passo.");
+                                ui.add_space(4.0);
+                                if ui
+                                    .add(egui::Button::new(RichText::new("🎓 Começar o tutorial").size(15.0)).fill(theme::ACCENT.gamma_multiply(0.75)))
+                                    .clicked()
+                                {
+                                    action = Some(LauncherAction::StartTutorial("primeiro-jogo"));
+                                }
+                            });
+                        ui.add_space(12.0);
                         ui.label("Nenhum projeto ainda.");
                         ui.weak("Crie o primeiro com ✨ Novo projeto, ou abra um dos 🎮 Exemplos para ver como um jogo é feito.");
                     }
@@ -297,6 +377,9 @@ impl Launcher {
         });
 
         if let Some(a) = self.new_project_dialog(ui.ctx(), settings) {
+            action = Some(a);
+        }
+        if let Some(a) = self.tutorials_dialog(ui.ctx(), settings) {
             action = Some(a);
         }
         if let Some(a) = self.examples_dialog(ui.ctx(), settings) {

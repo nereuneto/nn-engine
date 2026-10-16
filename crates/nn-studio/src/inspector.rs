@@ -453,6 +453,8 @@ pub struct Inspector {
     actions_out: Vec<InspectorAction>,
     /// O jogo aberto (se mostra a cena deste inspetor).
     game: Option<GameState>,
+    /// Componente novo: no próximo quadro, rola até o fim para mostrá-lo.
+    scroll_to_end: bool,
 }
 
 /// Cor do que vem do jogo aberto.
@@ -706,6 +708,7 @@ impl Inspector {
         if doc.error.is_some() {
             return actions;
         }
+        crate::tutorial::anchor(ui.ctx(), "inspetor", ui.max_rect());
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| match doc.selection.len() {
@@ -1161,7 +1164,7 @@ impl Inspector {
             return;
         }
         let mut chosen: Vec<Component> = Vec::new();
-        ui.menu_button("➕ Adicionar componente", |ui| {
+        let add_menu = ui.menu_button("➕ Adicionar componente", |ui| {
             for kind in &crate::scene_data::schema().order {
                 let (title, desc) = component_info(kind);
                 let exists = o.component(kind).is_some();
@@ -1233,11 +1236,15 @@ impl Inspector {
                 }
             });
         });
+        crate::tutorial::anchor_in(ui, "inspetor.adicionar", add_menu.response.rect);
         if !chosen.is_empty() {
             doc.record(None);
             if let Some(obj) = doc.data.find_mut(id) {
                 obj.components.extend(chosen);
             }
+            self.scroll_to_end = true;
+        } else if std::mem::take(&mut self.scroll_to_end) {
+            ui.scroll_to_cursor(Some(egui::Align::Max));
         }
     }
 

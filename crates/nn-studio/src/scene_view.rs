@@ -365,6 +365,19 @@ impl GameState {
     }
 }
 
+/// Tamanho de um quadro de uma imagem que parece uma spritesheet: pixel
+/// art pequena em quadros de 16×16 (a mais comum), ou uma tira com quadros
+/// quadrados. Senão, a imagem toda.
+pub fn sheet_frame(w: f64, h: f64) -> (f64, f64) {
+    if w % 16.0 == 0.0 && h % 16.0 == 0.0 && (w > 16.0 || h > 16.0) && w.max(h) <= 128.0 {
+        (16.0, 16.0)
+    } else if w > h && h > 0.0 && (w % h) == 0.0 {
+        (h, h)
+    } else {
+        (w, h)
+    }
+}
+
 /// O caminho é de um prefab?
 pub fn is_prefab_path(rel: &str) -> bool {
     rel.to_lowercase().ends_with(".prefab")
@@ -799,6 +812,7 @@ impl SceneDoc {
             egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Vista da cena")
         });
         self.view_rect = Some(rect);
+        crate::tutorial::anchor(ui.ctx(), "cena", rect);
         if !self.framed {
             self.framed = true;
             self.frame_selection(rect, env.root, env.sizes);
@@ -879,12 +893,7 @@ impl SceneDoc {
                 c.set("image", Prop::Str(rel.into()));
                 if let Some((w, h)) = env.sizes.image(env.root, rel) {
                     let (w, h) = (w as f64, h as f64);
-                    // Tira de quadros (largura múltipla da altura): um quadro.
-                    let (fw, fh) = if w > h && h > 0.0 && (w % h) == 0.0 {
-                        (h, h)
-                    } else {
-                        (w, h)
-                    };
+                    let (fw, fh) = sheet_frame(w, h);
                     if fw < w {
                         c.set("frame_w", Prop::Num(fw));
                         c.set("frame_h", Prop::Num(fh));
@@ -934,11 +943,11 @@ impl SceneDoc {
 
     fn toolbar(&mut self, ui: &mut egui::Ui, env: &mut SceneEnv, actions: &mut Vec<SceneAction>) {
         ui.horizontal_wrapped(|ui| {
-            if ui
+            let r = ui
                 .add(egui::Button::new("▶ Testar daqui").fill(crate::theme::PLAY.gamma_multiply(0.55)))
-                .on_hover_text("Roda o jogo começando nesta cena (F6)")
-                .clicked()
-            {
+                .on_hover_text("Roda o jogo começando nesta cena (F6)");
+            crate::tutorial::anchor(ui.ctx(), "cena.testar", r.rect);
+            if r.clicked() {
                 actions.push(SceneAction::TestHere);
             }
             if env.connected {
@@ -984,13 +993,14 @@ impl SceneDoc {
                 });
             ui.checkbox(&mut self.show_colliders, "Colisões");
             ui.separator();
-            ui.menu_button("➕ Objeto", |ui| {
+            let menu = ui.menu_button("➕ Objeto", |ui| {
                 if let Some((name, comps)) = add_object_menu(ui) {
                     let (x, y) = self.view_center();
                     self.add_object(name, x, y, comps);
                     ui.close();
                 }
             });
+            crate::tutorial::anchor(ui.ctx(), "cena.objeto", menu.response.rect);
             ui.label(format!("{:.0}%", self.camera.zoom * 100.0))
                 .on_hover_text("Zoom: role o mouse. Mover a vista: botão do meio, ou Espaço + arrastar.");
             if ui.button("⛶ Enquadrar").on_hover_text("F").clicked()
@@ -1695,6 +1705,20 @@ fn scale_handles(corners: &[Pos2; 4], _r: &LocalRect) -> Vec<((i8, i8), Pos2)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quadros_de_spritesheets() {
+        assert_eq!(
+            sheet_frame(64.0, 32.0),
+            (16.0, 16.0),
+            "herói: 8 quadros em 2 linhas"
+        );
+        assert_eq!(sheet_frame(64.0, 16.0), (16.0, 16.0), "moeda: tira");
+        assert_eq!(sheet_frame(16.0, 16.0), (16.0, 16.0), "imagem de um quadro");
+        assert_eq!(sheet_frame(8.0, 8.0), (8.0, 8.0));
+        assert_eq!(sheet_frame(256.0, 64.0), (64.0, 64.0), "tira grande");
+        assert_eq!(sheet_frame(300.0, 200.0), (300.0, 200.0), "imagem comum");
+    }
 
     #[test]
     fn camera_ida_e_volta() {

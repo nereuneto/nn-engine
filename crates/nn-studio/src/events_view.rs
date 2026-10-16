@@ -140,6 +140,7 @@ impl EventsPanel {
             ui.weak("A cena tem um erro e não pode ser editada aqui.");
             return actions;
         }
+        crate::tutorial::anchor(ui.ctx(), "eventos", ui.max_rect());
         let cat = events::catalog();
         let is_prefab = doc.is_prefab();
         let mut names: Vec<String> = Vec::new();
@@ -161,6 +162,10 @@ impl EventsPanel {
             {
                 new_rule = Some((Owner::Scene, d.new_item(false)));
             }
+            if !is_prefab {
+                let r = ui.min_rect();
+                crate::tutorial::anchor(ui.ctx(), "eventos.regra_cena", r);
+            }
             match &selected {
                 Some((id, name, false)) => {
                     let label = format!("➕ Regra de {}", short(name, 18));
@@ -176,11 +181,11 @@ impl EventsPanel {
             ui.separator();
             ui.checkbox(&mut self.only_selected, "Só do selecionado")
                 .on_hover_text("Mostra as regras da cena e as do objeto selecionado.");
-            if ui
+            let code = ui
                 .button("Ver como código")
-                .on_hover_text("Mostra em Lua o que as regras fazem (só para ler e aprender).")
-                .clicked()
-            {
+                .on_hover_text("Mostra em Lua o que as regras fazem (só para ler e aprender).");
+            crate::tutorial::anchor_in(ui, "eventos.codigo", code.rect);
+            if code.clicked() {
                 self.code = Some(code_for(doc, selected.as_ref().map(|s| s.0)));
             }
         });

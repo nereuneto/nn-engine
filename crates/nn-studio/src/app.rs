@@ -67,6 +67,8 @@ pub struct StudioApp {
     window_title: String,
     /// GPU do editor (as cenas visuais são desenhadas com ela).
     render_state: Option<eframe::egui_wgpu::RenderState>,
+    /// Tutorial em andamento.
+    pub tutorial: Option<crate::tutorial::TutorialRun>,
 }
 
 impl std::fmt::Debug for StudioApp {
@@ -143,6 +145,7 @@ impl StudioApp {
             logo,
             window_title: String::new(),
             render_state: None,
+            tutorial: None,
         };
         theme::apply(ctx, app.settings.theme, app.settings.zoom);
         if let Some(dir) = options.open {
@@ -199,6 +202,36 @@ impl StudioApp {
         self.persist();
     }
 
+    /// Cria o projeto do tutorial (numa pasta nova) e começa.
+    pub fn start_tutorial(&mut self, id: &str) {
+        let Some(tutorial) = crate::tutorial::find(id) else {
+            return;
+        };
+        let parent = self.settings.default_projects_dir();
+        let dir = crate::tutorial::project_dir(&parent, tutorial);
+        let result = std::fs::create_dir_all(&parent)
+            .map_err(|e| e.to_string())
+            .and_then(|_| {
+                nn_run::create_project(&nn_run::NewOptions {
+                    dir: dir.clone(),
+                    title: Some(tutorial.project.to_string()),
+                    template: tutorial.template,
+                })
+            });
+        match result {
+            Ok(report) => {
+                self.open_project(&report.dir);
+                if self.project().is_some() {
+                    self.tutorial = Some(crate::tutorial::TutorialRun::new(tutorial));
+                }
+            }
+            Err(e) => {
+                self.launcher.error =
+                    Some(format!("Não foi possível criar o projeto do tutorial: {e}"))
+            }
+        }
+    }
+
     pub fn close_project(&mut self) {
         if let Screen::Project(ws) = &mut self.screen {
             ws.stop();
@@ -231,7 +264,10 @@ impl StudioApp {
                 self.persist();
                 ctx.send_viewport_cmd(ViewportCommand::Close);
             }
-            Pending::CloseProject => self.close_project(),
+            Pending::CloseProject => {
+                self.close_project();
+                self.tutorial = None;
+            }
             Pending::Open(dir) => self.open_project(&dir),
             Pending::PickAndOpen => {
                 let mut dialog =
@@ -302,6 +338,11 @@ impl StudioApp {
             Command::Docs => ctx.open_url(egui::OpenUrl::new_tab(project::DOCS_URL)),
             Command::Shortcuts => self.shortcuts = true,
             Command::About => self.about = true,
+            Command::Tutorials => {
+                // Os tutoriais criam um projeto novo: volta ao início.
+                self.launcher.show_tutorials();
+                self.request(ctx, Pending::CloseProject);
+            }
             Command::Quit => self.request(ctx, Pending::Quit),
             _ => {}
         }
@@ -500,7 +541,12 @@ impl StudioApp {
                 }
             });
             ui.menu_button("Ajuda", |ui| {
-                for c in [Command::Docs, Command::Shortcuts, Command::About] {
+                for c in [
+                    Command::Tutorials,
+                    Command::Docs,
+                    Command::Shortcuts,
+                    Command::About,
+                ] {
                     if self.command_button(ui, c) {
                         out.push(c);
                     }
@@ -839,6 +885,7 @@ impl StudioApp {
             }
         }
 
+        crate::tutorial::begin_frame(&ctx);
         let mut commands = self.shortcuts_pressed(&ctx);
         match &self.screen {
             Screen::Launcher => {
@@ -858,6 +905,7 @@ impl StudioApp {
                     match a {
                         LauncherAction::Open(dir) => self.open_project(&dir),
                         LauncherAction::Command(c) => commands.push(c),
+                        LauncherAction::StartTutorial(id) => self.start_tutorial(id),
                     }
                 }
             }
@@ -881,6 +929,13 @@ impl StudioApp {
                             commands.extend(ws.ui(ui, &mut env));
                         }
                     });
+            }
+        }
+        // Tutorial: confere o projeto e mostra o passo.
+        if let (Some(run), Screen::Project(ws)) = (&mut self.tutorial, &mut self.screen) {
+            run.update(ws);
+            if run.ui(&ctx) == Some(crate::tutorial::TutorialAction::Close) {
+                self.tutorial = None;
             }
         }
         if let Some(c) = self.palette_ui(&ctx) {

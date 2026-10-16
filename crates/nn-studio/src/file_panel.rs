@@ -361,6 +361,7 @@ impl FilePanel {
                 text = text.strong();
             }
             let r = ui.selectable_label(selected, text);
+            crate::tutorial::anchor_in(ui, &format!("arquivo:{}", e.rel), r.rect);
             let r = if e.is_dir {
                 r
             } else {
