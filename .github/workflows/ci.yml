@@ -51,8 +51,15 @@ jobs:
             || { sed -nE 's/^([^ ]+):([0-9]+):([0-9]+): (error|warning): (.*)$/::error file=\1,line=\2,col=\3::\5/p; /^error/s/^/::error::/p' clippy.txt; exit 1; }
       - name: Build (inclui exemplos)
         run: cargo build --workspace --all-targets
+      # Falhas também viram uma anotação no PR (o começo de cada uma).
       - name: Testes
-        run: cargo test --workspace
+        shell: bash
+        run: |
+          cargo test --workspace --color never 2>&1 | tee testes.txt || {
+            msg=$(grep -E -A8 "^---- |panicked at" testes.txt | head -80 | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
+            echo "::error title=Testes::$msg"
+            exit 1
+          }
       - name: Documentação
         run: cargo doc --workspace --no-deps
         env:
