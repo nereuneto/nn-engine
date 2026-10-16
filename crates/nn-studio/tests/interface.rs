@@ -1120,3 +1120,127 @@ fn jogo_conta_onde_estao_os_objetos_e_o_editor_pausa() {
     h.key_press_modifiers(Modifiers::SHIFT, Key::F5);
     h.run_steps(3);
 }
+
+#[test]
+fn comportamento_pronto_pelo_inspetor() {
+    let dir = temp("comportamento");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    h.get_by_label("quadrado").click();
+    h.run();
+    // Adicionar componente > Jogador > Jogador de plataforma.
+    h.get_by_label_contains("Adicionar componente").click();
+    h.run();
+    tela(&mut h, "adicionar-componente");
+    h.get_by_label_contains("Jogador").click();
+    h.run();
+    h.get_by_label("Jogador de plataforma").click();
+    h.run();
+    let q = objeto(&h, "quadrado").clone();
+    // Precisa de corpo físico: já veio junto.
+    assert!(q.component("body").is_some());
+    let b = q
+        .components
+        .iter()
+        .find(|c| c.is_behavior())
+        .expect("comportamento");
+    assert_eq!(b.str("script"), "nn:plataforma");
+    assert_eq!(b.num("velocidade"), 320.0);
+    // As propriedades aparecem com os nomes do script.
+    h.get_by_label("Força do pulo");
+    tela(&mut h, "comportamento");
+    // Salva e o arquivo tem uma linha só para o comportamento.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(
+        text.contains(
+            "{ type = \"behavior\", script = \"nn:plataforma\", coiote = 0.1, pulo = 860,"
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+fn prefab_criado_pela_hierarquia_e_usado_na_cena() {
+    let dir = temp("prefab");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    // Botão direito no quadrado > Criar prefab.
+    h.get_by_label("quadrado").click_secondary();
+    h.run();
+    h.get_by_label_contains("Criar prefab").click();
+    h.run();
+    assert!(proj.join("prefabs/quadrado.prefab").exists());
+    let q = objeto(&h, "quadrado").clone();
+    assert_eq!(q.prefab.as_ref().unwrap().path, "prefabs/quadrado.prefab");
+    // Mudar a cor na instância vira uma mudança só dela (com ↺ para voltar).
+    let id = q.id;
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut("cenas/teste.cena").unwrap();
+        doc.selection = vec![id];
+        doc.data.find_mut(id).unwrap().components[0]
+            .set("color", nn_studio::scene_data::Prop::Str("#FF0000".into()));
+    }
+    h.run();
+    h.get_by_label("↺").click();
+    h.run();
+    assert_eq!(objeto(&h, "quadrado").components[0].str("color"), "#3FA7D6");
+    // Arrastar o prefab do painel Arquivos para a cena cria outra cópia.
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .file_panel
+        .reveal("prefabs/quadrado.prefab");
+    h.run();
+    let from = h.get_by_label("quadrado.prefab").rect().center();
+    let to = h.get_by_label("Vista da cena").rect().center() + egui::vec2(100.0, 50.0);
+    arrastar(&mut h, from, to);
+    let copias: Vec<_> = cena(&h)
+        .data
+        .objects
+        .iter()
+        .filter(|o| o.prefab.is_some())
+        .collect();
+    assert_eq!(copias.len(), 2);
+    // Mudar o prefab no disco muda as cópias abertas.
+    let text = std::fs::read_to_string(proj.join("prefabs/quadrado.prefab")).unwrap();
+    std::fs::write(
+        proj.join("prefabs/quadrado.prefab"),
+        text.replace("#3FA7D6", "#00FF00"),
+    )
+    .unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        h.run();
+        if objeto(&h, "quadrado").components[0].str("color") == "#00FF00" {
+            break;
+        }
+        assert!(start.elapsed().as_secs() < 10, "as cópias não mudaram");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    // Salvar: a cópia guarda só o caminho do prefab e a posição.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(
+        text.contains("prefab = \"prefabs/quadrado.prefab\""),
+        "{text}"
+    );
+    assert!(!text.contains("#00FF00"), "a cor vem do prefab: {text}");
+}
+
+#[test]
+fn variaveis_do_jogo_nas_configuracoes() {
+    let dir = temp("vars");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    paleta(&mut h, "configuracoes do projeto");
+    h.get_by_label("➕ Variável").click();
+    h.run();
+    h.get_by_label("💾 Salvar configurações").click();
+    h.run();
+    let text = std::fs::read_to_string(proj.join("config.lua")).unwrap();
+    assert!(text.contains("vars = { pontos = 0 }"), "{text}");
+}

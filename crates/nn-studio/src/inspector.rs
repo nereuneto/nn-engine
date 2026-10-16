@@ -1429,7 +1429,9 @@ impl Inspector {
         if comp.kind == "body"
             && let Some(o) = doc.data.find(id)
             && let Some((w, h)) = visible_size(o, sizes, files)
-            && ui.small_button("Ajustar ao tamanho da imagem").clicked()
+            && ui
+                .small_button("Ajustar ao tamanho da imagem ou forma")
+                .clicked()
         {
             changes.push(("w".into(), Prop::Num(w.round())));
             changes.push(("h".into(), Prop::Num(h.round())));

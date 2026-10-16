@@ -336,24 +336,19 @@ fn row(
             doc.duplicate_selection();
             ui.close();
         }
-        match &o.prefab {
-            Some(link) => {
-                if ui.button("Abrir prefab").clicked() {
-                    out.push(HierarchyAction::OpenFile(link.path.clone()));
-                    ui.close();
-                }
+        if let Some(link) = &o.prefab {
+            if ui.button("Abrir prefab").clicked() {
+                out.push(HierarchyAction::OpenFile(link.path.clone()));
+                ui.close();
             }
-            None if doc.prefab_root() != Some(id) => {
-                if ui
-                    .button("📦 Criar prefab")
-                    .on_hover_text("Guarda o objeto (com os filhos) em prefabs/, para usar em outras cenas. Também dá para arrastar o objeto para uma pasta do painel Arquivos.")
-                    .clicked()
-                {
-                    out.push(HierarchyAction::CreatePrefab { id, dir: None });
-                    ui.close();
-                }
-            }
-            None => {}
+        } else if doc.prefab_root() != Some(id)
+            && ui
+                .button("📦 Criar prefab")
+                .on_hover_text("Guarda o objeto (com os filhos) em prefabs/, para usar em outras cenas. Também dá para arrastar o objeto para uma pasta do painel Arquivos.")
+                .clicked()
+        {
+            out.push(HierarchyAction::CreatePrefab { id, dir: None });
+            ui.close();
         }
         if ui.button("Criar filho vazio").clicked() {
             doc.record(None);
