@@ -57,7 +57,7 @@ pub fn anchor_first(ui: &egui::Ui, key: &str, rect: Rect) {
     });
 }
 
-fn anchor_rect(ctx: &egui::Context, key: &str) -> Option<Rect> {
+pub fn anchor_rect(ctx: &egui::Context, key: &str) -> Option<Rect> {
     ctx.data(|d| {
         d.get_temp::<HashMap<String, Rect>>(anchors_id())
             .and_then(|m| m.get(key).copied())
@@ -167,7 +167,7 @@ fn key_rule(rule: &scene_data::Rule, modo: &str) -> bool {
 /// Os tutoriais, na ordem do menu.
 pub fn all() -> &'static [Tutorial] {
     static LIST: std::sync::OnceLock<Vec<Tutorial>> = std::sync::OnceLock::new();
-    LIST.get_or_init(|| vec![primeiro_jogo(), eventos()])
+    LIST.get_or_init(|| vec![primeiro_jogo(), eventos(), desenhe()])
 }
 
 pub fn find(id: &str) -> Option<&'static Tutorial> {
@@ -199,7 +199,7 @@ fn primeiro_jogo() -> Tutorial {
             },
             Step {
                 title: "Um chão comprido",
-                text: "Com o bloco selecionado, no Inspetor, em Transformação > Escala, arraste o número do x para a direita até uns 20. O bloco vira uma faixa de grama.",
+                text: "Com o bloco selecionado, no Inspetor, em Transformação > Escala, arraste o número do x para a direita até uns 20. Depois, em Imagem > Preencher, escolha Repetir: em vez de esticar, o bloco se repete e vira uma faixa de grama.",
                 target: Some("inspetor"),
                 show: Some(Tab::Inspector),
                 done: Some(|ws, _| with_image(ws, "bloco.png").iter().any(|o| o.scale_x >= 4.0)),
@@ -431,6 +431,146 @@ fn eventos() -> Tutorial {
             Step {
                 title: "É isso!",
                 text: "Regras têm condições (Quando ou Enquanto) e ações (Então). \"O outro\" é com quem o objeto encostou; \"esperar\" atrasa as ações seguintes; regras de um objeto vão junto com ele (e com as cópias, se for um prefab). Abra o prefab do asteroide do modelo Nave para ver mais.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// A imagem criada no tutorial (a última feita com "Nova imagem").
+fn drawing(ws: &ProjectWorkspace) -> Option<&crate::pixel_editor::PixelDoc> {
+    let rel = ws.created_images.last()?;
+    ws.pixels.get(rel)
+}
+
+fn painted(doc: &crate::pixel_editor::PixelDoc) -> usize {
+    doc.img.pixels().filter(|p| p.0[3] > 0).count()
+}
+
+fn desenhe() -> Tutorial {
+    Tutorial {
+        id: "desenhe-seu-heroi",
+        title: "Desenhe seu herói",
+        summary: "Desenhe um personagem pixel a pixel no editor de pixel art, faça ele andar com dois quadros e ponha na cena.",
+        minutes: 10,
+        template: Template::Vazio,
+        project: "Desenhe seu heroi",
+        steps: vec![
+            Step {
+                title: "Pixel art",
+                text: "Neste tutorial você desenha um personagem no editor de pixel art do NN Studio, anima ele com dois quadros e põe na cena.\n\nPixel art é desenhar ponto por ponto, em imagens pequenas: 16 × 16 pixels já dão um herói.",
+                target: None,
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Uma imagem nova",
+                text: "No painel Arquivos, clique em ➕ Novo > 🎨 Imagem (pixel art). Chame de meu_heroi, deixe o tamanho 16 × 16 e 1 quadro, e clique em Criar.",
+                target: Some("arquivos.novo"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| drawing(ws).is_some()),
+            },
+            Step {
+                title: "Desenhe!",
+                text: "Esta é a aba da imagem. Com o Lápis, segure o botão esquerdo e desenhe na tela do meio: uma cabeça, um corpo e duas pernas. O botão direito pinta com a cor secundária (transparente: apaga).\n\nDica: role o mouse para aumentar e marque Espelhado (à direita) para desenhar os dois lados de uma vez.",
+                target: Some("pixel:tela"),
+                show: None,
+                done: Some(|ws, _| drawing(ws).is_some_and(|d| painted(d) >= 25)),
+            },
+            Step {
+                title: "Cores",
+                text: "Clique nas cores da paleta (à direita) para trocar a cor do lápis: pele, roupa, cabelo. O Balde (G) pinta de uma vez uma área fechada. Use pelo menos três cores.",
+                target: Some("pixel:paleta"),
+                show: None,
+                done: Some(|ws, _| {
+                    drawing(ws).is_some_and(|d| crate::pixel_ops::used_colors(&d.img, 8).len() >= 3)
+                }),
+            },
+            Step {
+                title: "Um segundo quadro",
+                text: "Uma animação é uma sequência de desenhos. Embaixo, no painel Quadros, clique em Duplicar: o quadro 2 começa igual ao 1.",
+                target: Some("pixel:duplicar"),
+                show: None,
+                done: Some(|ws, _| drawing(ws).is_some_and(|d| d.frame_count() >= 2)),
+            },
+            Step {
+                title: "O passo",
+                text: "Agora você está no quadro 2. Mude as pernas: apague com a Borracha (E) e redesenhe uma perna mais para a frente. Marque Papel vegetal para ver o quadro 1 clarinho por baixo.",
+                target: Some("pixel:papel"),
+                show: None,
+                done: Some(|ws, _| {
+                    drawing(ws).is_some_and(|d| {
+                        if d.frame_count() < 2 {
+                            return false;
+                        }
+                        let a = crate::pixel_ops::crop(&d.img, d.cell(0));
+                        let b = crate::pixel_ops::crop(&d.img, d.cell(1));
+                        a.pixels().zip(b.pixels()).filter(|(x, y)| x != y).count() >= 2
+                    })
+                }),
+            },
+            Step {
+                title: "Animar",
+                text: "Clique em Animações (embaixo) > + Nova animação: ela já usa os dois quadros e toca na Prévia, à direita. Mude o nome para andar e, se quiser, o Ritmo (quadros por segundo).",
+                target: Some("pixel:aba-animacoes"),
+                show: None,
+                done: Some(|ws, _| {
+                    drawing(ws).is_some_and(|d| {
+                        d.anim
+                            .anims
+                            .iter()
+                            .any(|a| a.name == "andar" && a.frames.len() >= 2)
+                    })
+                }),
+            },
+            Step {
+                title: "Salvar",
+                text: "Clique em Salvar (ou Ctrl+S). A imagem vira um PNG comum e as animações ficam em meu_heroi.anim, ao lado dela.",
+                target: Some("pixel:salvar"),
+                show: None,
+                done: Some(|ws, _| {
+                    drawing(ws).is_some_and(|d| !d.is_dirty() && !d.anim.anims.is_empty())
+                }),
+            },
+            Step {
+                title: "Na cena",
+                text: "Volte para a aba fase.cena e arraste meu_heroi.png do painel Arquivos para a cena.",
+                target: Some("arquivo:assets/imagens/meu_heroi.png"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    ws.created_images.last().is_some_and(|rel| {
+                        !with_image(ws, rel.rsplit('/').next().unwrap_or(rel)).is_empty()
+                    })
+                }),
+            },
+            Step {
+                title: "Andando",
+                text: "Com ele selecionado, no Inspetor, em Imagem > Animação, clique no ☰ e escolha andar. Ele já anda ali mesmo, na cena!",
+                target: Some("inspetor.animacao"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    let Some(rel) = ws.created_images.last() else {
+                        return false;
+                    };
+                    let name = rel.rsplit('/').next().unwrap_or(rel);
+                    with_image(ws, name).iter().any(|o| {
+                        o.component("sprite")
+                            .is_some_and(|c| c.str("animation") == "andar")
+                    })
+                }),
+            },
+            Step {
+                title: "Teste!",
+                text: "Aperte ▶ Testar daqui (F6): seu herói aparece no jogo, andando. Com o jogo aberto, mude um pixel no editor e salve: o jogo mostra o desenho novo na hora.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: um herói seu!",
+                text: "Próximos passos: desenhe animações parado, andar e pular e escolha os nomes na Animação automática (Aparência), que troca sozinha conforme o herói anda ou pula. Os eventos também têm Tocar animação. Para montar a fase, faça o tutorial Seu primeiro jogo.",
                 target: None,
                 show: None,
                 done: None,

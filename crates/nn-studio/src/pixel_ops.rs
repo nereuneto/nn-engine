@@ -41,7 +41,14 @@ impl PixRect {
         let y0 = a.1.min(b.1).max(clip.y as i32);
         let x1 = a.0.max(b.0).min((clip.x + clip.w) as i32 - 1);
         let y1 = a.1.max(b.1).min((clip.y + clip.h) as i32 - 1);
-        (x1 >= x0 && y1 >= y0).then(|| Self::new(x0 as u32, y0 as u32, (x1 - x0 + 1) as u32, (y1 - y0 + 1) as u32))
+        (x1 >= x0 && y1 >= y0).then(|| {
+            Self::new(
+                x0 as u32,
+                y0 as u32,
+                (x1 - x0 + 1) as u32,
+                (y1 - y0 + 1) as u32,
+            )
+        })
     }
 }
 
@@ -58,7 +65,15 @@ pub fn put(img: &mut RgbaImage, x: i32, y: i32, c: Color, clip: PixRect) {
 
 /// Pincel quadrado de `size` pixels centrado em (x, y). Com `mirror`, pinta
 /// também o ponto espelhado na horizontal dentro de `clip`.
-pub fn stamp(img: &mut RgbaImage, x: i32, y: i32, size: u32, c: Color, clip: PixRect, mirror: bool) {
+pub fn stamp(
+    img: &mut RgbaImage,
+    x: i32,
+    y: i32,
+    size: u32,
+    c: Color,
+    clip: PixRect,
+    mirror: bool,
+) {
     let size = size.max(1) as i32;
     let start = -(size - 1) / 2;
     for dy in 0..size {
@@ -137,7 +152,8 @@ pub fn ellipse(a: (i32, i32), b: (i32, i32), filled: bool) -> Vec<(i32, i32)> {
             if !inside(x, y) {
                 continue;
             }
-            let edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
+            let edge =
+                !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1);
             if filled || edge {
                 out.push((x, y));
             }
@@ -232,14 +248,23 @@ fn cells(img: &RgbaImage, fw: u32, fh: u32) -> Vec<RgbaImage> {
 fn rebuild(img: &RgbaImage, fw: u32, fh: u32, list: &[RgbaImage]) -> RgbaImage {
     let (cols, rows) = grid(img, fw, fh);
     let n = list.len().max(1) as u32;
-    let (cols, rows) = if rows == 1 { (n, 1) } else { (cols, n.div_ceil(cols).max(rows)) };
+    let (cols, rows) = if rows == 1 {
+        (n, 1)
+    } else {
+        (cols, n.div_ceil(cols).max(rows))
+    };
     // Sobras à direita e embaixo (que não formam um quadro) ficam.
     let extra_w = img.width() - grid(img, fw, fh).0 * fw;
     let extra_h = img.height() - grid(img, fw, fh).1 * fh;
     let mut out = RgbaImage::new(cols * fw + extra_w, rows * fh + extra_h);
     for (i, c) in list.iter().enumerate() {
         let i = i as u32;
-        image::imageops::replace(&mut out, c, ((i % cols) * fw) as i64, ((i / cols) * fh) as i64);
+        image::imageops::replace(
+            &mut out,
+            c,
+            ((i % cols) * fw) as i64,
+            ((i / cols) * fh) as i64,
+        );
     }
     out
 }
@@ -474,7 +499,10 @@ mod tests {
         let (mut i, mut a) = folha(&[R, G, B]);
         insert_frame(&mut i, &mut a, 1, Some(0));
         assert_eq!(i.width(), 16);
-        assert_eq!([cor(&i, 0), cor(&i, 1), cor(&i, 2), cor(&i, 3)], [R, R, G, B]);
+        assert_eq!(
+            [cor(&i, 0), cor(&i, 1), cor(&i, 2), cor(&i, 3)],
+            [R, R, G, B]
+        );
         let idx: Vec<u32> = a.anims[0].frames.iter().map(|f| f.index).collect();
         assert_eq!(idx, [1, 3, 4]);
         remove_frame(&mut i, &mut a, 2);
@@ -512,7 +540,10 @@ mod tests {
 
     #[test]
     fn cores_em_hex() {
-        assert_eq!(parse_hex_list("ff0000\n#00ff0080, zzz 12"), vec![R, [0, 255, 0, 128]]);
+        assert_eq!(
+            parse_hex_list("ff0000\n#00ff0080, zzz 12"),
+            vec![R, [0, 255, 0, 128]]
+        );
         assert_eq!(to_hex([1, 2, 3, 255]), "010203");
         for (_, p) in PALETTES {
             assert!(parse_hex_list(p).len() >= 16);

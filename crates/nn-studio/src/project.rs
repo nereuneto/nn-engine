@@ -19,11 +19,11 @@ use crate::files::{self, FileKind, FileTree};
 use crate::game::GameProcess;
 use crate::hierarchy::{HierarchyAction, HierarchyPanel};
 use crate::inspector::{Inspector, InspectorAction};
+use crate::pixel_editor::{PixelAction, PixelDoc};
 use crate::scene_render::{SceneRenderer, Sizes};
 use crate::scene_view::{SceneAction, SceneDoc, SceneEnv};
 use crate::settings::{Mode, Settings};
 use crate::theme;
-use crate::pixel_editor::{PixelAction, PixelDoc};
 use crate::viewers::{MapView, SoundView, ViewerAction};
 
 /// Uma aba.
@@ -183,6 +183,8 @@ pub enum Action {
     GameCommand(&'static str),
     /// Gravar a paleta do projeto (`paleta.hex`).
     SavePalette,
+    /// Dar o foco a esta aba (clicaram dentro dela).
+    FocusTab(Tab),
     /// Criar uma imagem nova para o componente `ci` do objeto `id`.
     NewImageFor {
         scene: String,
@@ -289,6 +291,8 @@ pub struct ProjectWorkspace {
     started: std::time::Instant,
     /// Quantas vezes o jogo foi aberto (▶ Jogar ou Testar daqui).
     pub plays: u64,
+    /// Imagens criadas com "Nova imagem" (o tutorial confere).
+    pub created_images: Vec<String>,
 }
 
 impl std::fmt::Debug for ProjectWorkspace {
@@ -377,6 +381,7 @@ impl ProjectWorkspace {
             script_objects: None,
             started: std::time::Instant::now(),
             plays: 0,
+            created_images: Vec::new(),
         };
         ws.reload_config();
         ws.console.info(format!(
@@ -783,7 +788,9 @@ impl ProjectWorkspace {
 
     /// A imagem (PNG) de um arquivo `.anim`, se existir.
     fn image_of_anim(&self, rel: &str) -> Option<String> {
-        let base = rel.strip_suffix(".anim").or_else(|| rel.strip_suffix(".ANIM"))?;
+        let base = rel
+            .strip_suffix(".anim")
+            .or_else(|| rel.strip_suffix(".ANIM"))?;
         ["png", "PNG"]
             .iter()
             .map(|e| format!("{base}.{e}"))
@@ -1414,7 +1421,12 @@ impl ProjectWorkspace {
                         assign: None,
                     });
                 }
-                Action::NewImageFor { scene, id, ci, name } => {
+                Action::NewImageFor {
+                    scene,
+                    id,
+                    ci,
+                    name,
+                } => {
                     self.dialog = Some(Dialog::NewItem {
                         kind: NewKind::Image,
                         parent: crate::file_panel::image_dir(&self.files, ""),
@@ -1463,6 +1475,11 @@ impl ProjectWorkspace {
                 Action::CreateSceneScript(rel) => self.create_scene_script(&rel),
                 Action::NewBehaviorScript { scene, id } => self.new_behavior_script(&scene, id),
                 Action::CreatePrefab { id, dir } => self.create_prefab(id, dir),
+                Action::FocusTab(tab) => {
+                    if let Some(path) = self.dock.find_tab(&tab) {
+                        self.dock.set_focused_node_and_surface(path.node_path());
+                    }
+                }
                 Action::SavePalette => {
                     let text: String = self
                         .palette
@@ -1923,15 +1940,34 @@ impl ProjectWorkspace {
                     close = true;
                     self.console.info(format!("Criado: {rel}"));
                     self.files.rescan();
+                    if kind == NewKind::Image {
+                        self.created_images.push(rel.clone());
+                    }
                     if let Some((scene, id, ci)) = assign.take() {
                         let [w, h, n] = *size;
                         if let Some(doc) = self.scenes.get_mut(&scene) {
                             doc.begin_frame();
                             doc.record(None);
-                            if let Some(c) = doc.data.find_mut(id).and_then(|o| o.components.get_mut(ci)) {
+                            if let Some(c) =
+                                doc.data.find_mut(id).and_then(|o| o.components.get_mut(ci))
+                            {
                                 c.set("image", crate::scene_data::Prop::Str(rel.clone()));
-                                c.set("frame_w", crate::scene_data::Prop::Num(if n > 1 { w as f64 } else { 0.0 }));
-                                c.set("frame_h", crate::scene_data::Prop::Num(if n > 1 { h as f64 } else { 0.0 }));
+                                c.set(
+                                    "frame_w",
+                                    crate::scene_data::Prop::Num(if n > 1 {
+                                        w as f64
+                                    } else {
+                                        0.0
+                                    }),
+                                );
+                                c.set(
+                                    "frame_h",
+                                    crate::scene_data::Prop::Num(if n > 1 {
+                                        h as f64
+                                    } else {
+                                        0.0
+                                    }),
+                                );
                                 c.set("frame", crate::scene_data::Prop::Num(1.0));
                                 // Pixel art pequena aparece maior na cena.
                                 if c.num("w") <= 0.0 && w <= 64 {
@@ -2261,6 +2297,58 @@ fn drop_overlay(ctx: &egui::Context, dest: Option<String>) {
     );
 }
 
+/// O tamanho de quadro que as cenas e prefabs usam para a imagem `rel`.
+fn frame_hint(
+    root: &Path,
+    files: &FileTree,
+    open: &HashMap<String, SceneDoc>,
+    rel: &str,
+) -> Option<(u32, u32)> {
+    fn find_in(objects: &[crate::scene_data::Object], rel: &str) -> Option<(u32, u32)> {
+        let mut found = None;
+        crate::scene_data::visit(objects, &mut |o| {
+            for c in &o.components {
+                if found.is_none()
+                    && c.kind == "sprite"
+                    && c.str("image") == rel
+                    && c.num("frame_w") > 0.0
+                    && c.num("frame_h") > 0.0
+                {
+                    found = Some((c.num("frame_w") as u32, c.num("frame_h") as u32));
+                }
+            }
+        });
+        found
+    }
+    if let Some(f) = open.values().find_map(|d| find_in(&d.data.objects, rel)) {
+        return Some(f);
+    }
+    for e in files
+        .files_of(FileKind::Scene)
+        .chain(files.files_of(FileKind::Prefab))
+    {
+        let Ok(text) = std::fs::read_to_string(root.join(&e.rel)) else {
+            continue;
+        };
+        if !text.contains(rel) {
+            continue;
+        }
+        let found = if e.rel.ends_with(".prefab") {
+            crate::scene_data::read_prefab(&text, &e.rel)
+                .ok()
+                .and_then(|o| find_in(std::slice::from_ref(&o), rel))
+        } else {
+            crate::scene_data::read(&text, &e.rel)
+                .ok()
+                .and_then(|s| find_in(&s.objects, rel))
+        };
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
+}
+
 /// Cria um PNG transparente (e o `.anim` com o tamanho do quadro, se tiver
 /// mais de um quadro).
 fn create_image(root: &Path, rel: &str, w: u32, h: u32, frames: u32) -> Result<String, String> {
@@ -2489,10 +2577,19 @@ impl TabViewer for Viewer<'_> {
                 }
             }
             Tab::Image(rel) => {
-                let doc = self
-                    .pixels
-                    .entry(rel.clone())
-                    .or_insert_with(|| PixelDoc::open(self.root, rel));
+                if !self.pixels.contains_key(rel.as_str()) {
+                    let mut doc = PixelDoc::open(self.root, rel);
+                    if let Some((w, h)) = frame_hint(self.root, self.files, self.scenes, rel) {
+                        doc.hint_frame_size(w, h);
+                    }
+                    self.pixels.insert(rel.clone(), doc);
+                }
+                let doc = self.pixels.get_mut(rel.as_str()).expect("imagem aberta");
+                // Clicar na imagem dá o foco à aba (Ctrl+Z, Ctrl+S vêm para cá).
+                if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(ui.max_rect())
+                {
+                    self.actions.push(Action::FocusTab(Tab::Image(rel.clone())));
+                }
                 for a in doc.ui(ui, self.palette) {
                     match a {
                         PixelAction::Save => self.actions.push(Action::SaveDoc(rel.clone())),
@@ -2633,6 +2730,18 @@ impl Viewer<'_> {
                 SceneAction::OpenAsText => self.actions.push(Action::OpenAsText(rel.to_string())),
                 SceneAction::Game(cmd) => self.actions.push(Action::GameCommand(cmd)),
             }
+        }
+        // Objetos com animação tocam na cena do editor também.
+        let mut animated = false;
+        crate::scene_data::visit(&doc.data.objects, &mut |o| {
+            animated |= o
+                .components
+                .iter()
+                .any(|c| c.kind == "sprite" && !c.str("animation").is_empty());
+        });
+        if animated {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(33));
         }
         // Clicou nesta cena: a Hierarquia e o Inspetor passam a mostrá-la.
         if ui.ui_contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {

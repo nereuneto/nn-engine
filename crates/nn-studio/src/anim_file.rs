@@ -229,8 +229,7 @@ impl AnimFile {
 
     pub fn load(root: &Path, rel: &str) -> Result<Self, String> {
         let path = anim_path(rel);
-        let text = std::fs::read_to_string(root.join(&path))
-            .map_err(|e| format!("{path}: {e}"))?;
+        let text = std::fs::read_to_string(root.join(&path)).map_err(|e| format!("{path}: {e}"))?;
         Self::read(&text, &path)
     }
 
@@ -347,7 +346,10 @@ mod tests {
 
     #[test]
     fn caminho_ao_lado_da_imagem() {
-        assert_eq!(anim_path("assets/imagens/heroi.png"), "assets/imagens/heroi.anim");
+        assert_eq!(
+            anim_path("assets/imagens/heroi.png"),
+            "assets/imagens/heroi.anim"
+        );
         assert_eq!(anim_path("a.b/heroi"), "a.b/heroi.anim");
         assert_eq!(anim_path("x/heroi.anim"), "x/heroi.anim");
     }
@@ -357,7 +359,10 @@ mod tests {
         let mut f = AnimFile {
             frame_w: 16,
             frame_h: 16,
-            anims: vec![Anim::new("parado", [1, 2]), Anim::new("pulo \"alto\"", [5, 6, 7])],
+            anims: vec![
+                Anim::new("parado", [1, 2]),
+                Anim::new("pulo \"alto\"", [5, 6, 7]),
+            ],
         };
         f.anims[1].mode = Mode::Once;
         f.anims[1].fps = 8.0;

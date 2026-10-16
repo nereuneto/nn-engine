@@ -295,12 +295,24 @@ fn imagem_que_repete_em_vez_de_esticar() {
             ("cenas/esticar.cena", &cena_txt("stretch")),
         ],
     );
-    folha(&dir, "img/bloco.png", 2, 4, &[[255, 0, 0, 255], [0, 0, 255, 255]]);
+    folha(
+        &dir,
+        "img/bloco.png",
+        2,
+        4,
+        &[[255, 0, 0, 255], [0, 0, 255, 255]],
+    );
     for (path, esperado) in [
         // Repetir: 4 blocos de 16 px, cada um com 8 px vermelhos e 8 azuis.
-        ("cenas/repetir.cena", ["r", "b", "r", "b", "r", "b", "r", "b"]),
+        (
+            "cenas/repetir.cena",
+            ["r", "b", "r", "b", "r", "b", "r", "b"],
+        ),
         // Esticar: um bloco só, de 64 px.
-        ("cenas/esticar.cena", ["r", "r", "r", "r", "b", "b", "b", "b"]),
+        (
+            "cenas/esticar.cena",
+            ["r", "r", "r", "r", "b", "b", "b", "b"],
+        ),
     ] {
         let Some((mut h, _rt)) = cena(&dir, path) else {
             return;

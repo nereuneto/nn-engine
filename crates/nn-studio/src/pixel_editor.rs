@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use std::time::{Instant, SystemTime};
 
 use eframe::egui::{
-    self, Color32, Key, PointerButton, Pos2, Rect, Sense, Stroke, TextureHandle, Vec2,
+    self, Color32, Key, PointerButton, Pos2, Rect, RichText, Sense, Stroke, TextureHandle, Vec2,
 };
 use image::RgbaImage;
 
@@ -68,14 +68,18 @@ impl Tool {
 
     fn help(self) -> &'static str {
         match self {
-            Tool::Pencil => "Desenha pixel a pixel. Botão esquerdo: cor principal; direito: secundária. Shift+clique: linha desde o último ponto.",
+            Tool::Pencil => {
+                "Desenha pixel a pixel. Botão esquerdo: cor principal; direito: secundária. Shift+clique: linha desde o último ponto."
+            }
             Tool::Eraser => "Apaga (deixa transparente).",
             Tool::Fill => "Pinta a área da mesma cor (sem sair do quadro).",
             Tool::Line => "Arraste para uma linha. Shift: retas e diagonais.",
             Tool::Rect => "Arraste para um retângulo. Shift: quadrado.",
             Tool::Ellipse => "Arraste para um círculo ou elipse. Shift: círculo.",
             Tool::Picker => "Pega a cor de um pixel. (Com qualquer ferramenta: Alt+clique.)",
-            Tool::Select => "Arraste para selecionar; arraste a seleção para mover. Ctrl+C, Ctrl+X, Ctrl+V, Delete.",
+            Tool::Select => {
+                "Arraste para selecionar; arraste a seleção para mover. Ctrl+C, Ctrl+X, Ctrl+V, Delete."
+            }
         }
     }
 
@@ -185,6 +189,8 @@ pub struct PixelDoc {
     /// Animação escolhida no painel.
     pub anim_sel: Option<usize>,
     pub playing: bool,
+    /// Quadros ou animações, no painel de baixo.
+    pub bottom: Bottom,
     play_time: f64,
     play_last: Option<Instant>,
     resize: Option<[u32; 2]>,
@@ -247,6 +253,7 @@ impl PixelDoc {
             float_grab: None,
             anim_sel: None,
             playing: true,
+            bottom: Bottom::Frames,
             play_time: 0.0,
             play_last: None,
             resize: None,
@@ -309,6 +316,22 @@ impl PixelDoc {
         self.rev != self.saved_rev
     }
 
+    /// Sem `.anim`: usa o tamanho de quadro que as cenas usam para esta
+    /// imagem (não conta como alteração).
+    pub fn hint_frame_size(&mut self, w: u32, h: u32) {
+        if !self.has_frames()
+            && !self.anim_on_disk
+            && w > 0
+            && h > 0
+            && w <= self.img.width()
+            && h <= self.img.height()
+        {
+            self.anim.frame_w = w;
+            self.anim.frame_h = h;
+            self.current = self.current.min(self.frame_count() - 1);
+        }
+    }
+
     /// O arquivo mudou fora: relê, se não houver nada a perder.
     pub fn disk_changed(&mut self, root: &Path) {
         if self.is_dirty() || self.stroke.is_some() {
@@ -316,7 +339,10 @@ impl PixelDoc {
         }
         let path = root.join(&self.rel);
         let anim_m = mtime(&root.join(anim_path(&self.rel)));
-        if mtime(&path) != self.disk_mtime || anim_m.is_some() != self.anim_on_disk || anim_m.is_some() {
+        if mtime(&path) != self.disk_mtime
+            || anim_m.is_some() != self.anim_on_disk
+            || anim_m.is_some()
+        {
             self.load(root);
         }
     }
@@ -460,8 +486,17 @@ impl PixelDoc {
     pub fn add_frame(&mut self, copy: bool) {
         self.commit_floating();
         self.checkpoint(None);
-        let at = if self.has_frames() { self.current + 1 } else { 1 };
-        ops::insert_frame(&mut self.img, &mut self.anim, at, copy.then_some(self.current));
+        let at = if self.has_frames() {
+            self.current + 1
+        } else {
+            1
+        };
+        ops::insert_frame(
+            &mut self.img,
+            &mut self.anim,
+            at,
+            copy.then_some(self.current),
+        );
         self.current = at;
         self.touch();
     }
@@ -503,7 +538,10 @@ impl PixelDoc {
             ops::paste(&mut self.img, &f.img, f.x, f.y, all, false);
             self.selection = PixRect::between(
                 (f.x, f.y),
-                (f.x + f.img.width() as i32 - 1, f.y + f.img.height() as i32 - 1),
+                (
+                    f.x + f.img.width() as i32 - 1,
+                    f.y + f.img.height() as i32 - 1,
+                ),
                 all,
             );
             self.touch();
@@ -836,17 +874,35 @@ impl PixelDoc {
                     .auto_shrink([false, false])
                     .show(ui, |ui| self.side_panel(ui, project_palette, &mut actions));
             });
+        let height = ui.available_height();
         egui::Panel::bottom(egui::Id::new(("pixel-quadros", &self.rel)))
             .resizable(true)
-            .default_size(210.0)
+            .default_size((height * 0.5).clamp(150.0, 280.0))
             .min_size(120.0)
             .show(ui, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        self.frames_panel(ui);
-                        ui.add_space(4.0);
-                        self.anims_panel(ui);
+                        let (nf, na) = (self.frame_count(), self.anim.anims.len());
+                        ui.horizontal(|ui| {
+                            let r = ui.selectable_value(
+                                &mut self.bottom,
+                                Bottom::Frames,
+                                RichText::new(format!("Quadros ({nf})")).strong(),
+                            );
+                            crate::tutorial::anchor_in(ui, "pixel:aba-quadros", r.rect);
+                            let r = ui.selectable_value(
+                                &mut self.bottom,
+                                Bottom::Anims,
+                                RichText::new(format!("Animações ({na})")).strong(),
+                            );
+                            crate::tutorial::anchor_in(ui, "pixel:aba-animacoes", r.rect);
+                        });
+                        ui.separator();
+                        match self.bottom {
+                            Bottom::Frames => self.frames_panel(ui),
+                            Bottom::Anims => self.anims_panel(ui),
+                        }
                     });
             });
         self.canvas(ui, hot);
@@ -871,19 +927,6 @@ impl PixelDoc {
                     self.set_tool(t);
                 }
             }
-            ui.separator();
-            if self.tool.uses_brush() {
-                ui.label("Pincel");
-                ui.add(egui::DragValue::new(&mut self.brush).range(1..=16).suffix(" px"))
-                    .on_hover_text("Tamanho do pincel ([ e ] mudam)");
-            }
-            if self.tool.uses_fill() {
-                ui.checkbox(&mut self.filled, "Preenchido");
-            }
-            let r = ui
-                .checkbox(&mut self.mirror, "Espelhado")
-                .on_hover_text("Desenha dos dois lados ao mesmo tempo (o meio é o meio do quadro): ótimo para personagens de frente.");
-            crate::tutorial::anchor_in(ui, "pixel:espelhado", r.rect);
         });
         ui.horizontal_wrapped(|ui| {
             ui.label(format!("{} × {} px", self.img.width(), self.img.height()));
@@ -916,7 +959,7 @@ impl PixelDoc {
             if r.changed() {
                 if frames {
                     let h = self.img.height();
-                    let w = if self.img.width() % h == 0 { h } else { self.img.width() };
+                    let w = if self.img.width().is_multiple_of(h) { h } else { self.img.width() };
                     self.set_frame_size(w.min(self.img.width()), h);
                 } else {
                     self.set_frame_size(0, 0);
@@ -945,26 +988,13 @@ impl PixelDoc {
                     .selectable_value(&mut self.only_frame, true, "Quadro")
                     .on_hover_text("Mostra só o quadro atual, maior");
                 crate::tutorial::anchor_in(ui, "pixel:so-quadro", r.rect);
-                ui.checkbox(&mut self.onion, "Papel vegetal").on_hover_text(
+                let r = ui.checkbox(&mut self.onion, "Papel vegetal").on_hover_text(
                     "Mostra o quadro anterior clarinho por baixo, para desenhar o próximo passo da animação.",
                 );
+                crate::tutorial::anchor_in(ui, "pixel:papel", r.rect);
             }
             ui.separator();
             ui.checkbox(&mut self.pixel_grid, "Grade");
-            if ui.button("−").on_hover_text("Diminuir (rolar)").clicked() {
-                self.zoom = Some((self.zoom.unwrap_or(8.0) / 2.0).max(0.25));
-            }
-            ui.label(match self.zoom {
-                None => "Ajustado".to_string(),
-                Some(z) => format!("{:.0}%", z * 100.0),
-            });
-            if ui.button("+").on_hover_text("Aumentar (rolar)").clicked() {
-                self.zoom = Some((self.zoom.unwrap_or(8.0) * 2.0).min(128.0));
-            }
-            if ui.selectable_label(self.zoom.is_none(), "Ajustar").clicked() {
-                self.zoom = None;
-                self.pan = Vec2::ZERO;
-            }
             ui.separator();
             let code = if self.has_frames() {
                 format!(
@@ -1002,15 +1032,47 @@ impl PixelDoc {
         self.tool = t;
     }
 
-    fn side_panel(&mut self, ui: &mut egui::Ui, project: &mut Vec<Color>, actions: &mut Vec<PixelAction>) {
+    fn side_panel(
+        &mut self,
+        ui: &mut egui::Ui,
+        project: &mut Vec<Color>,
+        actions: &mut Vec<PixelAction>,
+    ) {
+        if self.bottom == Bottom::Anims {
+            self.preview(ui);
+            ui.add_space(6.0);
+            ui.separator();
+        }
+        ui.strong(self.tool.label());
+        ui.horizontal_wrapped(|ui| {
+            if self.tool.uses_brush() {
+                ui.label("Pincel");
+                ui.add(
+                    egui::DragValue::new(&mut self.brush)
+                        .range(1..=16)
+                        .suffix(" px"),
+                )
+                .on_hover_text("Tamanho do pincel ([ e ] mudam)");
+            }
+            if self.tool.uses_fill() {
+                ui.checkbox(&mut self.filled, "Preenchido");
+            }
+        });
+        let r = ui
+            .checkbox(&mut self.mirror, "Espelhado")
+            .on_hover_text("Desenha dos dois lados ao mesmo tempo (o meio é o meio do quadro): ótimo para personagens de frente.");
+        crate::tutorial::anchor_in(ui, "pixel:espelhado", r.rect);
+        ui.add_space(6.0);
         ui.strong("Cores");
         egui::Grid::new(("pixel-cores-grade", &self.rel))
             .num_columns(2)
             .show(ui, |ui| {
-                ui.label("Principal").on_hover_text("Botão esquerdo do mouse");
+                ui.label("Principal")
+                    .on_hover_text("Botão esquerdo do mouse");
                 ui.color_edit_button_srgba_unmultiplied(&mut self.primary);
                 ui.end_row();
-                ui.label("Secundária").on_hover_text("Botão direito do mouse");
+                ui.label("Secundária")
+                    .on_hover_text("Botão direito do mouse");
                 ui.color_edit_button_srgba_unmultiplied(&mut self.secondary);
                 ui.end_row();
             });
@@ -1018,10 +1080,13 @@ impl PixelDoc {
             std::mem::swap(&mut self.primary, &mut self.secondary);
         }
         ui.add_space(6.0);
-        let names: Vec<String> = ["Cores desta imagem".to_string(), "Paleta do projeto".to_string()]
-            .into_iter()
-            .chain(ops::PALETTES.iter().map(|(n, _)| n.to_string()))
-            .collect();
+        let names: Vec<String> = [
+            "Cores desta imagem".to_string(),
+            "Paleta do projeto".to_string(),
+        ]
+        .into_iter()
+        .chain(ops::PALETTES.iter().map(|(n, _)| n.to_string()))
+        .collect();
         let palette = self.palette.min(names.len() - 1);
         egui::ComboBox::from_id_salt(("paleta", &self.rel))
             .width(ui.available_width().min(200.0))
@@ -1037,7 +1102,7 @@ impl PixelDoc {
             i => ops::parse_hex_list(ops::PALETTES[i - 2].1),
         };
         let mut picked = None;
-        ui.horizontal_wrapped(|ui| {
+        let swatches = ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = Vec2::splat(2.0);
             // Transparente primeiro: o "apagador" de qualquer ferramenta.
             for c in std::iter::once(CLEAR).chain(colors.iter().copied()) {
@@ -1046,7 +1111,11 @@ impl PixelDoc {
                 if c[3] == 0 {
                     checkerboard(p, rect, 4.0);
                 } else {
-                    p.rect_filled(rect, 2.0, Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]));
+                    p.rect_filled(
+                        rect,
+                        2.0,
+                        Color32::from_rgba_unmultiplied(c[0], c[1], c[2], c[3]),
+                    );
                 }
                 let selected = c == self.primary;
                 let stroke = if selected {
@@ -1068,6 +1137,7 @@ impl PixelDoc {
                 }
             }
         });
+        crate::tutorial::anchor_in(ui, "pixel:paleta", swatches.response.rect);
         if let Some((c, secondary)) = picked {
             if secondary {
                 self.secondary = c;
@@ -1079,7 +1149,9 @@ impl PixelDoc {
             ui.horizontal_wrapped(|ui| {
                 if ui
                     .small_button("+ Cor principal")
-                    .on_hover_text(format!("Guarda em {PROJECT_PALETTE}, para usar em todas as imagens"))
+                    .on_hover_text(format!(
+                        "Guarda em {PROJECT_PALETTE}, para usar em todas as imagens"
+                    ))
                     .clicked()
                     && self.primary[3] > 0
                     && !project.contains(&self.primary)
@@ -1087,15 +1159,22 @@ impl PixelDoc {
                     project.push(self.primary);
                     actions.push(PixelAction::SavePalette);
                 }
-                if project.contains(&self.primary) && ui.small_button("Tirar a principal").clicked() {
+                if project.contains(&self.primary) && ui.small_button("Tirar a principal").clicked()
+                {
                     project.retain(|c| *c != self.primary);
                     actions.push(PixelAction::SavePalette);
                 }
             });
         }
 
-        ui.add_space(10.0);
-        ui.separator();
+        if self.bottom != Bottom::Anims {
+            ui.add_space(10.0);
+            ui.separator();
+            self.preview(ui);
+        }
+    }
+
+    fn preview(&mut self, ui: &mut egui::Ui) {
         ui.strong("Prévia");
         let anim = self.anim_sel.and_then(|i| self.anim.anims.get(i)).cloned();
         let frame = match &anim {
@@ -1116,10 +1195,14 @@ impl PixelDoc {
             }
         };
         let w = ui.available_width().min(200.0);
-        let (rect, _) = ui.allocate_exact_size(Vec2::new(w, w.min(160.0)), Sense::hover());
+        let (rect, _) = ui.allocate_exact_size(Vec2::new(w, w.min(120.0)), Sense::hover());
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, 4.0, ui.visuals().extreme_bg_color);
-        self.paint_frame(&painter, rect.shrink(6.0), frame.min(self.frame_count() - 1));
+        self.paint_frame(
+            &painter,
+            rect.shrink(6.0),
+            frame.min(self.frame_count() - 1),
+        );
         match &anim {
             Some(a) => {
                 ui.horizontal(|ui| {
@@ -1132,16 +1215,17 @@ impl PixelDoc {
                 });
             }
             None => {
-                ui.weak(format!("Quadro {} de {}", self.current + 1, self.frame_count()));
+                ui.weak(format!(
+                    "Quadro {} de {}",
+                    self.current + 1,
+                    self.frame_count()
+                ));
             }
         }
     }
 
     fn frames_panel(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            ui.strong("Quadros");
-            ui.weak(format!("{} de {}", self.current + 1, self.frame_count()));
-            ui.separator();
             let r = ui
                 .button("+ Novo quadro")
                 .on_hover_text("Um quadro vazio depois do atual");
@@ -1163,27 +1247,27 @@ impl PixelDoc {
                 self.delete_frame();
             }
             if ui
-                .add_enabled(self.current > 0, egui::Button::new("Para trás"))
-                .on_hover_text("Troca de lugar com o anterior")
+                .add_enabled(self.current > 0, egui::Button::new("◀"))
+                .on_hover_text("Mover para trás (troca de lugar com o anterior)")
                 .clicked()
             {
                 self.move_frame(false);
             }
             if ui
-                .add_enabled(self.current + 1 < self.frame_count(), egui::Button::new("Para frente"))
-                .on_hover_text("Troca de lugar com o próximo")
+                .add_enabled(self.current + 1 < self.frame_count(), egui::Button::new("▶"))
+                .on_hover_text("Mover para a frente (troca de lugar com o próximo)")
                 .clicked()
             {
                 self.move_frame(true);
             }
             ui.separator();
-            if ui.button("Espelhar ↔").on_hover_text("Espelha a seleção (ou o quadro) na horizontal").clicked() {
+            if ui.button("↔").on_hover_text("Espelhar na horizontal (a seleção ou o quadro). Atalho: H").clicked() {
                 self.transform(Transform::FlipH);
             }
-            if ui.button("Espelhar ↕").on_hover_text("Espelha na vertical").clicked() {
+            if ui.button("↕").on_hover_text("Espelhar na vertical (a seleção ou o quadro)").clicked() {
                 self.transform(Transform::FlipV);
             }
-            if ui.button("Girar").on_hover_text("Gira 90° (quadros quadrados)").clicked() {
+            if ui.button("Girar").on_hover_text("Gira 90° (a seleção, ou o quadro se ele for quadrado)").clicked() {
                 self.transform(Transform::Rotate);
             }
         });
@@ -1197,15 +1281,22 @@ impl PixelDoc {
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     for i in 0..self.frame_count() {
-                        let id = egui::Id::new(("quadro", &self.rel, i));
-                        let r = ui.dnd_drag_source(id, FrameDrag(i), |ui| {
-                            let (rect, r) = ui.allocate_exact_size(Vec2::new(size, size + 14.0), Sense::click());
+                        let r = {
+                            let (rect, r) = ui.allocate_exact_size(
+                                Vec2::new(size, size + 14.0),
+                                Sense::click_and_drag(),
+                            );
                             let p = ui.painter_at(rect);
                             let thumb = Rect::from_min_size(rect.min, Vec2::splat(size));
                             p.rect_filled(thumb, 3.0, ui.visuals().extreme_bg_color);
                             self.paint_frame(&p, thumb.shrink(3.0), i);
                             if i == self.current {
-                                p.rect_stroke(thumb, 3.0, Stroke::new(2.0, crate::theme::ACCENT), egui::StrokeKind::Inside);
+                                p.rect_stroke(
+                                    thumb,
+                                    3.0,
+                                    Stroke::new(2.0, crate::theme::ACCENT),
+                                    egui::StrokeKind::Inside,
+                                );
                             }
                             p.text(
                                 Pos2::new(thumb.center().x, thumb.bottom() + 7.0),
@@ -1215,13 +1306,14 @@ impl PixelDoc {
                                 ui.visuals().text_color(),
                             );
                             r
-                        });
-                        let clicked = r.inner.clicked() || (r.response.clicked());
-                        if clicked {
+                        };
+                        r.dnd_set_drag_payload(FrameDrag(i));
+                        self.drag_ghost(ui, &r, i);
+                        if r.clicked() {
                             self.current = i;
                             self.playing = false;
                         }
-                        r.response.on_hover_text(format!(
+                        r.on_hover_text(format!(
                             "Quadro {} (clique para desenhar nele; arraste para uma animação)",
                             i + 1
                         ));
@@ -1230,54 +1322,68 @@ impl PixelDoc {
             });
     }
 
+    /// Enquanto arrasta um quadro, a miniatura acompanha o mouse.
+    fn drag_ghost(&self, ui: &egui::Ui, r: &egui::Response, frame: u32) {
+        if !r.dragged() {
+            return;
+        }
+        if let Some(pos) = ui.ctx().pointer_interact_pos() {
+            let layer = egui::LayerId::new(egui::Order::Tooltip, r.id.with("arrastando"));
+            let painter = ui.ctx().layer_painter(layer);
+            let rect = Rect::from_center_size(pos, Vec2::splat(40.0));
+            painter.rect_filled(rect, 3.0, ui.visuals().extreme_bg_color);
+            self.paint_frame(
+                &painter,
+                rect.shrink(3.0),
+                frame.min(self.frame_count() - 1),
+            );
+        }
+    }
+
     fn anims_panel(&mut self, ui: &mut egui::Ui) {
-        ui.separator();
+        let mut remove = None;
+        let mut duplicate = None;
         ui.horizontal_wrapped(|ui| {
-            ui.strong("Animações");
-            ui.weak(format!("(salvas em {})", anim_path(&self.rel).rsplit('/').next().unwrap_or("")));
-            let r = ui
-                .button("+ Nova animação")
-                .on_hover_text("A primeira usa todos os quadros; as outras começam com o quadro atual.");
+            for i in 0..self.anim.anims.len() {
+                let name = self.anim.anims[i].name.clone();
+                let r = ui.selectable_label(self.anim_sel == Some(i), &name);
+                if r.clicked() {
+                    self.anim_sel = Some(i);
+                    self.play_time = 0.0;
+                    self.playing = true;
+                }
+                r.context_menu(|ui| {
+                    if ui.button("Duplicar").clicked() {
+                        duplicate = Some(i);
+                        ui.close();
+                    }
+                    if ui.button("Excluir").clicked() {
+                        remove = Some(i);
+                        ui.close();
+                    }
+                });
+            }
+            let r = ui.button("+ Nova animação").on_hover_text(
+                "A primeira usa todos os quadros; as outras começam com o quadro atual.",
+            );
             crate::tutorial::anchor_in(ui, "pixel:nova-animacao", r.rect);
             if r.clicked() {
                 self.new_anim();
                 self.playing = true;
             }
+            ui.weak(format!(
+                "salvas em {}",
+                anim_path(&self.rel).rsplit('/').next().unwrap_or("")
+            ));
         });
         if self.anim.anims.is_empty() {
             ui.weak("Nenhuma ainda. Uma animação é uma sequência de quadros com nome (\"andar\", \"pular\"), usada pela Animação automática, pelos eventos e pelo código.");
             return;
         }
-        let mut remove = None;
-        let mut duplicate = None;
-        ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.set_width(150.0);
-                for i in 0..self.anim.anims.len() {
-                    let name = self.anim.anims[i].name.clone();
-                    let r = ui.selectable_label(self.anim_sel == Some(i), &name);
-                    if r.clicked() {
-                        self.anim_sel = Some(i);
-                        self.play_time = 0.0;
-                        self.playing = true;
-                    }
-                    r.context_menu(|ui| {
-                        if ui.button("Duplicar").clicked() {
-                            duplicate = Some(i);
-                            ui.close();
-                        }
-                        if ui.button("Excluir").clicked() {
-                            remove = Some(i);
-                            ui.close();
-                        }
-                    });
-                }
-            });
-            ui.separator();
-            if let Some(i) = self.anim_sel.filter(|i| *i < self.anim.anims.len()) {
-                ui.vertical(|ui| self.anim_editor(ui, i, &mut remove, &mut duplicate));
-            }
-        });
+        if let Some(i) = self.anim_sel.filter(|i| *i < self.anim.anims.len()) {
+            ui.add_space(2.0);
+            self.anim_editor(ui, i, &mut remove, &mut duplicate);
+        }
         if let Some(i) = duplicate {
             self.checkpoint(None);
             let mut copy = self.anim.anims[i].clone();
@@ -1298,15 +1404,54 @@ impl PixelDoc {
         }
     }
 
-    fn anim_editor(&mut self, ui: &mut egui::Ui, i: usize, remove: &mut Option<usize>, duplicate: &mut Option<usize>) {
+    fn anim_editor(
+        &mut self,
+        ui: &mut egui::Ui,
+        i: usize,
+        remove: &mut Option<usize>,
+        duplicate: &mut Option<usize>,
+    ) {
         let a = self.anim.anims[i].clone();
         ui.horizontal_wrapped(|ui| {
+            let mut all = false;
+            let mut clear = false;
+            ui.menu_button("☰", |ui| {
+                if ui.button("Usar todos os quadros da folha").clicked() {
+                    all = true;
+                    ui.close();
+                }
+                if ui.button("Tirar todos os quadros").clicked() {
+                    clear = true;
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("Duplicar animação").clicked() {
+                    *duplicate = Some(i);
+                    ui.close();
+                }
+                if ui.button("Excluir animação").clicked() {
+                    *remove = Some(i);
+                    ui.close();
+                }
+            });
+            if all || clear {
+                let n = if all { self.frame_count() } else { 0 };
+                self.anim_edit(i, "", |a| {
+                    a.frames = (1..=n).map(|index| Frame { index, time: None }).collect();
+                });
+                self.last_edit = None;
+            }
             ui.label("Nome");
             let mut name = a.name.clone();
-            let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(110.0));
+            let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(90.0));
             crate::tutorial::anchor_in(ui, "pixel:nome-animacao", r.rect);
             if r.changed() {
-                let taken = self.anim.anims.iter().enumerate().any(|(k, o)| k != i && o.name == name);
+                let taken = self
+                    .anim
+                    .anims
+                    .iter()
+                    .enumerate()
+                    .any(|(k, o)| k != i && o.name == name);
                 if !name.trim().is_empty() && !taken {
                     self.anim_edit(i, "nome", |a| a.name = name);
                 }
@@ -1314,7 +1459,12 @@ impl PixelDoc {
             ui.label("Ritmo");
             let mut fps = a.fps;
             if ui
-                .add(egui::DragValue::new(&mut fps).range(0.5..=60.0).speed(0.2).suffix(" quadros/s"))
+                .add(
+                    egui::DragValue::new(&mut fps)
+                        .range(0.5..=60.0)
+                        .speed(0.2)
+                        .suffix(" quadros/s"),
+                )
                 .changed()
             {
                 self.anim_edit(i, "fps", |a| a.fps = fps);
@@ -1331,30 +1481,6 @@ impl PixelDoc {
                 self.anim_edit(i, "modo", |a| a.mode = mode);
             }
             ui.weak(format!("{:.2} s", a.duration()));
-            if ui.small_button("Duplicar").clicked() {
-                *duplicate = Some(i);
-            }
-            if ui.small_button("Excluir").clicked() {
-                *remove = Some(i);
-            }
-        });
-        ui.horizontal_wrapped(|ui| {
-            let r = ui
-                .small_button("+ Quadro atual")
-                .on_hover_text("Põe o quadro atual no fim da animação (ou arraste quadros da fita para cá)");
-            crate::tutorial::anchor_in(ui, "pixel:mais-quadro", r.rect);
-            if r.clicked() {
-                let f = self.current + 1;
-                self.anim_edit(i, "", |a| a.frames.push(Frame { index: f, time: None }));
-                self.last_edit = None;
-            }
-            if ui.small_button("Todos os quadros").clicked() {
-                let n = self.frame_count();
-                self.anim_edit(i, "", |a| {
-                    a.frames = (1..=n).map(|index| Frame { index, time: None }).collect();
-                });
-                self.last_edit = None;
-            }
         });
         // Linha do tempo.
         let size = 46.0;
@@ -1367,9 +1493,8 @@ impl PixelDoc {
                 ui.horizontal(|ui| {
                     let playing_pos = (self.playing).then(|| a.position_at(self.play_time)).flatten();
                     for (k, f) in a.frames.iter().enumerate() {
-                        let id = egui::Id::new(("tl", &self.rel, i, k));
-                        let r = ui.dnd_drag_source(id, TimelineDrag(k), |ui| {
-                            let (rect, r) = ui.allocate_exact_size(Vec2::new(size, size + 26.0), Sense::click());
+                        let r = {
+                            let (rect, r) = ui.allocate_exact_size(Vec2::new(size, size + 26.0), Sense::click_and_drag());
                             let p = ui.painter_at(rect);
                             let thumb = Rect::from_min_size(rect.min, Vec2::splat(size));
                             p.rect_filled(thumb, 3.0, ui.visuals().extreme_bg_color);
@@ -1398,8 +1523,10 @@ impl PixelDoc {
                                 },
                             );
                             r
-                        });
-                        let resp = r.inner.union(r.response.clone());
+                        };
+                        r.dnd_set_drag_payload(TimelineDrag(k));
+                        self.drag_ghost(ui, &r, f.index.saturating_sub(1));
+                        let resp = r;
                         if resp.clicked() {
                             select = Some(f.index.saturating_sub(1));
                         }
@@ -1464,6 +1591,40 @@ impl PixelDoc {
                     end.on_hover_text("Arraste um quadro da fita para cá");
                 });
             });
+        // Os quadros da folha: clique (ou arraste) para pôr na animação.
+        let mut add = None;
+        ui.horizontal_wrapped(|ui| {
+            ui.weak("Quadros da folha:");
+            ui.spacing_mut().item_spacing.x = 3.0;
+            for f in 0..self.frame_count() {
+                let (rect, resp) =
+                    ui.allocate_exact_size(Vec2::splat(30.0), Sense::click_and_drag());
+                let p = ui.painter_at(rect);
+                p.rect_filled(rect, 2.0, ui.visuals().extreme_bg_color);
+                self.paint_frame(&p, rect.shrink(2.0), f);
+                resp.dnd_set_drag_payload(FrameDrag(f));
+                self.drag_ghost(ui, &resp, f);
+                if f == 0 {
+                    crate::tutorial::anchor_in(ui, "pixel:mini-quadros", resp.rect);
+                }
+                if resp.clicked() {
+                    add = Some(f);
+                }
+                resp.on_hover_text(format!(
+                    "Quadro {}: clique para pôr no fim da animação",
+                    f + 1
+                ));
+            }
+        });
+        if let Some(f) = add {
+            self.anim_edit(i, "", |a| {
+                a.frames.push(Frame {
+                    index: f + 1,
+                    time: None,
+                })
+            });
+            self.last_edit = None;
+        }
         if let Some(f) = select {
             self.current = f.min(self.frame_count() - 1);
             self.playing = false;
@@ -1487,7 +1648,13 @@ impl PixelDoc {
         }
         if let Some((at, what)) = drop_at {
             self.anim_edit(i, "", |a| match what {
-                Drop::Frame(f) => a.frames.insert(at.min(a.frames.len()), Frame { index: f + 1, time: None }),
+                Drop::Frame(f) => a.frames.insert(
+                    at.min(a.frames.len()),
+                    Frame {
+                        index: f + 1,
+                        time: None,
+                    },
+                ),
                 Drop::Move(from) => {
                     if from < a.frames.len() {
                         let f = a.frames.remove(from);
@@ -1516,10 +1683,14 @@ impl PixelDoc {
         let fit = if fit > 1.0 { fit.floor() } else { fit };
         let zoom = self.zoom.unwrap_or(fit);
         let origin = rect.center() + self.pan - view_size * zoom / 2.0;
-        let to_screen = |x: f32, y: f32| origin + Vec2::new(x - view.x as f32, y - view.y as f32) * zoom;
+        let to_screen =
+            |x: f32, y: f32| origin + Vec2::new(x - view.x as f32, y - view.y as f32) * zoom;
         let to_pixel = |p: Pos2| {
             let v = (p - origin) / zoom;
-            ((v.x + view.x as f32).floor() as i32, (v.y + view.y as f32).floor() as i32)
+            (
+                (v.x + view.x as f32).floor() as i32,
+                (v.y + view.y as f32).floor() as i32,
+            )
         };
 
         // Zoom (rolar) e arrastar a vista (botão do meio ou Espaço).
@@ -1535,8 +1706,10 @@ impl PixelDoc {
                 self.zoom = Some(new_zoom);
             }
         }
-        let (space, alt, shift) = ui.input(|i| (i.key_down(Key::Space), i.modifiers.alt, i.modifiers.shift));
-        let panning = resp.dragged_by(PointerButton::Middle) || (space && resp.dragged_by(PointerButton::Primary));
+        let (space, alt, shift) =
+            ui.input(|i| (i.key_down(Key::Space), i.modifiers.alt, i.modifiers.shift));
+        let panning = resp.dragged_by(PointerButton::Middle)
+            || (space && resp.dragged_by(PointerButton::Primary));
         if panning {
             self.pan += resp.drag_delta();
         }
@@ -1550,16 +1723,32 @@ impl PixelDoc {
             let prev = self.onion_frame();
             if let (Some(prev), Some(tex)) = (prev, &self.tex) {
                 let cur = self.cell(self.current);
-                let r = Rect::from_min_size(to_screen(cur.x as f32, cur.y as f32), Vec2::new(cur.w as f32, cur.h as f32) * zoom);
-                painter.image(tex.id(), r, self.uv(self.cell(prev)), Color32::from_white_alpha(70));
+                let r = Rect::from_min_size(
+                    to_screen(cur.x as f32, cur.y as f32),
+                    Vec2::new(cur.w as f32, cur.h as f32) * zoom,
+                );
+                painter.image(
+                    tex.id(),
+                    r,
+                    self.uv(self.cell(prev)),
+                    Color32::from_white_alpha(70),
+                );
             }
         }
         if let Some(tex) = &self.tex {
             painter.image(tex.id(), img_rect, self.uv(view), Color32::WHITE);
         }
         if let (Some(f), Some(tex)) = (&self.floating, &self.float_tex) {
-            let r = Rect::from_min_size(to_screen(f.x as f32, f.y as f32), Vec2::new(f.img.width() as f32, f.img.height() as f32) * zoom);
-            painter.image(tex.id(), r, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+            let r = Rect::from_min_size(
+                to_screen(f.x as f32, f.y as f32),
+                Vec2::new(f.img.width() as f32, f.img.height() as f32) * zoom,
+            );
+            painter.image(
+                tex.id(),
+                r,
+                Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                Color32::WHITE,
+            );
             dashed_rect(&painter, r);
         }
         // Grades.
@@ -1578,25 +1767,43 @@ impl PixelDoc {
             let stroke = Stroke::new(1.0, Color32::from_rgb(0xFF, 0x9F, 0x1C).gamma_multiply(0.7));
             for i in 0..self.frame_count() {
                 let c = self.cell(i);
-                let r = Rect::from_min_size(to_screen(c.x as f32, c.y as f32), Vec2::new(c.w as f32, c.h as f32) * zoom);
+                let r = Rect::from_min_size(
+                    to_screen(c.x as f32, c.y as f32),
+                    Vec2::new(c.w as f32, c.h as f32) * zoom,
+                );
                 painter.rect_stroke(r, 0.0, stroke, egui::StrokeKind::Inside);
             }
             if self.frame_count() > 1 {
                 let c = self.cell(self.current);
-                let r = Rect::from_min_size(to_screen(c.x as f32, c.y as f32), Vec2::new(c.w as f32, c.h as f32) * zoom);
-                painter.rect_stroke(r, 0.0, Stroke::new(2.0, crate::theme::ACCENT), egui::StrokeKind::Outside);
+                let r = Rect::from_min_size(
+                    to_screen(c.x as f32, c.y as f32),
+                    Vec2::new(c.w as f32, c.h as f32) * zoom,
+                );
+                painter.rect_stroke(
+                    r,
+                    0.0,
+                    Stroke::new(2.0, crate::theme::ACCENT),
+                    egui::StrokeKind::Outside,
+                );
             }
         }
         if self.mirror {
             let c = self.cell(self.current);
             let x = to_screen(c.x as f32 + c.w as f32 / 2.0, 0.0).x;
             let top = to_screen(0.0, c.y as f32).y;
-            painter.vline(x, top..=top + c.h as f32 * zoom, Stroke::new(1.0, Color32::from_rgb(0x41, 0xA6, 0xF6)));
+            painter.vline(
+                x,
+                top..=top + c.h as f32 * zoom,
+                Stroke::new(1.0, Color32::from_rgb(0x41, 0xA6, 0xF6)),
+            );
         }
         if let Some(s) = self.selection
             && self.floating.is_none()
         {
-            let r = Rect::from_min_size(to_screen(s.x as f32, s.y as f32), Vec2::new(s.w as f32, s.h as f32) * zoom);
+            let r = Rect::from_min_size(
+                to_screen(s.x as f32, s.y as f32),
+                Vec2::new(s.w as f32, s.h as f32) * zoom,
+            );
             dashed_rect(&painter, r);
         }
 
@@ -1627,7 +1834,8 @@ impl PixelDoc {
                 if let Some(s) = &self.stroke {
                     let down = ui.input(|i| i.pointer.button_down(s.button));
                     if down {
-                        if p != s.last || matches!(s.tool, Tool::Line | Tool::Rect | Tool::Ellipse) {
+                        if p != s.last || matches!(s.tool, Tool::Line | Tool::Rect | Tool::Ellipse)
+                        {
                             self.continue_stroke(p, shift);
                         }
                     } else {
@@ -1646,13 +1854,57 @@ impl PixelDoc {
             }
         }
 
+        // Zoom, no canto da tela.
+        let bar = Rect::from_min_size(
+            rect.right_top() + Vec2::new(-176.0, 6.0),
+            Vec2::new(170.0, 22.0),
+        );
+        painter.rect_filled(
+            bar.expand(2.0),
+            4.0,
+            ui.visuals().extreme_bg_color.gamma_multiply(0.85),
+        );
+        let mut zoom_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(bar)
+                .layout(egui::Layout::right_to_left(egui::Align::Center)),
+        );
+        if zoom_ui
+            .selectable_label(self.zoom.is_none(), "Ajustar")
+            .on_hover_text("Cabe tudo na tela")
+            .clicked()
+        {
+            self.zoom = None;
+            self.pan = Vec2::ZERO;
+        }
+        if zoom_ui
+            .small_button("+")
+            .on_hover_text("Aumentar (ou role o mouse)")
+            .clicked()
+        {
+            self.zoom = Some((zoom * 2.0).min(128.0));
+        }
+        zoom_ui.label(RichText::new(format!("{:.0}%", zoom * 100.0)).monospace());
+        if zoom_ui
+            .small_button("−")
+            .on_hover_text("Diminuir (ou role o mouse)")
+            .clicked()
+        {
+            self.zoom = Some((zoom / 2.0).max(0.1));
+        }
+
         // Cursor e coordenadas.
         if let Some((x, y)) = self.hover_px
             && hot
         {
             if PixRect::of(&self.img).contains(x, y) {
                 let r = Rect::from_min_size(to_screen(x as f32, y as f32), Vec2::splat(zoom));
-                painter.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_white_alpha(140)), egui::StrokeKind::Outside);
+                painter.rect_stroke(
+                    r,
+                    0.0,
+                    Stroke::new(1.0, Color32::from_white_alpha(140)),
+                    egui::StrokeKind::Outside,
+                );
                 let mut info = format!("x {x} · y {y}");
                 if self.has_frames()
                     && let Some(f) = self.frame_at(x, y)
@@ -1682,15 +1934,29 @@ impl PixelDoc {
             && let Some(pos) = a.frames.iter().position(|f| f.index == self.current + 1)
             && a.frames.len() > 1
         {
-            let prev = if pos == 0 { a.frames.len() - 1 } else { pos - 1 };
-            return Some(a.frames[prev].index.saturating_sub(1).min(self.frame_count() - 1));
+            let prev = if pos == 0 {
+                a.frames.len() - 1
+            } else {
+                pos - 1
+            };
+            return Some(
+                a.frames[prev]
+                    .index
+                    .saturating_sub(1)
+                    .min(self.frame_count() - 1),
+            );
         }
         (self.current > 0).then(|| self.current - 1)
     }
 
     fn select_press(&mut self, p: (i32, i32)) {
         if let Some(f) = &self.floating {
-            let r = PixRect::new(f.x.max(0) as u32, f.y.max(0) as u32, f.img.width(), f.img.height());
+            let r = PixRect::new(
+                f.x.max(0) as u32,
+                f.y.max(0) as u32,
+                f.img.width(),
+                f.img.height(),
+            );
             if p.0 >= f.x && p.1 >= f.y && p.0 < f.x + r.w as i32 && p.1 < f.y + r.h as i32 {
                 self.float_grab = Some((p.0 - f.x, p.1 - f.y));
                 return;
@@ -1794,6 +2060,14 @@ impl PixelDoc {
     }
 }
 
+/// O que o painel de baixo mostra.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Bottom {
+    #[default]
+    Frames,
+    Anims,
+}
+
 #[derive(Debug, Clone, Copy)]
 enum Drop {
     Frame(u32),
@@ -1845,9 +2119,25 @@ fn checkerboard(painter: &egui::Painter, rect: Rect, cell: f32) {
 }
 
 fn dashed_rect(painter: &egui::Painter, r: Rect) {
-    painter.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::BLACK), egui::StrokeKind::Outside);
-    let pts = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()];
-    painter.extend(egui::Shape::dashed_line(&pts, Stroke::new(1.0, Color32::WHITE), 4.0, 4.0));
+    painter.rect_stroke(
+        r,
+        0.0,
+        Stroke::new(1.0, Color32::BLACK),
+        egui::StrokeKind::Outside,
+    );
+    let pts = [
+        r.left_top(),
+        r.right_top(),
+        r.right_bottom(),
+        r.left_bottom(),
+        r.left_top(),
+    ];
+    painter.extend(egui::Shape::dashed_line(
+        &pts,
+        Stroke::new(1.0, Color32::WHITE),
+        4.0,
+        4.0,
+    ));
 }
 
 /// Para a lista de "Nova imagem": tamanhos comuns de quadro.
@@ -1887,7 +2177,11 @@ mod tests {
         d.end_stroke();
         assert!(d.is_dirty());
         assert_eq!(ops::get(&d.img, 2, 1), Some(d.primary));
-        assert_eq!(ops::get(&d.img, 4, 1), Some(CLEAR), "não passa para o quadro 2");
+        assert_eq!(
+            ops::get(&d.img, 4, 1),
+            Some(CLEAR),
+            "não passa para o quadro 2"
+        );
         d.undo();
         assert!(!d.is_dirty(), "desfazer volta ao estado salvo");
         d.redo();
@@ -1929,7 +2223,11 @@ mod tests {
         d.secondary = [9, 9, 9, 255];
         d.begin_stroke(Tool::Fill, PointerButton::Secondary, (0, 0), false);
         assert_eq!(ops::get(&d.img, 3, 3), Some([9, 9, 9, 255]));
-        assert_eq!(ops::get(&d.img, 8, 0), Some(CLEAR), "o balde não sai do quadro");
+        assert_eq!(
+            ops::get(&d.img, 8, 0),
+            Some(CLEAR),
+            "o balde não sai do quadro"
+        );
     }
 
     #[test]
@@ -1955,7 +2253,11 @@ mod tests {
         assert_eq!(ops::get(&d.img, 8, 0), Some(d.primary), "colou no quadro 3");
         d.transform(Transform::FlipH);
         d.commit_floating();
-        assert_eq!(ops::get(&d.img, 9, 0), Some(d.primary), "espelhou a seleção");
+        assert_eq!(
+            ops::get(&d.img, 9, 0),
+            Some(d.primary),
+            "espelhou a seleção"
+        );
         assert_eq!(ops::get(&d.img, 8, 0), Some(CLEAR));
     }
 

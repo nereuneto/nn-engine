@@ -420,7 +420,11 @@ pub enum InspectorAction {
     /// Mostrar o painel Eventos.
     ShowEvents,
     /// Criar uma imagem nova (pixel art) para o componente `ci` do objeto.
-    NewImage { id: u32, ci: usize, name: String },
+    NewImage {
+        id: u32,
+        ci: usize,
+        name: String,
+    },
 }
 
 /// Resumo das regras de eventos, com o botão para editar. Devolve `true` se
@@ -1480,9 +1484,9 @@ impl Inspector {
                         });
                     }
                 } else {
-                    let r = ui
-                        .button("🎨 Editar imagem")
-                        .on_hover_text("Abre a imagem no editor de pixel art (e as animações dela)");
+                    let r = ui.button("🎨 Editar imagem").on_hover_text(
+                        "Abre a imagem no editor de pixel art (e as animações dela)",
+                    );
                     crate::tutorial::anchor_in(ui, "inspetor:editar-imagem", r.rect);
                     if r.clicked() {
                         self.actions_out
@@ -1818,15 +1822,29 @@ fn anim_field(
     let mut v = current.str().to_string();
     let mut changed = false;
     ui.horizontal(|ui| {
-        let w = if anims.is_empty() { width } else { width - 28.0 };
+        let w = if anims.is_empty() {
+            width
+        } else {
+            width - 28.0
+        };
         let r = ui.add(
             egui::TextEdit::singleline(&mut v)
                 .desired_width(w.max(40.0))
                 .hint_text(if anims.is_empty() { "" } else { "(nenhuma)" }),
         );
         changed |= r.changed();
-        if !v.is_empty() && !anims.is_empty() && !anims.contains(&v) && !v.chars().next().is_some_and(|c| c.is_ascii_digit()) {
-            r.on_hover_text(format!("A imagem não tem a animação \"{v}\". Tem: {}", anims.join(", ")));
+        if spec.key == "animation" {
+            crate::tutorial::anchor_in(ui, "inspetor.animacao", r.rect);
+        }
+        if !v.is_empty()
+            && !anims.is_empty()
+            && !anims.contains(&v)
+            && !v.chars().next().is_some_and(|c| c.is_ascii_digit())
+        {
+            r.on_hover_text(format!(
+                "A imagem não tem a animação \"{v}\". Tem: {}",
+                anims.join(", ")
+            ));
         }
         if !anims.is_empty() {
             ui.push_id(("anim", salt, &spec.key), |ui| {

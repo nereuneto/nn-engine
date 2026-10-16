@@ -478,25 +478,26 @@ impl SceneRenderer {
                         });
                         let (fw, fh) = (fw as u32, fh as u32);
                         let tex_size = self.renderer.texture_size(tex);
-                        let (sprite, natural) = if fw > 0 && fh > 0 && fw <= tex_size.x && fh <= tex_size.y {
-                            let sheet = self.renderer.sprite_sheet(tex, UVec2::new(fw, fh));
-                            // Com animação, o editor já mostra ela tocando.
-                            let playing = Some(c.str("animation"))
-                                .filter(|a| !a.is_empty())
-                                .and_then(|name| {
-                                    let file = self.anims.get(root, c.str("image"))?;
-                                    let a = file.find(name)?;
-                                    let pos = a.position_at(time as f64)?;
-                                    Some(a.frames[pos].index)
-                                });
-                            let frame = playing.unwrap_or(c.num("frame").max(1.0) as u32);
-                            if frame > sheet.frame_count() {
-                                continue;
-                            }
-                            (sheet.sprite(frame - 1), Vec2::new(fw as f32, fh as f32))
-                        } else {
-                            (Sprite::new(tex), self.renderer.texture_size(tex).as_vec2())
-                        };
+                        let (sprite, natural) =
+                            if fw > 0 && fh > 0 && fw <= tex_size.x && fh <= tex_size.y {
+                                let sheet = self.renderer.sprite_sheet(tex, UVec2::new(fw, fh));
+                                // Com animação, o editor já mostra ela tocando.
+                                let playing = Some(c.str("animation"))
+                                    .filter(|a| !a.is_empty())
+                                    .and_then(|name| {
+                                        let file = self.anims.get(root, c.str("image"))?;
+                                        let a = file.find(name)?;
+                                        let pos = a.position_at(time as f64)?;
+                                        Some(a.frames[pos].index)
+                                    });
+                                let frame = playing.unwrap_or(c.num("frame").max(1.0) as u32);
+                                if frame > sheet.frame_count() {
+                                    continue;
+                                }
+                                (sheet.sprite(frame - 1), Vec2::new(fw as f32, fh as f32))
+                            } else {
+                                (Sprite::new(tex), self.renderer.texture_size(tex).as_vec2())
+                            };
                         let mut sz = Vec2::new(
                             if c.num("w") > 0.0 {
                                 c.num("w") as f32

@@ -429,17 +429,35 @@ mod tests {
     fn duracao_por_quadro() {
         let a = Animation::new([7, 8, 9], 10.0).with_times([0.1, 0.5, 0.1]);
         let at = |t: f32| a.frame_at(t);
-        assert_eq!([at(0.05), at(0.15), at(0.55), at(0.65), at(0.75)], [7, 8, 8, 9, 7]);
+        assert_eq!(
+            [at(0.05), at(0.15), at(0.55), at(0.65), at(0.75)],
+            [7, 8, 8, 9, 7]
+        );
         let once = Animation::new([1, 2], 10.0).once().with_times([0.2, 0.3]);
         assert_eq!(once.frame_at(0.25), 2);
         assert!(!once.is_finished_at(0.4));
         assert!(once.is_finished_at(0.5));
-        let pp = Animation::new([0, 1, 2], 10.0).ping_pong().with_times([1.0, 0.1, 0.1]);
+        let pp = Animation::new([0, 1, 2], 10.0)
+            .ping_pong()
+            .with_times([1.0, 0.1, 0.1]);
         // 0 (1 s), 1, 2, 1 e volta ao 0.
         assert!((pp.duration() - 1.3).abs() < 1e-5);
-        assert_eq!([pp.frame_at(0.5), pp.frame_at(1.05), pp.frame_at(1.15), pp.frame_at(1.25)], [0, 1, 2, 1]);
+        assert_eq!(
+            [
+                pp.frame_at(0.5),
+                pp.frame_at(1.05),
+                pp.frame_at(1.15),
+                pp.frame_at(1.25)
+            ],
+            [0, 1, 2, 1]
+        );
         // Tudo igual a 1/fps: sem lista própria.
-        assert!(Animation::new([0, 1], 10.0).with_times([0.1, 0.1]).times().is_none());
+        assert!(
+            Animation::new([0, 1], 10.0)
+                .with_times([0.1, 0.1])
+                .times()
+                .is_none()
+        );
     }
 
     #[test]

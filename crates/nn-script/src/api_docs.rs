@@ -284,11 +284,7 @@ pub const API_DOCS: &[ApiDoc] = &[
         "(caminho)",
         "Conteúdo de um arquivo de texto.",
     ),
-    d(
-        "nn.assets.exists",
-        "(caminho)",
-        "O arquivo existe no jogo?",
-    ),
+    d("nn.assets.exists", "(caminho)", "O arquivo existe no jogo?"),
     d(
         "nn.assets.animations",
         "(imagem)",

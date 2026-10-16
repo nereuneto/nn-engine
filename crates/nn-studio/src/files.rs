@@ -425,7 +425,11 @@ pub fn safe_name(text: &str) -> String {
         }
     }
     let out = out.trim_matches('_').to_string();
-    if out.is_empty() { "desenho".into() } else { out }
+    if out.is_empty() {
+        "desenho".into()
+    } else {
+        out
+    }
 }
 
 pub fn join_rel(dir: &str, name: &str) -> String {
