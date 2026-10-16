@@ -34,7 +34,7 @@ meu-jogo/
 ├── lib/
 │   └── util.lua        módulos: local util = require("lib.util")
 └── assets/
-    ├── imagens/
+    ├── imagens/        heroi.png e, ao lado, heroi.anim (as animações dela)
     └── sons/
 ```
 
@@ -165,7 +165,7 @@ Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), 
 
 | `type` | Campos (padrão) |
 |---|---|
-| `sprite` | `image`, `frame_w`, `frame_h` (0 = imagem inteira), `frame` (1), `w`, `h` (0 = tamanho da imagem), `color` ("#FFFFFF"), `flip_x`, `flip_y`, `pixel_art` (true) |
+| `sprite` | `image`, `frame_w`, `frame_h` (0 = imagem inteira, ou o tamanho do `.anim` da imagem), `frame` (1), `w`, `h` (0 = tamanho da imagem), `color` ("#FFFFFF"), `flip_x`, `flip_y`, `pixel_art` (true), `fill` ("stretch" ou "repeat": repete a imagem lado a lado; `w` e `h` são o tamanho de cada cópia e a escala do objeto diz quantas cabem), `animation` ("": uma [animação](#animações-anim) da imagem para tocar desde o começo) |
 | `text` | `text`, `size` (32), `color`, `anchor` ("center", "left", "right"...) |
 | `shape` | `shape` ("rect" ou "circle"), `w`, `h` (64), `radius` (32), `color` |
 | `body` | `body` ("dynamic", "static" ou "kinematic"), `shape` ("box" ou "circle"), `w`, `h` (32), `radius` (16), `sensor`, `one_way`, `bounce` (0), `gravity_scale` (1), `tag` (padrão: o nome do objeto) |
@@ -186,6 +186,8 @@ A cena e cada objeto também podem ter `events`, as regras [Quando... Então...]
 | `self:find(nome)`, `self:find_all(nome)` | Um objeto / a lista de todos com o nome. |
 | `obj.x`, `obj.y`, `obj.rotation`, `obj.scale_x`, `obj.scale_y`, `obj.visible`, `obj.layer` | Leitura e escrita. Com corpo físico, `x` e `y` acompanham o corpo. |
 | `obj.sprite`, `obj.text`, `obj.shape`, `obj.camera` | O componente (primeiro do tipo): mude os campos à vontade (`obj.sprite.frame = 3`, `obj.text.text = "Fim"`, `obj.shape.color = "#FF0000"`). |
+| `obj.sprite:play(nome, reiniciar)` | Toca uma [animação](#animações-anim) da imagem (se já estiver tocando, continua; `reiniciar = true` começa de novo). Também dá para mudar `obj.sprite.animation`. |
+| `obj.sprite:stop()`, `:finished()`, `:animations()` | Para (o quadro atual fica) / a animação de modo "once" chegou ao fim? / os nomes das animações da imagem. Ao terminar, o objeto recebe a mensagem `animacao_terminou` (com o nome). |
 | `obj.body` | O corpo físico ([nn.physics](#nnphysics)): `vx`, `vy`, `on_ground`, `:set_position`... |
 | `obj.map`, `obj.particles`, `obj.sound` | O mapa carregado, o emissor de partículas e o som. |
 | `obj:component(tipo)`, `obj.components` | Qualquer componente, pelo tipo / todos. |
@@ -274,7 +276,7 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:checkpoint` | Ponto de reinício. | `quem` ("") |
 | `nn:ir_para_cena` | Leva para outra cena. | `cena`, `quem` (""), `tecla` (false: precisa apertar para cima / Enter), `escurecer` (0.5 s) |
 | `nn:movimento` | Gira, flutua ou vai e volta (com corpo cinemático, carrega quem está em cima). | `tipo` ("ir_e_voltar", "flutuar", "girar"), `distancia_x` (200), `distancia_y` (0), `altura` (12), `duracao` (2), `velocidade` (90) |
-| `nn:animacao` | Troca os quadros conforme o estado. Precisa de imagem. | `parado` ("1"), `andando`, `pulando`, `caindo` (listas como `"1-4"` ou `"5,6"`; vazio usa o anterior), `fps` (10), `espelhar` (true) |
+| `nn:animacao` | Troca a animação conforme o estado. Precisa de imagem. | `parado` ("1"), `andando`, `pulando`, `caindo` (o nome de uma [animação](#animações-anim) da imagem, como `"andar"`, ou quadros como `"1-4"` e `"5,6"`; vazio usa o anterior), `fps` (10, para quadros), `espelhar` (true) |
 | `nn:mostrar_valor` | Escreve variáveis num texto. Precisa de texto. | `texto` ("Moedas: {moedas}") |
 | `nn:atirar` | Cria um prefab andando. | `prefab`, `tecla` ("x"; vazio = sozinho), `intervalo` (0.3), `velocidade` (700), `direcao` ("frente", "jogador", "direita", "cima"), `som`, `distancia` (24) |
 | `nn:gerador` | Cria um prefab de tempos em tempos. | `prefab`, `intervalo` (2), `maximo` (10), `espalhar_x`, `espalhar_y` (0), `comecar_ja` (false) |
@@ -373,6 +375,7 @@ Condições (`cond`):
 | `visivel` | `quem`, `estado` ("visivel", "escondido") |
 | `pegar` | `quem`, `item` ("" = qualquer coletável) |
 | `levou_dano` / `vida_acabou` | `quem` (precisa do comportamento Vida) |
+| `animacao_terminou` | `quem`, `nome` ("" = qualquer uma; só animações de modo "once") |
 | `mensagem` | `quem`, `msg` (de `obj:send("msg")`, de comportamentos ou da ação `mensagem`) |
 
 Ações (`act`):
@@ -391,6 +394,7 @@ Ações (`act`):
 | `mover` | `alvo`, `modo` ("para": a posição; "somar": andando), `x`, `y` |
 | `velocidade` | `modo` ("definir", "somar": empurrão), `alvo`, `vx`, `vy` (no corpo físico, se houver) |
 | `texto` / `imagem` / `quadro` / `cor` | `alvo` e `texto` / `imagem` / `quadro` / `cor` |
+| `animacao` | `nome`, `alvo`, `reiniciar` (false) |
 | `faiscas` | `alvo`, `cor`, `quantidade` |
 | `tremer` | `forca`, `tempo` |
 | `som` | `som`, `volume` |
@@ -423,7 +427,7 @@ As duas tabelas têm as mesmas funções; muda só o espaço.
 | `text(texto, x, y, opts)` | Texto. |
 | `circle(x, y, raio, cor)` | Círculo de cor sólida (`x, y` é o centro nos dois espaços). |
 
-Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`.
+Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`, `tile_w`, `tile_h` (repetir em vez de esticar: o tamanho de cada cópia; `{ w = 640, h = 32, tile_w = 32, tile_h = 32 }` desenha 20 blocos).
 
 Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `font`.
 `anchor` diz qual ponto do texto fica em `x, y`: `topleft` (padrão), `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright`.
@@ -510,6 +514,8 @@ Usar uma ação que não foi criada com `bind` é um erro (para pegar erros de d
 | `sound(caminho)` | Som (WAV, OGG Vorbis, MP3), com `duration` e `:play(opts)`. |
 | `font(caminho)` | Fonte .ttf/.otf, para a opção `font` do texto. |
 | `read(caminho)` | Conteúdo de um arquivo de texto. |
+| `exists(caminho)` | O arquivo existe? |
+| `animations(imagem)` | As [animações](#animações-anim) do `.anim` da imagem, por nome: `nn.assets.animations("assets/imagens/heroi.png").andar` (prontas para `nn.animator`). |
 
 Cada arquivo é carregado uma vez; pedir de novo devolve o mesmo. Imagens e sons alterados no disco são recarregados sozinhos.
 
@@ -534,7 +540,42 @@ anim:update(dt)
 nn.draw.sprite(sheet, x, y, { frame = anim:frame() })
 ```
 
-O animador tem `:frame()`, `:finished()`, `:restart()` e os campos `speed` (multiplicador) e `time`. A animação tem `duration`, `length` e `mode`.
+O animador tem `:frame()`, `:finished()`, `:restart()` e os campos `speed` (multiplicador) e `time`. A animação tem `duration`, `length` e `mode`. Um quarto parâmetro dá a cada quadro a sua duração, em segundos: `nn.animation({ 1, 2, 3 }, 10, "once", { 0.1, 0.5, 0.1 })`.
+
+#### Animações (.anim)
+
+As animações feitas no [editor de pixel art do NN Studio](studio.md#animações) ficam num arquivo ao lado da imagem: `heroi.png` → `heroi.anim`. Ele guarda o tamanho do quadro e as animações com nome:
+
+```lua
+return {
+  format = 1,
+  frame_w = 16, frame_h = 16,
+  animations = {
+    { name = "parado", frames = { 1, 2 }, fps = 3 },
+    { name = "andar", frames = { 5, 6, 7, 8 }, fps = 10 },
+    { name = "golpe", frames = { 3, 4 }, fps = 10, mode = "once", times = { 0.1, 0.3 } },
+  },
+}
+```
+
+`frames` são números de quadro (a partir de 1), `fps` o ritmo, `mode` é `"loop"` (padrão), `"once"` ou `"pingpong"`, e `times` (opcional) a duração de cada quadro em segundos. Nas cenas visuais, o componente `sprite` usa as animações da imagem dele (`animation = "andar"`, `obj.sprite:play("andar")`, a Animação automática e os eventos); em código, `nn.assets.animations(imagem)` devolve as animações prontas para `nn.animator`:
+
+```lua
+local folha = nn.assets.sheet("assets/imagens/heroi.png", 16, 16, { pixel_art = true })
+local anims = nn.assets.animations("assets/imagens/heroi.png")
+local anim = nn.animator(anims.parado)
+
+function cena:update(dt)
+  anim:play(nn.input.down("direita") and anims.andar or anims.parado)
+  anim:update(dt)
+end
+
+function cena:draw()
+  nn.draw.sprite(folha, 0, 0, { frame = anim:frame(), scale = 4 })
+end
+```
+
+Ao salvar o `.anim` com o jogo aberto, as cenas recarregam com as animações novas.
 
 ### nn.physics
 

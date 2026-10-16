@@ -896,6 +896,10 @@ impl PixelDoc {
                                 Bottom::Anims,
                                 RichText::new(format!("Animações ({na})")).strong(),
                             );
+                            let r = r.on_hover_text(format!(
+                                "Sequências de quadros com nome, salvas em {}",
+                                anim_path(&self.rel).rsplit('/').next().unwrap_or("")
+                            ));
                             crate::tutorial::anchor_in(ui, "pixel:aba-animacoes", r.rect);
                         });
                         ui.separator();
@@ -1371,10 +1375,6 @@ impl PixelDoc {
                 self.new_anim();
                 self.playing = true;
             }
-            ui.weak(format!(
-                "salvas em {}",
-                anim_path(&self.rel).rsplit('/').next().unwrap_or("")
-            ));
         });
         if self.anim.anims.is_empty() {
             ui.weak("Nenhuma ainda. Uma animação é uma sequência de quadros com nome (\"andar\", \"pular\"), usada pela Animação automática, pelos eventos e pelo código.");

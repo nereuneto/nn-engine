@@ -331,3 +331,57 @@ fn imagem_que_repete_em_vez_de_esticar() {
         assert_eq!(linha, esperado, "{path}");
     }
 }
+
+#[test]
+fn salvar_o_anim_com_o_jogo_aberto_recarrega_a_cena() {
+    let dir = projeto(
+        "recarregar",
+        &[
+            ("img/heroi.anim", ANIM),
+            (
+                "cenas/fase.cena",
+                r#"return { objects = { { id = 1, name = "heroi", components = {
+  { type = "sprite", image = "img/heroi.png", animation = "parado" } } } } }"#,
+            ),
+        ],
+    );
+    folha(&dir, "img/heroi.png", 8, 8, &RGBW);
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let config = AppConfig::default()
+        .size(64, 64)
+        .assets_dir(&dir)
+        .hot_reload(true);
+    let Ok(mut h) = Headless::new(config, move |ctx| {
+        let mut s = rt.scene("cenas/fase.cena");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        assert!(!std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1"));
+        return;
+    };
+    h.run_frames(2);
+    rt2.lua()
+        .globals()
+        .set("cena", h.game.0.table().unwrap())
+        .unwrap();
+    assert_eq!(lua::<u32>(&rt2, "cena.objects.heroi.sprite.frame"), 1);
+    // O editor salvou "parado" com outro quadro.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    std::fs::write(
+        dir.join("img/heroi.anim"),
+        ANIM.replace(
+            r#"{ name = "parado", frames = { 1 }"#,
+            r#"{ name = "parado", frames = { 4 }"#,
+        ),
+    )
+    .unwrap();
+    std::thread::sleep(ScriptRuntime::POLL_INTERVAL + std::time::Duration::from_millis(50));
+    h.run_frames(3);
+    assert_eq!(h.game.0.error(), None);
+    rt2.lua()
+        .globals()
+        .set("cena", h.game.0.table().unwrap())
+        .unwrap();
+    assert_eq!(lua::<u32>(&rt2, "cena.objects.heroi.sprite.frame"), 4);
+}
