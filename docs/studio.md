@@ -155,7 +155,7 @@ engine como qualquer outra cena (`nn.scene.switch("cenas/fase.cena")`, cena
 inicial no `config.lua`, exportação, recarregar ao salvar). Crie uma com
 **Ctrl+N** ou **➕ Novo > Cena visual**.
 
-![Cena visual do modelo "Cena visual" aberta no NN Studio](imagens/nn-studio-cena.png)
+![Cena visual do modelo Plataforma aberta no NN Studio](imagens/nn-studio-cena.png)
 
 ### A aba da cena
 
@@ -227,7 +227,7 @@ Inspetor: **➕ Adicionar componente** mostra os comportamentos por categoria.
 Cada um tem suas propriedades (velocidade, altura do pulo, quantas vidas...),
 com explicação ao passar o mouse.
 
-![Herói do modelo "Cena visual" com os comportamentos no Inspetor](imagens/nn-studio-comportamentos.png)
+![Herói do modelo Plataforma com os comportamentos no Inspetor](imagens/nn-studio-comportamentos.png)
 
 | Categoria | Comportamento | O que faz |
 |---|---|---|
