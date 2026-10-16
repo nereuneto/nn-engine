@@ -58,6 +58,10 @@ return {
 }
 ```
 
+Todas as opções são opcionais. Rodando da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), o jogo recarrega ao salvar, a não ser que o `config.lua` diga `hot_reload = false`; o jogo exportado não recarrega. O NN Studio também edita estas opções num formulário (**Editar > Configurações do projeto**), sem mexer nos comentários do arquivo.
+
+As mensagens de erro do Lua aparecem em português ("tentou chamar um valor nil (vazio) (método 'pular')"), na tela de erro do jogo e no console do NN Studio.
+
 ## Distribuindo o jogo
 
 ```sh

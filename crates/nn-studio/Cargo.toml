@@ -1,0 +1,52 @@
+[package]
+name = "nn-studio"
+description = "NN Studio: o editor visual da nn-engine."
+version.workspace = true
+edition.workspace = true
+# A interface (egui 0.36) pede um Rust mais novo que o resto da engine.
+rust-version = "1.95"
+repository.workspace = true
+default-run = "nn-studio"
+
+[[bin]]
+name = "nn-studio"
+path = "src/main.rs"
+
+[lib]
+name = "nn_studio"
+path = "src/lib.rs"
+
+[dependencies]
+nn-app.workspace = true
+nn-audio.workspace = true
+nn-run.workspace = true
+nn-script.workspace = true
+nn-tilemap.workspace = true
+directories.workspace = true
+env_logger.workspace = true
+image.workspace = true
+log.workspace = true
+mlua.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+eframe = { version = "0.36.2", default-features = false, features = ["accesskit", "default_fonts", "links", "persistence", "wayland", "wgpu", "x11"] }
+egui_dock = { version = "0.21.1", features = ["serde"] }
+# Diálogos nativos (escolher pasta). No Linux, pelo portal do sistema.
+rfd = "0.17.2"
+# Excluir arquivos manda para a lixeira do sistema.
+trash = "5.2"
+# Abrir arquivos no programa padrão e mostrar na pasta.
+opener = { version = "0.9", features = ["reveal"] }
+# Os jogos de exemplo vão dentro do executável.
+include_dir = "0.7.4"
+
+[build-dependencies]
+# Ícone do executável no Windows.
+winresource = "0.1"
+
+[dev-dependencies]
+egui_kittest = { version = "0.36", features = ["eframe", "wgpu", "snapshot"] }
+
+[lints]
+workspace = true
