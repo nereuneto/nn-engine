@@ -202,6 +202,8 @@ pub enum SceneAction {
     TestHere,
     Reload,
     OpenAsText,
+    /// Comando para o jogo aberto: "pause", "resume" ou "step".
+    Game(&'static str),
 }
 
 /// O que a aba precisa do espaço de trabalho.
@@ -216,12 +218,146 @@ pub struct SceneEnv<'a> {
     /// O jogo aberto está mostrando esta cena.
     pub connected: bool,
     pub time: f32,
+    /// Onde os objetos estão no jogo aberto (se ele mostra esta cena).
+    pub game: Option<&'a GameState>,
 }
 
 impl std::fmt::Debug for SceneEnv<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SceneEnv").finish_non_exhaustive()
     }
+}
+
+/// Um objeto da cena como está no jogo aberto.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GameObject {
+    /// Posição, rotação e escala (relativas ao pai), como no arquivo.
+    pub local: Transform,
+    /// No mundo.
+    pub world: Transform,
+    pub visible: bool,
+    /// Propriedades dos comportamentos: (componente, campos).
+    pub props: Vec<(usize, Vec<(String, Prop)>)>,
+}
+
+/// O que o jogo aberto pelo editor conta da cena da frente.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct GameState {
+    pub scene: String,
+    pub paused: bool,
+    pub objects: std::collections::HashMap<u32, GameObject>,
+    pub vars: Vec<(String, Prop)>,
+}
+
+fn json_prop(v: &serde_json::Value) -> Option<Prop> {
+    Some(match v {
+        serde_json::Value::Number(n) => Prop::Num(n.as_f64()?),
+        serde_json::Value::Bool(b) => Prop::Bool(*b),
+        serde_json::Value::String(s) => Prop::Str(s.clone()),
+        _ => return None,
+    })
+}
+
+impl GameState {
+    /// Lê a mensagem `estado` do jogo.
+    pub fn parse(v: &serde_json::Value) -> Option<Self> {
+        let num = |o: &serde_json::Value, k: &str| o.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
+        let mut state = GameState {
+            scene: v.get("scene")?.as_str()?.to_string(),
+            paused: v.get("paused").and_then(|p| p.as_bool()).unwrap_or(false),
+            ..Default::default()
+        };
+        // Lista vazia chega como {} (tabela Lua vazia).
+        if let Some(list) = v.get("objects").and_then(|o| o.as_array()) {
+            for o in list {
+                let Some(id) = o.get("id").and_then(|i| i.as_u64()) else {
+                    continue;
+                };
+                let mut props = Vec::new();
+                if let Some(map) = o.get("props").and_then(|p| p.as_object()) {
+                    for (ci, fields) in map {
+                        let Ok(ci) = ci.parse::<usize>() else {
+                            continue;
+                        };
+                        let mut list: Vec<(String, Prop)> = fields
+                            .as_object()
+                            .map(|f| {
+                                f.iter()
+                                    .filter_map(|(k, v)| json_prop(v).map(|p| (k.clone(), p)))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        list.sort_by(|a, b| a.0.cmp(&b.0));
+                        props.push((ci.saturating_sub(1), list));
+                    }
+                }
+                props.sort_by_key(|(ci, _)| *ci);
+                state.objects.insert(
+                    id as u32,
+                    GameObject {
+                        local: Transform {
+                            x: num(o, "x"),
+                            y: num(o, "y"),
+                            rotation: num(o, "rotation"),
+                            scale_x: num(o, "scale_x"),
+                            scale_y: num(o, "scale_y"),
+                        },
+                        world: Transform {
+                            x: num(o, "wx"),
+                            y: num(o, "wy"),
+                            rotation: num(o, "wr"),
+                            scale_x: num(o, "wsx"),
+                            scale_y: num(o, "wsy"),
+                        },
+                        visible: o.get("visible").and_then(|b| b.as_bool()).unwrap_or(true),
+                        props,
+                    },
+                );
+            }
+        }
+        if let Some(map) = v.get("vars").and_then(|o| o.as_object()) {
+            state.vars = map
+                .iter()
+                .filter_map(|(k, v)| json_prop(v).map(|p| (k.clone(), p)))
+                .collect();
+            state.vars.sort_by(|a, b| a.0.cmp(&b.0));
+        }
+        Some(state)
+    }
+
+    /// Valor de uma propriedade de comportamento no jogo.
+    pub fn prop(&self, id: u32, component: usize, key: &str) -> Option<&Prop> {
+        self.objects
+            .get(&id)?
+            .props
+            .iter()
+            .find(|(c, _)| *c == component)?
+            .1
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v)
+    }
+}
+
+/// O caminho é de um prefab?
+pub fn is_prefab_path(rel: &str) -> bool {
+    rel.to_lowercase().ends_with(".prefab")
+}
+
+/// Lê uma cena ou um prefab (que vira uma cena com um objeto só), com as
+/// instâncias de prefabs ligadas.
+fn read_doc(root: &Path, rel: &str) -> Result<SceneData, String> {
+    let text = std::fs::read_to_string(root.join(rel)).map_err(|e| e.to_string())?;
+    let mut data = if is_prefab_path(rel) {
+        SceneData {
+            objects: vec![scene_data::read_prefab(&text, rel)?],
+            ..Default::default()
+        }
+    } else {
+        scene_data::read(&text, rel)?
+    };
+    data.link_prefabs(root);
+    Ok(data)
 }
 
 const GIZMO_LEN: f32 = 64.0;
@@ -232,11 +368,13 @@ const BLUE: Color32 = Color32::from_rgb(0x4A, 0x9C, 0xF0);
 const SELECT: Color32 = Color32::from_rgb(0xFF, 0xA9, 0x2E);
 
 impl SceneDoc {
+    /// É um `.prefab` (um objeto só) e não uma cena?
+    pub fn is_prefab(&self) -> bool {
+        is_prefab_path(&self.rel)
+    }
+
     pub fn open(root: &Path, rel: &str) -> Self {
-        let (data, error) = match std::fs::read_to_string(root.join(rel))
-            .map_err(|e| e.to_string())
-            .and_then(|t| scene_data::read(&t, rel))
-        {
+        let (data, error) = match read_doc(root, rel) {
             Ok(d) => (d, None),
             Err(e) => (SceneData::default(), Some(e)),
         };
@@ -274,8 +412,15 @@ impl SceneDoc {
                 "a cena tem um erro e não pode ser salva pelo editor: {e}"
             ));
         }
-        crate::files::write_atomic(&root.join(&self.rel), &scene_data::write(&self.data))
-            .map_err(|e| e.to_string())?;
+        let text = if self.is_prefab() {
+            let Some(obj) = self.data.objects.first() else {
+                return Err("o prefab precisa de um objeto".into());
+            };
+            scene_data::write_prefab(obj)
+        } else {
+            scene_data::write(&self.data)
+        };
+        crate::files::write_atomic(&root.join(&self.rel), &text).map_err(|e| e.to_string())?;
         self.saved = self.data.clone();
         self.external_change = false;
         Ok(())
@@ -293,10 +438,10 @@ impl SceneDoc {
 
     /// O arquivo mudou no disco.
     pub fn disk_changed(&mut self, root: &Path) {
-        let Ok(text) = std::fs::read_to_string(root.join(&self.rel)) else {
+        if !root.join(&self.rel).is_file() {
             return;
-        };
-        if scene_data::read(&text, &self.rel).ok().as_ref() == Some(&self.saved) {
+        }
+        if read_doc(root, &self.rel).ok().as_ref() == Some(&self.saved) {
             return;
         }
         if self.is_dirty() {
@@ -304,6 +449,18 @@ impl SceneDoc {
         } else {
             self.reload(root);
         }
+    }
+
+    /// A versão salva usa este prefab?
+    pub fn saved_uses_prefab(&self, rel: &str) -> bool {
+        self.saved.uses_prefab(rel)
+    }
+
+    /// Um prefab mudou no disco: as instâncias passam a usar o novo, sem
+    /// perder o que cada uma mudou (e sem a cena ficar "não salva" por isso).
+    pub fn relink_prefabs(&mut self, root: &Path) {
+        self.data.link_prefabs(root);
+        self.saved.link_prefabs(root);
     }
 
     /// Guarda o estado antes de uma mudança (para desfazer).
@@ -359,11 +516,30 @@ impl SceneDoc {
         if self.selection.is_empty() {
             return;
         }
+        // O objeto principal de um prefab não sai (o prefab é ele).
+        let keep = self.prefab_root();
+        let ids: Vec<u32> = self
+            .selection_roots()
+            .into_iter()
+            .filter(|id| Some(*id) != keep)
+            .collect();
+        if ids.is_empty() {
+            return;
+        }
         self.record(None);
-        for id in self.selection_roots() {
+        for id in ids {
             self.data.remove(id);
         }
         self.selection.clear();
+    }
+
+    /// Num prefab, o objeto principal.
+    pub fn prefab_root(&self) -> Option<u32> {
+        if self.is_prefab() {
+            self.data.objects.first().map(|o| o.id)
+        } else {
+            None
+        }
     }
 
     pub fn duplicate_selection(&mut self) {
@@ -372,7 +548,11 @@ impl SceneDoc {
         }
         self.record(None);
         let mut new = Vec::new();
+        let keep = self.prefab_root();
         for id in self.selection_roots() {
+            if Some(id) == keep {
+                continue;
+            }
             if let Some(n) = self.data.duplicate(id) {
                 // A cópia aparece um pouco ao lado, para dar para ver.
                 if let Some(o) = self.data.find_mut(n) {
@@ -387,13 +567,37 @@ impl SceneDoc {
 
     /// Cria um objeto na posição `(x, y)` do mundo (na raiz) e seleciona.
     pub fn add_object(&mut self, name: &str, x: f64, y: f64, components: Vec<Component>) -> u32 {
+        let mut o = Object::new(0, name);
+        o.components = components;
+        self.add_prepared(o, x, y)
+    }
+
+    /// Põe um objeto pronto na posição `(x, y)` do mundo e seleciona. Num
+    /// prefab, ele vira filho do objeto principal.
+    pub fn add_prepared(&mut self, mut o: Object, x: f64, y: f64) -> u32 {
         self.record(None);
         let id = self.data.next_id();
-        let mut o = Object::new(id, name);
+        o.id = id;
         o.x = x.round();
         o.y = y.round();
-        o.components = components;
-        self.data.objects.push(o);
+        match self.prefab_root() {
+            Some(root) => {
+                if let Some(t) = self.data.world_transform(root) {
+                    let local = t.to_local(Transform {
+                        x: o.x,
+                        y: o.y,
+                        rotation: 0.0,
+                        scale_x: 1.0,
+                        scale_y: 1.0,
+                    });
+                    o.x = local.x.round();
+                    o.y = local.y.round();
+                }
+                let n = self.data.find(root).map(|r| r.children.len()).unwrap_or(0);
+                self.data.insert(Some(root), n, o);
+            }
+            None => self.data.objects.push(o),
+        }
         self.selection = vec![id];
         id
     }
@@ -405,17 +609,26 @@ impl SceneDoc {
 
     /// Enquadra a seleção (ou a cena toda).
     pub fn frame_selection(&mut self, rect: Rect, root: &Path, sizes: &mut Sizes) {
-        let ids = if self.selection.is_empty() {
-            self.data.ids()
+        // Sem seleção: tudo o que aparece (objetos escondidos não contam).
+        let items: Vec<(Object, Transform)> = if self.selection.is_empty() {
+            scene_render::draw_order(&self.data)
+                .iter()
+                .map(|p| (p.object.clone(), p.world))
+                .collect()
         } else {
-            self.selection.clone()
+            self.selection
+                .iter()
+                .filter_map(|id| {
+                    Some((
+                        self.data.find(*id)?.clone(),
+                        self.data.world_transform(*id)?,
+                    ))
+                })
+                .collect()
         };
         let mut min = (f64::MAX, f64::MAX);
         let mut max = (f64::MIN, f64::MIN);
-        for id in ids {
-            let (Some(o), Some(t)) = (self.data.find(id), self.data.world_transform(id)) else {
-                continue;
-            };
+        for (o, t) in &items {
             let (r, _) = local_bounds(o, root, sizes, 32.0);
             for (cx, cy) in r.corners() {
                 let (wx, wy) = t.point_to_world(cx * t.scale_x, cy * t.scale_y);
@@ -441,7 +654,9 @@ impl SceneDoc {
         let icon = scene_render::ICON_SIZE / self.camera.zoom;
         for placed in scene_render::draw_order(&self.data).iter().rev() {
             let o = placed.object;
-            if o.locked {
+            let owner_locked =
+                !placed.is_own() && self.data.find(placed.owner).is_some_and(|w| w.locked);
+            if o.locked || owner_locked {
                 continue;
             }
             let t = placed.world;
@@ -458,7 +673,7 @@ impl SceneDoc {
                 t.scale_y
             };
             if r.contains(lx / sx, ly / sy) {
-                return Some(o.id);
+                return Some(placed.owner);
             }
         }
         None
@@ -495,7 +710,22 @@ impl SceneDoc {
                 });
                 (l.x, l.y)
             }
-            None => (wx, wy),
+            None => match self.data.find(id) {
+                Some(o) => {
+                    let t = self.data.root_unplace(
+                        o,
+                        Transform {
+                            x: wx,
+                            y: wy,
+                            rotation: 0.0,
+                            scale_x: 1.0,
+                            scale_y: 1.0,
+                        },
+                    );
+                    (t.x, t.y)
+                }
+                None => (wx, wy),
+            },
         };
         if let Some(o) = self.data.find_mut(id) {
             o.x = round2(lx);
@@ -655,6 +885,22 @@ impl SceneDoc {
                 c.set("scale", Prop::Num(3.0));
                 c
             }
+            crate::files::FileKind::Prefab => {
+                // Um prefab não pode ficar dentro dele mesmo.
+                if rel == self.rel {
+                    return None;
+                }
+                let base = scene_data::load_prefab(env.root, rel).ok()?;
+                let mut o = Object::new(0, &base.name);
+                o.layer = base.layer;
+                o.prefab = Some(scene_data::PrefabLink {
+                    path: rel.to_string(),
+                    base: None,
+                    raw: Vec::new(),
+                });
+                o.link_prefab(base);
+                return Some(self.add_prepared(o, wx, wy));
+            }
             _ => return None,
         };
         Some(self.add_object(&name, wx, wy, vec![comp]))
@@ -671,8 +917,23 @@ impl SceneDoc {
             }
             if env.connected {
                 ui.colored_label(GREEN, "• Ao vivo").on_hover_text(
-                    "O jogo aberto está nesta cena: o que você mudar aparece nele na hora, sem salvar.",
+                    "O jogo aberto está nesta cena: o que você mudar aparece nele na hora, sem salvar. Os contornos tracejados mostram onde os objetos estão no jogo. Ctrl+clique num objeto na janela do jogo seleciona ele aqui.",
                 );
+                let paused = env.game.is_some_and(|g| g.paused);
+                if paused {
+                    if ui.button("Continuar").on_hover_text("Volta a rodar o jogo").clicked() {
+                        actions.push(SceneAction::Game("resume"));
+                    }
+                    if ui.button("Avançar 1 quadro").clicked() {
+                        actions.push(SceneAction::Game("step"));
+                    }
+                } else if ui
+                    .button("Pausar")
+                    .on_hover_text("Congela o jogo aberto (para ver onde as coisas estão)")
+                    .clicked()
+                {
+                    actions.push(SceneAction::Game("pause"));
+                }
             }
             ui.separator();
             for (tool, label, tip) in [
@@ -776,44 +1037,17 @@ impl SceneDoc {
 
     /// Onde a câmera começa: no objeto com Câmera (ou em quem ele segue).
     fn camera_start(&self) -> (f64, f64, f64) {
-        let mut out = (0.0, 0.0, 1.0);
-        scene_data::visit(&self.data.objects, &mut |o| {
-            if out != (0.0, 0.0, 1.0) {
-                return;
-            }
-            if let Some(c) = o.component("camera") {
-                let zoom = c.num("zoom").max(0.01);
-                let target = c.str("follow");
-                let mut pos = self.data.world_transform(o.id).map(|t| (t.x, t.y));
-                if !target.is_empty() {
-                    scene_data::visit(&self.data.objects, &mut |t| {
-                        if t.name == target {
-                            pos = self.data.world_transform(t.id).map(|w| (w.x, w.y));
-                        }
-                    });
-                }
-                if let Some((x, y)) = pos {
-                    out = (x, y, zoom);
-                }
-            }
-        });
-        out
+        self.data.camera_start()
     }
 
     fn draw_overlays(&self, painter: &egui::Painter, rect: Rect, env: &mut SceneEnv) {
         let cam = self.camera;
-        let ids: Vec<(u32, Transform)> = scene_render::draw_order(&self.data)
-            .iter()
-            .map(|p| (p.object.id, p.world))
-            .collect();
-        for (id, t) in &ids {
-            let Some(o) = self.data.find(*id) else {
-                continue;
-            };
+        let order = scene_render::draw_order(&self.data);
+        let icon_size = scene_render::ICON_SIZE / cam.zoom;
+        for placed in &order {
+            let (o, t) = (placed.object, &placed.world);
             // Ícone de objetos sem nada visível (vazio, som, câmera, partículas).
-            let Some((_, _, is_icon)) = self.screen_corners(env, rect, *id) else {
-                continue;
-            };
+            let (_, is_icon) = local_bounds(o, env.root, env.sizes, icon_size);
             let center = cam.to_screen(rect, t.x, t.y);
             if is_icon
                 || o.components
@@ -870,6 +1104,52 @@ impl SceneDoc {
                 c.to_vec(),
                 Stroke::new(1.0, SELECT.gamma_multiply(0.6)),
             ));
+        }
+        // Onde os objetos estão no jogo aberto (quando estão em outro lugar).
+        if let Some(game) = env.game {
+            let icon = scene_render::ICON_SIZE / cam.zoom;
+            let color = Color32::from_rgb(0x5A, 0xD8, 0xE8);
+            for (id, g) in &game.objects {
+                let (Some(o), Some(t)) = (self.data.find(*id), self.data.world_transform(*id))
+                else {
+                    continue;
+                };
+                let w = g.world;
+                let moved = (w.x - t.x).abs() > 0.5
+                    || (w.y - t.y).abs() > 0.5
+                    || (w.rotation - t.rotation).abs() > 0.5;
+                if !moved || !g.visible {
+                    continue;
+                }
+                let (r, _) = local_bounds(o, env.root, env.sizes, icon);
+                let pts: Vec<Pos2> = r
+                    .corners()
+                    .iter()
+                    .map(|(cx, cy)| {
+                        let (wx, wy) = w.point_to_world(cx * w.scale_x, cy * w.scale_y);
+                        cam.to_screen(rect, wx, wy)
+                    })
+                    .collect();
+                for i in 0..pts.len() {
+                    let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+                    // Sombra escura embaixo: aparece em qualquer fundo.
+                    painter.add(egui::Shape::dashed_line(
+                        &[a, b],
+                        Stroke::new(3.5, Color32::from_black_alpha(150)),
+                        6.0,
+                        4.0,
+                    ));
+                    painter.add(egui::Shape::dashed_line(
+                        &[a, b],
+                        Stroke::new(1.5, color),
+                        6.0,
+                        4.0,
+                    ));
+                }
+                let from = cam.to_screen(rect, t.x, t.y);
+                let to = cam.to_screen(rect, w.x, w.y);
+                painter.line_segment([from, to], Stroke::new(1.0, color.gamma_multiply(0.5)));
+            }
         }
         // Selecionados.
         for id in &self.selection {
@@ -1080,7 +1360,7 @@ impl SceneDoc {
                 let sel = Rect::from_two_pos(*start, end);
                 let ids: Vec<u32> = scene_render::draw_order(&self.data)
                     .iter()
-                    .filter(|p| !p.object.locked)
+                    .filter(|p| p.is_own() && !p.object.locked)
                     .map(|p| p.object.id)
                     .collect();
                 for id in ids {

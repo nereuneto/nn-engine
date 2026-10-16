@@ -11,8 +11,9 @@ pub enum Template {
     Padrao,
     /// Só uma cena com um quadrado que anda.
     Minimo,
-    /// Fase de plataforma montada no NN Studio (cena visual `.cena`) com um
-    /// script pequeno: o jeito de começar pelo editor.
+    /// Fase de plataforma montada no NN Studio (cena visual `.cena`), sem
+    /// código: comportamentos prontos e um prefab. O jeito de começar pelo
+    /// editor.
     Visual,
 }
 
@@ -67,8 +68,12 @@ impl Template {
                     include_bytes!("../modelos/visual/cenas/fase.cena"),
                 ),
                 (
-                    "cenas/fase.lua",
-                    include_bytes!("../modelos/visual/cenas/fase.lua"),
+                    "cenas/fim.cena",
+                    include_bytes!("../modelos/visual/cenas/fim.cena"),
+                ),
+                (
+                    "prefabs/moeda.prefab",
+                    include_bytes!("../modelos/visual/prefabs/moeda.prefab"),
                 ),
                 // As imagens e o som são os mesmos do modelo padrão.
                 (

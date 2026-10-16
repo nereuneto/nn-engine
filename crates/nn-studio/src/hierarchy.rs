@@ -26,11 +26,28 @@ pub fn zone(row: Rect, y: f32) -> DropZone {
     }
 }
 
+/// O que a Hierarquia pede ao espaço de trabalho.
+#[derive(Debug, Clone, PartialEq)]
+pub enum HierarchyAction {
+    /// Transformar o objeto num prefab (na pasta dada, ou em `prefabs/`).
+    CreatePrefab {
+        id: u32,
+        dir: Option<String>,
+    },
+    OpenFile(String),
+}
+
 /// Aplica o soltar: devolve `false` se não deu (ex.: soltar dentro do filho).
 pub fn apply_drop(doc: &mut SceneDoc, dragged: u32, target: u32, zone: DropZone) -> bool {
-    if dragged == target {
+    if dragged == target || doc.prefab_root() == Some(dragged) {
         return false;
     }
+    // Num prefab, tudo fica dentro do objeto principal.
+    let zone = if doc.prefab_root() == Some(target) {
+        DropZone::Inside
+    } else {
+        zone
+    };
     let Some(parent) = doc.data.parent_of(target) else {
         return false;
     };
@@ -69,15 +86,16 @@ pub struct HierarchyPanel {
 }
 
 impl HierarchyPanel {
-    pub fn ui(&mut self, ui: &mut egui::Ui, doc: Option<&mut SceneDoc>) {
+    pub fn ui(&mut self, ui: &mut egui::Ui, doc: Option<&mut SceneDoc>) -> Vec<HierarchyAction> {
+        let mut out = Vec::new();
         let Some(doc) = doc else {
             ui.add_space(8.0);
             ui.weak("Abra uma cena visual (.cena) para ver os objetos dela aqui.");
-            return;
+            return out;
         };
         if doc.error.is_some() {
             ui.weak("A cena não abriu (veja a aba dela).");
-            return;
+            return out;
         }
         ui.horizontal(|ui| {
             ui.menu_button("➕", |ui| {
@@ -107,7 +125,7 @@ impl HierarchyPanel {
                 }
                 if self.filter.trim().is_empty() {
                     let objects = doc.data.objects.clone();
-                    rows(ui, doc, &objects, 0, &mut drop);
+                    rows(ui, doc, &objects, 0, &mut drop, &mut out);
                 } else {
                     let mut found = Vec::new();
                     crate::scene_data::visit(&doc.data.objects, &mut |o| {
@@ -116,7 +134,7 @@ impl HierarchyPanel {
                         }
                     });
                     for o in found {
-                        row(ui, doc, &o, 0, &mut drop);
+                        row(ui, doc, &o, 0, &mut drop, &mut out);
                     }
                 }
                 // Espaço livre no fim: soltar aqui leva para a raiz.
@@ -132,9 +150,20 @@ impl HierarchyPanel {
                 }
                 if let Some(payload) = resp.dnd_release_payload::<ObjectDrag>() {
                     let id = payload.0;
-                    doc.record(None);
-                    let n = doc.data.objects.len();
-                    doc.data.move_object(id, None, n);
+                    match doc.prefab_root() {
+                        // Num prefab, o fim da lista é o fim do objeto principal.
+                        Some(root) if root != id => {
+                            doc.record(None);
+                            let n = doc.data.find(root).map(|r| r.children.len()).unwrap_or(0);
+                            doc.data.move_object(id, Some(root), n);
+                        }
+                        Some(_) => {}
+                        None => {
+                            doc.record(None);
+                            let n = doc.data.objects.len();
+                            doc.data.move_object(id, None, n);
+                        }
+                    }
                 }
                 if resp.clicked() {
                     doc.selection.clear();
@@ -159,6 +188,7 @@ impl HierarchyPanel {
                 doc.duplicate_selection();
             }
         }
+        out
     }
 }
 
@@ -168,11 +198,12 @@ fn rows(
     list: &[Object],
     depth: usize,
     drop: &mut Option<(u32, u32, DropZone)>,
+    out: &mut Vec<HierarchyAction>,
 ) {
     for o in list {
-        row(ui, doc, o, depth, drop);
+        row(ui, doc, o, depth, drop, out);
         if !o.children.is_empty() && !doc.collapsed.contains(&o.id) {
-            rows(ui, doc, &o.children, depth + 1, drop);
+            rows(ui, doc, &o.children, depth + 1, drop, out);
         }
     }
 }
@@ -183,6 +214,7 @@ fn row(
     o: &Object,
     depth: usize,
     drop: &mut Option<(u32, u32, DropZone)>,
+    out: &mut Vec<HierarchyAction>,
 ) {
     let id = o.id;
     let selected = doc.selection.contains(&id);
@@ -258,6 +290,9 @@ fn row(
         }
 
         let mut text = RichText::new(&o.name);
+        if o.prefab.is_some() {
+            text = text.color(crate::inspector::PREFAB);
+        }
         if !o.visible {
             text = text.weak();
         }
@@ -269,6 +304,10 @@ fn row(
         Some(r)
     });
     let Some(label) = row.inner else { return };
+    let label = match &o.prefab {
+        Some(link) => label.on_hover_text(format!("Instância do prefab {}", link.path)),
+        None => label,
+    };
 
     let modifiers = ui.input(|i| i.modifiers);
     if label.clicked() {
@@ -295,6 +334,20 @@ fn row(
         }
         if ui.button("Duplicar (Ctrl+D)").clicked() {
             doc.duplicate_selection();
+            ui.close();
+        }
+        if let Some(link) = &o.prefab {
+            if ui.button("Abrir prefab").clicked() {
+                out.push(HierarchyAction::OpenFile(link.path.clone()));
+                ui.close();
+            }
+        } else if doc.prefab_root() != Some(id)
+            && ui
+                .button("📦 Criar prefab")
+                .on_hover_text("Guarda o objeto (com os filhos) em prefabs/, para usar em outras cenas. Também dá para arrastar o objeto para uma pasta do painel Arquivos.")
+                .clicked()
+        {
+            out.push(HierarchyAction::CreatePrefab { id, dir: None });
             ui.close();
         }
         if ui.button("Criar filho vazio").clicked() {

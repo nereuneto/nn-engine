@@ -17,7 +17,7 @@ use crate::console::{Console, ConsoleAction};
 use crate::file_panel::FilePanel;
 use crate::files::{self, FileKind, FileTree};
 use crate::game::GameProcess;
-use crate::hierarchy::HierarchyPanel;
+use crate::hierarchy::{HierarchyAction, HierarchyPanel};
 use crate::inspector::{Inspector, InspectorAction};
 use crate::scene_render::{SceneRenderer, Sizes};
 use crate::scene_view::{SceneAction, SceneDoc, SceneEnv};
@@ -48,7 +48,7 @@ impl Tab {
         let lower = rel.to_lowercase();
         Some(match FileKind::of(Path::new(rel)) {
             FileKind::Lua | FileKind::Text | FileKind::Tileset => Tab::Code(rel.into()),
-            FileKind::Scene => Tab::Scene(rel.into()),
+            FileKind::Scene | FileKind::Prefab => Tab::Scene(rel.into()),
             FileKind::Map if lower.ends_with(".tmj") => Tab::Map(rel.into()),
             FileKind::Map => Tab::Code(rel.into()),
             FileKind::Image => Tab::Image(rel.into()),
@@ -160,6 +160,18 @@ pub enum Action {
     CreateSceneScript(String),
     /// Abrir a cena visual como texto.
     OpenAsText(String),
+    /// Criar um script de comportamento e pôr no objeto `id` da cena.
+    NewBehaviorScript {
+        scene: String,
+        id: u32,
+    },
+    /// Transformar o objeto `id` da cena ativa num prefab, na pasta `dir`.
+    CreatePrefab {
+        id: u32,
+        dir: Option<String>,
+    },
+    /// Comando para o jogo aberto ("pause", "resume", "step").
+    GameCommand(&'static str),
 }
 
 enum Dialog {
@@ -240,8 +252,13 @@ pub struct ProjectWorkspace {
     inspector: Inspector,
     /// Cena que o jogo aberto está mostrando (para o ajuste ao vivo).
     pub game_scene: Option<String>,
+    /// O que o jogo aberto conta da cena da frente.
+    pub game_state: Option<crate::scene_view::GameState>,
     /// Valores do config.lua (tamanho da tela e cor de fundo).
     config: ConfigValues,
+    /// Para o autocompletar: script → nomes dos objetos das cenas que o
+    /// usam. Refeito quando alguma cena muda.
+    script_objects: Option<HashMap<String, Vec<String>>>,
     started: std::time::Instant,
 }
 
@@ -324,7 +341,9 @@ impl ProjectWorkspace {
             hierarchy: HierarchyPanel::default(),
             inspector: Inspector::default(),
             game_scene: None,
+            game_state: None,
             config: ConfigValues::default(),
+            script_objects: None,
             started: std::time::Instant::now(),
         };
         ws.reload_config();
@@ -365,6 +384,59 @@ impl ProjectWorkspace {
     pub fn is_dirty(&self, rel: &str) -> bool {
         self.docs.get(rel).is_some_and(CodeDoc::is_dirty)
             || self.scenes.get(rel).is_some_and(SceneDoc::is_dirty)
+    }
+
+    /// O que o autocompletar precisa saber para o arquivo `rel`.
+    fn completion_env(&mut self, rel: &str) -> crate::complete::Env {
+        use crate::complete::{Env, ScriptKind};
+        let map = self.script_objects.get_or_insert_with(|| {
+            let mut map: HashMap<String, Vec<String>> = HashMap::new();
+            for e in self.files.files_of(FileKind::Scene) {
+                let Ok(text) = std::fs::read_to_string(self.root.join(&e.rel)) else {
+                    continue;
+                };
+                let Ok(scene) = crate::scene_data::read(&text, &e.rel) else {
+                    continue;
+                };
+                if scene.script.is_empty() {
+                    continue;
+                }
+                let names = map.entry(scene.script.clone()).or_default();
+                crate::scene_data::visit(&scene.objects, &mut |o| names.push(o.name.clone()));
+            }
+            map
+        });
+        let mut objects = map.get(rel).cloned().unwrap_or_default();
+        let mut scene_script = map.contains_key(rel);
+        // Cenas abertas (talvez ainda não salvas) também contam.
+        for doc in self.scenes.values() {
+            if doc.data.script == rel {
+                scene_script = true;
+                crate::scene_data::visit(&doc.data.objects, &mut |o| objects.push(o.name.clone()));
+            }
+        }
+        objects.sort();
+        objects.dedup();
+        let text = self.docs.get(rel).map(|d| d.text.as_str()).unwrap_or("");
+        let kind = if text.contains("props") && !scene_script {
+            ScriptKind::Behavior
+        } else if scene_script {
+            ScriptKind::SceneScript
+        } else {
+            ScriptKind::Other
+        };
+        Env {
+            files: self
+                .files
+                .entries()
+                .iter()
+                .filter(|e| !e.is_dir)
+                .map(|e| e.rel.clone())
+                .collect(),
+            objects,
+            vars: self.config.vars.iter().map(|(k, _)| k.clone()).collect(),
+            kind,
+        }
     }
 
     /// Esquece as alterações não salvas (antes de fechar sem salvar).
@@ -677,11 +749,24 @@ impl ProjectWorkspace {
         let exit = game.exited();
         let errors_before = self.console.count(crate::console::Category::Error);
         for line in lines {
-            if let Some(scene) = crate::console::live_scene(&line) {
-                self.game_scene = Some(scene);
-                continue;
+            use crate::console::LiveMessage;
+            match crate::console::live_message(&line) {
+                Some(LiveMessage::Scene(scene)) => self.game_scene = Some(scene),
+                Some(LiveMessage::State(v)) => {
+                    self.game_state = crate::scene_view::GameState::parse(&v);
+                }
+                Some(LiveMessage::Select(id)) => {
+                    // Ctrl+clique no jogo: seleciona o objeto aqui.
+                    if let Some(scene) = self.game_scene.clone()
+                        && let Some(doc) = self.scenes.get_mut(&scene)
+                        && doc.data.find(id).is_some()
+                    {
+                        doc.selection = vec![id];
+                        self.active_scene = Some(scene);
+                    }
+                }
+                None => self.console.push_game_line(&line),
             }
-            self.console.push_game_line(&line);
         }
         if let Some(status) = exit {
             // O que ainda estava no caminho.
@@ -697,6 +782,7 @@ impl ProjectWorkspace {
             }
             self.game = None;
             self.game_scene = None;
+            self.game_state = None;
         }
         // Erro novo com o console escondido: mostra o console.
         if self.console.count(crate::console::Category::Error) > errors_before
@@ -730,6 +816,20 @@ impl ProjectWorkspace {
             }
             if let Some(scene) = self.scenes.get_mut(rel) {
                 scene.disk_changed(&root);
+            }
+            if matches!(
+                FileKind::of(Path::new(rel)),
+                FileKind::Scene | FileKind::Prefab
+            ) {
+                self.script_objects = None;
+            }
+            if FileKind::of(Path::new(rel)) == FileKind::Prefab {
+                // As cópias do prefab nas cenas abertas passam a usar o novo.
+                for (other, doc) in self.scenes.iter_mut() {
+                    if other != rel && (doc.data.uses_prefab(rel) || doc.saved_uses_prefab(rel)) {
+                        doc.relink_prefabs(&root);
+                    }
+                }
             }
             if matches!(
                 FileKind::of(Path::new(rel)),
@@ -933,6 +1033,144 @@ impl ProjectWorkspace {
         }
     }
 
+    /// Guarda um objeto da cena ativa (com os filhos) num `.prefab` e
+    /// transforma o objeto numa instância dele.
+    fn create_prefab(&mut self, id: u32, dir: Option<String>) {
+        let Some(scene) = self.active_scene.clone() else {
+            return;
+        };
+        let Some(obj) = self
+            .scenes
+            .get(&scene)
+            .and_then(|d| d.data.find(id))
+            .cloned()
+        else {
+            return;
+        };
+        if obj.prefab.is_some() {
+            self.console
+                .warn(format!("\"{}\" já é um prefab.", obj.name));
+            return;
+        }
+        let dir = dir
+            .filter(|d| !d.is_empty())
+            .unwrap_or_else(|| "prefabs".into());
+        let slug: String = crate::commands::fold(&obj.name)
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect();
+        let slug = if slug.trim_matches('_').is_empty() {
+            "objeto".to_string()
+        } else {
+            slug
+        };
+        let mut rel = files::join_rel(&dir, &format!("{slug}.prefab"));
+        let mut n = 2;
+        while self.root.join(&rel).exists() {
+            rel = files::join_rel(&dir, &format!("{slug}_{n}.prefab"));
+            n += 1;
+        }
+        // O prefab começa no (0, 0), com ids próprios.
+        let mut base = obj.clone();
+        base.x = 0.0;
+        base.y = 0.0;
+        let mut next = 1;
+        fn renumber(o: &mut crate::scene_data::Object, next: &mut u32) {
+            o.id = *next;
+            *next += 1;
+            for c in &mut o.children {
+                renumber(c, next);
+            }
+        }
+        renumber(&mut base, &mut next);
+        let full = self.root.join(&rel);
+        if let Some(parent) = full.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Err(e) = crate::files::write_atomic(&full, &crate::scene_data::write_prefab(&base)) {
+            self.console
+                .error(format!("Não foi possível criar {rel}: {e}"));
+            return;
+        }
+        self.files.rescan();
+        self.file_panel.reveal(&rel);
+        if let Some(doc) = self.scenes.get_mut(&scene) {
+            doc.begin_frame();
+            doc.record(None);
+            let removed: Vec<u32> = {
+                let mut v = Vec::new();
+                crate::scene_data::visit(&obj.children, &mut |c| v.push(c.id));
+                v
+            };
+            if let Some(o) = doc.data.find_mut(id) {
+                o.children.clear();
+                o.prefab = Some(crate::scene_data::PrefabLink {
+                    path: rel.clone(),
+                    base: None,
+                    raw: Vec::new(),
+                });
+                o.link_prefab(base);
+            }
+            doc.selection.retain(|s| !removed.contains(s));
+            doc.end_frame();
+        }
+        self.console.info(format!(
+            "Prefab criado: {rel}. Arraste-o do painel Arquivos para pôr cópias nas cenas."
+        ));
+    }
+
+    /// Cria `scripts/<nome do objeto>.lua` com o modelo de comportamento e
+    /// põe no objeto.
+    fn new_behavior_script(&mut self, scene: &str, id: u32) {
+        let Some(name) = self
+            .scenes
+            .get(scene)
+            .and_then(|d| d.data.find(id))
+            .map(|o| o.name.clone())
+        else {
+            return;
+        };
+        let slug: String = crate::commands::fold(&name)
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect();
+        let slug = if slug.trim_matches('_').is_empty() {
+            "comportamento".to_string()
+        } else {
+            slug
+        };
+        let mut rel = format!("scripts/{slug}.lua");
+        let mut n = 2;
+        while self.root.join(&rel).exists() {
+            rel = format!("scripts/{slug}_{n}.lua");
+            n += 1;
+        }
+        let full = self.root.join(&rel);
+        if let Some(dir) = full.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Err(e) = std::fs::write(&full, crate::behaviors::template(&name)) {
+            self.console
+                .error(format!("Não foi possível criar {rel}: {e}"));
+            return;
+        }
+        self.console.info(format!("Criado: {rel}"));
+        self.files.rescan();
+        let info = self.inspector.catalog.get(&self.root, &rel);
+        if let Some(doc) = self.scenes.get_mut(scene) {
+            doc.begin_frame();
+            doc.record(None);
+            if let Some(o) = doc.data.find_mut(id) {
+                o.components.push(crate::scene_data::Component::behavior(
+                    &rel,
+                    &info.defaults(),
+                ));
+            }
+            doc.end_frame();
+        }
+        self.open_file(&rel, None);
+    }
+
     /// Cria (ou liga, se já existir) o script `<cena>.lua` da cena visual.
     fn create_scene_script(&mut self, scene_rel: &str) {
         let script = match scene_rel.rsplit_once('.') {
@@ -1067,6 +1305,13 @@ impl ProjectWorkspace {
                 Action::SaveDoc(rel) => self.save_doc(&rel),
                 Action::TestScene(rel) => self.play_from(ctx, env, Some(&rel)),
                 Action::CreateSceneScript(rel) => self.create_scene_script(&rel),
+                Action::NewBehaviorScript { scene, id } => self.new_behavior_script(&scene, id),
+                Action::CreatePrefab { id, dir } => self.create_prefab(id, dir),
+                Action::GameCommand(cmd) => {
+                    if let Some(g) = &mut self.game {
+                        g.send(&serde_json::json!({ "cmd": cmd }).to_string());
+                    }
+                }
                 Action::OpenAsText(rel) => {
                     self.file_panel.reveal(&rel);
                     self.show_tab(Tab::Code(rel));
@@ -1239,6 +1484,14 @@ impl ProjectWorkspace {
         for doc in self.scenes.values_mut() {
             doc.begin_frame();
         }
+        // Autocompletar: só para o código com o foco.
+        let mut code_env = None;
+        if let Some(rel) = self.focused_code.clone()
+            && rel.ends_with(".lua")
+            && self.docs.contains_key(&rel)
+        {
+            code_env = Some((rel.clone(), self.completion_env(&rel)));
+        }
         {
             let mut viewer = Viewer {
                 root: &self.root,
@@ -1271,6 +1524,10 @@ impl ProjectWorkspace {
                 design: (f64::from(self.config.width), f64::from(self.config.height)),
                 clear_color: &self.config.clear_color,
                 time: self.started.elapsed().as_secs_f32(),
+                code_env: code_env.as_ref(),
+                game_state: self.game_state.as_ref().filter(|g| {
+                    self.game.is_some() && self.game_scene.as_deref() == Some(g.scene.as_str())
+                }),
             };
             let mut style = egui_dock::Style::from_egui(ui.style().as_ref());
             style.tab_bar.fill_tab_bar = false;
@@ -1659,6 +1916,85 @@ impl ProjectWorkspace {
     }
 }
 
+/// Lista das variáveis do jogo (`vars` do config.lua). Devolve `false` se
+/// algum nome for inválido ou repetido.
+fn vars_editor(ui: &mut egui::Ui, vars: &mut Vec<(String, crate::scene_data::Prop)>) -> bool {
+    use crate::scene_data::Prop;
+    ui.label(RichText::new("Variáveis do jogo").strong());
+    ui.weak("Valem de uma cena para outra (nn.vars.nome). Coletável e Vida mudam elas; Mostrar valor mostra na tela.");
+    ui.add_space(4.0);
+    let mut ok = true;
+    let mut remove = None;
+    let names: Vec<String> = vars.iter().map(|(k, _)| k.clone()).collect();
+    egui::Grid::new("grade-vars")
+        .num_columns(4)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            for (i, (name, value)) in vars.iter_mut().enumerate() {
+                let valid = config_lua::valid_var_name(name)
+                    && names.iter().filter(|n| *n == name).count() == 1;
+                ok &= valid;
+                let r = ui.add(
+                    egui::TextEdit::singleline(name)
+                        .desired_width(140.0)
+                        .text_color_opt((!valid).then_some(theme::ERROR)),
+                );
+                if !valid {
+                    r.on_hover_text("Use letras, números e _ (sem espaço, sem começar com número), sem repetir.");
+                }
+                let kind = match value {
+                    Prop::Num(_) => 0,
+                    Prop::Str(_) => 1,
+                    Prop::Bool(_) => 2,
+                };
+                let mut new_kind = kind;
+                egui::ComboBox::from_id_salt(("tipo-var", i))
+                    .width(90.0)
+                    .selected_text(["número", "texto", "sim/não"][kind])
+                    .show_ui(ui, |ui| {
+                        for (k, l) in ["número", "texto", "sim/não"].iter().enumerate() {
+                            ui.selectable_value(&mut new_kind, k, *l);
+                        }
+                    });
+                if new_kind != kind {
+                    *value = match new_kind {
+                        0 => Prop::Num(0.0),
+                        1 => Prop::Str(String::new()),
+                        _ => Prop::Bool(false),
+                    };
+                }
+                match value {
+                    Prop::Num(n) => {
+                        ui.add(egui::DragValue::new(n).speed(1.0));
+                    }
+                    Prop::Str(t) => {
+                        ui.add(egui::TextEdit::singleline(t).desired_width(140.0));
+                    }
+                    Prop::Bool(b) => {
+                        ui.checkbox(b, "");
+                    }
+                }
+                if ui.small_button("✖").on_hover_text("Tirar").clicked() {
+                    remove = Some(i);
+                }
+                ui.end_row();
+            }
+        });
+    if let Some(i) = remove {
+        vars.remove(i);
+    }
+    if ui.button("➕ Variável").clicked() {
+        let mut n = 1;
+        let mut name = "pontos".to_string();
+        while vars.iter().any(|(k, _)| *k == name) {
+            n += 1;
+            name = format!("pontos_{n}");
+        }
+        vars.push((name, Prop::Num(0.0)));
+    }
+    ok
+}
+
 fn drop_overlay(ctx: &egui::Context, dest: Option<String>) {
     let screen = ctx.content_rect();
     let painter = ctx.layer_painter(egui::LayerId::new(
@@ -1713,6 +2049,10 @@ struct Viewer<'a> {
     design: (f64, f64),
     clear_color: &'a str,
     time: f32,
+    /// Autocompletar do código com o foco: (arquivo, o que ele sabe).
+    code_env: Option<&'a (String, crate::complete::Env)>,
+    /// O que o jogo aberto conta da cena da frente.
+    game_state: Option<&'a crate::scene_view::GameState>,
 }
 
 impl TabViewer for Viewer<'_> {
@@ -1860,7 +2200,11 @@ impl TabViewer for Viewer<'_> {
                     }
                 }
                 let doc = self.docs.get_mut(rel.as_str()).expect("documento aberto");
-                for a in doc.ui(ui, self.lua, self.zoom_code) {
+                let env = self
+                    .code_env
+                    .filter(|(r, _)| r == rel.as_str())
+                    .map(|(_, e)| e);
+                for a in doc.ui(ui, self.lua, self.zoom_code, env) {
                     match a {
                         CodeAction::Save => self.actions.push(Action::SaveDoc(rel.clone())),
                         CodeAction::Reload => self.actions.push(Action::ReloadDoc(rel.clone())),
@@ -1897,14 +2241,26 @@ impl TabViewer for Viewer<'_> {
                     .active_scene
                     .as_deref()
                     .and_then(|r| self.scenes.get_mut(r));
-                self.hierarchy.ui(ui, doc);
+                for a in self.hierarchy.ui(ui, doc) {
+                    match a {
+                        HierarchyAction::CreatePrefab { id, dir } => {
+                            self.actions.push(Action::CreatePrefab { id, dir });
+                        }
+                        HierarchyAction::OpenFile(rel) => {
+                            self.actions.push(Action::OpenFile { rel, line: None });
+                        }
+                    }
+                }
             }
             Tab::Inspector => {
                 let active = self.active_scene.clone();
                 let doc = active.as_deref().and_then(|r| self.scenes.get_mut(r));
+                let game = self
+                    .game_state
+                    .filter(|g| active.as_deref() == Some(g.scene.as_str()));
                 for a in self
                     .inspector
-                    .ui(ui, doc, self.files, self.sizes, self.mode)
+                    .ui(ui, doc, self.files, self.sizes, self.mode, game)
                 {
                     match a {
                         InspectorAction::OpenFile(rel) => {
@@ -1913,6 +2269,14 @@ impl TabViewer for Viewer<'_> {
                         InspectorAction::CreateScript => {
                             if let Some(r) = &active {
                                 self.actions.push(Action::CreateSceneScript(r.clone()));
+                            }
+                        }
+                        InspectorAction::NewBehaviorScript(id) => {
+                            if let Some(r) = &active {
+                                self.actions.push(Action::NewBehaviorScript {
+                                    scene: r.clone(),
+                                    id,
+                                });
                             }
                         }
                     }
@@ -1942,6 +2306,7 @@ impl Viewer<'_> {
             clear_color: self.clear_color,
             connected: self.game_scene == Some(rel),
             time: self.time,
+            game: self.game_state.filter(|g| g.scene == rel),
         };
         let actions = doc.ui(ui, &mut env);
         for a in actions {
@@ -1949,6 +2314,7 @@ impl Viewer<'_> {
                 SceneAction::TestHere => self.actions.push(Action::TestScene(rel.to_string())),
                 SceneAction::Reload => doc.reload(self.root),
                 SceneAction::OpenAsText => self.actions.push(Action::OpenAsText(rel.to_string())),
+                SceneAction::Game(cmd) => self.actions.push(Action::GameCommand(cmd)),
             }
         }
         // Clicou nesta cena: a Hierarquia e o Inspetor passam a mostrá-la.
@@ -2073,7 +2439,8 @@ impl Viewer<'_> {
         let full = self.mode.is_full();
         let scenes: Vec<String> = self
             .files
-            .files_of(FileKind::Lua)
+            .files_of(FileKind::Scene)
+            .chain(self.files.files_of(FileKind::Lua))
             .filter(|e| e.rel != "config.lua")
             .map(|e| e.rel.clone())
             .collect();
@@ -2158,6 +2525,8 @@ impl Viewer<'_> {
             ui.add_space(4.0);
             ui.weak("Mais opções no modo Completo (botão Completo, no alto à direita).");
         }
+        ui.add_space(14.0);
+        let vars_ok = vars_editor(ui, &mut self.form.values.vars);
         ui.add_space(12.0);
         let changed = self
             .form
@@ -2168,7 +2537,7 @@ impl Viewer<'_> {
         ui.horizontal(|ui| {
             if ui
                 .add_enabled(
-                    !changed.is_empty(),
+                    !changed.is_empty() && vars_ok,
                     egui::Button::new("💾 Salvar configurações")
                         .fill(theme::ACCENT.gamma_multiply(0.7)),
                 )

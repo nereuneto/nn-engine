@@ -11,7 +11,7 @@ cargo nn novo ../meu-jogo     # cria a pasta com um jogo pequeno e completo
 cargo nn ../meu-jogo          # joga
 ```
 
-O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"` e `--modelo minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
+O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"`, `--modelo visual` (uma fase de plataforma montada no [NN Studio](studio.md), sem código, com [comportamentos](#comportamentos) prontos e um [prefab](#prefabs)) e `--modelo minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
 
 Para ver jogos prontos:
 
@@ -55,10 +55,14 @@ return {
   fixed_hz = 60,          -- passos de fixed_update por segundo
   resizable = true,
   hot_reload = true,      -- recarregar ao salvar
+  vars = {                -- variáveis do jogo (nn.vars)
+    moedas = 0,
+    vidas = 3,
+  },
 }
 ```
 
-Todas as opções são opcionais. Rodando da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), o jogo recarrega ao salvar, a não ser que o `config.lua` diga `hot_reload = false`; o jogo exportado não recarrega. O NN Studio também edita estas opções num formulário (**Editar > Configurações do projeto**), sem mexer nos comentários do arquivo.
+Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#variáveis-do-jogo-nnvars). Rodando da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), o jogo recarrega ao salvar, a não ser que o `config.lua` diga `hot_reload = false`; o jogo exportado não recarrega. O NN Studio também edita estas opções num formulário (**Editar > Configurações do projeto**), sem mexer nos comentários do arquivo.
 
 As mensagens de erro do Lua aparecem em português ("tentou chamar um valor nil (vazio) (método 'pular')"), na tela de erro do jogo e no console do NN Studio.
 
@@ -162,8 +166,10 @@ Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), 
 | `shape` | `shape` ("rect" ou "circle"), `w`, `h` (64), `radius` (32), `color` |
 | `body` | `body` ("dynamic", "static" ou "kinematic"), `shape` ("box" ou "circle"), `w`, `h` (32), `radius` (16), `sensor`, `one_way`, `bounce` (0), `gravity_scale` (1), `tag` (padrão: o nome do objeto) |
 | `map` | `map` (arquivo .tmj), `scale` (1), `collision` (true) |
+| (sprite, text, shape) | `hud` (false): fixo na tela, em vez de andar com o mundo. A posição conta a partir do centro da tela (y para cima). |
 | `camera` | `follow` (nome do objeto a seguir), `smooth` (6), `zoom` (1), `limit_to_map` (true) |
 | `sound` | `sound`, `autoplay` (true), `loop`, `volume` (1), `channel` ("effects" ou "music") |
+| `behavior` | `script` (`"nn:plataforma"` para um [pronto](#comportamentos-prontos) ou o caminho de um `.lua`) e as propriedades dele, soltas: `{ type = "behavior", script = "nn:patrulha", velocidade = 60 }` |
 | `particles` | `rate` (20), `lifetime` (1), `speed_min`, `speed_max`, `direction` (90, em graus), `spread` (360), `gravity`, `size_start`, `size_end`, `color_start`, `color_end`, `blend`, `emitting` |
 
 **O script da cena** é um arquivo `.lua` que devolve uma tabela com os callbacks de sempre (`enter`, `fixed_update`, `update`, `draw`, `exit`, `resume`, `reload`), chamados depois do que a engine faz sozinha. Os objetos já existem quando o `enter` roda:
@@ -180,6 +186,22 @@ Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), 
 | `obj:world_transform()` | Posição, rotação e escala no mundo (somando os pais). |
 | `obj:destroy()` | Tira o objeto (e os filhos) da cena. |
 | `obj.parent`, `obj.children`, `obj.name`, `obj.id` | A árvore de objetos. |
+| `obj.vx`, `obj.vy` | Num objeto **sem** corpo físico, velocidade: ele anda sozinho (tiros, enfeites). |
+| `obj:behavior(nome)` | O comportamento (`"plataforma"`, `"nn:plataforma"` ou `"scripts/x.lua"`), ou `nil`. |
+| `obj:send(msg, ...)` | Chama `msg(...)` em todos os comportamentos do objeto que tiverem essa função: `heroi:send("dano", 1)`. |
+| `obj:bounds()` | Metade da largura e da altura (do corpo, da imagem ou da forma). |
+| `obj:touching(outro, margem)` | Os dois estão encostando? |
+| `obj:move_to(x, y)` | Leva o objeto (e o corpo) para lá, parado. |
+
+A cena também tem:
+
+| Na cena | O que faz |
+|---|---|
+| `self:spawn(prefab, x, y, opts)` | Cria um objeto a partir de um [prefab](#prefabs), com a cena rodando, e devolve o objeto. `opts` muda campos (`{ name = "tiro2", layer = 5 }`). |
+| `self:restart(opts)` | Reinicia a cena. `{ checkpoint = true }` põe o jogador no último checkpoint. |
+| `self:set_checkpoint(x, y)`, `self:checkpoint()` | Guarda / lê o ponto de reinício da cena. |
+| `self:targets(quem)` | Objetos com esse nome; `""` = o jogador (objetos com comportamento de jogador). |
+| `self:burst(x, y, cor, n)` | Faíscas num ponto. |
 
 Para reagir a toques entre corpos, defina `contact`: ele recebe os eventos da física com os objetos em `e.object_a` e `e.object_b` (o sensor, se houver, vem em `a`):
 
@@ -192,6 +214,109 @@ end
 ```
 
 Ao salvar o `.cena` ou o script com o jogo aberto, os objetos voltam ao que está no arquivo e o resto do estado do script (`self.pontos`...) continua.
+
+### Comportamentos
+
+Um comportamento é um componente `behavior`: um pedaço de lógica preso a um objeto, com propriedades que aparecem no Inspetor do NN Studio. Pode ser um dos [prontos](#comportamentos-prontos) (`script = "nn:plataforma"`) ou um arquivo seu, que devolve uma tabela:
+
+```lua
+-- scripts/girar.lua
+local B = {
+  title = "Girar",                                   -- nome no Inspetor
+  description = "Gira o objeto sem parar.",
+  category = "Movimento",                            -- grupo no menu
+  requires = { "sprite" },                           -- componentes de que precisa (opcional)
+  props = {
+    { "velocidade", 90, label = "Velocidade", help = "Graus por segundo.", min = -720, max = 720 },
+    { "sentido", "horario", options = { { "horario", "horário" }, { "anti", "anti-horário" } } },
+    { "som", "", type = "sound", advanced = true },
+  },
+}
+
+function B:start()                -- todos os objetos da cena já existem
+  self.giros = 0
+end
+
+function B:update(dt)
+  local s = self.sentido == "horario" and -1 or 1
+  self.obj.rotation = self.obj.rotation + s * self.velocidade * dt
+end
+
+return B
+```
+
+- **Propriedades** (`props`): lista de `{ "nome", padrão, ... }`. Cada uma vira `self.<nome>`, com o valor que o objeto tem no `.cena` (ou o padrão). Opções: `label`, `help`, `min`, `max`, `integer = true`, `options = { { valor, "texto" }, ... }` (escolha), `advanced = true` (só no modo Completo), `show_if = { "outra", valores... }` (só aparece quando outra propriedade tem um desses valores) e `type`, que normalmente é deduzido do padrão (número, sim/não, cor `"#RRGGBB"`, texto). Para o Inspetor mostrar a lista certa, `type` pode ser `"object"` (nome de um objeto da cena), `"scene"`, `"prefab"`, `"sound"`, `"image"`, `"color"` ou `"choice"`. Também vale um mapa simples: `props = { velocidade = 90 }`.
+- **Callbacks** (todos opcionais): `start()`, `update(dt)`, `fixed_update(dt)`, `draw()` (depois dos objetos), `contact(outro, e)` (o corpo do objeto tocou o de `outro`; `e` é o evento da física) e `destroyed()`.
+- **Campos:** `self.obj` (o objeto), `self.scene` (a cena: `self.scene:find`, `self.scene:spawn`...), `self.enabled` (`false` para de rodar) e `self.component` (o componente, com os valores do arquivo).
+- `player = true` marca um comportamento de jogador: é quem os outros procuram quando "Quem" ou "Alvo" fica vazio.
+- Qualquer função do comportamento pode ser chamada por mensagem: `obj:send("dano", 1)` chama `dano(1)` em todos os comportamentos do objeto (é assim que o Perigo tira vida da Vida).
+
+No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um arquivo com esse formato. Ao salvar o script com o jogo aberto, os comportamentos são recriados.
+
+#### Comportamentos prontos
+
+| `script` | O que faz | Propriedades (padrão) |
+|---|---|---|
+| `nn:plataforma` | Jogador de plataforma: anda e pula (setas, WASD, espaço, controle). Precisa de corpo dinâmico. | `velocidade` (320), `pulo` (860), `pulos_no_ar` (0), `coiote` (0.1), `pulo_variavel` (true) |
+| `nn:topdown` | Jogador visto de cima: anda nas 4 direções. | `velocidade` (260) |
+| `nn:vida` | Pontos de vida; recebe `dano(n)` e `curar(n)`. | `vidas` (3), `variavel` ("vidas": espelha numa variável do jogo), `invencivel` (1 s), `ao_acabar` ("reiniciar", "checkpoint", "cena", "destruir"), `cena`, `piscar` (true) |
+| `nn:patrulha` | Anda até uma parede (ou a beirada) e volta. Precisa de corpo. | `velocidade` (120), `direcao` ("direita"), `beirada` (true), `espelhar` (true) |
+| `nn:perseguir` | Vai atrás do alvo quando ele chega perto. | `alvo` ("" = jogador), `velocidade` (150), `visao` (320), `voar` (false), `espelhar` (true) |
+| `nn:perigo` | Machuca quem encosta. | `quem` (""), `acao` ("dano", "checkpoint", "reiniciar"), `dano` (1), `pisar` (false: pular em cima destrói), `some` (false), `empurrao` (520) |
+| `nn:coletavel` | Some ao ser tocado e soma numa variável. | `quem` (""), `variavel` ("moedas"), `valor` (1), `som`, `brilho` (true), `cor_brilho` |
+| `nn:checkpoint` | Ponto de reinício. | `quem` ("") |
+| `nn:ir_para_cena` | Leva para outra cena. | `cena`, `quem` (""), `tecla` (false: precisa apertar para cima / Enter), `escurecer` (0.5 s) |
+| `nn:movimento` | Gira, flutua ou vai e volta (com corpo cinemático, carrega quem está em cima). | `tipo` ("ir_e_voltar", "flutuar", "girar"), `distancia_x` (200), `distancia_y` (0), `altura` (12), `duracao` (2), `velocidade` (90) |
+| `nn:animacao` | Troca os quadros conforme o estado. Precisa de imagem. | `parado` ("1"), `andando`, `pulando`, `caindo` (listas como `"1-4"` ou `"5,6"`; vazio usa o anterior), `fps` (10), `espelhar` (true) |
+| `nn:mostrar_valor` | Escreve variáveis num texto. Precisa de texto. | `texto` ("Moedas: {moedas}") |
+| `nn:atirar` | Cria um prefab andando. | `prefab`, `tecla` ("x"; vazio = sozinho), `intervalo` (0.3), `velocidade` (700), `direcao` ("frente", "jogador", "direita", "cima"), `som`, `distancia` (24) |
+| `nn:gerador` | Cria um prefab de tempos em tempos. | `prefab`, `intervalo` (2), `maximo` (10), `espalhar_x`, `espalhar_y` (0), `comecar_ja` (false) |
+| `nn:temporario` | Some depois de um tempo ou fora da tela. | `tempo` (3), `fora_da_tela` (true) |
+
+Os prontos são escritos em Lua, com a mesma API dos seus: o código deles está em `crates/nn-script/src/comportamentos/` e é um bom ponto de partida para um comportamento novo.
+
+### Prefabs
+
+Um prefab (`.prefab`) é um objeto guardado num arquivo próprio, para usar em várias cenas:
+
+```lua
+return {
+  format = 1,
+  object = {
+    id = 1, name = "moeda",
+    components = {
+      { type = "sprite", image = "assets/imagens/moeda.png", frame_w = 16, frame_h = 16, w = 40, h = 40 },
+      { type = "behavior", script = "nn:coletavel", variavel = "moedas", valor = 1 },
+    },
+    children = { ... },
+  },
+}
+```
+
+Numa cena, uma instância é um objeto com `prefab`, a posição dela e, se for o caso, o que muda em relação ao prefab:
+
+```lua
+{
+  id = 7, name = "moeda_rara", prefab = "prefabs/moeda.prefab",
+  x = 200, y = 40, rotation = 0, scale_x = 1, scale_y = 1, visible = true, layer = 1,
+  overrides = {
+    { component = 2, valor = 5 },   -- o 2º componente do prefab, com valor = 5
+  },
+}
+```
+
+Os componentes e os filhos vêm do prefab, então mudar o arquivo muda todas as instâncias. Em código, `self:spawn("prefabs/moeda.prefab", x, y)` cria uma na hora.
+
+### Variáveis do jogo (nn.vars)
+
+`nn.vars` guarda o que vale para o jogo todo: começa com as `vars` do `config.lua`, **passa de uma cena para outra** e volta ao começo quando o jogo é aberto de novo. `nn.reset_vars()` volta tudo aos valores do `config.lua` (a Vida faz isso ao reiniciar a cena). Para guardar no disco entre uma partida e outra, use [nn.save](#nnsave).
+
+```lua
+nn.vars.moedas = nn.vars.moedas + 1
+if nn.vars.vidas <= 0 then nn.scene.switch("cenas/fim.cena") end
+```
+
+Variáveis novas no `config.lua` aparecem no jogo aberto ao salvar.
 
 ## Referência da API
 
@@ -626,4 +751,4 @@ Enquanto a tela escurece, a cena que está saindo continua desenhada mas fica pa
 
 ### Outros
 
-`print(...)` escreve no terminal (log da engine). `nn.version` é a versão da engine. Variáveis globais são compartilhadas entre as cenas e sobrevivem à recarga.
+`print(...)` escreve no terminal (log da engine). `nn.version` é a versão da engine. `nn.vars` e `nn.reset_vars()`: veja [variáveis do jogo](#variáveis-do-jogo-nnvars). Variáveis globais são compartilhadas entre as cenas e sobrevivem à recarga.

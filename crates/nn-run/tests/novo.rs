@@ -150,6 +150,13 @@ fn modelo_visual_roda_a_fase_e_pega_moedas() {
     assert!(ScriptRuntime::new(&dir).unwrap().check_syntax().is_empty());
 
     let rt = ScriptRuntime::new(&dir).unwrap();
+    let vars = rt.clone();
+    let var = move |name: &str| -> i64 {
+        vars.lua()
+            .load(format!("return nn.vars.{name}"))
+            .eval()
+            .unwrap()
+    };
     let config = project
         .config
         .clone()
@@ -173,18 +180,17 @@ fn modelo_visual_roda_a_fase_e_pega_moedas() {
     };
     h.run_frames(30);
     assert_eq!(h.game.0.error(), None);
-    assert_eq!(h.game.0.field::<i64>("total"), Some(3));
-    // Anda para a direita até a moeda que está no chão.
+    assert_eq!(var("moedas"), 0);
+    assert_eq!(var("vidas"), 3);
+    // Anda para a direita até a moeda que está no chão. Não tem nenhum
+    // código: só comportamentos prontos e um prefab.
     h.ctx.input.press_key(KeyCode::KeyD);
-    h.run_frames(150);
+    h.run_frames(120);
     h.ctx.input.release_key(KeyCode::KeyD);
     h.run_frames(5);
     assert_eq!(h.game.0.error(), None);
-    assert_eq!(
-        h.game.0.field::<i64>("pontos"),
-        Some(1),
-        "pegou a moeda do chão"
-    );
+    assert_eq!(var("moedas"), 1, "pegou a moeda do chão");
+    assert_eq!(var("vidas"), 3);
     drop(h);
     std::fs::remove_dir_all(&dir).unwrap();
 }

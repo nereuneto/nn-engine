@@ -87,12 +87,41 @@ pub fn format_record(level: log::Level, target: &str, message: &str) -> String {
 /// Linha em que o jogo avisa qual cena está na frente (para o ajuste ao
 /// vivo): devolve o caminho da cena.
 pub fn live_scene(line: &str) -> Option<String> {
+    match live_message(line)? {
+        LiveMessage::Scene(s) => Some(s),
+        _ => None,
+    }
+}
+
+/// O que o jogo aberto pelo editor manda pelo canal ao vivo.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LiveMessage {
+    /// A cena da frente.
+    Scene(String),
+    /// Onde estão os objetos, propriedades e variáveis (JSON).
+    State(serde_json::Value),
+    /// Ctrl+clique num objeto da janela do jogo.
+    Select(u32),
+}
+
+/// Linha do canal ao vivo (não vai para o console).
+pub fn live_message(line: &str) -> Option<LiveMessage> {
     let json = line.strip_prefix(LOG_PREFIX)?;
     let rec = serde_json::from_str::<Record>(json).ok()?;
     if rec.target != nn_script::live::LOG_TARGET {
         return None;
     }
-    rec.message.strip_prefix("cena: ").map(str::to_string)
+    let m = rec.message;
+    if let Some(s) = m.strip_prefix("cena: ") {
+        return Some(LiveMessage::Scene(s.to_string()));
+    }
+    if let Some(s) = m.strip_prefix("estado: ") {
+        return serde_json::from_str(s).ok().map(LiveMessage::State);
+    }
+    if let Some(s) = m.strip_prefix("selecionar: ") {
+        return s.trim().parse().ok().map(LiveMessage::Select);
+    }
+    None
 }
 
 pub fn parse_game_line(line: &str) -> (Level, Category, String) {

@@ -992,3 +992,255 @@ fn cena_visual_desenhada_pela_engine() {
     }
     assert!(found, "o quadrado não apareceu; fundo {fundo:?}");
 }
+
+#[test]
+fn autocompletar_no_editor_de_codigo() {
+    let dir = temp("autocompletar");
+    let proj = plataforma(&dir);
+    std::fs::create_dir_all(proj.join("scripts")).unwrap();
+    std::fs::write(proj.join("scripts/fase.lua"), "").unwrap();
+    std::fs::write(
+        proj.join("cenas/teste.cena"),
+        "return { script = 'scripts/fase.lua', objects = { { id = 1, name = 'heroi' } } }",
+    )
+    .unwrap();
+    let mut h = studio(&dir, Some(proj.clone()));
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("scripts/fase.lua", None);
+    h.run();
+    let editor = h.get_by_role(Role::MultilineTextInput);
+    editor.focus();
+    h.run();
+    let texto = |h: &Harness<'_, StudioApp>| {
+        h.state().project().unwrap().docs["scripts/fase.lua"]
+            .text
+            .clone()
+    };
+
+    // "nn.dr" sugere "draw"; Enter aceita.
+    digitar(&mut h, "nn.dr");
+    h.get_by_label("{}  draw");
+    tela(&mut h, "autocompletar");
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(texto(&h), "nn.draw");
+    // Depois do ponto, as funções; aceitar uma função abre o parêntese.
+    digitar(&mut h, ".rec");
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(texto(&h), "nn.draw.rect(");
+    // A dica mostra os parâmetros enquanto se digita os argumentos.
+    h.get_by_label_contains("nn.draw.rect(x, y, w, h, cor)");
+    digitar(&mut h, "0, 0, 8, 8)\n");
+
+    // Objetos da cena que usa este script.
+    digitar(&mut h, "self.objects.he");
+    h.key_press(Key::Tab);
+    h.run();
+    assert!(texto(&h).ends_with("self.objects.heroi"), "{}", texto(&h));
+    // Esc fecha sem mudar nada.
+    digitar(&mut h, ".bo");
+    h.key_press(Key::Escape);
+    h.run();
+    assert!(
+        texto(&h).ends_with("self.objects.heroi.bo"),
+        "{}",
+        texto(&h)
+    );
+    assert!(
+        h.state().project().unwrap().docs["scripts/fase.lua"]
+            .suggest
+            .is_none()
+    );
+}
+
+/// "Jogo" que conta o estado da cena, pede para selecionar um objeto e
+/// guarda o que recebe.
+#[cfg(unix)]
+fn jogo_que_conta(dir: &Path) -> PathBuf {
+    let p = dir.join("jogo-conta.sh");
+    let recebido = dir.join("comandos.txt");
+    let estado = r#"estado: {\"scene\":\"cenas/teste.cena\",\"paused\":false,\"objects\":[{\"id\":2,\"x\":50,\"y\":0,\"rotation\":0,\"scale_x\":1,\"scale_y\":1,\"wx\":50,\"wy\":0,\"wr\":0,\"wsx\":1,\"wsy\":1,\"visible\":true,\"props\":{}}],\"vars\":{\"moedas\":7}}"#;
+    std::fs::write(
+        &p,
+        format!(
+            "#!/bin/sh\n\
+             printf '%s\\n' '@nn {{\"n\":\"Info\",\"a\":\"nn_script::live\",\"m\":\"cena: cenas/teste.cena\"}}'\n\
+             printf '%s\\n' '@nn {{\"n\":\"Info\",\"a\":\"nn_script::live\",\"m\":\"{estado}\"}}'\n\
+             printf '%s\\n' '@nn {{\"n\":\"Info\",\"a\":\"nn_script::live\",\"m\":\"selecionar: 2\"}}'\n\
+             while read -r linha; do echo \"$linha\" >> '{}'; done\n",
+            recebido.display()
+        ),
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    p
+}
+
+#[cfg(unix)]
+#[test]
+fn jogo_conta_onde_estao_os_objetos_e_o_editor_pausa() {
+    let dir = temp("jogo-conta");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), jogo_que_conta(&dir), false);
+    com_cena(&mut h, &proj);
+    h.key_press(Key::F6);
+    h.run_steps(3);
+    let start = std::time::Instant::now();
+    while h.state().project().unwrap().game_state.is_none() || cena(&h).selection.is_empty() {
+        assert!(start.elapsed().as_secs() < 20, "o jogo não contou o estado");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.step();
+    }
+    h.run_steps(3);
+    // Ctrl+clique no jogo selecionou o quadrado aqui.
+    assert_eq!(cena(&h).selection, vec![2]);
+    // O Inspetor mostra onde ele está no jogo e deixa trazer para a cena.
+    h.get_by_label("No jogo");
+    tela(&mut h, "jogo-conta");
+    h.get_by_label("Manter").click();
+    h.run_steps(3);
+    assert_eq!(objeto(&h, "quadrado").x, 50.0);
+    // Pausar manda o comando para o jogo.
+    h.get_by_label("Pausar").click();
+    h.run_steps(3);
+    let arquivo = dir.join("comandos.txt");
+    let start = std::time::Instant::now();
+    loop {
+        let t = std::fs::read_to_string(&arquivo).unwrap_or_default();
+        if t.contains(r#"{"cmd":"pause"}"#) {
+            break;
+        }
+        assert!(start.elapsed().as_secs() < 10, "não chegou: {t}");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    h.key_press_modifiers(Modifiers::SHIFT, Key::F5);
+    h.run_steps(3);
+}
+
+#[test]
+fn comportamento_pronto_pelo_inspetor() {
+    let dir = temp("comportamento");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    h.get_by_label("quadrado").click();
+    h.run();
+    // Adicionar componente > Jogador > Jogador de plataforma.
+    h.get_by_label_contains("Adicionar componente").click();
+    h.run();
+    tela(&mut h, "adicionar-componente");
+    h.get_by_label_contains("Jogador").click();
+    h.run();
+    h.get_by_label("Jogador de plataforma").click();
+    h.run();
+    let q = objeto(&h, "quadrado").clone();
+    // Precisa de corpo físico: já veio junto.
+    assert!(q.component("body").is_some());
+    let b = q
+        .components
+        .iter()
+        .find(|c| c.is_behavior())
+        .expect("comportamento");
+    assert_eq!(b.str("script"), "nn:plataforma");
+    assert_eq!(b.num("velocidade"), 320.0);
+    // As propriedades aparecem com os nomes do script.
+    h.get_by_label("Força do pulo");
+    tela(&mut h, "comportamento");
+    // Salva e o arquivo tem uma linha só para o comportamento.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(
+        text.contains(
+            "{ type = \"behavior\", script = \"nn:plataforma\", coiote = 0.1, pulo = 860,"
+        ),
+        "{text}"
+    );
+}
+
+#[test]
+fn prefab_criado_pela_hierarquia_e_usado_na_cena() {
+    let dir = temp("prefab");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    // Botão direito no quadrado > Criar prefab.
+    h.get_by_label("quadrado").click_secondary();
+    h.run();
+    h.get_by_label_contains("Criar prefab").click();
+    h.run();
+    assert!(proj.join("prefabs/quadrado.prefab").exists());
+    let q = objeto(&h, "quadrado").clone();
+    assert_eq!(q.prefab.as_ref().unwrap().path, "prefabs/quadrado.prefab");
+    // Mudar a cor na instância vira uma mudança só dela (com ↺ para voltar).
+    let id = q.id;
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut("cenas/teste.cena").unwrap();
+        doc.selection = vec![id];
+        doc.data.find_mut(id).unwrap().components[0]
+            .set("color", nn_studio::scene_data::Prop::Str("#FF0000".into()));
+    }
+    h.run();
+    h.get_by_label("↺").click();
+    h.run();
+    assert_eq!(objeto(&h, "quadrado").components[0].str("color"), "#3FA7D6");
+    // Arrastar o prefab do painel Arquivos para a cena cria outra cópia.
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .file_panel
+        .reveal("prefabs/quadrado.prefab");
+    h.run();
+    let from = h.get_by_label("quadrado.prefab").rect().center();
+    let to = h.get_by_label("Vista da cena").rect().center() + egui::vec2(100.0, 50.0);
+    arrastar(&mut h, from, to);
+    let copias: Vec<_> = cena(&h)
+        .data
+        .objects
+        .iter()
+        .filter(|o| o.prefab.is_some())
+        .collect();
+    assert_eq!(copias.len(), 2);
+    // Mudar o prefab no disco muda as cópias abertas.
+    let text = std::fs::read_to_string(proj.join("prefabs/quadrado.prefab")).unwrap();
+    std::fs::write(
+        proj.join("prefabs/quadrado.prefab"),
+        text.replace("#3FA7D6", "#00FF00"),
+    )
+    .unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        h.run();
+        if objeto(&h, "quadrado").components[0].str("color") == "#00FF00" {
+            break;
+        }
+        assert!(start.elapsed().as_secs() < 10, "as cópias não mudaram");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    // Salvar: a cópia guarda só o caminho do prefab e a posição.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(
+        text.contains("prefab = \"prefabs/quadrado.prefab\""),
+        "{text}"
+    );
+    assert!(!text.contains("#00FF00"), "a cor vem do prefab: {text}");
+}
+
+#[test]
+fn variaveis_do_jogo_nas_configuracoes() {
+    let dir = temp("vars");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    paleta(&mut h, "configuracoes do projeto");
+    h.get_by_label("➕ Variável").click();
+    h.run();
+    h.get_by_label("💾 Salvar configurações").click();
+    h.run();
+    let text = std::fs::read_to_string(proj.join("config.lua")).unwrap();
+    assert!(text.contains("vars = { pontos = 0 }"), "{text}");
+}

@@ -6,8 +6,10 @@
 //! ▶ Jogar, que roda o jogo na própria janela dele.
 
 pub mod app;
+pub mod behaviors;
 pub mod code;
 pub mod commands;
+pub mod complete;
 pub mod config_lua;
 pub mod console;
 pub mod examples;

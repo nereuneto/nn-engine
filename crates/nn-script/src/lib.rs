@@ -27,6 +27,7 @@
 //! corrigido é salvo.
 
 mod api;
+pub mod api_docs;
 mod convert;
 mod errors;
 mod input;
@@ -62,6 +63,59 @@ pub const SCENE_RUNTIME: &str = include_str!("cena.lua");
 /// Extensão dos arquivos de cena visual.
 pub const SCENE_EXTENSION: &str = "cena";
 
+/// Extensão dos prefabs (um objeto pronto para usar em várias cenas).
+pub const PREFAB_EXTENSION: &str = "prefab";
+
+/// Comportamentos prontos (`"nn:<id>"` no componente `behavior`): id e
+/// código Lua. O NN Studio lê as propriedades de cada um.
+pub const BEHAVIORS: &[(&str, &str)] = &[
+    ("plataforma", include_str!("comportamentos/plataforma.lua")),
+    ("topdown", include_str!("comportamentos/topdown.lua")),
+    ("patrulha", include_str!("comportamentos/patrulha.lua")),
+    ("perseguir", include_str!("comportamentos/perseguir.lua")),
+    ("coletavel", include_str!("comportamentos/coletavel.lua")),
+    ("perigo", include_str!("comportamentos/perigo.lua")),
+    ("vida", include_str!("comportamentos/vida.lua")),
+    ("checkpoint", include_str!("comportamentos/checkpoint.lua")),
+    (
+        "ir_para_cena",
+        include_str!("comportamentos/ir_para_cena.lua"),
+    ),
+    ("animacao", include_str!("comportamentos/animacao.lua")),
+    ("movimento", include_str!("comportamentos/movimento.lua")),
+    ("atirar", include_str!("comportamentos/atirar.lua")),
+    ("gerador", include_str!("comportamentos/gerador.lua")),
+    ("temporario", include_str!("comportamentos/temporario.lua")),
+    (
+        "mostrar_valor",
+        include_str!("comportamentos/mostrar_valor.lua"),
+    ),
+];
+
+/// Variáveis do jogo (`nn.vars`): começam com o `vars` do config.lua e valem
+/// entre as cenas.
+const VARS_LUA: &str = r#"
+local initial = ...
+local function copy(v)
+  if type(v) ~= "table" then return v end
+  local t = {}
+  for k, x in pairs(v) do t[k] = copy(x) end
+  return t
+end
+nn.vars = copy(initial)
+--- Volta as variáveis do jogo aos valores do config.lua.
+function nn.reset_vars()
+  for k in pairs(nn.vars) do nn.vars[k] = nil end
+  for k, v in pairs(copy(initial)) do nn.vars[k] = v end
+end
+-- O config.lua mudou com o jogo aberto: variáveis novas aparecem.
+function nn._merge_vars(new)
+  initial = new
+  for k, v in pairs(new) do
+    if nn.vars[k] == nil then nn.vars[k] = copy(v) end
+  end
+end
+"#;
 /// Chave do registro Lua com o módulo das cenas visuais.
 const SCENE_RUNTIME_KEY: &str = "nn.cena";
 
@@ -131,7 +185,15 @@ impl ScriptRuntime {
         api::install(&lua)?;
         install_require(&lua, source.clone())?;
         let scene_runtime: Table = lua.load(SCENE_RUNTIME).set_name("@nn/cena.lua").eval()?;
+        let builtin: Table = scene_runtime.get("BUILTIN")?;
+        for (id, src) in BEHAVIORS {
+            builtin.set(*id, *src)?;
+        }
         lua.set_named_registry_value(SCENE_RUNTIME_KEY, scene_runtime)?;
+        let vars = config_vars(&lua, source.as_ref());
+        lua.load(VARS_LUA)
+            .set_name("@nn/vars.lua")
+            .call::<()>(vars)?;
 
         let loaded: Table = lua.globals().get::<Table>("package")?.get("loaded")?;
         let builtin_modules = loaded
@@ -175,6 +237,7 @@ impl ScriptRuntime {
         let mut errors = Vec::new();
         let mut files = self.inner.source.files("lua");
         files.extend(self.inner.source.files(SCENE_EXTENSION));
+        files.extend(self.inner.source.files(PREFAB_EXTENSION));
         for (path, _) in files {
             let result = self
                 .inner
@@ -248,6 +311,21 @@ impl ScriptRuntime {
         }
     }
 
+    /// Variáveis novas no config.lua passam a existir em `nn.vars`.
+    fn merge_config_vars(&self) {
+        let lua = &self.inner.lua;
+        let vars = config_vars(lua, self.inner.source.as_ref());
+        let merge = lua
+            .globals()
+            .get::<Table>("nn")
+            .and_then(|nn| nn.get::<Function>("_merge_vars"));
+        if let Ok(f) = merge
+            && let Err(e) = f.call::<()>(vars)
+        {
+            log::warn!("variáveis do config.lua: {e}");
+        }
+    }
+
     /// Descarrega os módulos do projeto (`require`) para que sejam lidos de novo.
     fn forget_project_modules(&self) -> mlua::Result<()> {
         let loaded: Table = self
@@ -273,6 +351,7 @@ impl ScriptRuntime {
         }
         let mut files = self.inner.source.files("lua");
         files.extend(self.inner.source.files(SCENE_EXTENSION));
+        files.extend(self.inner.source.files(PREFAB_EXTENSION));
         files.sort();
         files
     }
@@ -309,6 +388,16 @@ impl ScriptRuntime {
         }
         self.inner.generation.get()
     }
+}
+
+/// A tabela `vars` do config.lua (vazia se não houver).
+fn config_vars(lua: &Lua, source: &dyn AssetSource) -> Table {
+    let read = || -> Option<Table> {
+        let bytes = source.read(Path::new("config.lua")).ok()?;
+        let config: Table = lua.load(&bytes).set_name("@config.lua").eval().ok()?;
+        config.get::<Option<Table>>("vars").ok().flatten()
+    };
+    read().unwrap_or_else(|| lua.create_table().expect("tabela Lua"))
 }
 
 /// Troca a busca de módulos do `require` por uma que lê da mesma origem dos
@@ -357,6 +446,8 @@ pub struct LuaScene {
     entered: bool,
     error: Option<String>,
     generation: u64,
+    /// Pausado pelo editor e pediram para avançar: roda um passo fixo.
+    step_fixed: bool,
 }
 
 impl std::fmt::Debug for LuaScene {
@@ -379,6 +470,7 @@ impl LuaScene {
             entered: false,
             error: None,
             generation,
+            step_fixed: false,
         }
     }
 
@@ -399,6 +491,11 @@ impl LuaScene {
             .get::<Option<T>>(name)
             .ok()
             .flatten()
+    }
+
+    /// A tabela `self` da cena (para ferramentas e testes).
+    pub fn table(&self) -> Option<Table> {
+        self.instance.clone()
     }
 
     fn set_error(&mut self, e: &mlua::Error) {
@@ -479,8 +576,41 @@ impl LuaScene {
                 self.set_error(&e);
                 return;
             }
+            self.runtime.merge_config_vars();
             log::info!("recarregando cena {}", self.path);
             self.load(ctx);
+        }
+    }
+
+    /// Cena da frente, aberta pelo editor: manda o estado dela e o Ctrl+clique.
+    fn live_tick(&mut self, ctx: &mut Context) {
+        if self.error.is_some() {
+            return;
+        }
+        let Some(instance) = self.instance.clone() else {
+            return;
+        };
+        let lua = self.runtime.lua().clone();
+        let result = self.runtime.with_ctx(ctx, |_| {
+            let Some(f) = instance.get::<Option<Function>>("_live_tick")? else {
+                return Ok((Value::Nil, None));
+            };
+            f.call::<(Value, Option<i64>)>(instance.clone())
+        });
+        match result {
+            Ok((state, picked)) => {
+                if let Value::Table(_) = &state
+                    && let Ok(mut json) =
+                        mlua::LuaSerdeExt::from_value::<serde_json::Value>(&lua, state)
+                {
+                    json["paused"] = serde_json::Value::Bool(live::paused());
+                    live::report(&json);
+                }
+                if let Some(id) = picked {
+                    live::select(id);
+                }
+            }
+            Err(e) => log::debug!("estado ao vivo: {}", format_error(&e)),
         }
     }
 
@@ -567,14 +697,31 @@ impl Scene for LuaScene {
     }
 
     fn fixed_update(&mut self, ctx: &mut Context) {
+        // Pausado pelo editor: só anda o passo pedido com "avançar".
+        if live::paused() {
+            if !self.step_fixed {
+                return;
+            }
+            self.step_fixed = false;
+        }
         let dt = ctx.fixed_dt();
         self.call(ctx, "fixed_update", dt);
     }
 
     fn update(&mut self, ctx: &mut Context) -> Transition {
         self.reload_if_changed(ctx);
+        if live::enabled() {
+            self.live_tick(ctx);
+        }
+        let run = !live::paused() || {
+            let step = live::take_step();
+            self.step_fixed = step;
+            step
+        };
         let dt = ctx.time.delta_secs();
-        self.call(ctx, "update", dt);
+        if run {
+            self.call(ctx, "update", dt);
+        }
 
         // Com erro na tela, Esc fecha o jogo (não há outra saída).
         if self.error.is_some() && ctx.input.key_pressed(nn_input::KeyCode::Escape) {

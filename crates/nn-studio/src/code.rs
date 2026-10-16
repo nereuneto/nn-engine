@@ -11,6 +11,7 @@ use eframe::egui::{
     text::{ByteIndex, CCursor, CCursorRange, LayoutJob},
 };
 
+use crate::complete::{self, Completion};
 use crate::lua_syntax::{self, SyntaxIssue, TokenKind};
 
 /// Recuo usado pelo editor (Tab).
@@ -52,6 +53,17 @@ pub struct CodeDoc {
     select: Option<Range<usize>>,
     /// Linha e coluna do cursor (a partir de 1).
     pub cursor: (usize, usize),
+    /// Sugestões abertas (autocompletar).
+    pub suggest: Option<Suggest>,
+    /// Posição do cursor (em bytes) no quadro anterior.
+    last_cursor: Option<usize>,
+}
+
+/// Lista de sugestões aberta.
+#[derive(Debug, Clone)]
+pub struct Suggest {
+    pub completion: Completion,
+    pub selected: usize,
 }
 
 /// Pedido do editor para quem o contém.
@@ -391,6 +403,8 @@ impl CodeDoc {
             jump: None,
             select: None,
             cursor: (1, 1),
+            suggest: None,
+            last_cursor: None,
         })
     }
 
@@ -542,7 +556,68 @@ impl CodeDoc {
         self.last_edit = Instant::now();
     }
 
-    pub fn ui(&mut self, ui: &mut egui::Ui, lua: &mlua::Lua, font_size: f32) -> Vec<CodeAction> {
+    /// Posição do cursor em bytes (do estado do campo de texto).
+    fn cursor_byte(&self, ctx: &egui::Context) -> Option<usize> {
+        let state = egui::TextEdit::load_state(ctx, self.editor_id())?;
+        let r = state.cursor.char_range()?;
+        Some(byte_index(&self.text, r.primary.index.0))
+    }
+
+    /// Põe o cursor em `byte`.
+    fn set_cursor(&self, ctx: &egui::Context, byte: usize) {
+        let id = self.editor_id();
+        let mut state = egui::TextEdit::load_state(ctx, id).unwrap_or_default();
+        let c = char_index(&self.text, byte);
+        state
+            .cursor
+            .set_char_range(Some(CCursorRange::one(CCursor::new(c))));
+        state.store(ctx, id);
+    }
+
+    /// Aceita a sugestão escolhida.
+    fn accept(&mut self, ctx: &egui::Context) {
+        let Some(sug) = self.suggest.take() else {
+            return;
+        };
+        let Some(item) = sug.completion.items.get(sug.selected) else {
+            return;
+        };
+        let (text, cursor) = complete::apply(&self.text, &sug.completion, item);
+        self.text = text;
+        self.set_cursor(ctx, cursor);
+        self.last_cursor = Some(cursor);
+        self.last_edit = Instant::now();
+    }
+
+    /// Abre (ou atualiza) as sugestões no cursor.
+    pub fn refresh_suggest(&mut self, ctx: &egui::Context, env: &complete::Env, forced: bool) {
+        let Some(cursor) = self.cursor_byte(ctx) else {
+            self.suggest = None;
+            return;
+        };
+        let keep = self
+            .suggest
+            .as_ref()
+            .and_then(|s| s.completion.items.get(s.selected))
+            .map(|i| i.label.clone());
+        self.suggest = complete::complete(&self.text, cursor, env, forced).map(|completion| {
+            let selected = keep
+                .and_then(|k| completion.items.iter().position(|i| i.label == k))
+                .unwrap_or(0);
+            Suggest {
+                completion,
+                selected,
+            }
+        });
+    }
+
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        lua: &mlua::Lua,
+        font_size: f32,
+        env: Option<&complete::Env>,
+    ) -> Vec<CodeAction> {
         let mut actions = Vec::new();
         let id = self.editor_id();
         let dark = ui.visuals().dark_mode;
@@ -572,6 +647,38 @@ impl CodeDoc {
 
         // Atalhos do editor, antes do campo de texto ver as teclas.
         let has_focus = ui.memory(|m| m.has_focus(id));
+        if !has_focus {
+            self.suggest = None;
+        }
+        let mut forced = false;
+        if has_focus && env.is_some() {
+            if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::Space)) {
+                forced = true;
+            }
+            if let Some(sug) = &mut self.suggest {
+                let n = sug.completion.items.len().max(1);
+                let (up, down, accept, close) = ui.input_mut(|i| {
+                    (
+                        i.consume_key(Modifiers::NONE, Key::ArrowUp),
+                        i.consume_key(Modifiers::NONE, Key::ArrowDown),
+                        i.consume_key(Modifiers::NONE, Key::Enter)
+                            || i.consume_key(Modifiers::NONE, Key::Tab),
+                        i.consume_key(Modifiers::NONE, Key::Escape),
+                    )
+                });
+                if up {
+                    sug.selected = (sug.selected + n - 1) % n;
+                }
+                if down {
+                    sug.selected = (sug.selected + 1) % n;
+                }
+                if close {
+                    self.suggest = None;
+                } else if accept {
+                    self.accept(ui.ctx());
+                }
+            }
+        }
         if has_focus {
             let edit = ui.input_mut(|i| {
                 if i.consume_key(Modifiers::COMMAND, Key::Slash) {
@@ -655,6 +762,7 @@ impl CodeDoc {
             };
         let before = self.text.clone();
         let mut scroll_target = None;
+        let mut popup_pos: Option<Rect> = None;
         egui::ScrollArea::both()
             .id_salt(("rolagem-codigo", &self.rel))
             .auto_shrink([false, false])
@@ -752,6 +860,30 @@ impl CodeDoc {
                         let c = galley.pos_from_cursor(CCursor::new(r.start));
                         scroll_target = Some(c.translate(origin.to_vec2()));
                     }
+                    // Onde fica a lista de sugestões e a dica da função.
+                    if let Some(range) = out.cursor_range
+                        && out.response.response.has_focus()
+                    {
+                        let c = galley
+                            .pos_from_cursor(range.primary)
+                            .translate(origin.to_vec2());
+                        popup_pos = Some(c);
+                    }
+                    // Dica ao passar o mouse num nome da API.
+                    if let Some(p) = out.response.response.hover_pos() {
+                        let c = galley.cursor_from_pos(p - origin);
+                        let b = byte_index(&self.text, c.index.0);
+                        if let Some(doc) = complete::doc_at(&self.text, b) {
+                            out.response.response.clone().on_hover_ui_at_pointer(|ui| {
+                                ui.label(
+                                    RichText::new(format!("{}{}", doc.name, doc.args))
+                                        .monospace()
+                                        .strong(),
+                                );
+                                ui.label(doc.doc);
+                            });
+                        }
+                    }
                     if let Some(t) = scroll_target {
                         ui.scroll_to_rect(t.expand(20.0), Some(egui::Align::Center));
                     }
@@ -760,9 +892,126 @@ impl CodeDoc {
         if self.text != before {
             self.last_edit = Instant::now();
         }
+        // Sugestões: abrem sozinhas ao digitar e somem quando o cursor anda.
+        if let Some(env) = env {
+            let cursor = self.cursor_byte(ui.ctx());
+            if forced {
+                self.refresh_suggest(ui.ctx(), env, true);
+            } else if self.text != before {
+                let typed = cursor
+                    .and_then(|c| self.text[..c.min(self.text.len())].chars().last())
+                    .is_some_and(|ch| {
+                        ch.is_alphanumeric() || matches!(ch, '_' | '.' | ':' | '"' | '\'' | '/')
+                    });
+                if typed {
+                    self.refresh_suggest(ui.ctx(), env, self.suggest.is_some());
+                } else {
+                    self.suggest = None;
+                }
+            } else if cursor != self.last_cursor && self.suggest.is_some() {
+                self.suggest = None;
+            }
+            self.last_cursor = cursor;
+            if let Some(pos) = popup_pos {
+                self.suggest_ui(ui, pos, &font);
+            }
+        }
         self.check_syntax(lua, ui.ctx());
 
         actions
+    }
+
+    /// A lista de sugestões (ou a dica da função) embaixo do cursor.
+    fn suggest_ui(&mut self, ui: &mut egui::Ui, cursor: Rect, font: &FontId) {
+        let ctx = ui.ctx().clone();
+        let Some(sug) = &self.suggest else {
+            // Sem lista: mostra os parâmetros da função em que está o cursor.
+            let Some(b) = self.cursor_byte(&ctx) else {
+                return;
+            };
+            if let Some(doc) = complete::signature_at(&self.text, b) {
+                egui::Area::new(egui::Id::new(("assinatura", &self.rel)))
+                    .order(egui::Order::Tooltip)
+                    .fixed_pos(cursor.left_top() - Vec2::new(0.0, 26.0))
+                    .interactable(false)
+                    .show(&ctx, |ui| {
+                        egui::Frame::popup(ui.style()).show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(format!("{}{}", doc.name, doc.args))
+                                        .font(font.clone())
+                                        .strong(),
+                                );
+                                ui.weak(doc.doc);
+                            });
+                        });
+                    });
+            }
+            return;
+        };
+        let mut clicked = None;
+        let selected = sug.selected;
+        egui::Area::new(egui::Id::new(("sugestoes", &self.rel)))
+            .order(egui::Order::Foreground)
+            .fixed_pos(cursor.left_bottom() + Vec2::new(0.0, 2.0))
+            .show(&ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        egui::ScrollArea::vertical()
+                            .max_height(220.0)
+                            .max_width(240.0)
+                            .id_salt(("lista-sugestoes", &self.rel))
+                            .show(ui, |ui| {
+                                ui.set_width(240.0);
+                                for (i, item) in sug.completion.items.iter().enumerate() {
+                                    let text = RichText::new(format!(
+                                        "{}  {}",
+                                        item.kind.badge(),
+                                        item.label
+                                    ))
+                                    .font(font.clone());
+                                    let r = ui.add(
+                                        egui::Button::selectable(
+                                            i == selected,
+                                            (text, egui::Atom::grow()),
+                                        )
+                                        .min_size(Vec2::new(240.0, 0.0)),
+                                    );
+                                    if i == selected {
+                                        r.scroll_to_me(None);
+                                    }
+                                    if r.clicked() {
+                                        clicked = Some(i);
+                                    }
+                                }
+                            });
+                        if let Some(item) = sug.completion.items.get(selected)
+                            && (!item.detail.is_empty() || !item.doc.is_empty())
+                        {
+                            ui.separator();
+                            ui.vertical(|ui| {
+                                ui.set_width(260.0);
+                                ui.label(
+                                    RichText::new(format!("{}{}", item.label, item.detail))
+                                        .font(font.clone())
+                                        .strong(),
+                                );
+                                if !item.doc.is_empty() {
+                                    ui.label(&item.doc);
+                                }
+                            });
+                        }
+                    });
+                    ui.weak("Enter ou Tab: usar · Esc: fechar");
+                });
+            });
+        if let Some(i) = clicked
+            && let Some(s) = &mut self.suggest
+        {
+            s.selected = i;
+            self.accept(&ctx);
+            ctx.memory_mut(|m| m.request_focus(self.editor_id()));
+        }
     }
 
     fn status_line(&mut self, ui: &mut egui::Ui, actions: &mut Vec<CodeAction>) {

@@ -42,8 +42,13 @@ jobs:
           sudo apt-get install -y mesa-vulkan-drivers libasound2-dev libudev-dev
           echo "NN_REQUIRE_GPU=1" >> "$GITHUB_ENV"
 
+      # Os avisos também viram anotações no PR (aparecem na aba de arquivos).
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        shell: bash
+        run: |
+          echo "::notice::$(rustc --version) / $(cargo clippy --version)"
+          cargo clippy --workspace --all-targets --color never --message-format=short -- -D warnings 2>&1 | tee clippy.txt \
+            || { sed -nE 's/^([^ ]+):([0-9]+):([0-9]+): (error|warning): (.*)$/::error file=\1,line=\2,col=\3::\5/p; /^error/s/^/::error::/p' clippy.txt; exit 1; }
       - name: Build (inclui exemplos)
         run: cargo build --workspace --all-targets
       - name: Testes
