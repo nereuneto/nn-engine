@@ -31,6 +31,27 @@ pub struct EventsEnv<'a> {
     pub vars: &'a [String],
     /// Nomes das animações do projeto (arquivos `.anim`).
     pub anims: &'a [String],
+    /// Tipos de tile dos tilesets dos mapas da cena ("lava", "agua"...).
+    pub tile_kinds: &'a [String],
+    /// O tileset do mapa da cena, para escolher tiles.
+    pub tile_sheet: Option<&'a TileSheet>,
+}
+
+/// A imagem de um tileset para escolher um tile.
+#[derive(Clone)]
+pub struct TileSheet {
+    pub texture: egui::TextureHandle,
+    pub size: [u32; 2],
+    pub data: crate::tileset::TilesetData,
+    pub first_gid: u32,
+}
+
+impl std::fmt::Debug for TileSheet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TileSheet")
+            .field("image", &self.data.image)
+            .finish_non_exhaustive()
+    }
 }
 
 impl std::fmt::Debug for EventsEnv<'_> {
@@ -1133,6 +1154,76 @@ fn field(
             }
             r
         }
+        PropType::TileType => {
+            let mut v = current.str().to_string();
+            let hint = spec.allow_empty.clone().unwrap_or_else(|| "tipo".into());
+            let w = text_width(&v).max(70.0);
+            let r = ui.add(
+                egui::TextEdit::singleline(&mut v)
+                    .hint_text(hint.clone())
+                    .desired_width(w),
+            );
+            if r.changed() {
+                new = Some(Prop::Str(v.trim().to_string()));
+            }
+            let mut chosen = None;
+            ui.menu_button("…", |ui| {
+                if spec.allow_empty.is_some() && ui.button(format!("({hint})")).clicked() {
+                    chosen = Some(String::new());
+                    ui.close();
+                }
+                if ctx.env.tile_kinds.is_empty() {
+                    ui.weak("Nenhum tile com tipo ainda: no painel Tiles, use Tipo para marcar.");
+                }
+                for k in ctx.env.tile_kinds {
+                    if ui.button(k).clicked() {
+                        chosen = Some(k.clone());
+                        ui.close();
+                    }
+                }
+            })
+            .response
+            .on_hover_text("Tipos dos tiles dos mapas desta cena");
+            if let Some(c) = chosen {
+                new = Some(Prop::Str(c));
+                structural = true;
+            }
+            r
+        }
+        PropType::Tile => {
+            let mut v = current.num().max(0.0).round();
+            let r = ui.add(
+                egui::DragValue::new(&mut v)
+                    .speed(0.1)
+                    .range(0.0..=1e6)
+                    .max_decimals(0),
+            );
+            if r.changed() {
+                new = Some(Prop::Num(v));
+            }
+            if let Some(sheet) = ctx.env.tile_sheet {
+                let mut chosen = None;
+                let menu = ui.menu_button("…", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.weak("Clique num tile.");
+                        if ui.small_button("Nenhum (apaga)").clicked() {
+                            chosen = Some(0.0);
+                            ui.close();
+                        }
+                    });
+                    if let Some(t) = tile_picker(ui, sheet, v as u32) {
+                        chosen = Some(t as f64);
+                        ui.close();
+                    }
+                });
+                menu.response.on_hover_text("Escolher no tileset do mapa");
+                if let Some(c) = chosen {
+                    new = Some(Prop::Num(c));
+                    structural = true;
+                }
+            }
+            r
+        }
         PropType::Value => {
             let mut v = match &current {
                 Prop::Num(n) => format_num(*n),
@@ -1256,6 +1347,62 @@ fn field(
             edit.field(merge);
         }
     }
+}
+
+/// A grade do tileset; devolve o tile clicado (número do mapa).
+fn tile_picker(ui: &mut egui::Ui, sheet: &TileSheet, current: u32) -> Option<u32> {
+    let d = &sheet.data;
+    let z = (256.0 / sheet.size[0].max(1) as f32)
+        .clamp(1.0, 4.0)
+        .floor();
+    let size = egui::Vec2::new(sheet.size[0] as f32, sheet.size[1] as f32) * z;
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, 0.0, egui::Color32::from_gray(0x40));
+    p.image(
+        sheet.texture.id(),
+        rect,
+        egui::Rect::from_min_max(egui::Pos2::ZERO, egui::Pos2::new(1.0, 1.0)),
+        egui::Color32::WHITE,
+    );
+    let tile_rect = |id: u32| {
+        let (x, y) = d.tile_origin(id);
+        egui::Rect::from_min_size(
+            rect.min + egui::Vec2::new(x as f32, y as f32) * z,
+            egui::Vec2::new(d.tile_w as f32, d.tile_h as f32) * z,
+        )
+    };
+    if current >= sheet.first_gid && current - sheet.first_gid < d.count {
+        p.rect_stroke(
+            tile_rect(current - sheet.first_gid),
+            0.0,
+            egui::Stroke::new(2.0, egui::Color32::WHITE),
+            egui::StrokeKind::Inside,
+        );
+    }
+    let at = |pos: egui::Pos2| (0..d.count).find(|id| tile_rect(*id).contains(pos));
+    if let Some(pos) = resp.hover_pos()
+        && let Some(id) = at(pos)
+    {
+        p.rect_stroke(
+            tile_rect(id),
+            0.0,
+            egui::Stroke::new(1.0, egui::Color32::YELLOW),
+            egui::StrokeKind::Inside,
+        );
+        let info = d.info(id);
+        let mut tip = format!("tile {}", id + sheet.first_gid);
+        if !info.kind.is_empty() {
+            tip.push_str(&format!(" · tipo {}", info.kind));
+        }
+        resp.clone().on_hover_text_at_pointer(tip);
+    }
+    if resp.clicked()
+        && let Some(pos) = resp.interact_pointer_pos()
+    {
+        return at(pos).map(|id| id + sheet.first_gid);
+    }
+    None
 }
 
 #[cfg(test)]

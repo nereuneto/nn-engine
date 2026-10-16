@@ -151,6 +151,7 @@ fn modelo_visual_roda_a_fase_e_pega_moedas() {
 
     let rt = ScriptRuntime::new(&dir).unwrap();
     let vars = rt.clone();
+    let check = rt.clone();
     let var = move |name: &str| -> i64 {
         vars.lua()
             .load(format!("return nn.vars.{name}"))
@@ -180,6 +181,15 @@ fn modelo_visual_roda_a_fase_e_pega_moedas() {
     };
     h.run_frames(30);
     assert_eq!(h.game.0.error(), None);
+    // O chão é um mapa de tiles pintado: o herói para em cima dele (o topo
+    // da terra fica em y = -240; o herói tem 60 de altura).
+    check
+        .lua()
+        .globals()
+        .set("cena", h.game.0.table().unwrap())
+        .unwrap();
+    let y = lua::<f64>(&check, "return cena.objects.heroi.y");
+    assert!((y - -210.0).abs() < 3.0, "herói no chão de tiles: y = {y}");
     assert_eq!(var("moedas"), 0);
     assert_eq!(var("vidas"), 3);
     // Anda para a direita até a moeda que está no chão. Não tem nenhum
@@ -326,6 +336,17 @@ fn modelo_aventura_chave_abre_a_porta_e_o_bau_termina() {
         for _, o in ipairs(cena:find_all(n)) do o:destroy() end end";
     rt.lua().load(sem_inimigos).exec().unwrap();
     h.run_frames(2);
+    // As paredes são tiles do mapa: andando para a direita, o herói para na
+    // parede de tijolos do meio (que começa em x = 72; ele tem 40 de largura).
+    h.ctx.input.press_key(KeyCode::KeyD);
+    h.run_frames(150);
+    h.ctx.input.release_key(KeyCode::KeyD);
+    h.run_frames(2);
+    let x = lua::<f64>(&rt, "return cena.objects.heroi.x");
+    assert!(
+        (40.0..=53.0).contains(&x),
+        "parou na parede de tiles: x = {x}"
+    );
     assert_eq!(lua::<i64>(&rt, "return nn.vars.chaves"), 0);
     // Sem chave, a porta avisa.
     rt.lua()

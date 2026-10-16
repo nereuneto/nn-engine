@@ -201,6 +201,7 @@ A cena e cada objeto também podem ter `events`, as regras [Quando... Então...]
 | `obj:touching(outro, margem)` | Os dois estão encostando? |
 | `obj:move_to(x, y)` | Leva o objeto (e o corpo) para lá, parado. |
 | `obj:mouse_over()` | O mouse está em cima do objeto? (Num objeto de HUD, confere na tela.) |
+| `obj:tiles_touching(margem)` | Os tiles dos mapas da cena que o objeto toca (com a `margem` em volta, padrão 2): uma lista de `{ col, row, layer, tile, properties, map }`. `properties.tipo` é o tipo marcado no painel Tiles. |
 
 A cena também tem:
 
@@ -690,7 +691,11 @@ local mapa = nn.tilemap.new({
 })
 ```
 
-Outros métodos e campos: `width`, `height` (em tiles), `tile_width`, `tile_height`, `world_width`, `world_height`, `layers`, `properties`, `:tile(col, lin, camada)`, `:set_tile(col, lin, tile, camada)` (a colisão acompanha: ótimo para blocos quebráveis), `:set_solid(col, lin, "solid" | "one_way" | nil)`, `:solid(col, lin)`, `:cell_at(x, y)` e `:cell_center(col, lin)`. Colunas e linhas começam em 1, com a linha 1 no topo, como no editor.
+Outros métodos e campos: `width`, `height` (em tiles), `tile_width`, `tile_height`, `world_width`, `world_height`, `layers`, `properties`, `:tile(col, lin, camada)`, `:set_tile(col, lin, tile, camada)` (a colisão acompanha: ótimo para blocos quebráveis), `:set_solid(col, lin, "solid" | "one_way" | nil)`, `:solid(col, lin)`, `:cell_at(x, y)`, `:cell_center(col, lin)`, `:tile_properties(col, lin, camada)` (as propriedades do tile ali no tileset, como `{ tipo = "lava", solid = true }`) e `:tiles_in(x0, y0, x1, y1)` (os tiles não vazios dentro de um retângulo do mundo, em todas as camadas: `{ col, row, layer, tile, properties }`). Colunas e linhas começam em 1, com a linha 1 no topo, como no editor.
+
+**Tiles girados:** como no Tiled, os três bits de cima do número do tile dizem se ele está espelhado na horizontal (`0x80000000`), na vertical (`0x40000000`) ou na diagonal (`0x20000000`; diagonal + horizontal = girado 90° no sentido horário). `mapa:tile(...)` devolve o número com os bits; as propriedades e a colisão são as do tile sem eles.
+
+**No NN Studio**, os mapas são pintados direto na cena (**✏ Pintar**), com terrenos que se encaixam sozinhos e as marcações `solid`, `one_way`, `tipo` e as animações feitas no painel Tiles (veja o [guia do NN Studio](studio.md#mapas-de-tiles)). Os arquivos são os mesmos do Tiled.
 
 **Tiles animados** (água, lava, tochas, bandeiras): no Tiled, abra o tileset, escolha o tile e use o *Editor de Animação de Tiles* para montar a sequência de quadros. Ao carregar o mapa, a animação vem junto e roda sozinha, no ritmo do jogo. Em mapas feitos em Lua, use `mapa:animate(tile, { quadros }, fps)`: onde aparecer `tile`, os `quadros` se revezam (`mapa:animate(5, { 5, 6, 7, 8 }, 6)`). Os quadros precisam ser do mesmo tileset que o tile.
 

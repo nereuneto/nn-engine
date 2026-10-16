@@ -35,6 +35,8 @@ pub enum HierarchyAction {
         dir: Option<String>,
     },
     OpenFile(String),
+    /// Criar um mapa de tiles (abre a janela).
+    NewMap,
 }
 
 /// Aplica o soltar: devolve `false` se não deu (ex.: soltar dentro do filho).
@@ -103,6 +105,10 @@ impl HierarchyPanel {
                 if let Some((name, comps)) = add_object_menu(ui) {
                     let (x, y) = doc.view_center();
                     doc.add_object(name, x, y, comps);
+                    ui.close();
+                }
+                if ui.button("Mapa de tiles...").clicked() {
+                    out.push(HierarchyAction::NewMap);
                     ui.close();
                 }
             })

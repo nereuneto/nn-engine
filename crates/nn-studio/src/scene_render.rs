@@ -65,6 +65,8 @@ pub struct Sizes {
     maps: HashMap<(String, u32), Option<(f32, f32)>>,
     /// Animações (`.anim`) das imagens: nomes e tamanho do quadro.
     pub anims: crate::anim_file::AnimCache,
+    /// Tamanho (em pixels, sem escala) dos mapas abertos no editor.
+    pub map_px: HashMap<String, (f32, f32)>,
 }
 
 impl Sizes {
@@ -92,6 +94,9 @@ impl Sizes {
     pub fn map(&mut self, root: &Path, rel: &str, scale: f32) -> Option<(f32, f32)> {
         if rel.is_empty() {
             return None;
+        }
+        if let Some((w, h)) = self.map_px.get(rel) {
+            return Some((w * scale.max(0.01), h * scale.max(0.01)));
         }
         *self
             .maps
@@ -342,6 +347,8 @@ pub struct SceneRenderer {
     maps: HashMap<(String, u32), Option<nn_tilemap::TileMap>>,
     targets: HashMap<String, Target>,
     anims: crate::anim_file::AnimCache,
+    /// Mapas abertos no editor (ainda não salvos): mapa → (versão, arquivos).
+    map_sources: HashMap<String, (u64, HashMap<String, String>)>,
 }
 
 impl std::fmt::Debug for SceneRenderer {
@@ -365,6 +372,7 @@ impl SceneRenderer {
             maps: HashMap::new(),
             targets: HashMap::new(),
             anims: Default::default(),
+            map_sources: HashMap::new(),
         }
     }
 
@@ -416,21 +424,61 @@ impl SceneRenderer {
             })
     }
 
+    /// Versão do mapa aberto no editor que está sendo desenhada.
+    pub fn map_source_rev(&self, rel: &str) -> Option<u64> {
+        self.map_sources.get(rel).map(|(r, _)| *r)
+    }
+
+    /// Desenha o mapa `rel` a partir destes textos (o mapa e os tilesets),
+    /// em vez do disco: é o mapa sendo pintado, ainda sem salvar.
+    pub fn set_map_source(&mut self, rel: &str, rev: u64, files: HashMap<String, String>) {
+        if self.map_source_rev(rel) == Some(rev) {
+            return;
+        }
+        self.map_sources.insert(rel.to_string(), (rev, files));
+        self.maps.retain(|(r, _), _| r != rel);
+    }
+
+    /// Volta a desenhar o mapa do disco.
+    pub fn clear_map_source(&mut self, rel: &str) {
+        if self.map_sources.remove(rel).is_some() {
+            self.maps.retain(|(r, _), _| r != rel);
+        }
+    }
+
     /// Carrega o mapa (uma vez) e devolve a chave dele no cache.
     fn ensure_map(&mut self, root: &Path, rel: &str, scale: f32) -> (String, u32) {
         let key = (rel.to_string(), scale.to_bits());
         if !self.maps.contains_key(&key) {
-            let mut loaded = nn_tilemap::load_tiled(
-                Path::new(rel),
-                nn_tilemap::read_from(root),
-                scale.max(0.01),
-            )
-            .ok();
+            let sources = self.map_sources.get(rel).map(|(_, f)| f.clone());
+            let mut disk = nn_tilemap::read_from(root);
+            let read = |p: &Path| -> Result<String, String> {
+                let k = p.to_string_lossy().replace('\\', "/");
+                match sources.as_ref().and_then(|s| s.get(&k)) {
+                    Some(text) => Ok(text.clone()),
+                    None => disk(p),
+                }
+            };
+            let mut loaded = nn_tilemap::load_tiled(Path::new(rel), read, scale.max(0.01)).ok();
             if let Some(m) = &mut loaded {
+                // As imagens dos tilesets vêm do cache (o mapa é relido a cada
+                // pincelada).
                 let renderer = &mut self.renderer;
+                let textures = &mut self.textures;
                 let ok = m
                     .load_textures(|p| {
-                        renderer.load_texture(root.join(p), TextureOptions::PIXEL_ART)
+                        let r = p.to_string_lossy().replace('\\', "/");
+                        match textures.get(&(r.clone(), true)) {
+                            Some(Some(id)) => Ok(*id),
+                            _ => {
+                                let id =
+                                    renderer.load_texture(root.join(p), TextureOptions::PIXEL_ART);
+                                if let Ok(id) = &id {
+                                    textures.insert((r, true), Some(*id));
+                                }
+                                id
+                            }
+                        }
                     })
                     .is_ok();
                 if !ok {

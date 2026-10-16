@@ -1,0 +1,635 @@
+{
+  "columns": 8,
+  "image": "terreno.png",
+  "imageheight": 96,
+  "imagewidth": 128,
+  "margin": 0,
+  "name": "terreno",
+  "spacing": 0,
+  "tilecount": 48,
+  "tiledversion": "1.10.2",
+  "tileheight": 16,
+  "tiles": [
+    {
+      "id": 14,
+      "properties": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "properties": [
+        {
+          "name": "one_way",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "properties": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "tipo",
+          "type": "string",
+          "value": "agua"
+        }
+      ]
+    },
+    {
+      "id": 32,
+      "properties": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "tipo",
+          "type": "string",
+          "value": "tijolo"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "properties": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "animation": [
+        {
+          "duration": 220,
+          "tileid": 34
+        },
+        {
+          "duration": 220,
+          "tileid": 35
+        },
+        {
+          "duration": 220,
+          "tileid": 36
+        }
+      ],
+      "id": 34
+    },
+    {
+      "id": 37,
+      "properties": [
+        {
+          "name": "tipo",
+          "type": "string",
+          "value": "espinho"
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "properties": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "properties": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "probability": 0.15
+    },
+    {
+      "id": 44,
+      "probability": 0.2,
+      "properties": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        },
+        {
+          "name": "tipo",
+          "type": "string",
+          "value": "agua"
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "probability": 0.15,
+      "properties": [
+        {
+          "name": "solid",
+          "type": "bool",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "tilewidth": 16,
+  "type": "tileset",
+  "version": "1.10",
+  "wangsets": [
+    {
+      "colors": [
+        {
+          "color": "#8a5834",
+          "name": "terra",
+          "probability": 1,
+          "tile": -1
+        }
+      ],
+      "name": "plataforma",
+      "tile": -1,
+      "type": "corner",
+      "wangtiles": [
+        {
+          "tileid": 0,
+          "wangid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "tileid": 1,
+          "wangid": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "tileid": 2,
+          "wangid": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "tileid": 3,
+          "wangid": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "tileid": 4,
+          "wangid": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "tileid": 5,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "tileid": 6,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "tileid": 7,
+          "wangid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 8,
+          "wangid": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 9,
+          "wangid": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 10,
+          "wangid": [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 11,
+          "wangid": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 12,
+          "wangid": [
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 13,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 14,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 45,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "colors": [
+        {
+          "color": "#5caa46",
+          "name": "grama",
+          "probability": 1,
+          "tile": -1
+        },
+        {
+          "color": "#3480ce",
+          "name": "agua",
+          "probability": 1,
+          "tile": -1
+        }
+      ],
+      "name": "de cima",
+      "tile": -1,
+      "type": "corner",
+      "wangtiles": [
+        {
+          "tileid": 16,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 17,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            2,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 18,
+          "wangid": [
+            0,
+            1,
+            0,
+            2,
+            0,
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 19,
+          "wangid": [
+            0,
+            1,
+            0,
+            2,
+            0,
+            2,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 20,
+          "wangid": [
+            0,
+            2,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 21,
+          "wangid": [
+            0,
+            2,
+            0,
+            1,
+            0,
+            2,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 22,
+          "wangid": [
+            0,
+            2,
+            0,
+            2,
+            0,
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 23,
+          "wangid": [
+            0,
+            2,
+            0,
+            2,
+            0,
+            2,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 24,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            2
+          ]
+        },
+        {
+          "tileid": 25,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            2,
+            0,
+            2
+          ]
+        },
+        {
+          "tileid": 26,
+          "wangid": [
+            0,
+            1,
+            0,
+            2,
+            0,
+            1,
+            0,
+            2
+          ]
+        },
+        {
+          "tileid": 27,
+          "wangid": [
+            0,
+            1,
+            0,
+            2,
+            0,
+            2,
+            0,
+            2
+          ]
+        },
+        {
+          "tileid": 28,
+          "wangid": [
+            0,
+            2,
+            0,
+            1,
+            0,
+            1,
+            0,
+            2
+          ]
+        },
+        {
+          "tileid": 29,
+          "wangid": [
+            0,
+            2,
+            0,
+            1,
+            0,
+            2,
+            0,
+            2
+          ]
+        },
+        {
+          "tileid": 30,
+          "wangid": [
+            0,
+            2,
+            0,
+            2,
+            0,
+            1,
+            0,
+            2
+          ]
+        },
+        {
+          "tileid": 31,
+          "wangid": [
+            0,
+            2,
+            0,
+            2,
+            0,
+            2,
+            0,
+            2
+          ]
+        },
+        {
+          "tileid": 43,
+          "wangid": [
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "tileid": 44,
+          "wangid": [
+            0,
+            2,
+            0,
+            2,
+            0,
+            2,
+            0,
+            2
+          ]
+        }
+      ]
+    }
+  ]
+}

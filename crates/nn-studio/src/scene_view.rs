@@ -211,6 +211,11 @@ pub struct SceneDoc {
     frame_start: Option<SceneData>,
     /// Onde a vista estava no último quadro.
     view_rect: Option<Rect>,
+    /// Objeto de mapa sendo pintado (modo Pintar).
+    pub painting: Option<u32>,
+    paint_stroke: Option<crate::paint::Stroke>,
+    /// O mapa cresceu desde que o jogo abriu: ele só vê ao salvar.
+    pub paint_grew: bool,
 }
 
 /// O que a aba pede ao espaço de trabalho.
@@ -221,6 +226,8 @@ pub enum SceneAction {
     OpenAsText,
     /// Comando para o jogo aberto: "pause", "resume" ou "step".
     Game(&'static str),
+    /// Criar um mapa de tiles (abre a janela).
+    NewMap,
 }
 
 /// O que a aba precisa do espaço de trabalho.
@@ -237,6 +244,10 @@ pub struct SceneEnv<'a> {
     pub time: f32,
     /// Onde os objetos estão no jogo aberto (se ele mostra esta cena).
     pub game: Option<&'a GameState>,
+    /// Mapas abertos para pintar, os tilesets deles e o pincel.
+    pub maps: &'a mut std::collections::HashMap<String, crate::map_doc::MapDoc>,
+    pub tilesets: &'a mut std::collections::HashMap<String, crate::tileset::TilesetDoc>,
+    pub paint: &'a mut crate::paint::PaintState,
 }
 
 impl std::fmt::Debug for SceneEnv<'_> {
@@ -438,6 +449,9 @@ impl SceneDoc {
             hover: None,
             frame_start: None,
             view_rect: None,
+            painting: None,
+            paint_stroke: None,
+            paint_grew: false,
         }
     }
 
@@ -857,8 +871,14 @@ impl SceneDoc {
         }
 
         self.draw_guides(&painter, rect, env);
-        self.handle_input(ui, &response, rect, env, &mut actions);
-        self.draw_overlays(&painter, rect, env);
+        if self.painting.is_some() {
+            self.paint_input(ui, &response, rect, env, &mut actions);
+            self.draw_overlays(&painter, rect, env);
+            self.paint_overlay(&painter, ui, &response, rect, env);
+        } else {
+            self.handle_input(ui, &response, rect, env, &mut actions);
+            self.draw_overlays(&painter, rect, env);
+        }
 
         // Arquivo solto em cima da cena: vira objeto.
         if response.dnd_hover_payload::<FileDrag>().is_some() {
@@ -993,10 +1013,42 @@ impl SceneDoc {
                 });
             ui.checkbox(&mut self.show_colliders, "Colisões");
             ui.separator();
+            // Pintar o mapa do objeto selecionado.
+            let map_obj = match (self.painting, self.selection.as_slice()) {
+                (Some(id), _) => Some(id),
+                (None, [id]) => self
+                    .data
+                    .find(*id)
+                    .filter(|o| o.component("map").is_some_and(|c| !c.str("map").is_empty()))
+                    .map(|o| o.id),
+                _ => None,
+            };
+            if let Some(id) = map_obj {
+                let on = self.painting.is_some();
+                let r = ui
+                    .selectable_label(on, "✏ Pintar")
+                    .on_hover_text("Pinta os tiles do mapa direto na cena (Esc sai). As ferramentas e os tiles ficam no painel Tiles.");
+                crate::tutorial::anchor(ui.ctx(), "cena.pintar", r.rect);
+                if r.clicked() {
+                    self.painting = if on { None } else { Some(id) };
+                    self.paint_stroke = None;
+                }
+                if on && self.paint_grew && env.connected {
+                    ui.colored_label(crate::theme::WARNING, "O mapa cresceu: salve para o jogo ver")
+                        .on_hover_text("O que você pinta dentro do mapa aparece na hora; quando o mapa cresce, o jogo aberto recarrega ao salvar (Ctrl+S).");
+                }
+                ui.separator();
+            }
             let menu = ui.menu_button("➕ Objeto", |ui| {
                 if let Some((name, comps)) = add_object_menu(ui) {
                     let (x, y) = self.view_center();
                     self.add_object(name, x, y, comps);
+                    ui.close();
+                }
+                let r = ui.button("Mapa de tiles...").on_hover_text("Um mapa para pintar com tiles: chão, paredes, plataformas");
+                crate::tutorial::anchor(ui.ctx(), "cena.objeto:mapa", r.rect);
+                if r.clicked() {
+                    actions.push(SceneAction::NewMap);
                     ui.close();
                 }
             });
@@ -1427,6 +1479,367 @@ impl SceneDoc {
                 None if !(modifiers.shift || modifiers.command) => self.selection.clear(),
                 None => {}
             }
+        }
+    }
+
+    /// O mapa do objeto sendo pintado: (arquivo, escala, x e y do canto de
+    /// baixo à esquerda no mundo).
+    fn paint_target(&self) -> Option<(u32, String, f64, f64, f64)> {
+        let id = self.painting?;
+        let o = self.data.find(id)?;
+        let c = o.component("map")?;
+        let t = self.data.world_transform(id)?;
+        Some((
+            id,
+            c.str("map").to_string(),
+            c.num("scale").max(0.01),
+            t.x,
+            t.y,
+        ))
+    }
+
+    /// Célula do mapa sob um ponto da tela (pode estar fora do mapa).
+    fn paint_cell(
+        &self,
+        rect: Rect,
+        p: Pos2,
+        map: &crate::map_doc::MapDoc,
+        scale: f64,
+        ox: f64,
+        oy: f64,
+    ) -> (i64, i64) {
+        let (wx, wy) = self.camera.to_world(rect, p);
+        let (tw, th) = (map.tile_w as f64 * scale, map.tile_h as f64 * scale);
+        let col = ((wx - ox) / tw).floor() as i64;
+        let from_bottom = ((wy - oy) / th).floor() as i64;
+        (col, map.height as i64 - 1 - from_bottom)
+    }
+
+    /// Modo Pintar: o mouse pinta tiles em vez de mexer nos objetos.
+    fn paint_input(
+        &mut self,
+        ui: &mut egui::Ui,
+        response: &egui::Response,
+        rect: Rect,
+        env: &mut SceneEnv,
+        actions: &mut Vec<SceneAction>,
+    ) {
+        let Some((id, rel, scale, _, _)) = self.paint_target() else {
+            self.painting = None;
+            return;
+        };
+        if !env.maps.contains_key(&rel) {
+            // O espaço de trabalho abre o mapa no próximo quadro.
+            return;
+        }
+        let pointer = response.hover_pos();
+        if let Some(p) = pointer {
+            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+            if scroll != 0.0 {
+                self.camera
+                    .zoom_at(rect, p, (1.0015f64).powf(scroll as f64));
+            }
+            let zoom = ui.input(|i| i.zoom_delta());
+            if zoom != 1.0 {
+                self.camera.zoom_at(rect, p, zoom as f64);
+            }
+        }
+        if (response.hovered() || response.has_focus()) && !ui.ctx().text_edit_focused() {
+            let pressed =
+                |ui: &mut egui::Ui, m: Modifiers, k: Key| ui.input_mut(|i| i.consume_key(m, k));
+            for tool in crate::paint::PaintTool::ALL {
+                if pressed(ui, Modifiers::NONE, tool.key()) {
+                    env.paint.tool = tool;
+                }
+            }
+            if pressed(ui, Modifiers::NONE, Key::R) {
+                env.paint.stamp = env.paint.stamp.rotated();
+            }
+            if pressed(ui, Modifiers::NONE, Key::X) {
+                env.paint.stamp = env.paint.stamp.flipped_h();
+            }
+            if pressed(ui, Modifiers::SHIFT, Key::X) {
+                env.paint.stamp = env.paint.stamp.flipped_v();
+            }
+            if pressed(ui, Modifiers::NONE, Key::F) {
+                self.frame_selection(rect, env.root, env.sizes);
+            }
+            if pressed(ui, Modifiers::NONE, Key::Escape) {
+                self.painting = None;
+                self.paint_stroke = None;
+                return;
+            }
+            if pressed(ui, Modifiers::NONE, Key::F6) {
+                actions.push(SceneAction::TestHere);
+            }
+        }
+        // Mover a vista: botão do meio ou Espaço + arrastar.
+        let (space, middle) = ui.input(|i| (i.key_down(Key::Space), i.pointer.middle_down()));
+        if response.drag_started() && (middle || space) {
+            let start = ui
+                .input(|i| i.pointer.press_origin())
+                .unwrap_or(rect.center());
+            self.start_drag(DragKind::Pan { start: self.camera }, start);
+        }
+        if let (Some(drag), Some(now)) = (self.drag.clone(), response.interact_pointer_pos()) {
+            self.continue_drag(&drag, now, rect, Modifiers::NONE, env);
+        }
+        if response.drag_stopped() || !(middle || space || ui.input(|i| i.pointer.any_down())) {
+            self.drag = None;
+        }
+        if space || middle || self.drag.is_some() {
+            return;
+        }
+        // Pintar: os eventos do mouse em ordem (traços rápidos saem inteiros).
+        let events: Vec<egui::Event> = ui.input(|i| i.events.clone());
+        let mut changes: Vec<crate::paint::Change> = Vec::new();
+        let mut grew = false;
+        for e in events {
+            let Some(map) = env.maps.get_mut(&rel) else {
+                return;
+            };
+            let Some((_, _, _, ox, oy)) = self.paint_target() else {
+                return;
+            };
+            match e {
+                egui::Event::PointerButton {
+                    pos,
+                    button,
+                    pressed: true,
+                    modifiers,
+                } if rect.contains(pos)
+                    && response.contains_pointer()
+                    && self.paint_stroke.is_none()
+                    && matches!(
+                        button,
+                        egui::PointerButton::Primary | egui::PointerButton::Secondary
+                    ) =>
+                {
+                    response.request_focus();
+                    let cell = self.paint_cell(rect, pos, map, scale, ox, oy);
+                    // Botão direito ou Alt: conta-gotas. Ctrl: copiar um pedaço.
+                    let pick = button == egui::PointerButton::Secondary || modifiers.alt;
+                    let (stroke, out) =
+                        env.paint
+                            .begin(map, env.tilesets, cell, modifiers.command, pick);
+                    grew |= out.grew;
+                    changes.extend(out.changes);
+                    self.paint_stroke = Some(stroke);
+                }
+                egui::Event::PointerMoved(pos) => {
+                    if let Some(mut stroke) = self.paint_stroke.take() {
+                        let cell = self.paint_cell(rect, pos, map, scale, ox, oy);
+                        let out = env.paint.drag(map, env.tilesets, &mut stroke, cell);
+                        grew |= out.grew;
+                        changes.extend(out.changes);
+                        self.paint_stroke = Some(stroke);
+                    }
+                }
+                egui::Event::PointerButton {
+                    pos,
+                    pressed: false,
+                    ..
+                } => {
+                    if let Some(stroke) = self.paint_stroke.take() {
+                        let cell = self.paint_cell(rect, pos, map, scale, ox, oy);
+                        env.paint.end(map, stroke, cell);
+                    }
+                }
+                _ => {}
+            }
+            // O mapa cresceu à esquerda ou embaixo: o objeto anda junto.
+            self.apply_map_shift(id, &rel, env, scale);
+        }
+        if self.paint_stroke.is_some() && !ui.input(|i| i.pointer.any_down()) {
+            let stroke = self.paint_stroke.take().unwrap();
+            if let Some(map) = env.maps.get_mut(&rel) {
+                let last = stroke.last;
+                env.paint.end(map, stroke, last);
+            }
+        }
+        if grew {
+            self.paint_grew = true;
+        }
+        if !changes.is_empty() && !grew {
+            let list: Vec<serde_json::Value> = changes
+                .iter()
+                .map(|(l, c, r, g)| serde_json::json!([l, c + 1, r + 1, g]))
+                .collect();
+            self.live.push(LiveChange {
+                id,
+                component: None,
+                field: "tiles".into(),
+                value: Prop::Num(0.0),
+                json: Some(serde_json::Value::Array(list)),
+            });
+        }
+    }
+
+    /// Leva para o objeto o quanto o mapa cresceu (ou encolheu, ao desfazer)
+    /// à esquerda e embaixo, para o desenho ficar no mesmo lugar.
+    pub fn apply_map_shift(&mut self, id: u32, rel: &str, env: &mut SceneEnv, scale: f64) {
+        let Some(map) = env.maps.get_mut(rel) else {
+            return;
+        };
+        let (dc, dr) = map.take_shift();
+        if (dc, dr) == (0, 0) {
+            return;
+        }
+        let (tw, th) = (map.tile_w as f64 * scale, map.tile_h as f64 * scale);
+        if let Some(o) = self.data.find_mut(id) {
+            o.x -= dc as f64 * tw;
+            o.y -= dr as f64 * th;
+        }
+    }
+
+    /// Por cima da cena, no modo Pintar: o contorno do mapa, a grade, o que
+    /// bloqueia e onde o pincel vai pintar.
+    fn paint_overlay(
+        &self,
+        painter: &egui::Painter,
+        ui: &egui::Ui,
+        response: &egui::Response,
+        rect: Rect,
+        env: &mut SceneEnv,
+    ) {
+        let Some((_, rel, scale, ox, oy)) = self.paint_target() else {
+            return;
+        };
+        let Some(map) = env.maps.get(&rel) else {
+            painter.text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                "Abrindo o mapa...",
+                egui::FontId::proportional(16.0),
+                Color32::WHITE,
+            );
+            return;
+        };
+        let cam = self.camera;
+        let (tw, th) = (map.tile_w as f64 * scale, map.tile_h as f64 * scale);
+        // Canto de cima à esquerda da célula (col, row) na tela.
+        let corner = |c: i64, r: i64| {
+            cam.to_screen(
+                rect,
+                ox + c as f64 * tw,
+                oy + (map.height as i64 - r) as f64 * th,
+            )
+        };
+        let outline = Rect::from_two_pos(corner(0, 0), corner(map.width as i64, map.height as i64));
+        painter.rect_stroke(
+            outline,
+            0.0,
+            Stroke::new(1.5, Color32::from_rgb(0xFF, 0x9F, 0x1C)),
+            egui::StrokeKind::Outside,
+        );
+        let cell_px = (tw * cam.zoom) as f32;
+        // Células visíveis.
+        let vis = outline.intersect(rect);
+        if vis.width() <= 0.0 || vis.height() <= 0.0 {
+            return;
+        }
+        let c0 = (((vis.left() - outline.left()) / cell_px).floor() as i64).max(0);
+        let c1 = (((vis.right() - outline.left()) / cell_px).ceil() as i64).min(map.width as i64);
+        let rpx = (th * cam.zoom) as f32;
+        let r0 = (((vis.top() - outline.top()) / rpx).floor() as i64).max(0);
+        let r1 = (((vis.bottom() - outline.top()) / rpx).ceil() as i64).min(map.height as i64);
+        if env.paint.show_grid && cell_px >= 8.0 {
+            let stroke = Stroke::new(1.0, Color32::from_white_alpha(28));
+            for c in c0..=c1 {
+                let x = corner(c, 0).x;
+                painter.vline(x, vis.y_range(), stroke);
+            }
+            for r in r0..=r1 {
+                let y = corner(0, r).y;
+                painter.hline(vis.x_range(), y, stroke);
+            }
+        }
+        // O que bloqueia: vermelho (sólido) e azul em cima (plataforma).
+        if env.paint.show_collision && (c1 - c0) * (r1 - r0) <= 40_000 {
+            for r in r0..r1 {
+                for c in c0..c1 {
+                    let mut solid = false;
+                    let mut one_way = false;
+                    for li in map.tile_layers() {
+                        let gid = map.get(li, c, r);
+                        if gid == 0 {
+                            continue;
+                        }
+                        let l = map.tile_layer(li).unwrap();
+                        if l.collision {
+                            solid = true;
+                        }
+                        if let Some((ts, local)) = map.tileset_of(gid)
+                            && let Some(data) = crate::paint::tileset_data(map, ts, env.tilesets)
+                        {
+                            let info = data.info(local);
+                            solid |= info.solid;
+                            one_way |= info.one_way;
+                        }
+                    }
+                    let cr = Rect::from_two_pos(corner(c, r), corner(c + 1, r + 1));
+                    if solid {
+                        painter.rect_filled(
+                            cr,
+                            0.0,
+                            Color32::from_rgba_unmultiplied(0xE5, 0x48, 0x4D, 60),
+                        );
+                    } else if one_way {
+                        painter.hline(
+                            cr.x_range(),
+                            cr.top() + 1.0,
+                            Stroke::new(2.5, Color32::from_rgb(0x4A, 0x9C, 0xF0)),
+                        );
+                    }
+                }
+            }
+        }
+        // Onde o pincel vai pintar.
+        if let Some(p) = response.hover_pos() {
+            let (c, r) = self.paint_cell(rect, p, map, scale, ox, oy);
+            let copying = ui.input(|i| i.modifiers.command);
+            let (w, h) = match (env.paint.tool, copying) {
+                (_, true)
+                | (
+                    crate::paint::PaintTool::Eraser
+                    | crate::paint::PaintTool::Picker
+                    | crate::paint::PaintTool::Fill
+                    | crate::paint::PaintTool::Terrain,
+                    _,
+                ) => (1, 1),
+                _ => (env.paint.stamp.w as i64, env.paint.stamp.h as i64),
+            };
+            let (sc, sr) = match &self.paint_stroke {
+                Some(s) if s.copy || env.paint.tool == crate::paint::PaintTool::Rect => (
+                    (s.start.0.min(c), s.start.1.min(r)),
+                    (s.start.0.max(c), s.start.1.max(r)),
+                ),
+                _ => ((c, r), (c + w - 1, r + h - 1)),
+            };
+            let hr = Rect::from_two_pos(corner(sc.0, sc.1), corner(sr.0 + 1, sr.1 + 1));
+            let color = if copying || self.paint_stroke.as_ref().is_some_and(|s| s.copy) {
+                Color32::from_rgb(0x41, 0xA6, 0xF6)
+            } else {
+                Color32::WHITE
+            };
+            painter.rect_stroke(hr, 0.0, Stroke::new(2.0, color), egui::StrokeKind::Inside);
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+            let layer = map
+                .tile_layer(map.layer)
+                .map(|l| l.name.as_str())
+                .unwrap_or("");
+            painter.text(
+                rect.left_bottom() + Vec2::new(8.0, -6.0),
+                egui::Align2::LEFT_BOTTOM,
+                format!(
+                    "{} · camada {layer} · coluna {} · linha {}",
+                    env.paint.tool.label(),
+                    c + 1,
+                    r + 1
+                ),
+                egui::FontId::monospace(12.0),
+                Color32::WHITE,
+            );
         }
     }
 

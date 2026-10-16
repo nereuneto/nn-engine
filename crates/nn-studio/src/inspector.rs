@@ -395,8 +395,8 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
             "Cai, colide, para no chão. Mexa nele pelo script: objeto.body.vx.",
         ),
         "map" => (
-            "Mapa do Tiled",
-            "Desenha um mapa .tmj, com a colisão dos tiles.",
+            "Mapa de tiles",
+            "Desenha um mapa .tmj (do editor ou do Tiled), com a colisão dos tiles.",
         ),
         "camera" => ("Câmera", "Onde a câmera começa, ou quem ela segue."),
         "sound" => ("Som", "Toca um som ou música quando a cena começa."),
@@ -683,7 +683,15 @@ fn behavior_spec(info: &BehaviorInfo, p: &behaviors::PropSpec) -> Spec {
         PropType::Sound => Wd::File(FileKind::Sound),
         PropType::Image => Wd::File(FileKind::Image),
         PropType::Anim => Wd::Anim,
-        PropType::Target | PropType::Var | PropType::Value | PropType::Behavior => Wd::Text,
+        PropType::Tile => Wd::Int {
+            min: 0.0,
+            max: 1_000_000.0,
+        },
+        PropType::Target
+        | PropType::Var
+        | PropType::Value
+        | PropType::Behavior
+        | PropType::TileType => Wd::Text,
     };
     Spec {
         key: p.key.clone(),
@@ -1492,6 +1500,27 @@ impl Inspector {
                         self.actions_out
                             .push(InspectorAction::OpenFile(comp.str("image").to_string()));
                     }
+                }
+            });
+        }
+        // Pintar o mapa aqui na cena.
+        if comp.kind == "map" && !comp.str("map").is_empty() {
+            ui.horizontal_wrapped(|ui| {
+                let on = doc.painting == Some(id);
+                let r = ui
+                    .selectable_label(on, "✏ Pintar")
+                    .on_hover_text("Pinta os tiles direto na cena (o pincel fica no painel Tiles)");
+                crate::tutorial::anchor_in(ui, "inspetor:pintar", r.rect);
+                if r.clicked() {
+                    doc.painting = if on { None } else { Some(id) };
+                }
+                if ui
+                    .button("Abrir o mapa")
+                    .on_hover_text("Na aba do mapa")
+                    .clicked()
+                {
+                    self.actions_out
+                        .push(InspectorAction::OpenFile(comp.str("map").to_string()));
                 }
             });
         }
