@@ -12,7 +12,9 @@ use eframe::egui;
 use eframe::egui_wgpu::{self, wgpu};
 use glam::{UVec2, Vec2};
 use nn_core::Color;
-use nn_render::{Anchor, Camera2D, Renderer, Sprite, Text, TextureId, TextureOptions};
+use nn_render::{
+    Anchor, Camera2D, FontId, Panel, PanelImage, Renderer, Sprite, Text, TextureId, TextureOptions,
+};
 
 use crate::scene_data::{Component, Object, SceneData, Transform};
 
@@ -162,6 +164,59 @@ pub fn sprite_frame(c: &Component, anim: impl FnOnce(&str) -> Option<(u32, u32)>
     }
 }
 
+/// Largura aproximada de um texto (sem GPU): 0,55 do tamanho por letra.
+pub fn approx_text_width(text: &str, size: f64) -> f64 {
+    let chars = text.lines().map(|l| l.chars().count()).max().unwrap_or(0);
+    size * 0.55 * chars as f64
+}
+
+/// Número de uma variável do jogo (o valor inicial do config.lua).
+pub fn var_num(name: &str) -> Option<f64> {
+    use crate::scene_data::Prop;
+    match crate::scene_data::var_value(name)? {
+        Prop::Num(n) => Some(n),
+        Prop::Bool(b) => Some(if b { 1.0 } else { 0.0 }),
+        Prop::Str(s) => s.trim().parse().ok(),
+    }
+}
+
+/// Ícones: quantos cheios e quantos ao todo (como `icons_count` do cena.lua).
+pub fn icons_count(c: &Component) -> (usize, usize) {
+    let mut n = c.num("count");
+    if !c.str("var").is_empty() {
+        n = var_num(c.str("var")).unwrap_or(0.0);
+    }
+    let n = n.max(0.0).floor() as usize;
+    (n, n.max(c.num("max").max(0.0).floor() as usize))
+}
+
+/// Tamanho (sem escala) de um componente de interface, como o
+/// `component_size` do cena.lua (os textos são medidos por aproximação).
+pub fn ui_size(c: &Component) -> Option<(f64, f64)> {
+    Some(match c.kind.as_str() {
+        "panel" | "button" | "bar" | "textfield" => (c.num("w"), c.num("h")),
+        "slider" => (c.num("w") + c.num("knob"), c.num("h").max(c.num("knob"))),
+        "checkbox" => {
+            let (box_, size) = (c.num("box"), c.num("size"));
+            let tw = if c.str("text").is_empty() {
+                0.0
+            } else {
+                approx_text_width(c.str("text"), size) + box_ * 0.4
+            };
+            (box_ + tw, box_.max(size * 1.2))
+        }
+        "icons" => {
+            let (_, k) = icons_count(c);
+            let k = k.max(1) as f64;
+            (
+                k * c.num("size") + (k - 1.0) * c.num("spacing"),
+                c.num("size"),
+            )
+        }
+        _ => return None,
+    })
+}
+
 /// Tamanho de um objeto sem nada visível (ícone), em pixels da tela.
 pub const ICON_SIZE: f64 = 22.0;
 
@@ -249,12 +304,120 @@ pub fn local_bounds(o: &Object, root: &Path, sizes: &mut Sizes, icon: f64) -> (L
                     });
                 }
             }
-            _ => {}
+            "icons" => {
+                if let Some((w, h)) = ui_size(c) {
+                    let x0 = match c.str("align") {
+                        "left" => 0.0,
+                        "right" => -w,
+                        _ => -w / 2.0,
+                    };
+                    add(LocalRect {
+                        min: (x0, -h / 2.0),
+                        max: (x0 + w, h / 2.0),
+                    });
+                }
+            }
+            _ => {
+                if let Some((w, h)) = ui_size(c) {
+                    add(LocalRect::centered(w, h));
+                }
+            }
         }
     }
     match rect {
         Some(r) if r.max.0 > r.min.0 && r.max.1 > r.min.1 => (r, false),
         _ => (LocalRect::centered(icon, icon), true),
+    }
+}
+
+/// Grupo: põe os filhos visíveis em coluna, em linha ou em grade em volta
+/// do objeto, como o `arrange` do cena.lua. Devolve as posições (id, x, y).
+pub fn arrange(o: &Object, root: &Path, sizes: &mut Sizes) -> Vec<(u32, f64, f64)> {
+    let Some(l) = o.component("layout") else {
+        return Vec::new();
+    };
+    let mode = l.str("arrange");
+    let gap = l.num("spacing");
+    let align = l.str("align");
+    let items: Vec<(u32, f64, f64)> = o
+        .children
+        .iter()
+        .filter(|ch| ch.visible)
+        .map(|ch| {
+            let (r, icon) = local_bounds(ch, root, sizes, 0.0);
+            let (w, h) = if icon {
+                (0.0, 0.0)
+            } else {
+                (r.max.0 - r.min.0, r.max.1 - r.min.1)
+            };
+            (ch.id, w * ch.scale_x.abs(), h * ch.scale_y.abs())
+        })
+        .collect();
+    if items.is_empty() {
+        return Vec::new();
+    }
+    let cross = |size: f64, total: f64| match align {
+        "start" => -total / 2.0 + size / 2.0,
+        "end" => total / 2.0 - size / 2.0,
+        _ => 0.0,
+    };
+    let n = items.len() as f64;
+    let mut out = Vec::new();
+    match mode {
+        "vertical" | "horizontal" => {
+            let vertical = mode == "vertical";
+            let along = |it: &(u32, f64, f64)| if vertical { it.2 } else { it.1 };
+            let across = |it: &(u32, f64, f64)| if vertical { it.1 } else { it.2 };
+            let total: f64 = items.iter().map(along).sum::<f64>() + gap * (n - 1.0);
+            let widest = items.iter().map(across).fold(0.0, f64::max);
+            let mut pos = total / 2.0;
+            for it in &items {
+                let size = along(it);
+                let a = pos - size / 2.0;
+                let c = cross(across(it), widest);
+                out.push(if vertical {
+                    (it.0, c, a)
+                } else {
+                    (it.0, -a, c)
+                });
+                pos -= size + gap;
+            }
+        }
+        "grid" => {
+            let cols = l.num("columns").floor().max(1.0) as usize;
+            let cw = items.iter().map(|i| i.1).fold(0.0, f64::max);
+            let ch = items.iter().map(|i| i.2).fold(0.0, f64::max);
+            let rows = items.len().div_ceil(cols) as f64;
+            let k = cols.min(items.len()) as f64;
+            let w = k * cw + (k - 1.0) * gap;
+            let h = rows * ch + (rows - 1.0) * gap;
+            for (i, it) in items.iter().enumerate() {
+                let (col, row) = ((i % cols) as f64, (i / cols) as f64);
+                out.push((
+                    it.0,
+                    -w / 2.0 + cw / 2.0 + col * (cw + gap),
+                    h / 2.0 - ch / 2.0 - row * (ch + gap),
+                ));
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+/// Aplica os Grupos da cena toda (os filhos vão para o lugar).
+pub fn arrange_all(data: &mut SceneData, root: &Path, sizes: &mut Sizes) {
+    let mut moves = Vec::new();
+    crate::scene_data::visit(&data.objects, &mut |o| {
+        moves.extend(arrange(o, root, sizes))
+    });
+    for (id, x, y) in moves {
+        if let Some(o) = data.find_mut(id)
+            && (o.x != x || o.y != y)
+        {
+            o.x = x;
+            o.y = y;
+        }
     }
 }
 
@@ -349,6 +512,8 @@ pub struct SceneRenderer {
     anims: crate::anim_file::AnimCache,
     /// Mapas abertos no editor (ainda não salvos): mapa → (versão, arquivos).
     map_sources: HashMap<String, (u64, HashMap<String, String>)>,
+    /// Fontes dos textos e botões (arquivo → fonte; `None` se não abriu).
+    fonts: HashMap<String, Option<FontId>>,
 }
 
 impl std::fmt::Debug for SceneRenderer {
@@ -373,6 +538,376 @@ impl SceneRenderer {
             targets: HashMap::new(),
             anims: Default::default(),
             map_sources: HashMap::new(),
+            fonts: HashMap::new(),
+        }
+    }
+
+    /// A fonte do arquivo (vazio: a do tema, ou a padrão).
+    fn font(&mut self, root: &Path, path: &str) -> Option<FontId> {
+        let path = if path.is_empty() {
+            crate::scene_data::theme_value("font")
+        } else {
+            path.to_string()
+        };
+        if path.is_empty() {
+            return None;
+        }
+        let renderer = &mut self.renderer;
+        *self
+            .fonts
+            .entry(path.clone())
+            .or_insert_with(|| renderer.load_font(root.join(&path)).ok())
+    }
+
+    fn text_of(
+        &mut self,
+        root: &Path,
+        content: &str,
+        size: f32,
+        color: &str,
+        font: &str,
+    ) -> (String, f32, Color, Option<FontId>) {
+        (
+            content.to_string(),
+            size,
+            parse_color(color),
+            self.font(root, font),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_label(
+        &mut self,
+        root: &Path,
+        content: &str,
+        at: Vec2,
+        size: f32,
+        color: &str,
+        font: &str,
+        anchor: Anchor,
+    ) {
+        let (content, size, color, font) = self.text_of(root, content, size, color, font);
+        let mut t = Text::new(&content)
+            .at(at)
+            .size(size)
+            .color(color)
+            .anchor(anchor);
+        if let Some(f) = font {
+            t = t.font(f);
+        }
+        self.renderer.draw_text(&t);
+    }
+
+    fn measure(&mut self, root: &Path, content: &str, size: f32, font: &str) -> f32 {
+        let font = self.font(root, font);
+        let mut t = Text::new(content).size(size);
+        if let Some(f) = font {
+            t = t.font(f);
+        }
+        self.renderer.measure_text(&t).x
+    }
+
+    /// Desenha um componente de interface com centro em `pos` (mundo do
+    /// editor, y para cima), no estado normal, como o jogo desenha.
+    fn draw_ui(&mut self, root: &Path, c: &Component, pos: Vec2, scale: Vec2) {
+        use crate::scene_data::themed;
+        let (sx, sy) = (scale.x.abs(), scale.y.abs());
+        let num = |k: &str| c.num(k) as f32;
+        let panel_image = |me: &mut Self, key: &str| -> Option<PanelImage> {
+            let tex = me.texture(root, c.str(key), true)?;
+            Some(PanelImage {
+                texture: tex,
+                region: nn_render::Rect::FULL,
+                slice: num("slice"),
+                scale: num("slice_scale"),
+            })
+        };
+        match c.kind.as_str() {
+            "panel" => {
+                let mut p = Panel::new(pos, Vec2::new(num("w") * sx, num("h") * sy))
+                    .color(parse_color(&themed(c.str("color"), "panel")))
+                    .radius(num("radius"))
+                    .border(
+                        num("border"),
+                        parse_color(&themed(c.str("border_color"), "border")),
+                    );
+                if let Some(img) = panel_image(self, "image") {
+                    p = p.image(img);
+                }
+                self.renderer.draw_panel(&p);
+            }
+            "button" => {
+                let (w, h) = (num("w") * sx, num("h") * sy);
+                let image = panel_image(self, "image");
+                let color = if image.is_some() {
+                    if c.str("color").is_empty() {
+                        "#FFFFFF".to_string()
+                    } else {
+                        c.str("color").to_string()
+                    }
+                } else if !c.bool("enabled") {
+                    themed("", "disabled")
+                } else {
+                    themed(c.str("color"), "button")
+                };
+                let mut p = Panel::new(pos, Vec2::new(w, h))
+                    .color(parse_color(&color))
+                    .radius(num("radius"))
+                    .border(
+                        num("border"),
+                        parse_color(&themed(c.str("border_color"), "border")),
+                    );
+                if let Some(img) = image {
+                    p = p.image(img);
+                }
+                self.renderer.draw_panel(&p);
+                let size = num("size") * sy;
+                let text = c.str("text");
+                let tc = if c.bool("enabled") {
+                    themed(c.str("text_color"), "text")
+                } else {
+                    "#FFFFFF80".to_string()
+                };
+                let mut dx = 0.0;
+                if let Some(icon) = self.texture(root, c.str("icon"), true) {
+                    let isz = h * 0.6;
+                    let tw = if text.is_empty() {
+                        0.0
+                    } else {
+                        self.measure(root, text, size, c.str("font"))
+                    };
+                    let gap = if text.is_empty() { 0.0 } else { size * 0.4 };
+                    let total = isz + gap + tw;
+                    self.renderer.draw(
+                        &Sprite::new(icon)
+                            .at(pos + Vec2::new(-total / 2.0 + isz / 2.0, 0.0))
+                            .size(Vec2::splat(isz)),
+                    );
+                    dx = -total / 2.0 + isz + gap + tw / 2.0;
+                }
+                if !text.is_empty() {
+                    self.draw_label(
+                        root,
+                        text,
+                        pos + Vec2::new(dx, 0.0),
+                        size,
+                        &tc,
+                        c.str("font"),
+                        Anchor::Center,
+                    );
+                }
+            }
+            "bar" => {
+                let (w, h) = (num("w") * sx, num("h") * sy);
+                self.renderer.draw_panel(
+                    &Panel::new(pos, Vec2::new(w, h))
+                        .color(parse_color(c.str("back_color")))
+                        .radius(num("radius"))
+                        .border(
+                            num("border"),
+                            parse_color(&themed(c.str("border_color"), "border")),
+                        ),
+                );
+                let mut v = c.num("value");
+                if !c.str("var").is_empty() {
+                    v = var_num(c.str("var")).unwrap_or(0.0);
+                }
+                let mut max = c.num("max");
+                if !c.str("max_var").is_empty() {
+                    max = var_num(c.str("max_var")).unwrap_or(max);
+                }
+                let f = if max > 0.0 {
+                    (v / max).clamp(0.0, 1.0) as f32
+                } else {
+                    0.0
+                };
+                if f > 0.0 {
+                    let (fw, fh, d) = match c.str("direction") {
+                        "left" => (w * f, h, Vec2::new(w / 2.0 - w * f / 2.0, 0.0)),
+                        "up" => (w, h * f, Vec2::new(0.0, -h / 2.0 + h * f / 2.0)),
+                        "down" => (w, h * f, Vec2::new(0.0, h / 2.0 - h * f / 2.0)),
+                        _ => (w * f, h, Vec2::new(-w / 2.0 + w * f / 2.0, 0.0)),
+                    };
+                    self.renderer.draw_panel(
+                        &Panel::new(pos + d, Vec2::new(fw, fh))
+                            .color(parse_color(&themed(c.str("color"), "accent")))
+                            .radius(num("radius").min(fw / 2.0).min(fh / 2.0)),
+                    );
+                }
+            }
+            "icons" => {
+                let (n, k) = icons_count(c);
+                let (size, gap) = (num("size") * sy, num("spacing") * sx);
+                let total = k as f32 * size + (k.max(1) - 1) as f32 * gap;
+                let start = match c.str("align") {
+                    "left" => 0.0,
+                    "right" => -total,
+                    _ => -total / 2.0,
+                };
+                let tex = self.texture(root, c.str("image"), c.bool("pixel_art"));
+                let (fw, fh) = (c.num("frame_w") as u32, c.num("frame_h") as u32);
+                for i in 0..k {
+                    let at = pos + Vec2::new(start + i as f32 * (size + gap) + size / 2.0, 0.0);
+                    let full = i < n;
+                    match tex {
+                        Some(t) => {
+                            let ts = self.renderer.texture_size(t);
+                            let sprite = if fw > 0 && fh > 0 && fw <= ts.x && fh <= ts.y {
+                                let sheet = self.renderer.sprite_sheet(t, UVec2::new(fw, fh));
+                                let frame =
+                                    (c.num("frame").max(1.0) as u32).min(sheet.frame_count());
+                                sheet.sprite(frame - 1)
+                            } else {
+                                Sprite::new(t)
+                            };
+                            let color = if full {
+                                c.str("color")
+                            } else {
+                                c.str("empty_color")
+                            };
+                            self.renderer.draw(
+                                &sprite
+                                    .at(at)
+                                    .size(Vec2::splat(size))
+                                    .color(parse_color(color)),
+                            );
+                        }
+                        None => {
+                            let color = if full {
+                                themed("", "accent")
+                            } else {
+                                c.str("empty_color").to_string()
+                            };
+                            self.renderer
+                                .draw_circle(at, size / 2.0, parse_color(&color));
+                        }
+                    }
+                }
+            }
+            "slider" => {
+                let (w, h) = (num("w") * sx, num("h") * sy);
+                self.renderer.draw_panel(
+                    &Panel::new(pos, Vec2::new(w, h))
+                        .color(parse_color(c.str("back_color")))
+                        .radius(h / 2.0),
+                );
+                let v = match c.str("target") {
+                    "musica" | "efeitos" | "geral" => c.num("max"),
+                    _ if !c.str("var").is_empty() => var_num(c.str("var")).unwrap_or(c.num("min")),
+                    _ => c.num("value"),
+                };
+                let span = c.num("max") - c.num("min");
+                let f = if span != 0.0 {
+                    ((v - c.num("min")) / span).clamp(0.0, 1.0) as f32
+                } else {
+                    0.0
+                };
+                if f > 0.0 {
+                    self.renderer.draw_panel(
+                        &Panel::new(
+                            pos + Vec2::new(-w / 2.0 + w * f / 2.0, 0.0),
+                            Vec2::new(w * f, h),
+                        )
+                        .color(parse_color(&themed(c.str("color"), "accent")))
+                        .radius(h / 2.0),
+                    );
+                }
+                self.renderer.draw_circle(
+                    pos + Vec2::new(-w / 2.0 + w * f, 0.0),
+                    num("knob") * sy / 2.0,
+                    parse_color(c.str("knob_color")),
+                );
+            }
+            "checkbox" => {
+                let box_ = num("box") * sy;
+                let size = num("size") * sy;
+                let text = c.str("text");
+                let tw = if text.is_empty() {
+                    0.0
+                } else {
+                    self.measure(root, text, size, c.str("font")) + box_ * 0.4
+                };
+                let total = box_ + tw;
+                let bpos = pos + Vec2::new(-total / 2.0 + box_ / 2.0, 0.0);
+                self.renderer.draw_panel(
+                    &Panel::new(bpos, Vec2::splat(box_))
+                        .color(parse_color(&themed(c.str("color"), "panel")))
+                        .radius(box_ * 0.2)
+                        .border((box_ * 0.08).max(2.0), parse_color(&themed("", "border"))),
+                );
+                let checked = match c.str("target") {
+                    "tela_cheia" => false,
+                    _ if !c.str("var").is_empty() => var_num(c.str("var")).unwrap_or(0.0) != 0.0,
+                    _ => c.bool("checked"),
+                };
+                if checked {
+                    let inner = box_ * 0.5;
+                    self.renderer.draw_panel(
+                        &Panel::new(bpos, Vec2::splat(inner))
+                            .color(parse_color(&themed(c.str("check_color"), "accent")))
+                            .radius(inner * 0.25),
+                    );
+                }
+                if !text.is_empty() {
+                    let tc = themed(c.str("text_color"), "text");
+                    self.draw_label(
+                        root,
+                        text,
+                        pos + Vec2::new(-total / 2.0 + box_ + box_ * 0.4, 0.0),
+                        size,
+                        &tc,
+                        c.str("font"),
+                        Anchor::CenterLeft,
+                    );
+                }
+            }
+            "textfield" => {
+                let (w, h) = (num("w") * sx, num("h") * sy);
+                self.renderer.draw_panel(
+                    &Panel::new(pos, Vec2::new(w, h))
+                        .color(parse_color(c.str("color")))
+                        .radius(num("radius"))
+                        .border(
+                            num("border"),
+                            parse_color(&themed(c.str("border_color"), "border")),
+                        ),
+                );
+                let value = if c.str("var").is_empty() {
+                    c.str("text").to_string()
+                } else {
+                    match crate::scene_data::var_value(c.str("var")) {
+                        Some(crate::scene_data::Prop::Str(s)) => s,
+                        Some(crate::scene_data::Prop::Num(n)) => crate::scene_data::format_num(n),
+                        _ => String::new(),
+                    }
+                };
+                let pad = 12f32.min(w * 0.1);
+                let at = pos + Vec2::new(-w / 2.0 + pad, 0.0);
+                let size = num("size") * sy;
+                if value.is_empty() {
+                    self.draw_label(
+                        root,
+                        c.str("placeholder"),
+                        at,
+                        size,
+                        "#FFFFFF66",
+                        c.str("font"),
+                        Anchor::CenterLeft,
+                    );
+                } else {
+                    let tc = themed(c.str("text_color"), "text");
+                    self.draw_label(
+                        root,
+                        &value,
+                        at,
+                        size,
+                        &tc,
+                        c.str("font"),
+                        Anchor::CenterLeft,
+                    );
+                }
+            }
+            _ => {}
         }
     }
 
@@ -595,12 +1130,14 @@ impl SceneRenderer {
                     }
                     "text" => {
                         let content = c.str("text").to_string();
-                        self.renderer.draw_text(
-                            &Text::new(&content)
-                                .at(pos)
-                                .size((c.num("size") * w.scale_y.abs()) as f32)
-                                .color(parse_color(c.str("color")))
-                                .anchor(anchor_of(c.str("anchor"))),
+                        self.draw_label(
+                            root,
+                            &content,
+                            pos,
+                            (c.num("size") * w.scale_y.abs()) as f32,
+                            c.str("color"),
+                            c.str("font"),
+                            anchor_of(c.str("anchor")),
                         );
                     }
                     "map" => {
@@ -611,7 +1148,7 @@ impl SceneRenderer {
                             map.draw(&mut self.renderer, camera, viewport);
                         }
                     }
-                    _ => {}
+                    _ => self.draw_ui(root, c, pos, Vec2::new(w.scale_x as f32, w.scale_y as f32)),
                 }
             }
         }

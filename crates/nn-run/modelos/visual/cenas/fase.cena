@@ -5,6 +5,12 @@ return {
   background = "#5FB3E0",
   gravity = -1800,
   events = {
+    { comment = "Esc (ou o B do controle) abre o menu de pausa por cima da fase." },
+    { when = {
+        { cond = "tecla", modo = "apertar", tecla = "voltar" },
+      }, actions = {
+        { act = "por_cima", cena = "cenas/pausa.cena" },
+      } },
     { comment = "A saída só abre depois de pegar todas as moedas." },
     { when = {
         { cond = "acabaram", nome = "moeda" },
@@ -105,12 +111,28 @@ return {
       },
     },
     {
-      id = 13, name = "placar",
-      x = 0, y = 320, rotation = 0, scale_x = 1, scale_y = 1,
-      visible = true, layer = 5,
+      id = 13, name = "vidas",
+      x = 32, y = -42, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5, anchor = "top_left",
       components = {
-        { type = "text", text = "Moedas: 0", size = 32, color = "#FFFFFF", anchor = "center", hud = true },
-        { type = "behavior", script = "nn:mostrar_valor", texto = "Moedas: {moedas}    Vidas: {vidas}" },
+        { type = "icons", image = "assets/imagens/coracao.png", frame = 1, frame_w = 0, frame_h = 0, var = "vidas", count = 3, max = 3, size = 44, spacing = 6, color = "#FFFFFF", empty_color = "#FFFFFF40", align = "left", pixel_art = true, hud = true },
+      },
+    },
+    {
+      id = 15, name = "moedas",
+      x = -32, y = -40, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5, anchor = "top_right",
+      components = {
+        { type = "text", text = "Moedas: 0", size = 30, color = "#FFFFFF", anchor = "right", font = "", hud = true },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Moedas: {moedas}" },
+      },
+    },
+    {
+      id = 16, name = "progresso",
+      x = -142, y = -82, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5, anchor = "top_right",
+      components = {
+        { type = "bar", w = 220, h = 14, var = "moedas", value = 1, max = 4, max_var = "", color = "", back_color = "#00000080", radius = 7, border = 0, border_color = "", direction = "right", hud = true },
       },
     },
   },

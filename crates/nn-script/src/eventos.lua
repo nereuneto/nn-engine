@@ -985,7 +985,7 @@ E.ACTIONS = {
     help = "Fica guardado: vale também na próxima vez que o jogo abrir.",
     props = { { "canal", "musica", options = { { "musica", "da música" }, { "efeitos", "dos efeitos" }, { "geral", "geral" } } },
       { "valor", 100, type = "value", label = "Volume (%)" } },
-    lua = "nn.audio.set_volume({valor} / 100, \"{canal}\")",
+    lua = "nn.audio.set_volume({valor} / 100, ({ musica = \"music\", efeitos = \"effects\" })[\"{canal}\"])",
     run = function(ctx, p)
       M.set_volume(p.canal, number(fill(tostring(p.valor))) / 100)
     end,

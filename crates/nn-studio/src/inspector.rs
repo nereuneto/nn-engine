@@ -35,6 +35,14 @@ enum W {
     Object,
     /// Nome de uma animação da imagem do objeto.
     Anim,
+    /// Cor que, vazia, vem do tema da interface (a chave do tema).
+    ThemeColor(&'static str),
+    /// Variável do jogo.
+    Var,
+    /// Fonte (.ttf); vazia = a do tema.
+    Font,
+    /// Cena (.cena ou .lua).
+    Scene,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -153,7 +161,7 @@ const SPRITE_FIELDS: &[F] = &[
 
 const HUD: F = help(
     f("hud", "Fixo na tela (HUD)", W::Bool),
-    "Não anda com a câmera: placar, vidas, botões. A posição conta a partir do centro da tela.",
+    "Não anda com a câmera: placar, vidas, botões. A posição conta a partir do ponto da tela escolhido em Transformação (Preso em).",
 );
 
 const TEXT_FIELDS: &[F] = &[
@@ -164,6 +172,7 @@ const TEXT_FIELDS: &[F] = &[
         f("anchor", "Âncora", W::Choice(ANCHORS)),
         "Qual ponto do texto fica na posição do objeto.",
     ),
+    FONT,
     HUD,
 ];
 
@@ -367,6 +376,364 @@ const PARTICLES_FIELDS: &[F] = &[
     f("emitting", "Emitindo", W::Bool),
 ];
 
+// Interface (menus e HUD) ------------------------------------------------
+
+const SLICE: F = help(
+    adv(
+        "slice",
+        "Margem das fatias",
+        W::Num {
+            speed: 0.2,
+            min: 0.0,
+            max: 512.0,
+            suffix: " px",
+        },
+    ),
+    "Com imagem: quantos pixels de cada canto não esticam (9 fatias).",
+);
+const SLICE_SCALE: F = help(
+    adv(
+        "slice_scale",
+        "Escala das fatias",
+        W::Num {
+            speed: 0.05,
+            min: 0.0,
+            max: 64.0,
+            suffix: "",
+        },
+    ),
+    "Com imagem: quanto cada pixel dos cantos cresce. Pixel art pequena: 3 ou 4.",
+);
+const UI_HUD: F = help(
+    adv("hud", "Fixo na tela", W::Bool),
+    "Fica preso à tela e não anda com a câmera. Desligado, fica no mundo do jogo.",
+);
+const FONT: F = help(
+    adv("font", "Fonte", W::Font),
+    "Arquivo .ttf ou .otf. Vazio = a fonte do tema (ou a da engine).",
+);
+const RADIUS: F = f("radius", "Cantos arredondados", SIZE);
+const BORDER: F = f("border", "Borda", SIZE);
+const BORDER_COLOR: F = f("border_color", "Cor da borda", W::ThemeColor("border"));
+const VAR: F = help(
+    f("var", "Variável", W::Var),
+    "Variável do jogo (Configurações do projeto) que o componente mostra ou muda.",
+);
+const PERCENT: W = W::Num {
+    speed: 0.01,
+    min: -100_000.0,
+    max: 100_000.0,
+    suffix: "",
+};
+
+const PANEL_FIELDS: &[F] = &[
+    f("w", "Largura", SIZE),
+    f("h", "Altura", SIZE),
+    f("color", "Cor", W::ThemeColor("panel")),
+    RADIUS,
+    BORDER,
+    BORDER_COLOR,
+    help(
+        f("image", "Imagem", W::File(FileKind::Image)),
+        "Uma moldura desenhada: os cantos ficam do mesmo tamanho e o meio estica.",
+    ),
+    SLICE,
+    SLICE_SCALE,
+    UI_HUD,
+];
+
+const BUTTON_ACTIONS: &[(&str, &str)] = &[
+    ("nada", "Nada (use os eventos)"),
+    ("cena", "Trocar de cena"),
+    ("por_cima", "Abrir cena por cima"),
+    ("fechar", "Fechar esta cena (por cima)"),
+    ("reiniciar", "Reiniciar a cena"),
+    ("sair", "Sair do jogo"),
+];
+
+const BUTTON_FIELDS: &[F] = &[
+    f("text", "Texto", W::Text),
+    help(
+        f("action", "Ao apertar", W::Choice(BUTTON_ACTIONS)),
+        "O que o botão faz. Para outras coisas, use a condição \"Clicar\" nos eventos.",
+    ),
+    help(
+        f("scene", "Cena", W::Scene),
+        "Para \"Trocar de cena\" e \"Abrir cena por cima\".",
+    ),
+    f("size", "Tamanho do texto", SIZE),
+    f("w", "Largura", SIZE),
+    f("h", "Altura", SIZE),
+    f("color", "Cor", W::ThemeColor("button")),
+    help(
+        f("hover_color", "Cor com foco", W::ThemeColor("hover")),
+        "Com o mouse em cima, ou escolhido pelo teclado ou controle.",
+    ),
+    f("press_color", "Cor apertado", W::ThemeColor("press")),
+    f("text_color", "Cor do texto", W::ThemeColor("text")),
+    RADIUS,
+    adv("border", "Borda", SIZE),
+    adv("border_color", "Cor da borda", W::ThemeColor("border")),
+    help(
+        f("icon", "Ícone", W::File(FileKind::Image)),
+        "Imagem pequena antes do texto.",
+    ),
+    adv("image", "Imagem do fundo", W::File(FileKind::Image)),
+    SLICE,
+    SLICE_SCALE,
+    FONT,
+    help(
+        adv("sound", "Som", W::File(FileKind::Sound)),
+        "Toca ao apertar. Vazio = o som do tema.",
+    ),
+    help(
+        f("focus", "Começa com foco", W::Bool),
+        "O primeiro escolhido quando o menu abre (para jogar com teclado ou controle).",
+    ),
+    f("enabled", "Ativo", W::Bool),
+    UI_HUD,
+];
+
+const BAR_FIELDS: &[F] = &[
+    VAR,
+    help(
+        f("value", "Valor", PERCENT),
+        "Sem variável: o valor mostrado.",
+    ),
+    help(f("max", "Máximo", PERCENT), "O valor da barra cheia."),
+    help(
+        adv("max_var", "Variável do máximo", W::Var),
+        "Se o máximo muda no jogo (vida máxima, por exemplo).",
+    ),
+    f("w", "Largura", SIZE),
+    f("h", "Altura", SIZE),
+    f("color", "Cor", W::ThemeColor("accent")),
+    f("back_color", "Cor do fundo", W::Color),
+    RADIUS,
+    adv("border", "Borda", SIZE),
+    adv("border_color", "Cor da borda", W::ThemeColor("border")),
+    f(
+        "direction",
+        "Enche para",
+        W::Choice(&[
+            ("right", "Direita"),
+            ("left", "Esquerda"),
+            ("up", "Cima"),
+            ("down", "Baixo"),
+        ]),
+    ),
+    UI_HUD,
+];
+
+const ICONS_FIELDS: &[F] = &[
+    help(
+        f("image", "Imagem", W::File(FileKind::Image)),
+        "Um coração, uma moeda, uma estrela...",
+    ),
+    help(
+        adv(
+            "frame_w",
+            "Largura do quadro",
+            W::Int {
+                min: 0.0,
+                max: 4096.0,
+            },
+        ),
+        "Para spritesheets. 0 = a imagem inteira.",
+    ),
+    adv(
+        "frame_h",
+        "Altura do quadro",
+        W::Int {
+            min: 0.0,
+            max: 4096.0,
+        },
+    ),
+    adv(
+        "frame",
+        "Quadro",
+        W::Int {
+            min: 1.0,
+            max: 100_000.0,
+        },
+    ),
+    help(
+        VAR,
+        "Variável do jogo com quantos ícones mostrar (vidas, por exemplo).",
+    ),
+    help(
+        f(
+            "count",
+            "Quantidade",
+            W::Int {
+                min: 0.0,
+                max: 100.0,
+            },
+        ),
+        "Sem variável: quantos ícones mostrar.",
+    ),
+    help(
+        f(
+            "max",
+            "Máximo",
+            W::Int {
+                min: 0.0,
+                max: 100.0,
+            },
+        ),
+        "Mostra os que faltam apagados (3 de 5 corações). 0 = só os que tem.",
+    ),
+    f("size", "Tamanho", SIZE),
+    f("spacing", "Espaço entre eles", SIZE),
+    f("color", "Cor", W::Color),
+    f("empty_color", "Cor dos que faltam", W::Color),
+    f(
+        "align",
+        "Alinhar",
+        W::Choice(&[
+            ("left", "À esquerda"),
+            ("center", "No meio"),
+            ("right", "À direita"),
+        ]),
+    ),
+    adv("pixel_art", "Pixel art", W::Bool),
+    UI_HUD,
+];
+
+const SLIDER_FIELDS: &[F] = &[
+    help(
+        f(
+            "target",
+            "Muda",
+            W::Choice(&[
+                ("variavel", "Uma variável"),
+                ("musica", "Volume da música"),
+                ("efeitos", "Volume dos efeitos"),
+                ("geral", "Volume geral"),
+            ]),
+        ),
+        "Os volumes ficam guardados para a próxima vez que o jogo abrir.",
+    ),
+    VAR,
+    help(
+        f("value", "Valor", PERCENT),
+        "O valor inicial (sem variável).",
+    ),
+    f("min", "Mínimo", PERCENT),
+    f("max", "Máximo", PERCENT),
+    help(
+        f(
+            "step",
+            "Passo",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 100_000.0,
+                suffix: "",
+            },
+        ),
+        "Quanto anda com as setas. 0 = um décimo.",
+    ),
+    f("w", "Largura", SIZE),
+    f("h", "Altura", SIZE),
+    f("color", "Cor", W::ThemeColor("accent")),
+    f("back_color", "Cor do fundo", W::Color),
+    f("knob_color", "Cor do botão", W::Color),
+    f("knob", "Tamanho do botão", SIZE),
+    UI_HUD,
+];
+
+const CHECKBOX_FIELDS: &[F] = &[
+    f("text", "Texto", W::Text),
+    f(
+        "target",
+        "Muda",
+        W::Choice(&[("variavel", "Uma variável"), ("tela_cheia", "Tela cheia")]),
+    ),
+    VAR,
+    help(
+        f("checked", "Marcada", W::Bool),
+        "Como começa (sem variável).",
+    ),
+    f("size", "Tamanho do texto", SIZE),
+    f("box", "Tamanho da caixa", SIZE),
+    f("color", "Cor da caixa", W::ThemeColor("button")),
+    f("check_color", "Cor do ✓", W::ThemeColor("accent")),
+    f("text_color", "Cor do texto", W::ThemeColor("text")),
+    FONT,
+    UI_HUD,
+];
+
+const TEXTFIELD_FIELDS: &[F] = &[
+    help(f("text", "Texto", W::Text), "O texto que já vem escrito."),
+    help(
+        f("placeholder", "Dica", W::Text),
+        "Aparece apagada enquanto o campo está vazio.",
+    ),
+    help(
+        VAR,
+        "Variável do jogo que guarda o que foi digitado (o nome do jogador, por exemplo).",
+    ),
+    help(
+        f(
+            "max",
+            "Máximo de letras",
+            W::Int {
+                min: 1.0,
+                max: 1000.0,
+            },
+        ),
+        "",
+    ),
+    f("w", "Largura", SIZE),
+    f("h", "Altura", SIZE),
+    f("size", "Tamanho do texto", SIZE),
+    f("color", "Cor do fundo", W::Color),
+    f("text_color", "Cor do texto", W::ThemeColor("text")),
+    BORDER,
+    f("border_color", "Cor da borda", W::ThemeColor("accent")),
+    RADIUS,
+    FONT,
+    UI_HUD,
+];
+
+const LAYOUT_FIELDS: &[F] = &[
+    help(
+        f(
+            "arrange",
+            "Arrumar os filhos",
+            W::Choice(&[
+                ("vertical", "Em coluna"),
+                ("horizontal", "Em linha"),
+                ("grid", "Em grade"),
+                ("none", "Não arrumar"),
+            ]),
+        ),
+        "Os filhos ficam um ao lado do outro, sem você posicionar cada um.",
+    ),
+    f("spacing", "Espaço", SIZE),
+    help(
+        f(
+            "columns",
+            "Colunas",
+            W::Int {
+                min: 1.0,
+                max: 50.0,
+            },
+        ),
+        "Na grade.",
+    ),
+    f(
+        "align",
+        "Alinhar",
+        W::Choice(&[
+            ("start", "No começo"),
+            ("center", "No meio"),
+            ("end", "No fim"),
+        ]),
+    ),
+];
+
 fn fields(kind: &str) -> &'static [F] {
     match kind {
         "sprite" => SPRITE_FIELDS,
@@ -377,7 +744,35 @@ fn fields(kind: &str) -> &'static [F] {
         "camera" => CAMERA_FIELDS,
         "sound" => SOUND_FIELDS,
         "particles" => PARTICLES_FIELDS,
+        "panel" => PANEL_FIELDS,
+        "button" => BUTTON_FIELDS,
+        "bar" => BAR_FIELDS,
+        "icons" => ICONS_FIELDS,
+        "slider" => SLIDER_FIELDS,
+        "checkbox" => CHECKBOX_FIELDS,
+        "textfield" => TEXTFIELD_FIELDS,
+        "layout" => LAYOUT_FIELDS,
         _ => &[],
+    }
+}
+
+/// Campos de interface que não valem com as outras escolhas (a cena de um
+/// botão que não troca de cena, a variável de um deslizador de volume...).
+fn hidden_ui_field(c: &Component, key: &str) -> bool {
+    match (c.kind.as_str(), key) {
+        ("button", "scene") => !matches!(c.str("action"), "cena" | "por_cima"),
+        ("slider" | "checkbox", "var") => c.str("target") != "variavel",
+        ("slider", "value") | ("checkbox", "checked") => {
+            c.str("target") != "variavel" || !c.str("var").is_empty()
+        }
+        ("textfield", "text") => !c.str("var").is_empty(),
+        ("bar", "value") => !c.str("var").is_empty(),
+        ("icons", "count") => !c.str("var").is_empty(),
+        ("icons", "frame") => c.num("frame_w") <= 0.0,
+        ("panel" | "button", "slice" | "slice_scale") => c.str("image").is_empty(),
+        ("layout", "columns") => c.str("arrange") != "grid",
+        ("layout", "spacing" | "align") => c.str("arrange") == "none",
+        _ => false,
     }
 }
 
@@ -401,6 +796,38 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "camera" => ("Câmera", "Onde a câmera começa, ou quem ela segue."),
         "sound" => ("Som", "Toca um som ou música quando a cena começa."),
         "particles" => ("Partículas", "Fumaça, faíscas, poeira, chuva..."),
+        "panel" => (
+            "Painel",
+            "Fundo de menu ou de HUD: cantos arredondados, borda ou uma moldura.",
+        ),
+        "button" => (
+            "Botão",
+            "Aperta com o mouse, o teclado ou o controle. Troca de cena, abre por cima, fecha...",
+        ),
+        "bar" => (
+            "Barra",
+            "Vida, energia, tempo: mostra uma variável do jogo.",
+        ),
+        "icons" => (
+            "Ícones",
+            "Corações, vidas, moedas: um ícone para cada ponto da variável.",
+        ),
+        "slider" => (
+            "Deslizador",
+            "Escolhe um valor arrastando: volume, dificuldade...",
+        ),
+        "checkbox" => (
+            "Caixa de marcar",
+            "Liga e desliga: tela cheia, uma opção do jogo.",
+        ),
+        "textfield" => (
+            "Campo de texto",
+            "Para digitar: o nome do jogador, um código.",
+        ),
+        "layout" => (
+            "Grupo (arrumar)",
+            "Arruma os filhos sozinho, em coluna, em linha ou em grade.",
+        ),
         "behavior" => (
             "Comportamento",
             "Um script com propriedades: pronto (andar, pular, coletar...) ou do jogo.",
@@ -609,6 +1036,12 @@ enum Wd {
     /// Animação da imagem do objeto (ou, num comportamento, também uma
     /// lista de quadros).
     Anim,
+    /// Cor que, vazia, vem do tema da interface.
+    ThemeColor(&'static str),
+    /// Variável do jogo.
+    Var,
+    /// Fonte (.ttf ou .otf).
+    Font,
 }
 
 impl From<&F> for Spec {
@@ -638,6 +1071,10 @@ impl From<&F> for Spec {
             W::File(k) => Wd::File(k),
             W::Object => Wd::Object("(nenhum)"),
             W::Anim => Wd::Anim,
+            W::ThemeColor(k) => Wd::ThemeColor(k),
+            W::Var => Wd::Var,
+            W::Font => Wd::Font,
+            W::Scene => Wd::Scene,
         };
         Spec {
             key: f.key.to_string(),
@@ -687,11 +1124,8 @@ fn behavior_spec(info: &BehaviorInfo, p: &behaviors::PropSpec) -> Spec {
             min: 0.0,
             max: 1_000_000.0,
         },
-        PropType::Target
-        | PropType::Var
-        | PropType::Value
-        | PropType::Behavior
-        | PropType::TileType => Wd::Text,
+        PropType::Var => Wd::Var,
+        PropType::Target | PropType::Value | PropType::Behavior | PropType::TileType => Wd::Text,
     };
     Spec {
         key: p.key.clone(),
@@ -745,7 +1179,7 @@ impl Inspector {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| match doc.selection.len() {
-                0 => self.scene_ui(ui, doc, files, mode, &mut actions),
+                0 => self.scene_ui(ui, doc, files, &mut actions),
                 1 => {
                     let id = doc.selection[0];
                     if doc.data.find(id).is_some() {
@@ -773,7 +1207,6 @@ impl Inspector {
         ui: &mut egui::Ui,
         doc: &mut SceneDoc,
         files: &FileTree,
-        mode: Mode,
         actions: &mut Vec<InspectorAction>,
     ) {
         ui.label(RichText::new("Cena").size(17.0).strong());
@@ -831,13 +1264,19 @@ impl Inspector {
                         .changed()
                     {
                         doc.record(None);
-                        doc.data.background = if own { "#14202E".into() } else { String::new() };
+                        doc.data.background = match (own, doc.data.overlay) {
+                            (false, _) => String::new(),
+                            (true, true) => "#00000099".into(),
+                            (true, false) => "#14202E".into(),
+                        };
                     }
                     if own {
                         let mut c = hex_to_rgba(&doc.data.background);
                         if ui.color_edit_button_srgba_unmultiplied(&mut c).changed() {
                             doc.record(Some("fundo"));
-                            doc.data.background = rgba_to_hex([c[0], c[1], c[2], 255]);
+                            // Por cima, o fundo é um véu: pode ser transparente.
+                            let a = if doc.data.overlay { c[3] } else { 255 };
+                            doc.data.background = rgba_to_hex([c[0], c[1], c[2], a]);
                         }
                     }
                 });
@@ -852,18 +1291,21 @@ impl Inspector {
                 }
                 ui.end_row();
 
-                if mode.is_full() {
-                    ui.label("Por cima:");
-                    let mut o = doc.data.overlay;
-                    if ui
-                        .checkbox(&mut o, "Desenha por cima da cena de baixo (pausa, diálogo)")
-                        .changed()
-                    {
-                        doc.record(None);
-                        doc.data.overlay = o;
+                ui.label("Por cima:");
+                let mut o = doc.data.overlay;
+                let r = ui
+                    .checkbox(&mut o, "Abre por cima de outra cena (pausa, opções)")
+                    .on_hover_text("A cena de baixo continua aparecendo, parada, até esta fechar. Os objetos ficam presos à tela e o fundo vira um véu (use uma cor transparente).");
+                crate::tutorial::anchor_in(ui, "inspetor:por-cima", r.rect);
+                if r.changed() {
+                    doc.record(None);
+                    doc.data.overlay = o;
+                    // O véu escuro por cima da cena de baixo.
+                    if o && (doc.data.background.is_empty() || hex_to_rgba(&doc.data.background)[3] == 255) {
+                        doc.data.background = "#00000099".into();
                     }
-                    ui.end_row();
                 }
+                ui.end_row();
             });
         if !doc.is_prefab() && events_summary(ui, &doc.data.events, false) {
             self.actions_out.push(InspectorAction::ShowEvents);
@@ -968,6 +1410,50 @@ impl Inspector {
                             .on_hover_text("Objetos de camada maior são desenhados por cima.");
                         ui.add(egui::DragValue::new(&mut t.5).speed(0.1));
                         ui.end_row();
+                        // Na tela (HUD ou cena por cima), os objetos da raiz
+                        // ficam presos a um ponto da tela.
+                        let root = doc.data.parent_of(id) == Some(None);
+                        if root && doc.data.is_screen(&o) {
+                            let r = ui.label("Preso em").on_hover_text(
+                                "Ponto da tela de onde a posição conta. Num canto, o objeto continua no canto em qualquer tamanho de tela.",
+                            );
+                            crate::tutorial::anchor_in(ui, "inspetor:ancora", r.rect);
+                            if let Some(a) = anchor_grid(ui, id, &o.anchor) {
+                                // Vai para dentro daquele canto (ou lado), com
+                                // uma margem; depois dá para ajustar.
+                                let (b, _) = crate::scene_render::local_bounds(&o, files.root(), sizes, 0.0);
+                                let (sx, sy) = (o.scale_x.abs(), o.scale_y.abs());
+                                let (x0, x1) = (b.min.0 * sx, b.max.0 * sx);
+                                let (y0, y1) = (b.min.1 * sy, b.max.1 * sy);
+                                const MARGIN: f64 = 24.0;
+                                let (_, _, fx, fy) = crate::scene_data::SCREEN_ANCHORS
+                                    .iter()
+                                    .copied()
+                                    .find(|p| p.0 == a)
+                                    .unwrap_or(("center", "", 0.5, 0.5));
+                                t.0 = round2(if fx < 0.25 {
+                                    MARGIN - x0
+                                } else if fx > 0.75 {
+                                    -MARGIN - x1
+                                } else {
+                                    -(x0 + x1) / 2.0
+                                });
+                                t.1 = round2(if fy < 0.25 {
+                                    -MARGIN - y1
+                                } else if fy > 0.75 {
+                                    MARGIN - y0
+                                } else {
+                                    -(y0 + y1) / 2.0
+                                });
+                                doc.record(None);
+                                if let Some(obj) = doc.data.find_mut(id) {
+                                    obj.anchor = a;
+                                    obj.x = t.0;
+                                    obj.y = t.1;
+                                }
+                            }
+                            ui.end_row();
+                        }
                         // Onde está no jogo aberto, se mudou.
                         if let Some(g) = self.game.as_ref().and_then(|g| g.objects.get(&id)) {
                             let l = g.local;
@@ -1006,7 +1492,12 @@ impl Inspector {
                                 ui.end_row();
                             }
                         }
-                        if t != (o.x, o.y, o.rotation, o.scale_x, o.scale_y, o.layer) {
+                let now = doc
+                            .data
+                            .find(id)
+                            .map(|x| (x.x, x.y, x.rotation, x.scale_x, x.scale_y, x.layer))
+                            .unwrap_or_default();
+                        if t != now {
                             doc.record(Some(&format!("{id}:transformacao")));
                             if let Some(obj) = doc.data.find_mut(id) {
                                 (
@@ -1125,6 +1616,11 @@ impl Inspector {
             state
                 .show_header(ui, |ui| {
                     let r = ui.label(RichText::new(&title).strong());
+                    crate::tutorial::anchor_in(
+                        ui,
+                        &format!("inspetor:componente:{}", comp.kind),
+                        r.rect,
+                    );
                     if !desc.is_empty() {
                         r.on_hover_text(&desc);
                     }
@@ -1198,10 +1694,24 @@ impl Inspector {
         }
         let mut chosen: Vec<Component> = Vec::new();
         let add_menu = ui.menu_button("➕ Adicionar componente", |ui| {
-            for kind in &crate::scene_data::schema().order {
+            let order = &crate::scene_data::schema().order;
+            let is_ui = |k: &str| {
+                matches!(
+                    k,
+                    "panel"
+                        | "button"
+                        | "bar"
+                        | "icons"
+                        | "slider"
+                        | "checkbox"
+                        | "textfield"
+                        | "layout"
+                )
+            };
+            let mut item = |ui: &mut egui::Ui, kind: &str| {
                 let (title, desc) = component_info(kind);
                 let exists = o.component(kind).is_some();
-                let unique = matches!(kind.as_str(), "body" | "camera" | "map");
+                let unique = matches!(kind, "body" | "camera" | "map" | "layout");
                 if ui
                     .add_enabled(!(exists && unique), egui::Button::new(title))
                     .on_hover_text(desc)
@@ -1218,7 +1728,15 @@ impl Inspector {
                     chosen.push(c);
                     ui.close();
                 }
+            };
+            for kind in order.iter().filter(|k| !is_ui(k)) {
+                item(ui, kind);
             }
+            ui.menu_button("Interface", |ui| {
+                for kind in order.iter().filter(|k| is_ui(k)) {
+                    item(ui, kind);
+                }
+            });
             ui.separator();
             ui.label(RichText::new("Comportamentos").weak());
             for cat in behaviors::categories() {
@@ -1460,6 +1978,9 @@ impl Inspector {
                         }
                     }
                     if comp.kind == "sprite" && spec.key == "frame" && comp.num("frame_w") <= 0.0 {
+                        continue;
+                    }
+                    if hidden_ui_field(comp, spec.key) {
                         continue;
                     }
                     let spec = Spec::from(spec);
@@ -1811,6 +2332,17 @@ fn field_widget(
             changed.then_some(Prop::Str(v))
         }
         Wd::Anim => anim_field(ui, spec, current, anims, salt, width),
+        Wd::ThemeColor(key) => theme_color_field(ui, current, key),
+        Wd::Var => var_field(ui, current, width),
+        Wd::Font => {
+            let list: Vec<String> = files
+                .files_of(FileKind::Font)
+                .map(|e| e.rel.clone())
+                .collect();
+            file_combo(ui, spec, current, &list, salt, "(do tema)", |p| {
+                FileKind::of(std::path::Path::new(p)) == FileKind::Font
+            })
+        }
         Wd::Scene => {
             let list: Vec<String> = files
                 .files_of(FileKind::Scene)
@@ -1818,7 +2350,7 @@ fn field_widget(
                 .map(|e| e.rel.clone())
                 .filter(|r| r != "config.lua")
                 .collect();
-            file_combo(ui, spec, current, &list, salt, |p| {
+            file_combo(ui, spec, current, &list, salt, "(nenhum)", |p| {
                 matches!(
                     FileKind::of(std::path::Path::new(p)),
                     FileKind::Scene | FileKind::Lua
@@ -1832,11 +2364,143 @@ fn field_widget(
                 .map(|e| e.rel.clone())
                 .filter(|r| kind != FileKind::Map || r.to_lowercase().ends_with(".tmj"))
                 .collect();
-            file_combo(ui, spec, current, &list, salt, |p| {
+            file_combo(ui, spec, current, &list, salt, "(nenhum)", |p| {
                 FileKind::of(std::path::Path::new(p)) == kind
             })
         }
     }
+}
+
+/// Os 9 pontos da tela para prender um objeto: um retângulo (a tela) com um
+/// ponto em cada canto, no meio de cada lado e no centro. Devolve o escolhido.
+fn anchor_grid(ui: &mut egui::Ui, id: u32, current: &str) -> Option<String> {
+    let current = if current.is_empty() {
+        "center"
+    } else {
+        current
+    };
+    let size = Vec2::new(72.0, 46.0);
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let screen = rect.shrink(7.0);
+    let visuals = ui.visuals().clone();
+    ui.painter().rect_stroke(
+        screen,
+        2.0,
+        egui::Stroke::new(1.0, visuals.weak_text_color()),
+        egui::StrokeKind::Middle,
+    );
+    let mut out = None;
+    for (name, label, fx, fy) in crate::scene_data::SCREEN_ANCHORS {
+        let p = screen.min + Vec2::new(screen.width() * fx as f32, screen.height() * fy as f32);
+        let hit = egui::Rect::from_center_size(p, Vec2::splat(14.0));
+        let r = ui
+            .interact(
+                hit,
+                ui.id().with(("ancora", id, name)),
+                egui::Sense::click(),
+            )
+            .on_hover_text(format!("Preso {label}"));
+        let on = name == current;
+        r.widget_info(|| {
+            egui::WidgetInfo::selected(
+                egui::WidgetType::RadioButton,
+                true,
+                on,
+                format!("Preso {label}"),
+            )
+        });
+        let (radius, color) = if on {
+            (5.0, visuals.selection.bg_fill)
+        } else if r.hovered() {
+            (4.0, visuals.strong_text_color())
+        } else {
+            (3.0, visuals.weak_text_color())
+        };
+        ui.painter().circle_filled(p, radius, color);
+        if r.clicked() && !on {
+            out = Some(name.to_string());
+        }
+    }
+    out
+}
+
+/// Cor que pode vir do tema: vazia, mostra a do tema (e mudar a cor a
+/// separa do tema); com uma cor, ↺ volta para a do tema.
+fn theme_color_field(ui: &mut egui::Ui, current: &Prop, key: &str) -> Option<Prop> {
+    let value = current.str();
+    let themed = value.is_empty();
+    let mut c = hex_to_rgba(&crate::scene_data::themed(value, key));
+    let mut out = None;
+    ui.horizontal(|ui| {
+        if ui
+            .color_edit_button_srgba_unmultiplied(&mut c)
+            .on_hover_text(if themed {
+                "Cor do tema da interface (Configurações do projeto). Mude para usar outra só aqui."
+            } else {
+                "Cor só deste componente"
+            })
+            .changed()
+        {
+            out = Some(Prop::Str(rgba_to_hex(c)));
+        }
+        if themed {
+            ui.weak("do tema");
+        } else if ui
+            .small_button("↺ tema")
+            .on_hover_text("Voltar a usar a cor do tema da interface")
+            .clicked()
+        {
+            out = Some(Prop::Str(String::new()));
+        }
+    });
+    out
+}
+
+/// Variável do jogo: escrever o nome ou escolher entre as do projeto.
+fn var_field(ui: &mut egui::Ui, current: &Prop, width: f32) -> Option<Prop> {
+    let mut v = current.str().to_string();
+    let mut out = None;
+    let vars = crate::scene_data::var_names();
+    ui.horizontal(|ui| {
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut v)
+                .hint_text("(nenhuma)")
+                .desired_width((width - 30.0).max(60.0)),
+        );
+        if r.changed() {
+            out = Some(Prop::Str(v.trim().to_string()));
+        }
+        ui.menu_button("…", |ui| {
+            if ui.button("(nenhuma)").clicked() {
+                out = Some(Prop::Str(String::new()));
+                ui.close();
+            }
+            if vars.is_empty() {
+                ui.weak("Nenhuma variável nas Configurações do projeto.");
+            }
+            for name in &vars {
+                if ui.button(name).clicked() {
+                    out = Some(Prop::Str(name.clone()));
+                    ui.close();
+                }
+            }
+        })
+        .response
+        .on_hover_text("Variáveis do jogo (Configurações do projeto)");
+    });
+    let shown = out
+        .as_ref()
+        .map(|p: &Prop| p.str().to_string())
+        .unwrap_or_else(|| current.str().to_string());
+    if !shown.is_empty() && !vars.contains(&shown) {
+        ui.end_row();
+        ui.label("");
+        ui.colored_label(
+            crate::theme::WARNING,
+            "⚠ Não está nas variáveis do jogo: começa vazia.",
+        );
+    }
+    out
 }
 
 /// Nome de animação: escrever ou escolher entre as da imagem.
@@ -1906,6 +2570,7 @@ fn file_combo(
     current: &Prop,
     list: &[String],
     salt: (u32, usize),
+    empty: &str,
     accepts: impl Fn(&str) -> bool,
 ) -> Option<Prop> {
     let mut v = current.str().to_string();
@@ -1914,16 +2579,14 @@ fn file_combo(
     let short = v.rsplit('/').next().unwrap_or(&v).to_string();
     let r = egui::ComboBox::from_id_salt(("arquivo", salt, &spec.key))
         .selected_text(if v.is_empty() {
-            "(nenhum)".to_string()
+            empty.to_string()
         } else {
             short
         })
         .width(ui.available_width().clamp(80.0, 180.0))
         .truncate()
         .show_ui(ui, |ui| {
-            changed |= ui
-                .selectable_value(&mut v, String::new(), "(nenhum)")
-                .changed();
+            changed |= ui.selectable_value(&mut v, String::new(), empty).changed();
             for rel in list {
                 changed |= ui.selectable_value(&mut v, rel.clone(), rel).changed();
             }

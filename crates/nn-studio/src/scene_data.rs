@@ -161,7 +161,7 @@ impl Component {
 
     /// Algum campo `hud` ligado (preso à tela)?
     pub fn is_hud(&self) -> bool {
-        matches!(self.kind.as_str(), "sprite" | "text" | "shape") && self.bool("hud")
+        self.get("hud") == Some(&Prop::Bool(true))
     }
 }
 
@@ -271,6 +271,8 @@ pub struct Object {
     /// Travado no editor (não seleciona clicando na cena).
     pub locked: bool,
     pub layer: i64,
+    /// HUD: ponto da tela em que o objeto fica preso ("" = o centro).
+    pub anchor: String,
     /// Numa instância de prefab, os componentes já com as mudanças dela.
     pub components: Vec<Component>,
     /// Filhos do próprio objeto (numa instância, além dos do prefab).
@@ -294,6 +296,7 @@ impl Object {
             visible: true,
             locked: false,
             layer: 0,
+            anchor: String::new(),
             components: Vec::new(),
             children: Vec::new(),
             prefab: None,
@@ -305,9 +308,11 @@ impl Object {
         self.components.iter().find(|c| c.kind == kind)
     }
 
-    /// Preso à tela (HUD): algum componente visual com `hud`.
+    /// Preso à tela (HUD): algum componente visual com `hud`, ou um Grupo
+    /// que arruma filhos presos à tela.
     pub fn is_hud(&self) -> bool {
         self.components.iter().any(Component::is_hud)
+            || (self.component("layout").is_some() && self.children.iter().any(Object::is_hud))
     }
 
     /// Filhos que vêm do prefab (só para desenhar; não são editados aqui).
@@ -391,6 +396,7 @@ impl Object {
             "visible" => Prop::Bool(self.visible),
             "locked" => Prop::Bool(self.locked),
             "layer" => Prop::Num(self.layer as f64),
+            "anchor" => Prop::Str(self.anchor.clone()),
             _ => return None,
         })
     }
@@ -426,7 +432,14 @@ pub struct Schema {
     components: BTreeMap<String, Vec<(String, Prop)>>,
     /// Ordem para mostrar no "Adicionar componente".
     pub order: Vec<String>,
+    /// Tema padrão da interface (`M.THEME`): (chave, valor).
+    pub theme: Vec<(String, String)>,
 }
+
+/// Chaves do tema da interface, na ordem do formulário.
+pub const THEME_KEYS: [&str; 10] = [
+    "font", "text", "button", "hover", "press", "disabled", "panel", "border", "accent", "sound",
+];
 
 impl Schema {
     pub fn fields(&self, kind: &str) -> Option<&[(String, Prop)]> {
@@ -472,12 +485,34 @@ pub fn schema() -> &'static Schema {
             "camera",
             "sound",
             "particles",
+            "panel",
+            "button",
+            "bar",
+            "icons",
+            "slider",
+            "checkbox",
+            "textfield",
+            "layout",
         ]
         .into_iter()
         .filter(|k| components.contains_key(*k))
         .map(str::to_string)
         .collect();
-        Schema { components, order }
+        let theme_table: Table = module.get("THEME").expect("THEME");
+        let theme = THEME_KEYS
+            .iter()
+            .map(|k| {
+                (
+                    k.to_string(),
+                    theme_table.get::<String>(*k).unwrap_or_default(),
+                )
+            })
+            .collect();
+        Schema {
+            components,
+            order,
+            theme,
+        }
     })
 }
 
@@ -600,6 +635,7 @@ fn read_object(o: &Table, name: &str) -> Result<Object, String> {
     obj.visible = boolean(o, "visible", true);
     obj.locked = boolean(o, "locked", false);
     obj.layer = num(o, "layer", 0.0) as i64;
+    obj.anchor = string(o, "anchor");
     let prefab = string(o, "prefab");
     if !prefab.is_empty() {
         let mut raw = Vec::new();
@@ -881,6 +917,12 @@ fn write_objects(s: &mut String, list: &[Object], depth: usize) {
         if o.locked {
             s.push_str(" locked = true,");
         }
+        if !o.anchor.is_empty() {
+            s.push_str(&format!(
+                " anchor = {},",
+                crate::config_lua::lua_string(&o.anchor)
+            ));
+        }
         s.push('\n');
         if let Some(link) = &o.prefab {
             s.push_str(&format!(
@@ -920,6 +962,139 @@ fn write_objects(s: &mut String, list: &[Object], depth: usize) {
         }
         s.push_str(&format!("{pad}}},\n"));
     }
+}
+
+// Tamanho da tela do jogo que o editor está mostrando (para as âncoras do
+// HUD): o do config.lua, ou o escolhido para ver em outros tamanhos.
+static SCREEN_W: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static SCREEN_H: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Muda o tamanho da tela usado nas âncoras do HUD.
+pub fn set_screen_size(w: f64, h: f64) {
+    use std::sync::atomic::Ordering::Relaxed;
+    SCREEN_W.store(w.to_bits(), Relaxed);
+    SCREEN_H.store(h.to_bits(), Relaxed);
+}
+
+static PREVIEW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Proporções de tela para ver como o HUD fica (largura ÷ altura; 0 = a
+/// do jogo).
+pub const PREVIEWS: [(&str, f64); 5] = [
+    ("do jogo", 0.0),
+    ("16:9", 16.0 / 9.0),
+    ("4:3", 4.0 / 3.0),
+    ("21:9", 21.0 / 9.0),
+    ("9:16 (celular em pé)", 9.0 / 16.0),
+];
+
+/// Vê a cena numa tela de outra proporção (0 = a do jogo).
+pub fn set_preview(ratio: f64) {
+    PREVIEW.store(ratio.to_bits(), std::sync::atomic::Ordering::Relaxed);
+}
+
+pub fn preview() -> f64 {
+    f64::from_bits(PREVIEW.load(std::sync::atomic::Ordering::Relaxed))
+}
+
+/// Tamanho da tela usado nas âncoras do HUD (padrão 1280 × 720). Com uma
+/// proporção escolhida para ver, a altura fica e a largura muda.
+pub fn screen_size() -> (f64, f64) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let (w, h) = (
+        f64::from_bits(SCREEN_W.load(Relaxed)),
+        f64::from_bits(SCREEN_H.load(Relaxed)),
+    );
+    let (w, h) = if w > 0.0 && h > 0.0 {
+        (w, h)
+    } else {
+        (1280.0, 720.0)
+    };
+    let ratio = preview();
+    if ratio > 0.0 {
+        ((h * ratio).round(), h)
+    } else {
+        (w, h)
+    }
+}
+
+// Tema da interface e variáveis do jogo (do config.lua), para o editor
+// desenhar os menus e o HUD como o jogo.
+type ProjectUi = (Vec<(String, String)>, Vec<(String, Prop)>);
+static PROJECT_UI: std::sync::RwLock<ProjectUi> = std::sync::RwLock::new((Vec::new(), Vec::new()));
+
+/// O editor leu o config.lua: o tema e as variáveis do jogo.
+pub fn set_project_ui(theme: Vec<(String, String)>, vars: Vec<(String, Prop)>) {
+    if let Ok(mut g) = PROJECT_UI.write() {
+        *g = (theme, vars);
+    }
+}
+
+/// Valor do tema da interface (o do projeto, ou o padrão da engine).
+pub fn theme_value(key: &str) -> String {
+    let mine = PROJECT_UI.read().ok().and_then(|g| {
+        g.0.iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+            .filter(|v| !v.is_empty())
+    });
+    mine.unwrap_or_else(|| {
+        schema()
+            .theme
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+            .unwrap_or_default()
+    })
+}
+
+/// A cor do componente, ou a do tema quando vazia.
+pub fn themed(value: &str, key: &str) -> String {
+    if value.is_empty() {
+        theme_value(key)
+    } else {
+        value.to_string()
+    }
+}
+
+/// Valor inicial de uma variável do jogo (config.lua).
+pub fn var_value(name: &str) -> Option<Prop> {
+    PROJECT_UI
+        .read()
+        .ok()
+        .and_then(|g| g.1.iter().find(|(k, _)| k == name).map(|(_, v)| v.clone()))
+}
+
+/// Nomes das variáveis do jogo (config.lua).
+pub fn var_names() -> Vec<String> {
+    PROJECT_UI
+        .read()
+        .map(|g| g.1.iter().map(|(k, _)| k.clone()).collect())
+        .unwrap_or_default()
+}
+
+/// Pontos da tela para prender o HUD: (nome, rótulo, fração x, fração y a
+/// partir do canto de cima à esquerda). Como `M.ANCHORS` do cena.lua.
+pub const SCREEN_ANCHORS: [(&str, &str, f64, f64); 9] = [
+    ("top_left", "em cima, à esquerda", 0.0, 0.0),
+    ("top", "em cima", 0.5, 0.0),
+    ("top_right", "em cima, à direita", 1.0, 0.0),
+    ("left", "à esquerda", 0.0, 0.5),
+    ("center", "no meio", 0.5, 0.5),
+    ("right", "à direita", 1.0, 0.5),
+    ("bottom_left", "embaixo, à esquerda", 0.0, 1.0),
+    ("bottom", "embaixo", 0.5, 1.0),
+    ("bottom_right", "embaixo, à direita", 1.0, 1.0),
+];
+
+/// Quanto o ponto de âncora está do centro da tela (y para cima).
+pub fn anchor_offset(anchor: &str) -> (f64, f64) {
+    let (w, h) = screen_size();
+    SCREEN_ANCHORS
+        .iter()
+        .find(|a| a.0 == anchor)
+        .map(|a| ((a.2 - 0.5) * w, (0.5 - a.3) * h))
+        .unwrap_or((0.0, 0.0))
 }
 
 /// Chama `f` para todos os objetos, em ordem (pais antes dos filhos).
@@ -1112,16 +1287,23 @@ impl SceneData {
         }
     }
 
+    /// O objeto fica preso à tela (HUD, ou a cena abre por cima de outra)?
+    pub fn is_screen(&self, o: &Object) -> bool {
+        self.overlay || o.is_hud()
+    }
+
     /// Onde fica um objeto da raiz no mundo do editor.
     pub fn root_place(&self, o: &Object, local: Transform) -> Transform {
-        if !o.is_hud() {
+        if !self.is_screen(o) {
             return local;
         }
-        // No jogo, o HUD fica onde estaria com a câmera no começo, sem zoom.
+        // No jogo, o HUD fica onde estaria com a câmera no começo, sem zoom,
+        // mais o ponto da tela em que ele está preso.
         let (cx, cy, zoom) = self.camera_start();
+        let (ax, ay) = anchor_offset(&o.anchor);
         Transform {
-            x: cx + local.x / zoom,
-            y: cy + local.y / zoom,
+            x: cx + (local.x + ax) / zoom,
+            y: cy + (local.y + ay) / zoom,
             rotation: local.rotation,
             scale_x: local.scale_x / zoom,
             scale_y: local.scale_y / zoom,
@@ -1130,13 +1312,14 @@ impl SceneData {
 
     /// O contrário de [`SceneData::root_place`].
     pub fn root_unplace(&self, o: &Object, world: Transform) -> Transform {
-        if !o.is_hud() {
+        if !self.is_screen(o) {
             return world;
         }
         let (cx, cy, zoom) = self.camera_start();
+        let (ax, ay) = anchor_offset(&o.anchor);
         Transform {
-            x: (world.x - cx) * zoom,
-            y: (world.y - cy) * zoom,
+            x: (world.x - cx) * zoom - ax,
+            y: (world.y - cy) * zoom - ay,
             rotation: world.rotation,
             scale_x: world.scale_x * zoom,
             scale_y: world.scale_y * zoom,
@@ -1367,7 +1550,7 @@ mod tests {
     fn esquema_vem_da_engine() {
         let s = schema();
         assert!(s.order.contains(&"sprite".to_string()));
-        assert_eq!(s.order.len(), 8);
+        assert_eq!(s.order.len(), 16);
         assert_eq!(s.default_of("body", "gravity_scale"), Some(&Prop::Num(1.0)));
         assert_eq!(s.default_of("sprite", "pixel_art"), Some(&Prop::Bool(true)));
         assert_eq!(Component::new("text").str("anchor"), "center");
@@ -1551,7 +1734,11 @@ mod tests {
                 let name = p.to_string_lossy().to_string();
                 let text = std::fs::read_to_string(&p).unwrap_or_default();
                 let out = if name.ends_with(".cena") {
-                    write(&read(&text, &name).unwrap())
+                    let mut scene = read(&text, &name).unwrap();
+                    // Os Grupos já arrumados, como o editor deixa.
+                    let dir = p.parent().and_then(|d| d.parent()).unwrap();
+                    crate::scene_render::arrange_all(&mut scene, dir, &mut Default::default());
+                    write(&scene)
                 } else if name.ends_with(".prefab") {
                     write_prefab(&read_prefab(&text, &name).unwrap())
                 } else {
@@ -1589,7 +1776,9 @@ mod tests {
                 let obj = read_prefab(&text, &name).unwrap();
                 assert_eq!(write_prefab(&obj), text, "{name}");
             } else {
-                let scene = read(&text, &name).unwrap();
+                let mut scene = read(&text, &name).unwrap();
+                let dir = p.parent().and_then(|d| d.parent()).unwrap();
+                crate::scene_render::arrange_all(&mut scene, dir, &mut Default::default());
                 assert_eq!(write(&scene), text, "{name}");
             }
         }

@@ -1,0 +1,84 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#000000AA",
+  gravity = -1800,
+  overlay = true,
+  events = {
+    { comment = "Esc também volta (para o título ou para a pausa)." },
+    { when = {
+        { cond = "tecla", modo = "apertar", tecla = "voltar" },
+      }, actions = {
+        { act = "fechar_cena" },
+      } },
+  },
+  objects = {
+    {
+      id = 1, name = "janela",
+      x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "panel", w = 520, h = 440, color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, hud = true },
+      },
+      children = {
+        {
+          id = 2, name = "titulo",
+          x = 0, y = 160, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 1,
+          components = {
+            { type = "text", text = "Opções", size = 48, color = "#FFD166", anchor = "center", font = "", hud = true },
+          },
+        },
+        {
+          id = 3, name = "musica_texto",
+          x = -200, y = 80, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 1,
+          components = {
+            { type = "text", text = "Música", size = 28, color = "#FFFFFF", anchor = "left", font = "", hud = true },
+          },
+        },
+        {
+          id = 4, name = "musica",
+          x = 90, y = 80, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 1,
+          components = {
+            { type = "slider", w = 220, h = 12, target = "musica", var = "", value = 0.5, min = 0, max = 1, step = 0, color = "", back_color = "#00000080", knob_color = "#FFFFFF", knob = 28, hud = true },
+          },
+        },
+        {
+          id = 5, name = "efeitos_texto",
+          x = -200, y = 10, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 1,
+          components = {
+            { type = "text", text = "Efeitos", size = 28, color = "#FFFFFF", anchor = "left", font = "", hud = true },
+          },
+        },
+        {
+          id = 6, name = "efeitos",
+          x = 90, y = 10, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 1,
+          components = {
+            { type = "slider", w = 220, h = 12, target = "efeitos", var = "", value = 0.5, min = 0, max = 1, step = 0, color = "", back_color = "#00000080", knob_color = "#FFFFFF", knob = 28, hud = true },
+          },
+        },
+        {
+          id = 7, name = "tela_cheia",
+          x = -116, y = -60, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 1,
+          components = {
+            { type = "checkbox", text = "Tela cheia", size = 26, box = 36, target = "tela_cheia", var = "", checked = false, color = "", check_color = "", text_color = "", font = "", hud = true },
+          },
+        },
+        {
+          id = 8, name = "voltar",
+          x = 0, y = -150, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 1,
+          components = {
+            { type = "button", text = "Voltar", size = 28, w = 240, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "fechar", scene = "", sound = "", focus = true, enabled = true, hud = true },
+          },
+        },
+      },
+    },
+  },
+}

@@ -558,6 +558,38 @@ pub fn visual_scene_template() -> String {
     write(&scene)
 }
 
+/// Cena visual que abre por cima de outra (pausa, opções): um painel com
+/// título e botões, e Esc (ou o B do controle) fecha.
+pub fn overlay_scene_template() -> String {
+    const TEXT: &str = r##"return {
+  format = 1,
+  background = "#00000099",
+  overlay = true,
+  events = {
+    { comment = "Esc (ou o B do controle) fecha esta cena e volta para a de baixo." },
+    { when = { { cond = "tecla", modo = "apertar", tecla = "voltar" } },
+      actions = { { act = "fechar_cena" } } },
+  },
+  objects = {
+    { id = 1, name = "janela", components = { { type = "panel", w = 360, h = 300 } },
+      children = {
+        { id = 2, name = "titulo", y = 90, layer = 1,
+          components = { { type = "text", text = "Pausa", size = 48, color = "#FFD166", hud = true } } },
+        { id = 3, name = "botoes", y = -35, layer = 1,
+          components = { { type = "layout", spacing = 14 } },
+          children = {
+            { id = 4, name = "continuar",
+              components = { { type = "button", text = "Continuar", action = "fechar", focus = true } } },
+            { id = 5, name = "sair",
+              components = { { type = "button", text = "Sair do jogo", action = "sair" } } },
+          } },
+      } },
+  },
+}"##;
+    let scene = crate::scene_data::read(TEXT, "por-cima").expect("modelo de cena por cima");
+    crate::scene_data::write(&scene)
+}
+
 /// Script de uma cena visual: os objetos já existem em `self.objects`.
 pub fn scene_script_template(scene_rel: &str) -> String {
     format!(

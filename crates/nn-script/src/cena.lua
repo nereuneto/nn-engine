@@ -571,8 +571,16 @@ M.ANCHORS = {
 --- aberta por cima de outra.)
 function M.is_hud(o)
   if o.scene and o.scene.overlay then return true end
+  local layout = false
   for _, c in ipairs(o.components) do
     if c.hud then return true end
+    if c.type == "layout" then layout = true end
+  end
+  -- Um Grupo que arruma filhos presos à tela também fica na tela.
+  if layout then
+    for _, ch in ipairs(o.children or {}) do
+      if M.is_hud(ch) then return true end
+    end
   end
   return false
 end

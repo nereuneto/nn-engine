@@ -138,12 +138,20 @@ return {
       },
     },
     {
-      id = 15, name = "placar",
-      x = 0, y = 316, rotation = 0, scale_x = 1, scale_y = 1,
-      visible = true, layer = 5,
+      id = 15, name = "vidas",
+      x = 32, y = -42, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5, anchor = "top_left",
       components = {
-        { type = "text", text = "Chaves: 0", size = 30, color = "#FFFFFF", anchor = "center", hud = true },
-        { type = "behavior", script = "nn:mostrar_valor", texto = "Chaves: {chaves}    Vidas: {vidas}" },
+        { type = "icons", image = "assets/imagens/coracao.png", frame = 1, frame_w = 0, frame_h = 0, var = "vidas", count = 3, max = 3, size = 44, spacing = 6, color = "#FFFFFF", empty_color = "#FFFFFF40", align = "left", pixel_art = true, hud = true },
+      },
+    },
+    {
+      id = 18, name = "chaves",
+      x = -32, y = -40, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 5, anchor = "top_right",
+      components = {
+        { type = "text", text = "Chaves: 0", size = 30, color = "#FFFFFF", anchor = "right", font = "", hud = true },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Chaves: {chaves}" },
       },
     },
     {
@@ -151,7 +159,7 @@ return {
       x = 0, y = -300, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 5,
       components = {
-        { type = "text", text = "", size = 28, color = "#FFD166", anchor = "center", hud = true },
+        { type = "text", text = "", size = 28, color = "#FFD166", anchor = "center", font = "", hud = true },
       },
     },
   },

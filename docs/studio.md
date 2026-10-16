@@ -70,6 +70,9 @@ projeto continua aberto.
   pintar o chão com um terreno que se encaixa sozinho, uma plataforma, uma
   camada de enfeites, lava animada marcada com um tipo e o evento que faz a
   lava queimar ([mapas de tiles](#mapas-de-tiles)).
+- **Monte um menu** (uns 10 minutos), a partir do modelo Vazio: corações no
+  HUD presos no canto da tela, uma cena de pausa que abre por cima do jogo
+  com Esc, com botões e um volume ([interface](#interface-menus-e-hud)).
 
 Eles ficam no Início (**🎓 Tutoriais**) e em **Ajuda > Tutoriais**.
 
@@ -203,8 +206,9 @@ nome. Instâncias de prefab aparecem em azul.
 
 ### Inspetor
 
-Sem nada selecionado, mostra a cena: o **script** dela, a cor de **fundo** e a
-**gravidade**. Com um objeto selecionado, mostra o nome, visível/travado, a
+Sem nada selecionado, mostra a cena: o **script** dela, a cor de **fundo**, a
+**gravidade** e **Por cima** (a cena abre por cima de outra, como uma pausa:
+veja [Interface](#interface-menus-e-hud)). Com um objeto selecionado, mostra o nome, visível/travado, a
 **Transformação** (posição, rotação em graus, escala e camada: camada maior é
 desenhada por cima) e os **componentes**:
 
@@ -218,6 +222,7 @@ desenhada por cima) e os **componentes**:
 | Câmera | Onde a câmera começa, ou quem ela segue (com suavidade e limite no mapa). |
 | Som | Toca um som ou música quando a cena começa. |
 | Partículas | Fumaça, faíscas, poeira, chuva... |
+| Interface | Painel, Botão, Barra, Ícones, Deslizador, Caixa de marcar, Campo de texto e Grupo: menus e HUD ([interface](#interface-menus-e-hud)). |
 | Comportamento | Um comportamento pronto ou um script seu (veja abaixo). |
 
 **➕ Adicionar componente** acrescenta outro; o menu ☰ de cada um sobe, desce
@@ -226,8 +231,10 @@ Simples, opções avançadas ficam escondidas.
 
 Imagem, texto e forma têm a opção **HUD**: o objeto fica **fixo na tela**
 (placar, vidas, botões), em vez de andar com o mundo. Na cena, ele aparece
-dentro do retângulo da tela do jogo; a posição é contada a partir do centro da
-tela.
+dentro do retângulo da tela do jogo. A posição conta a partir do ponto da
+tela escolhido em **Transformação > Preso em** (o centro, se você não
+escolher): preso no canto de cima à esquerda, ele continua no canto em
+qualquer tamanho de janela. Os componentes de interface já vêm fixos na tela.
 
 ### Comportamentos (sem código)
 
@@ -302,7 +309,59 @@ jogo** (ficam no `config.lua`, em `vars`) e:
 - no código, ficam em `nn.vars` (`nn.vars.moedas = nn.vars.moedas + 1`).
 
 Para um placar: um objeto de texto com **HUD** marcado e o comportamento
-**Mostrar valor** com `Moedas: {moedas}  Vidas: {vidas}`.
+**Mostrar valor** com `Moedas: {moedas}  Vidas: {vidas}`. Para as vidas, o
+componente **Ícones** com a variável `vidas` mostra um coração para cada uma;
+a **Barra** mostra uma variável enchendo (vida, energia, tempo). Veja
+[Interface](#interface-menus-e-hud).
+
+### Interface: menus e HUD
+
+![HUD do modelo Plataforma: corações (Ícones) presos no canto de cima à esquerda](imagens/nn-studio-interface.png)
+
+**➕ Objeto > Interface** (e **➕ Adicionar componente > Interface**) traz os
+componentes de menu e HUD:
+
+| Componente | O que faz |
+|---|---|
+| Painel | Fundo de menu ou de HUD: cor, cantos arredondados e borda, ou uma **imagem** de moldura em 9 fatias (os cantos não esticam, o meio estica). |
+| Botão | Texto (e ícone) num painel que muda de cor com o foco e ao apertar. **Ao apertar**: trocar de cena, abrir uma cena **por cima**, fechar esta cena, reiniciar ou sair do jogo; para outras coisas, a condição **Clique no objeto** nos eventos. **Começa com foco** escolhe o primeiro botão para quem joga com teclado ou controle. |
+| Barra | Mostra uma variável do jogo enchendo, até um máximo (ou outra variável, como a vida máxima). Enche para a direita, a esquerda, cima ou baixo. |
+| Ícones | Uma imagem para cada ponto de uma variável: corações para as vidas. Com **Máximo**, os que faltam aparecem apagados. |
+| Deslizador | Escolhe um valor arrastando ou com as setas: uma variável, ou o **volume** da música, dos efeitos ou geral. |
+| Caixa de marcar | Liga e desliga uma variável, ou a **tela cheia**. |
+| Campo de texto | Para digitar (o nome do jogador): o texto vai para uma variável. |
+| Grupo (arrumar) | Arruma os filhos sozinho, em coluna, em linha ou em grade, com um espaço entre eles. Opcional: sem ele, cada objeto fica onde você puser. |
+
+**➕ Objeto > Interface > Menu com botões** faz um menu pronto: um painel com
+um Grupo e três botões (Jogar, Opções e Sair).
+
+Os menus funcionam **sem código** com o mouse, com as setas (ou WASD) e Enter
+ou espaço, e com o controle (direcional e A). O foco anda para o item mais
+perto na direção apertada; Tab vai para o próximo. Num deslizador com foco, a
+esquerda e a direita mudam o valor. Os volumes e a tela cheia escolhidos ficam
+guardados e valem da próxima vez que o jogo abrir. Quando um valor muda, a
+condição **Mudar de valor** dispara nos eventos.
+
+**Cenas por cima.** Uma cena com **Por cima** marcado (no Inspetor da cena, ou
+**Abre por cima de outra cena** ao criar uma cena visual nova) abre por cima
+da que está rodando: a de baixo continua aparecendo, **parada**, e o fundo da
+cena por cima vira um véu (use uma cor transparente). Abra com a ação
+**Abrir cena por cima** (por exemplo, quando apertar a tecla *voltar*, que é
+Esc ou o B do controle) ou com um botão; feche com **Fechar esta cena** ou um
+botão **Fechar**. Uma cena por cima pode abrir outra (as opções por cima da
+pausa).
+
+**Tema da interface.** As cores vazias dos componentes (marcadas **do tema**
+no Inspetor) vêm do tema do projeto, em **Configurações do projeto > Tema da
+interface**: texto, botão (normal, com foco, apertado e desligado), painel,
+bordas e destaque, além da **fonte** (um `.ttf` ou `.otf` do projeto) e do
+**som** dos botões. Mude o tema e todos os menus mudam juntos; escolher uma
+cor no Inspetor muda só aquele componente (**↺ tema** volta). O componente
+Texto também tem **Fonte**.
+
+**Telas de outros formatos.** O **📐** na barra da cena mostra a tela do jogo
+em outras proporções (16:9, 4:3, 21:9, celular em pé), para conferir se o HUD
+preso nos cantos fica no lugar.
 
 ### Eventos: "Quando... Então..."
 
@@ -591,7 +650,7 @@ formulário com o título, o tamanho da janela, o **tamanho do jogo**, tela
 cheia, cor de fundo e a cena inicial (uma cena em código ou uma cena visual),
 além das
 [variáveis do jogo](#variáveis-do-jogo-e-hud): nome e valor inicial (número,
-texto ou sim/não). No modo Completo também o identificador dos saves, VSync,
+texto ou sim/não), e o [tema da interface](#interface-menus-e-hud). No modo Completo também o identificador dos saves, VSync,
 janela redimensionável, recarregar ao salvar e passos fixos por segundo. Tudo
 fica no `config.lua`: o NN Studio troca só os valores, sem mexer nos seus
 comentários.
@@ -703,6 +762,5 @@ o jogo.
 
 ## O que vem depois
 
-As próximas etapas do NN Studio trazem mais editores dentro do próprio
-editor: partículas e menus (componentes visuais para montar a interface que
-quiser).
+A próxima etapa do NN Studio traz o editor de partículas, com prévia na cena
+e efeitos prontos.

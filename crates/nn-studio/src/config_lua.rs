@@ -26,6 +26,27 @@ pub struct ConfigValues {
     pub resolution: Option<(u32, u32)>,
     /// Como o tamanho fixo se ajusta à janela: "fit", "stretch" ou "pixel".
     pub scale: String,
+    /// Tema da interface (`theme`): só o que muda do padrão, em ordem.
+    pub theme: Vec<(String, String)>,
+}
+
+impl ConfigValues {
+    /// Valor do tema: o do config.lua ou o padrão da engine.
+    pub fn theme_value(&self, key: &str) -> String {
+        self.theme
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| {
+                crate::scene_data::schema()
+                    .theme
+                    .iter()
+                    .find(|(k, _)| k == key)
+                    .map(|(_, v)| v.clone())
+                    .unwrap_or_default()
+            })
+    }
 }
 
 impl ConfigValues {
@@ -52,6 +73,7 @@ impl Default for ConfigValues {
             vars: Vec::new(),
             resolution: None,
             scale: "fit".into(),
+            theme: Vec::new(),
         }
     }
 }
@@ -165,6 +187,14 @@ pub fn read(text: &str, default_title: &str) -> Result<ConfigValues, String> {
         }
         v.vars.sort_by(|a, b| a.0.cmp(&b.0));
     }
+    if let Value::Table(theme) = get("theme") {
+        for (k, val) in theme.pairs::<String, Value>().filter_map(Result::ok) {
+            if let Value::String(s) = val {
+                v.theme.push((k, s.to_string_lossy()));
+            }
+        }
+        v.theme.sort_by(|a, b| a.0.cmp(&b.0));
+    }
     for (key, field) in [
         ("fullscreen", &mut v.fullscreen),
         ("resizable", &mut v.resizable),
@@ -214,7 +244,28 @@ pub fn changes(old: &ConfigValues, new: &ConfigValues) -> Vec<(&'static str, Lua
     if old.vars != new.vars {
         out.push(("vars", LuaValue::Raw(vars_lua(&new.vars))));
     }
+    if old.theme != new.theme {
+        out.push(("theme", LuaValue::Raw(theme_lua(&new.theme))));
+    }
     out
+}
+
+/// `{ accent = "#FFD166", font = "assets/fontes/x.ttf" }`.
+pub fn theme_lua(theme: &[(String, String)]) -> String {
+    let mut sorted: Vec<_> = theme
+        .iter()
+        .filter(|(_, v)| !v.is_empty())
+        .cloned()
+        .collect();
+    if sorted.is_empty() {
+        return "{}".into();
+    }
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    let items: Vec<String> = sorted
+        .iter()
+        .map(|(k, v)| format!("{k} = {}", lua_string(v)))
+        .collect();
+    format!("{{ {} }}", items.join(", "))
 }
 
 /// `{ 640, 360 }`, ou `false` sem tamanho fixo.
@@ -281,6 +332,7 @@ fn value_of(v: &ConfigValues, key: &str) -> Option<LuaValue> {
         "vsync" => LuaValue::Bool(v.vsync),
         "hot_reload" => LuaValue::Bool(v.hot_reload),
         "vars" => LuaValue::Raw(vars_lua(&v.vars)),
+        "theme" => LuaValue::Raw(theme_lua(&v.theme)),
         "resolution" => resolution_lua(v.resolution),
         "scale" => LuaValue::Str(v.scale.clone()),
         _ => return None,
@@ -324,6 +376,9 @@ pub fn generate(v: &ConfigValues) -> String {
     }
     if !v.vars.is_empty() {
         line("vars", LuaValue::Raw(vars_lua(&v.vars)));
+    }
+    if v.theme.iter().any(|(_, x)| !x.is_empty()) {
+        line("theme", LuaValue::Raw(theme_lua(&v.theme)));
     }
     s.push_str("}\n");
     s
@@ -497,6 +552,26 @@ mod tests {
         let out2 = update(&out, &changes(&back, &off), &off);
         assert!(out2.contains("resolution = false,"), "{out2}");
         assert_eq!(read(&out2, "x").unwrap().resolution, None);
+    }
+
+    #[test]
+    fn tema_da_interface() {
+        let text = "return {\n  title = \"X\",\n}\n";
+        let old = read(text, "x").unwrap();
+        assert!(old.theme.is_empty());
+        assert_eq!(old.theme_value("button"), "#3FA7D6");
+        let mut new = old.clone();
+        new.theme = vec![
+            ("button".into(), "#E76F51".into()),
+            ("font".into(), "assets/fontes/a.ttf".into()),
+        ];
+        let out = update(text, &changes(&old, &new), &new);
+        assert!(out.contains("theme = {"), "{out}");
+        let back = read(&out, "x").unwrap();
+        assert_eq!(back.theme_value("button"), "#E76F51");
+        assert_eq!(back.theme_value("font"), "assets/fontes/a.ttf");
+        assert_eq!(back.theme_value("panel"), "#1E2A3AE6");
+        assert!(changes(&back, &new).is_empty());
     }
 
     #[test]
