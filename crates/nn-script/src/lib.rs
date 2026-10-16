@@ -30,6 +30,7 @@ mod api;
 mod convert;
 mod errors;
 mod input;
+pub mod live;
 mod particles;
 mod physics;
 mod save;
@@ -53,6 +54,16 @@ use nn_render::Text;
 use crate::api::{CTX_KEY, SceneRequest, Shared};
 
 pub use errors::translate_error;
+
+/// Código Lua que roda as cenas visuais (`.cena`). Também traz a lista de
+/// componentes e seus campos padrão (`FIELDS`), que o NN Studio usa.
+pub const SCENE_RUNTIME: &str = include_str!("cena.lua");
+
+/// Extensão dos arquivos de cena visual.
+pub const SCENE_EXTENSION: &str = "cena";
+
+/// Chave do registro Lua com o módulo das cenas visuais.
+const SCENE_RUNTIME_KEY: &str = "nn.cena";
 
 /// Erro ao preparar o ambiente Lua.
 #[derive(Debug)]
@@ -119,6 +130,8 @@ impl ScriptRuntime {
         let lua = Lua::new();
         api::install(&lua)?;
         install_require(&lua, source.clone())?;
+        let scene_runtime: Table = lua.load(SCENE_RUNTIME).set_name("@nn/cena.lua").eval()?;
+        lua.set_named_registry_value(SCENE_RUNTIME_KEY, scene_runtime)?;
 
         let loaded: Table = lua.globals().get::<Table>("package")?.get("loaded")?;
         let builtin_modules = loaded
@@ -160,7 +173,9 @@ impl ScriptRuntime {
     /// Devolve as mensagens de erro (vazio se tudo estiver certo).
     pub fn check_syntax(&self) -> Vec<String> {
         let mut errors = Vec::new();
-        for (path, _) in self.inner.source.files("lua") {
+        let mut files = self.inner.source.files("lua");
+        files.extend(self.inner.source.files(SCENE_EXTENSION));
+        for (path, _) in files {
             let result = self
                 .inner
                 .source
@@ -213,6 +228,14 @@ impl ScriptRuntime {
                 self.inner.source.describe(Path::new(path)).display()
             ))
         })?;
+        if path.ends_with(&format!(".{SCENE_EXTENSION}")) {
+            // Cena visual: os dados viram uma cena pelo módulo embutido.
+            return self.with_ctx(ctx, |lua| {
+                let data: Value = lua.load(&bytes).set_name(format!("@{path}")).eval()?;
+                let runtime: Table = lua.named_registry_value(SCENE_RUNTIME_KEY)?;
+                runtime.get::<Function>("new")?.call((data, path))
+            });
+        }
         let value: Value = self.with_ctx(ctx, |lua| {
             lua.load(&bytes).set_name(format!("@{path}")).eval()
         })?;
@@ -249,6 +272,7 @@ impl ScriptRuntime {
             return Vec::new();
         }
         let mut files = self.inner.source.files("lua");
+        files.extend(self.inner.source.files(SCENE_EXTENSION));
         files.sort();
         files
     }
@@ -419,6 +443,7 @@ impl LuaScene {
             self.call(ctx, "reload", ());
         } else {
             self.entered = true;
+            live::announce(&self.path);
             let args: Value = match &self.args {
                 Some(key) => lua.registry_value(key).unwrap_or(Value::Nil),
                 None => Value::Nil,
@@ -456,6 +481,33 @@ impl LuaScene {
             }
             log::info!("recarregando cena {}", self.path);
             self.load(ctx);
+        }
+    }
+
+    /// Ajustes ao vivo vindos do editor (só cenas visuais os recebem).
+    fn apply_live(&mut self, ctx: &mut Context) {
+        if self.error.is_some() {
+            return;
+        }
+        let messages = live::take(&self.path);
+        if messages.is_empty() {
+            return;
+        }
+        let Some(instance) = self.instance.clone() else {
+            return;
+        };
+        let lua = self.runtime.lua().clone();
+        for msg in messages {
+            let result = self.runtime.with_ctx(ctx, |_| {
+                let Some(f) = instance.get::<Option<Function>>("_live")? else {
+                    return Ok(());
+                };
+                let value = mlua::LuaSerdeExt::to_value(&lua, &msg)?;
+                f.call::<()>((instance.clone(), value))
+            });
+            if let Err(e) = result {
+                log::warn!("ajuste ao vivo não aplicado: {}", format_error(&e));
+            }
         }
     }
 
@@ -510,6 +562,7 @@ impl Scene for LuaScene {
     }
 
     fn resume(&mut self, ctx: &mut Context) {
+        live::announce(&self.path);
         self.call(ctx, "resume", ());
     }
 
@@ -548,6 +601,7 @@ impl Scene for LuaScene {
     fn render(&mut self, ctx: &mut Context) {
         // Cenas cobertas por uma pausa não recebem update, mas recarregam aqui.
         self.reload_if_changed(ctx);
+        self.apply_live(ctx);
         self.call(ctx, "draw", ());
         if let Some(message) = self.error.clone() {
             self.draw_error(ctx, &message);

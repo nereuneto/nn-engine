@@ -17,6 +17,10 @@ use crate::console::{Console, ConsoleAction};
 use crate::file_panel::FilePanel;
 use crate::files::{self, FileKind, FileTree};
 use crate::game::GameProcess;
+use crate::hierarchy::HierarchyPanel;
+use crate::inspector::{Inspector, InspectorAction};
+use crate::scene_render::{SceneRenderer, Sizes};
+use crate::scene_view::{SceneAction, SceneDoc, SceneEnv};
 use crate::settings::{Mode, Settings};
 use crate::theme;
 use crate::viewers::{ImageView, MapView, SoundView, ViewerAction};
@@ -32,6 +36,10 @@ pub enum Tab {
     Image(String),
     Sound(String),
     Map(String),
+    /// Cena visual (`.cena`).
+    Scene(String),
+    Hierarchy,
+    Inspector,
 }
 
 impl Tab {
@@ -40,6 +48,7 @@ impl Tab {
         let lower = rel.to_lowercase();
         Some(match FileKind::of(Path::new(rel)) {
             FileKind::Lua | FileKind::Text | FileKind::Tileset => Tab::Code(rel.into()),
+            FileKind::Scene => Tab::Scene(rel.into()),
             FileKind::Map if lower.ends_with(".tmj") => Tab::Map(rel.into()),
             FileKind::Map => Tab::Code(rel.into()),
             FileKind::Image => Tab::Image(rel.into()),
@@ -50,29 +59,35 @@ impl Tab {
 
     pub fn rel(&self) -> Option<&str> {
         match self {
-            Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) => Some(r),
+            Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) | Tab::Scene(r) => Some(r),
             _ => None,
         }
     }
 
     fn set_rel(&mut self, new: String) {
         match self {
-            Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) => *r = new,
+            Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) | Tab::Scene(r) => *r = new,
             _ => {}
         }
     }
 
     /// Abas que ficam na área central (documentos).
     pub fn is_document(&self) -> bool {
-        !matches!(self, Tab::Files | Tab::Console)
+        !matches!(
+            self,
+            Tab::Files | Tab::Console | Tab::Hierarchy | Tab::Inspector
+        )
     }
 }
 
-/// Layout inicial: Arquivos à esquerda, Início no centro, Console embaixo.
+/// Layout inicial: Arquivos e Hierarquia à esquerda, Início no centro,
+/// Inspetor à direita e Console embaixo.
 pub fn default_layout() -> DockState<Tab> {
     let mut state = DockState::new(vec![Tab::Home]);
     let tree = state.main_surface_mut();
-    let [center, _files] = tree.split_left(NodeIndex::root(), 0.22, vec![Tab::Files]);
+    let [center, files] = tree.split_left(NodeIndex::root(), 0.2, vec![Tab::Files]);
+    let [_files, _hierarchy] = tree.split_below(files, 0.5, vec![Tab::Hierarchy]);
+    let [center, _inspector] = tree.split_right(center, 0.72, vec![Tab::Inspector]);
     let [_center, _console] = tree.split_below(center, 0.70, vec![Tab::Console]);
     state
 }
@@ -80,6 +95,7 @@ pub fn default_layout() -> DockState<Tab> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NewKind {
     Scene,
+    VisualScene,
     Module,
     Folder,
 }
@@ -87,7 +103,8 @@ pub enum NewKind {
 impl NewKind {
     fn title(self) -> &'static str {
         match self {
-            NewKind::Scene => "Nova cena",
+            NewKind::Scene => "Nova cena em código",
+            NewKind::VisualScene => "Nova cena visual",
             NewKind::Module => "Novo script (módulo)",
             NewKind::Folder => "Nova pasta",
         }
@@ -95,7 +112,7 @@ impl NewKind {
 
     fn default_name(self) -> &'static str {
         match self {
-            NewKind::Scene => "nova_cena",
+            NewKind::Scene | NewKind::VisualScene => "nova_cena",
             NewKind::Module => "util",
             NewKind::Folder => "nova_pasta",
         }
@@ -137,6 +154,12 @@ pub enum Action {
     CopyText(String),
     SaveDoc(String),
     ReloadDoc(String),
+    /// Rodar o jogo começando nesta cena.
+    TestScene(String),
+    /// Criar o script da cena visual.
+    CreateSceneScript(String),
+    /// Abrir a cena visual como texto.
+    OpenAsText(String),
 }
 
 enum Dialog {
@@ -169,12 +192,22 @@ struct SettingsForm {
 }
 
 /// O que o espaço de trabalho precisa do aplicativo.
-#[derive(Debug)]
 pub struct Env<'a> {
     pub settings: &'a mut Settings,
     pub audio: &'a mut Option<nn_audio::Audio>,
     /// Executável usado para rodar o jogo (o próprio NN Studio).
     pub exe: &'a Path,
+    /// GPU do editor (para desenhar as cenas com o renderer da engine).
+    pub render_state: Option<&'a eframe::egui_wgpu::RenderState>,
+}
+
+impl std::fmt::Debug for Env<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Env")
+            .field("exe", &self.exe)
+            .field("gpu", &self.render_state.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 pub struct ProjectWorkspace {
@@ -197,6 +230,19 @@ pub struct ProjectWorkspace {
     focused_code: Option<String>,
     console_drawn: u64,
     frame: u64,
+    /// Cenas visuais abertas.
+    pub scenes: HashMap<String, SceneDoc>,
+    /// Cena que a Hierarquia e o Inspetor mostram.
+    pub active_scene: Option<String>,
+    sizes: Sizes,
+    scene_renderer: Option<SceneRenderer>,
+    hierarchy: HierarchyPanel,
+    inspector: Inspector,
+    /// Cena que o jogo aberto está mostrando (para o ajuste ao vivo).
+    pub game_scene: Option<String>,
+    /// Valores do config.lua (tamanho da tela e cor de fundo).
+    config: ConfigValues,
+    started: std::time::Instant,
 }
 
 impl std::fmt::Debug for ProjectWorkspace {
@@ -245,6 +291,7 @@ impl ProjectWorkspace {
     pub fn open(root: PathBuf, layout: Option<DockState<Tab>>) -> Self {
         let title = project_title(&root);
         let files = FileTree::new(&root);
+        let first_time = layout.is_none();
         let mut dock = layout.unwrap_or_else(default_layout);
         // Abas de arquivos que sumiram desde a última vez saem do layout.
         dock.retain_tabs(|t| t.rel().is_none_or(|r| root.join(r).exists()));
@@ -270,11 +317,29 @@ impl ProjectWorkspace {
             focused_code: None,
             console_drawn: 0,
             frame: 0,
+            scenes: HashMap::new(),
+            active_scene: None,
+            sizes: Sizes::default(),
+            scene_renderer: None,
+            hierarchy: HierarchyPanel::default(),
+            inspector: Inspector::default(),
+            game_scene: None,
+            config: ConfigValues::default(),
+            started: std::time::Instant::now(),
         };
+        ws.reload_config();
         ws.console.info(format!(
             "Projeto aberto: {}",
             crate::settings::display_path(&ws.root)
         ));
+        // Primeira vez com um jogo que começa numa cena visual: já abre ela.
+        let start = ws.config.start.clone();
+        if first_time
+            && FileKind::of(Path::new(&start)) == FileKind::Scene
+            && ws.root.join(&start).is_file()
+        {
+            ws.open_file(&start, None);
+        }
         ws
     }
 
@@ -285,9 +350,33 @@ impl ProjectWorkspace {
             .values()
             .filter(|d| d.is_dirty())
             .map(|d| d.rel.clone())
+            .chain(
+                self.scenes
+                    .values()
+                    .filter(|s| s.is_dirty())
+                    .map(|s| s.rel.clone()),
+            )
             .collect();
         v.sort();
         v
+    }
+
+    /// O arquivo tem alterações não salvas (código ou cena).
+    pub fn is_dirty(&self, rel: &str) -> bool {
+        self.docs.get(rel).is_some_and(CodeDoc::is_dirty)
+            || self.scenes.get(rel).is_some_and(SceneDoc::is_dirty)
+    }
+
+    /// Esquece as alterações não salvas (antes de fechar sem salvar).
+    pub fn discard_changes(&mut self) {
+        self.docs.clear();
+        self.scenes.clear();
+    }
+
+    /// Relê o config.lua (tamanho da tela e cor de fundo da cena).
+    fn reload_config(&mut self) {
+        let text = std::fs::read_to_string(self.root.join("config.lua")).unwrap_or_default();
+        self.config = config_lua::read(&text, &self.title).unwrap_or_default();
     }
 
     pub fn save_all(&mut self) -> Result<(), String> {
@@ -300,6 +389,12 @@ impl ProjectWorkspace {
                     saved.push(doc.rel.clone());
                 }
                 Err(e) => errors.push(format!("{}: {e}", doc.rel)),
+            }
+        }
+        for scene in self.scenes.values_mut().filter(|s| s.is_dirty()) {
+            match scene.save(&self.root) {
+                Ok(()) => saved.push(scene.rel.clone()),
+                Err(e) => errors.push(format!("{}: {e}", scene.rel)),
             }
         }
         saved.sort();
@@ -338,6 +433,32 @@ impl ProjectWorkspace {
                     NodeIndex::root(),
                     0.70,
                     vec![Tab::Console],
+                );
+            }
+            Tab::Hierarchy => {
+                // Embaixo do painel Arquivos, se ele estiver aberto.
+                match self.dock.find_tab(&Tab::Files) {
+                    Some(path) if path.surface == egui_dock::SurfaceIndex::main() => {
+                        self.dock.main_surface_mut().split_below(
+                            path.node,
+                            0.5,
+                            vec![Tab::Hierarchy],
+                        );
+                    }
+                    _ => {
+                        self.dock.main_surface_mut().split_left(
+                            NodeIndex::root(),
+                            0.2,
+                            vec![Tab::Hierarchy],
+                        );
+                    }
+                }
+            }
+            Tab::Inspector => {
+                self.dock.main_surface_mut().split_right(
+                    NodeIndex::root(),
+                    0.78,
+                    vec![Tab::Inspector],
                 );
             }
             _ => {
@@ -396,7 +517,25 @@ impl ProjectWorkspace {
             Tab::Map(r) => {
                 self.maps.remove(r);
             }
+            Tab::Scene(r) => {
+                self.scenes.remove(r);
+                if let Some(sr) = &mut self.scene_renderer {
+                    sr.forget(r);
+                }
+                if self.active_scene.as_deref() == Some(r.as_str()) {
+                    self.active_scene = self.scenes.keys().next().cloned();
+                }
+            }
             _ => {}
+        }
+    }
+
+    /// Abre a Hierarquia e o Inspetor, se estiverem fechados (sem roubar o foco).
+    fn ensure_scene_panels(&mut self) {
+        for tab in [Tab::Hierarchy, Tab::Inspector] {
+            if self.dock.find_tab(&tab).is_none() {
+                self.show_tab(tab);
+            }
         }
     }
 
@@ -419,6 +558,17 @@ impl ProjectWorkspace {
                     return;
                 }
             }
+        }
+        if let Tab::Scene(r) = &tab {
+            if !self.scenes.contains_key(r) {
+                let doc = SceneDoc::open(&self.root, r);
+                if let Some(e) = &doc.error {
+                    self.console.error(format!("{r}: {e}"));
+                }
+                self.scenes.insert(r.clone(), doc);
+            }
+            self.active_scene = Some(r.clone());
+            self.ensure_scene_panels();
         }
         self.file_panel.reveal(rel);
         self.show_tab(tab);
@@ -457,6 +607,17 @@ impl ProjectWorkspace {
             .map(|e| e.rel.clone())
     }
 
+    /// Cena que recebe Salvar, desfazer etc.: a aba com foco, se for uma
+    /// cena (ou a Hierarquia ou o Inspetor dela).
+    fn focused_scene(&mut self) -> Option<String> {
+        let active = self.active_scene.clone();
+        match self.dock.find_active_focused() {
+            Some((_, Tab::Scene(r))) => Some(r.clone()),
+            Some((_, Tab::Hierarchy | Tab::Inspector)) => active,
+            _ => None,
+        }
+    }
+
     /// Código que recebe Salvar, Buscar etc.: a aba com foco, se for de código.
     fn active_code(&mut self) -> Option<String> {
         if let Some((_, Tab::Code(r))) = self.dock.find_active_focused() {
@@ -471,6 +632,11 @@ impl ProjectWorkspace {
     // Jogo
 
     pub fn play(&mut self, ctx: &egui::Context, env: &mut Env) {
+        self.play_from(ctx, env, None);
+    }
+
+    /// Roda o jogo; com `start`, começando nessa cena em vez da inicial.
+    pub fn play_from(&mut self, ctx: &egui::Context, env: &mut Env, start: Option<&str>) {
         let _ = self.save_all();
         if let Some(mut g) = self.game.take() {
             g.stop();
@@ -479,9 +645,15 @@ impl ProjectWorkspace {
             self.console.clear();
         }
         let wake_ctx = ctx.clone();
-        match GameProcess::start(env.exe, &self.root, move || wake_ctx.request_repaint()) {
+        self.game_scene = None;
+        match GameProcess::start(env.exe, &self.root, start, move || {
+            wake_ctx.request_repaint()
+        }) {
             Ok(g) => {
-                self.console.info("▶ Jogo iniciado. Salve um arquivo com o jogo aberto e a mudança aparece na hora.");
+                match start {
+                    Some(scene) => self.console.info(format!("▶ Testando a partir de {scene}.")),
+                    None => self.console.info("▶ Jogo iniciado. Salve um arquivo com o jogo aberto e a mudança aparece na hora."),
+                }
                 self.game = Some(g);
             }
             Err(e) => self
@@ -505,6 +677,10 @@ impl ProjectWorkspace {
         let exit = game.exited();
         let errors_before = self.console.count(crate::console::Category::Error);
         for line in lines {
+            if let Some(scene) = crate::console::live_scene(&line) {
+                self.game_scene = Some(scene);
+                continue;
+            }
             self.console.push_game_line(&line);
         }
         if let Some(status) = exit {
@@ -520,6 +696,7 @@ impl ProjectWorkspace {
                 None => self.console.info("O jogo foi fechado."),
             }
             self.game = None;
+            self.game_scene = None;
         }
         // Erro novo com o console escondido: mostra o console.
         if self.console.count(crate::console::Category::Error) > errors_before
@@ -549,6 +726,22 @@ impl ProjectWorkspace {
             if rel == "config.lua" {
                 self.form.loaded = false;
                 self.title = project_title(&self.root);
+                self.reload_config();
+            }
+            if let Some(scene) = self.scenes.get_mut(rel) {
+                scene.disk_changed(&root);
+            }
+            if matches!(
+                FileKind::of(Path::new(rel)),
+                FileKind::Image | FileKind::Map | FileKind::Tileset
+            ) {
+                self.sizes.invalidate(rel);
+                if FileKind::of(Path::new(rel)) != FileKind::Image {
+                    self.sizes.clear();
+                }
+                if let Some(sr) = &mut self.scene_renderer {
+                    sr.invalidate(&root, rel);
+                }
             }
         }
         // Mapas dependem de tilesets e imagens: recarrega todos.
@@ -564,7 +757,7 @@ impl ProjectWorkspace {
         }
         // Arquivo apagado fora: fecha a aba se não houver nada a perder.
         for rel in &changes.removed {
-            let dirty = self.docs.get(rel).is_some_and(CodeDoc::is_dirty);
+            let dirty = self.is_dirty(rel);
             if !dirty
                 && let Some(tab) = Tab::for_file(rel)
                 && self.dock.find_tab(&tab).is_some()
@@ -581,18 +774,45 @@ impl ProjectWorkspace {
     pub fn run(&mut self, cmd: Command, ctx: &egui::Context, env: &mut Env) -> bool {
         match cmd {
             Command::Play => self.play(ctx, env),
+            Command::TestHere => match self.test_target() {
+                Some(rel) => self.play_from(ctx, env, Some(&rel)),
+                None => self
+                    .console
+                    .warn("Abra uma cena visual (.cena) para testar o jogo a partir dela."),
+            },
             Command::Stop => self.stop(),
-            Command::Save => match self.active_code() {
-                Some(rel) => self.save_doc(&rel),
-                None => {
+            Command::Undo | Command::Redo => {
+                if let Some(rel) = self.focused_scene()
+                    && let Some(doc) = self.scenes.get_mut(&rel)
+                {
+                    doc.begin_frame();
+                    if cmd == Command::Undo {
+                        doc.undo();
+                    } else {
+                        doc.redo();
+                    }
+                    doc.end_frame();
+                    self.flush_live();
+                }
+            }
+            Command::Save => {
+                if let Some(rel) = self.focused_scene() {
+                    self.save_doc(&rel);
+                } else if let Some(rel) = self.active_code() {
+                    self.save_doc(&rel);
+                } else {
                     let _ = self.save_all();
                 }
-            },
+            }
             Command::SaveAll => {
                 let _ = self.save_all();
             }
-            Command::NewScene => self.actions.push(Action::NewItem {
-                kind: NewKind::Scene,
+            Command::NewScene | Command::NewCodeScene => self.actions.push(Action::NewItem {
+                kind: if cmd == Command::NewScene {
+                    NewKind::VisualScene
+                } else {
+                    NewKind::Scene
+                },
                 parent: if self.files.get("cenas").is_some_and(|e| e.is_dir) {
                     "cenas".into()
                 } else {
@@ -651,7 +871,7 @@ impl ProjectWorkspace {
                 let tab = self.dock.find_active_focused().map(|(_, t)| t.clone());
                 if let Some(tab) = tab {
                     match &tab {
-                        Tab::Code(r) if self.docs.get(r).is_some_and(CodeDoc::is_dirty) => {
+                        Tab::Code(r) | Tab::Scene(r) if self.is_dirty(r) => {
                             self.dialog = Some(Dialog::CloseTab(r.clone()));
                         }
                         _ => self.close_tab(&tab),
@@ -673,6 +893,8 @@ impl ProjectWorkspace {
             Command::ShowFiles => self.show_tab(Tab::Files),
             Command::ShowConsole => self.show_tab(Tab::Console),
             Command::ShowHome => self.show_tab(Tab::Home),
+            Command::ShowHierarchy => self.show_tab(Tab::Hierarchy),
+            Command::ShowInspector => self.show_tab(Tab::Inspector),
             Command::ClearConsole => self.console.clear(),
             Command::ResetLayout => {
                 self.dock = default_layout();
@@ -683,7 +905,77 @@ impl ProjectWorkspace {
         true
     }
 
+    /// Cena para "Testar daqui": a que tem o foco ou a última usada.
+    fn test_target(&mut self) -> Option<String> {
+        self.focused_scene()
+            .or_else(|| self.active_scene.clone())
+            .filter(|r| self.scenes.contains_key(r))
+    }
+
+    /// Manda para o jogo aberto os ajustes ao vivo da cena que ele mostra.
+    fn flush_live(&mut self) {
+        let target = self.game_scene.clone();
+        for (rel, doc) in &mut self.scenes {
+            if doc.live.is_empty() {
+                continue;
+            }
+            let changes = std::mem::take(&mut doc.live);
+            if target.as_deref() != Some(rel.as_str()) {
+                continue;
+            }
+            if let Some(game) = &mut self.game {
+                for c in changes {
+                    if !game.send(&c.to_json(rel)) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Cria (ou liga, se já existir) o script `<cena>.lua` da cena visual.
+    fn create_scene_script(&mut self, scene_rel: &str) {
+        let script = match scene_rel.rsplit_once('.') {
+            Some((stem, _)) => format!("{stem}.lua"),
+            None => format!("{scene_rel}.lua"),
+        };
+        let full = self.root.join(&script);
+        if !full.exists() {
+            if let Some(dir) = full.parent() {
+                let _ = std::fs::create_dir_all(dir);
+            }
+            if let Err(e) = std::fs::write(&full, files::scene_script_template(scene_rel)) {
+                self.console
+                    .error(format!("Não foi possível criar {script}: {e}"));
+                return;
+            }
+            self.console.info(format!("Criado: {script}"));
+            self.files.rescan();
+        }
+        if let Some(doc) = self.scenes.get_mut(scene_rel) {
+            doc.begin_frame();
+            doc.record(None);
+            doc.data.script = script.clone();
+            doc.end_frame();
+            // O script é lido ao carregar a cena: salva para o jogo já usar.
+            self.save_doc(scene_rel);
+        }
+        self.open_file(&script, None);
+    }
+
     fn save_doc(&mut self, rel: &str) {
+        if let Some(scene) = self.scenes.get_mut(rel) {
+            match scene.save(&self.root) {
+                Ok(()) => {
+                    self.console.info(format!("Salvo: {rel}"));
+                    self.files.rescan();
+                }
+                Err(e) => self
+                    .console
+                    .error(format!("Não foi possível salvar {rel}: {e}")),
+            }
+            return;
+        }
         let Some(doc) = self.docs.get_mut(rel) else {
             return;
         };
@@ -773,6 +1065,12 @@ impl ProjectWorkspace {
                     self.console.info(format!("Copiado: {text}"));
                 }
                 Action::SaveDoc(rel) => self.save_doc(&rel),
+                Action::TestScene(rel) => self.play_from(ctx, env, Some(&rel)),
+                Action::CreateSceneScript(rel) => self.create_scene_script(&rel),
+                Action::OpenAsText(rel) => {
+                    self.file_panel.reveal(&rel);
+                    self.show_tab(Tab::Code(rel));
+                }
                 Action::ReloadDoc(rel) => {
                     if let Some(doc) = self.docs.get_mut(&rel) {
                         match doc.reload(&self.root) {
@@ -828,6 +1126,23 @@ impl ProjectWorkspace {
                     {
                         d.rel = n.clone();
                         self.docs.insert(n, d);
+                    }
+                }
+                let scenes: Vec<String> = self.scenes.keys().cloned().collect();
+                for k in scenes {
+                    if let Some(n) = fix(&k)
+                        && let Some(mut d) = self.scenes.remove(&k)
+                    {
+                        d.rel = n.clone();
+                        if let Some(sr) = &mut self.scene_renderer {
+                            sr.forget(&k);
+                        }
+                        self.scenes.insert(n, d);
+                    }
+                }
+                for slot in [&mut self.active_scene, &mut self.game_scene] {
+                    if let Some(n) = slot.as_deref().and_then(fix) {
+                        *slot = Some(n);
                     }
                 }
                 // Visualizadores abrem de novo com o caminho novo.
@@ -916,6 +1231,14 @@ impl ProjectWorkspace {
 
         let mode = env.settings.mode;
         let mut clear_on_play = env.settings.clear_console_on_play;
+        if self.scene_renderer.is_none()
+            && let Some(rs) = env.render_state
+        {
+            self.scene_renderer = Some(SceneRenderer::new(rs));
+        }
+        for doc in self.scenes.values_mut() {
+            doc.begin_frame();
+        }
         {
             let mut viewer = Viewer {
                 root: &self.root,
@@ -938,6 +1261,16 @@ impl ProjectWorkspace {
                 focused_code: &mut self.focused_code,
                 console_drawn: &mut self.console_drawn,
                 frame: self.frame,
+                scenes: &mut self.scenes,
+                active_scene: &mut self.active_scene,
+                sizes: &mut self.sizes,
+                scene_renderer: &mut self.scene_renderer,
+                hierarchy: &mut self.hierarchy,
+                inspector: &mut self.inspector,
+                game_scene: self.game_scene.as_deref(),
+                design: (f64::from(self.config.width), f64::from(self.config.height)),
+                clear_color: &self.config.clear_color,
+                time: self.started.elapsed().as_secs_f32(),
             };
             let mut style = egui_dock::Style::from_egui(ui.style().as_ref());
             style.tab_bar.fill_tab_bar = false;
@@ -949,6 +1282,17 @@ impl ProjectWorkspace {
                 .show_inside(ui, &mut viewer);
         }
         env.settings.clear_console_on_play = clear_on_play;
+        // A Hierarquia e o Inspetor seguem a cena com o foco.
+        if let Some((_, Tab::Scene(r))) = self.dock.find_active_focused() {
+            let r = r.clone();
+            if self.scenes.contains_key(&r) {
+                self.active_scene = Some(r);
+            }
+        }
+        for doc in self.scenes.values_mut() {
+            doc.end_frame();
+        }
+        self.flush_live();
 
         if hovering {
             drop_overlay(&ctx, self.file_panel.target_dir(&self.files));
@@ -1056,12 +1400,15 @@ impl ProjectWorkspace {
                     });
                     let mut file_name = name.trim().to_string();
                     if kind != NewKind::Folder && Path::new(&file_name).extension().is_none() {
-                        file_name.push_str(".lua");
+                        file_name.push_str(if kind == NewKind::VisualScene { ".cena" } else { ".lua" });
                     }
                     let rel = files::join_rel(parent, &file_name);
                     ui.weak(format!("Será criado: {rel}"));
                     if kind == NewKind::Scene {
                         ui.weak("A cena já vem com um quadrado que anda com WASD, as setas ou o controle.");
+                    }
+                    if kind == NewKind::VisualScene {
+                        ui.weak("Monte a cena arrastando imagens, mapas e sons para ela. Se precisar de código, crie o script dela no Inspetor.");
                     }
                     if let Some(e) = error {
                         ui.colored_label(theme::ERROR, e.as_str());
@@ -1074,6 +1421,7 @@ impl ProjectWorkspace {
                             let result = match kind {
                                 NewKind::Folder => files::create_folder(&self.root, parent, name),
                                 NewKind::Scene => files::create_file(&self.root, parent, name, &files::scene_template(&rel)),
+                                NewKind::VisualScene => files::create_file(&self.root, parent, &file_name, &files::visual_scene_template()),
                                 NewKind::Module => files::create_file(&self.root, parent, name, &files::module_template(&rel)),
                             };
                             match result {
@@ -1106,7 +1454,7 @@ impl ProjectWorkspace {
             Dialog::ConfirmDelete(rel) => {
                 let rel = rel.clone();
                 let is_dir = self.files.get(&rel).is_some_and(|e| e.is_dir);
-                let dirty = self.docs.get(&rel).is_some_and(CodeDoc::is_dirty);
+                let dirty = self.is_dirty(&rel);
                 let mut confirm = false;
                 let response = egui::Modal::new(egui::Id::new("dialogo-excluir")).show(ctx, |ui| {
                     ui.set_width(360.0);
@@ -1182,8 +1530,13 @@ impl ProjectWorkspace {
                     if save {
                         self.save_doc(&rel);
                     }
-                    if !save || !self.docs.get(&rel).is_some_and(CodeDoc::is_dirty) {
-                        self.close_tab(&Tab::Code(rel));
+                    if !save || !self.is_dirty(&rel) {
+                        if !save && let Some(scene) = self.scenes.get_mut(&rel) {
+                            scene.reload(&self.root);
+                        }
+                        if let Some(tab) = Tab::for_file(&rel) {
+                            self.close_tab(&tab);
+                        }
                     }
                     close = true;
                 }
@@ -1350,6 +1703,16 @@ struct Viewer<'a> {
     focused_code: &'a mut Option<String>,
     console_drawn: &'a mut u64,
     frame: u64,
+    scenes: &'a mut HashMap<String, SceneDoc>,
+    active_scene: &'a mut Option<String>,
+    sizes: &'a mut Sizes,
+    scene_renderer: &'a mut Option<SceneRenderer>,
+    hierarchy: &'a mut HierarchyPanel,
+    inspector: &'a mut Inspector,
+    game_scene: Option<&'a str>,
+    design: (f64, f64),
+    clear_color: &'a str,
+    time: f32,
 }
 
 impl TabViewer for Viewer<'_> {
@@ -1371,9 +1734,13 @@ impl TabViewer for Viewer<'_> {
                 }
             }
             Tab::Settings => "Configurações".to_string(),
-            Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) => {
+            Tab::Hierarchy => "Hierarquia".to_string(),
+            Tab::Inspector => "Inspetor".to_string(),
+            Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) | Tab::Scene(r) => {
                 let name = r.rsplit('/').next().unwrap_or(r).to_string();
-                if self.docs.get(r.as_str()).is_some_and(CodeDoc::is_dirty) {
+                if self.docs.get(r.as_str()).is_some_and(CodeDoc::is_dirty)
+                    || self.scenes.get(r.as_str()).is_some_and(SceneDoc::is_dirty)
+                {
                     format!("{name} •")
                 } else {
                     name
@@ -1398,6 +1765,20 @@ impl TabViewer for Viewer<'_> {
             Tab::Code(r) if self.docs.get(r.as_str()).is_some_and(CodeDoc::is_dirty) => {
                 self.actions.push(Action::AskCloseTab(r.clone()));
                 OnCloseResponse::Ignore
+            }
+            Tab::Scene(r) if self.scenes.get(r.as_str()).is_some_and(SceneDoc::is_dirty) => {
+                self.actions.push(Action::AskCloseTab(r.clone()));
+                OnCloseResponse::Ignore
+            }
+            Tab::Scene(r) => {
+                self.scenes.remove(r.as_str());
+                if let Some(sr) = self.scene_renderer {
+                    sr.forget(r);
+                }
+                if self.active_scene.as_deref() == Some(r.as_str()) {
+                    *self.active_scene = self.scenes.keys().next().cloned();
+                }
+                OnCloseResponse::Close
             }
             Tab::Code(r) => {
                 self.docs.remove(r.as_str());
@@ -1510,11 +1891,72 @@ impl TabViewer for Viewer<'_> {
                     self.viewer_action(a);
                 }
             }
+            Tab::Scene(rel) => self.scene(ui, rel),
+            Tab::Hierarchy => {
+                let doc = self
+                    .active_scene
+                    .as_deref()
+                    .and_then(|r| self.scenes.get_mut(r));
+                self.hierarchy.ui(ui, doc);
+            }
+            Tab::Inspector => {
+                let active = self.active_scene.clone();
+                let doc = active.as_deref().and_then(|r| self.scenes.get_mut(r));
+                for a in self
+                    .inspector
+                    .ui(ui, doc, self.files, self.sizes, self.mode)
+                {
+                    match a {
+                        InspectorAction::OpenFile(rel) => {
+                            self.actions.push(Action::OpenFile { rel, line: None });
+                        }
+                        InspectorAction::CreateScript => {
+                            if let Some(r) = &active {
+                                self.actions.push(Action::CreateSceneScript(r.clone()));
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
 impl Viewer<'_> {
+    fn scene(&mut self, ui: &mut egui::Ui, rel: &str) {
+        if !self.scenes.contains_key(rel) {
+            // Aba que veio do layout salvo: abre agora.
+            let mut doc = SceneDoc::open(self.root, rel);
+            doc.begin_frame();
+            self.scenes.insert(rel.to_string(), doc);
+        }
+        if self.active_scene.is_none() {
+            *self.active_scene = Some(rel.to_string());
+        }
+        let doc = self.scenes.get_mut(rel).expect("cena aberta");
+        let mut env = SceneEnv {
+            root: self.root,
+            sizes: self.sizes,
+            renderer: self.scene_renderer.as_mut(),
+            design: self.design,
+            clear_color: self.clear_color,
+            connected: self.game_scene == Some(rel),
+            time: self.time,
+        };
+        let actions = doc.ui(ui, &mut env);
+        for a in actions {
+            match a {
+                SceneAction::TestHere => self.actions.push(Action::TestScene(rel.to_string())),
+                SceneAction::Reload => doc.reload(self.root),
+                SceneAction::OpenAsText => self.actions.push(Action::OpenAsText(rel.to_string())),
+            }
+        }
+        // Clicou nesta cena: a Hierarquia e o Inspetor passam a mostrá-la.
+        if ui.ui_contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
+            *self.active_scene = Some(rel.to_string());
+        }
+    }
+
     fn viewer_action(&mut self, a: ViewerAction) {
         self.actions.push(match a {
             ViewerAction::CopyText(t) => Action::CopyText(t),

@@ -19,10 +19,13 @@ path = "src/lib.rs"
 [dependencies]
 nn-app.workspace = true
 nn-audio.workspace = true
+nn-core.workspace = true
+nn-render.workspace = true
 nn-run.workspace = true
 nn-script.workspace = true
 nn-tilemap.workspace = true
 directories.workspace = true
+glam.workspace = true
 env_logger.workspace = true
 image.workspace = true
 log.workspace = true

@@ -41,6 +41,10 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
             "Padrão",
             "Um jogo pequeno e completo: título com menu, partida, pausa, fim e recorde salvo. O melhor jeito de começar.",
         ),
+        Template::Visual => (
+            "Cena visual",
+            "Uma fase de plataforma montada no editor, com o mouse: herói, plataformas e moedas, e um script curto com as regras.",
+        ),
         Template::Minimo => (
             "Mínimo",
             "Só uma cena com um quadrado que anda. Para quem quer começar do zero.",

@@ -67,15 +67,33 @@ fn fake_game(dir: &Path) -> PathBuf {
 }
 
 fn studio(dir: &Path, open: Option<PathBuf>) -> Harness<'static, StudioApp> {
+    studio_with(dir, open, fake_game(dir), false)
+}
+
+/// NN Studio com outro "jogo" e, se `gpu`, com a GPU de teste (as cenas
+/// visuais são desenhadas pelo renderer da engine).
+fn studio_with(
+    dir: &Path,
+    open: Option<PathBuf>,
+    exe: PathBuf,
+    gpu: bool,
+) -> Harness<'static, StudioApp> {
     let options = StudioOptions {
         settings_path: Some(dir.join("preferencias.json")),
         open,
-        exe: Some(fake_game(dir)),
+        exe: Some(exe),
     };
-    let mut h = Harness::builder()
+    let mut builder = Harness::builder()
         .with_size(egui::vec2(1280.0, 800.0))
-        .with_max_steps(200)
-        .build_eframe(move |cc| StudioApp::new(&cc.egui_ctx, options));
+        .with_max_steps(200);
+    if gpu {
+        builder = builder.wgpu();
+    }
+    let mut h = builder.build_eframe(move |cc| {
+        let mut app = StudioApp::new(&cc.egui_ctx, options);
+        app.set_render_state(cc.wgpu_render_state.clone());
+        app
+    });
     h.run();
     h
 }
@@ -335,8 +353,8 @@ fn nova_cena_pelo_dialogo() {
     let dir = temp("cena");
     let proj = plataforma(&dir);
     let mut h = studio(&dir, Some(proj.clone()));
-    atalho(&mut h, Modifiers::COMMAND, Key::N);
-    h.get_by_label("Nova cena");
+    paleta(&mut h, "cena em codigo");
+    h.get_by_label("Nova cena em código");
     selecionar_tudo(&mut h);
     digitar(&mut h, "chefe");
     h.get_by_label("Será criado: cenas/chefe.lua");
@@ -349,7 +367,7 @@ fn nova_cena_pelo_dialogo() {
     assert_eq!(doc.issue, None, "a cena nova não tem erros");
 
     // Nome repetido: erro no diálogo, nada é sobrescrito.
-    atalho(&mut h, Modifiers::COMMAND, Key::N);
+    paleta(&mut h, "cena em codigo");
     selecionar_tudo(&mut h);
     digitar(&mut h, "chefe");
     h.get_by_label("Criar").click();
@@ -630,4 +648,347 @@ fn mandar_para_a_lixeira_pergunta_antes() {
         assert!(text.contains("Não foi possível mandar"), "{text}");
         assert!(proj.join("lib/inimigos.lua").exists());
     }
+}
+
+// ---------------------------------------------------------------------------
+// Cenas visuais
+
+/// Projeto com uma cena visual nova (título e quadrado) aberta.
+fn com_cena(h: &mut Harness<'_, StudioApp>, proj: &Path) {
+    std::fs::write(
+        proj.join("cenas/teste.cena"),
+        nn_studio::files::visual_scene_template(),
+    )
+    .unwrap();
+    let ws = h.state_mut().project_mut().unwrap();
+    ws.files.rescan();
+    ws.open_file("cenas/teste.cena", None);
+    h.run();
+}
+
+fn cena<'a>(h: &'a Harness<'_, StudioApp>) -> &'a nn_studio::scene_view::SceneDoc {
+    &h.state().project().unwrap().scenes["cenas/teste.cena"]
+}
+
+fn objeto<'a>(h: &'a Harness<'_, StudioApp>, name: &str) -> &'a nn_studio::scene_data::Object {
+    cena(h)
+        .data
+        .objects
+        .iter()
+        .find(|o| o.name == name)
+        .unwrap_or_else(|| panic!("sem o objeto {name}"))
+}
+
+/// Arrasta com o mouse de um ponto a outro.
+fn arrastar(h: &mut Harness<'_, StudioApp>, from: egui::Pos2, to: egui::Pos2) {
+    h.hover_at(from);
+    h.run();
+    h.drag_at(from);
+    h.run();
+    for i in 1..=6 {
+        let t = i as f32 / 6.0;
+        h.hover_at(from + (to - from) * t);
+        h.run();
+    }
+    h.drop_at(to);
+    h.run();
+}
+
+#[test]
+fn nova_cena_visual_pelo_dialogo() {
+    let dir = temp("cena-visual");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    atalho(&mut h, Modifiers::COMMAND, Key::N);
+    h.get_by_label("Nova cena visual");
+    selecionar_tudo(&mut h);
+    digitar(&mut h, "fase3");
+    h.get_by_label("Será criado: cenas/fase3.cena");
+    h.get_by_label("Criar").click();
+    h.run();
+    assert!(proj.join("cenas/fase3.cena").exists());
+    let t = tabs(&h);
+    assert!(t.contains(&Tab::Scene("cenas/fase3.cena".into())), "{t:?}");
+    assert!(t.contains(&Tab::Hierarchy) && t.contains(&Tab::Inspector));
+    // A Hierarquia mostra os objetos do modelo; o Inspetor, a cena.
+    h.get_by_label("titulo");
+    h.get_by_label("quadrado");
+    h.get_by_label("Vista da cena");
+    h.get_by_label_contains("2 objetos");
+    tela(&mut h, "cena-visual-nova");
+    // A cena nova roda na engine (sem erros de sintaxe).
+    let text = std::fs::read_to_string(proj.join("cenas/fase3.cena")).unwrap();
+    assert!(text.contains("format = 1"), "{text}");
+}
+
+#[test]
+fn cena_visual_arrastar_imagem_mover_desfazer_e_salvar() {
+    let dir = temp("cena-editar");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .file_panel
+        .reveal("assets/imagens/moeda.png");
+    h.run();
+
+    // Arrasta a imagem do painel Arquivos para a cena: vira um sprite.
+    let from = h.get_by_label("moeda.png").rect().center();
+    let to = h.get_by_label("Vista da cena").rect().center() + egui::vec2(120.0, 0.0);
+    arrastar(&mut h, from, to);
+    let moeda = objeto(&h, "moeda").clone();
+    let sprite = moeda.component("sprite").expect("sprite");
+    assert_eq!(sprite.str("image"), "assets/imagens/moeda.png");
+    assert_eq!(
+        cena(&h).selection,
+        vec![moeda.id],
+        "o objeto novo fica selecionado"
+    );
+    assert!(cena(&h).is_dirty());
+    h.get_by_label("Imagem (sprite)");
+    tela(&mut h, "cena-imagem-solta");
+
+    // Setas movem o selecionado (com o mouse em cima da cena).
+    let centro = h.get_by_label("Vista da cena").rect().center();
+    h.hover_at(centro);
+    h.run();
+    for _ in 0..3 {
+        h.key_press(Key::ArrowRight);
+        h.run();
+    }
+    h.key_press_modifiers(Modifiers::SHIFT, Key::ArrowUp);
+    h.run();
+    let movida = objeto(&h, "moeda").clone();
+    assert_eq!(movida.x, moeda.x + 3.0);
+    assert_eq!(movida.y, moeda.y + 10.0);
+
+    // Ctrl+Z desfaz as setas de uma vez; outro Ctrl+Z tira a imagem.
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(objeto(&h, "moeda").x, moeda.x);
+    assert_eq!(objeto(&h, "moeda").y, moeda.y);
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(cena(&h).data.objects.iter().all(|o| o.name != "moeda"));
+    assert!(!cena(&h).is_dirty(), "voltou ao que está salvo");
+    atalho(&mut h, Modifiers::COMMAND, Key::Y);
+    assert_eq!(objeto(&h, "moeda").x, moeda.x);
+
+    // Ctrl+S grava o .cena.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    assert!(!cena(&h).is_dirty());
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(
+        text.contains("image = \"assets/imagens/moeda.png\""),
+        "{text}"
+    );
+    let lida = nn_studio::scene_data::read(&text, "teste").unwrap();
+    assert_eq!(
+        lida,
+        cena(&h).data,
+        "o que foi gravado é o que está no editor"
+    );
+}
+
+#[test]
+fn cena_visual_hierarquia_e_inspetor() {
+    let dir = temp("cena-inspetor");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+
+    // Clicar na Hierarquia seleciona; o Inspetor mostra o objeto.
+    h.get_by_label("quadrado").click();
+    h.run();
+    let id = objeto(&h, "quadrado").id;
+    assert_eq!(cena(&h).selection, vec![id]);
+    h.get_by_label("Transformação");
+
+    // Renomear pelo Inspetor.
+    campo(&h, "quadrado").focus();
+    h.run();
+    selecionar_tudo(&mut h);
+    digitar(&mut h, "jogador");
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(cena(&h).data.find(id).unwrap().name, "jogador");
+
+    // Adicionar um corpo físico.
+    h.get_by_label_contains("Adicionar componente").click();
+    h.run();
+    h.get_by_label("Corpo físico").click();
+    h.run();
+    assert!(cena(&h).data.find(id).unwrap().component("body").is_some());
+    tela(&mut h, "cena-inspetor");
+
+    // Arrastar "jogador" para dentro de "titulo" na Hierarquia vira filho.
+    let from = h.get_by_label("jogador").rect().center();
+    let to = h.get_by_label("titulo").rect().center();
+    arrastar(&mut h, from, to);
+    let titulo = objeto(&h, "titulo");
+    assert_eq!(titulo.children.len(), 1, "{:?}", cena(&h).data.objects);
+    assert_eq!(titulo.children[0].name, "jogador");
+
+    // Desfazer volta tudo, um passo por vez.
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(objeto(&h, "titulo").children.is_empty());
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(objeto(&h, "jogador").component("body").is_none());
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    objeto(&h, "quadrado");
+}
+
+#[test]
+fn cena_visual_seta_do_gizmo_e_selecao_por_retangulo() {
+    let dir = temp("cena-gizmo");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    h.get_by_label("quadrado").click();
+    h.run();
+    let antes = objeto(&h, "quadrado").clone();
+    let vista = h.get_by_label("Vista da cena").rect();
+    let centro = cena(&h).camera.to_screen(vista, antes.x, antes.y);
+    let zoom = cena(&h).camera.zoom;
+
+    // Arrastar a seta vermelha (eixo X) move só em X, mesmo com o mouse
+    // saindo um pouco da linha.
+    let seta = centro + egui::vec2(40.0, 0.0);
+    arrastar(&mut h, seta, seta + egui::vec2(100.0, 15.0));
+    let depois = objeto(&h, "quadrado").clone();
+    assert!(
+        (depois.x - (antes.x + 100.0 / zoom)).abs() < 0.01,
+        "x {} -> {}",
+        antes.x,
+        depois.x
+    );
+    assert_eq!(depois.y, antes.y);
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(objeto(&h, "quadrado").x, antes.x, "um passo só");
+
+    // Retângulo num espaço vazio seleciona o que fica todo dentro dele.
+    let canto = vista.left_top() + egui::vec2(5.0, 5.0);
+    arrastar(&mut h, canto, vista.right_bottom() - egui::vec2(5.0, 5.0));
+    let mut sel = cena(&h).selection.clone();
+    sel.sort();
+    assert_eq!(sel, vec![1, 2], "título e quadrado");
+}
+
+/// "Jogo" que avisa a cena da frente e guarda o que recebe na entrada.
+#[cfg(unix)]
+fn jogo_ao_vivo(dir: &Path) -> PathBuf {
+    let p = dir.join("jogo-ao-vivo.sh");
+    let recebido = dir.join("recebido.txt");
+    std::fs::write(
+        &p,
+        format!(
+            "#!/bin/sh\n\
+             echo \"args: $*\"\n\
+             printf '%s\\n' '@nn {{\"n\":\"Info\",\"a\":\"nn_script::live\",\"m\":\"cena: cenas/teste.cena\"}}'\n\
+             while read -r linha; do echo \"$linha\" >> '{}'; done\n",
+            recebido.display()
+        ),
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    p
+}
+
+#[cfg(unix)]
+#[test]
+fn testar_daqui_abre_na_cena_e_manda_ajustes_ao_vivo() {
+    let dir = temp("ao-vivo");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), jogo_ao_vivo(&dir), false);
+    com_cena(&mut h, &proj);
+    h.get_by_label("quadrado").click();
+    h.run();
+    let id = objeto(&h, "quadrado").id;
+
+    // F6: roda o jogo começando nesta cena.
+    // (Com o jogo aberto o editor redesenha sempre: `run_steps` em vez de `run`.)
+    h.key_press(Key::F6);
+    h.run_steps(3);
+    let start = std::time::Instant::now();
+    while h.state().project().unwrap().game_scene.is_none() {
+        assert!(start.elapsed().as_secs() < 20, "o jogo não avisou a cena");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        h.step();
+    }
+    h.run_steps(3);
+    let text = console_text(&h);
+    assert!(text.contains("args: --jogar"), "{text}");
+    assert!(text.contains("--cena cenas/teste.cena"), "{text}");
+    assert!(
+        !text.contains("nn_script::live"),
+        "o aviso da cena não suja o console"
+    );
+    h.get_by_label("• Ao vivo");
+
+    // Mexer no objeto manda o ajuste para o jogo, sem salvar.
+    let centro = h.get_by_label("Vista da cena").rect().center();
+    h.hover_at(centro);
+    h.run_steps(2);
+    h.key_press(Key::ArrowRight);
+    h.run_steps(2);
+    assert!(cena(&h).is_dirty());
+    let recebido = dir.join("recebido.txt");
+    let start = std::time::Instant::now();
+    let linhas = loop {
+        let t = std::fs::read_to_string(&recebido).unwrap_or_default();
+        if !t.is_empty() {
+            break t;
+        }
+        assert!(
+            start.elapsed().as_secs() < 10,
+            "o jogo não recebeu o ajuste"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+    let msg: serde_json::Value = serde_json::from_str(linhas.lines().next().unwrap()).unwrap();
+    assert_eq!(msg["scene"], "cenas/teste.cena");
+    assert_eq!(msg["id"], id);
+    assert_eq!(msg["field"], "x");
+    assert_eq!(msg["value"], 1.0);
+    tela(&mut h, "cena-ao-vivo");
+    h.key_press_modifiers(Modifiers::SHIFT, Key::F5);
+    h.run_steps(3);
+    assert!(!h.state().project().unwrap().is_playing());
+}
+
+/// Com GPU, a cena é desenhada pelo renderer da engine dentro do editor.
+#[test]
+fn cena_visual_desenhada_pela_engine() {
+    if std::env::var_os("NN_REQUIRE_GPU").is_none() {
+        eprintln!("sem NN_REQUIRE_GPU: pulando o teste com GPU");
+        return;
+    }
+    let dir = temp("cena-gpu");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    com_cena(&mut h, &proj);
+    let mut doc_rect = h.get_by_label("Vista da cena").rect();
+    let img = h.render().expect("render");
+    // O quadrado azul (#3FA7D6) aparece onde ele está na cena.
+    let q = objeto(&h, "quadrado");
+    let c = cena(&h).camera.to_screen(doc_rect, q.x, q.y);
+    let mut found = false;
+    for dy in -20..=20 {
+        for dx in -20..=20 {
+            let p = img.get_pixel((c.x as i32 + dx) as u32, (c.y as i32 + dy) as u32);
+            if (p[0] as i32 - 0x3F).abs() < 12
+                && (p[1] as i32 - 0xA7).abs() < 12
+                && (p[2] as i32 - 0xD6).abs() < 12
+            {
+                found = true;
+            }
+        }
+    }
+    doc_rect = doc_rect.shrink(4.0);
+    let fundo = img.get_pixel(doc_rect.left() as u32 + 4, doc_rect.bottom() as u32 - 4);
+    if let Some(d) = std::env::var_os("NN_STUDIO_TELAS") {
+        let _ = img.save(PathBuf::from(d).join("cena-gpu.png"));
+    }
+    assert!(found, "o quadrado não apareceu; fundo {fundo:?}");
 }
