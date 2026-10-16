@@ -56,10 +56,10 @@ return {
       x = 0, y = -180, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 2,
       components = {
-        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "body", body = "dynamic", shape = "box", w = 40, h = 60, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
         { type = "behavior", script = "nn:plataforma", coiote = 0.1, pulo = 860, pulo_variavel = true, pulos_no_ar = 0, velocidade = 320 },
-        { type = "behavior", script = "nn:animacao", andando = "5-8", caindo = "7", espelhar = true, fps = 10, parado = "1-2", pulando = "6" },
+        { type = "behavior", script = "nn:animacao", andando = "andar", caindo = "cair", espelhar = true, fps = 10, parado = "parado", pulando = "pular" },
         { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", cena = "", invencivel = 1, piscar = true, variavel = "vidas", vidas = 3 },
       },
     },

@@ -2,9 +2,11 @@
 //!
 //! Abre com o gerenciador de projetos (recentes, novo projeto a partir de um
 //! modelo, exemplos). Com um projeto aberto, mostra os arquivos, o editor de
-//! código Lua, visualizadores de imagem, som e mapa, o console e o botão
+//! código Lua, o editor de pixel art e animação, visualizadores de som e
+//! mapa, o console e o botão
 //! ▶ Jogar, que roda o jogo na própria janela dele.
 
+pub mod anim_file;
 pub mod app;
 pub mod behaviors;
 pub mod code;
@@ -22,6 +24,8 @@ pub mod hierarchy;
 pub mod inspector;
 pub mod launcher;
 pub mod lua_syntax;
+pub mod pixel_editor;
+pub mod pixel_ops;
 pub mod project;
 pub mod scene_data;
 pub mod scene_render;

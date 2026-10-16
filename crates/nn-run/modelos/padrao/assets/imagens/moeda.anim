@@ -1,0 +1,9 @@
+-- Animações de moeda.png (feitas no NN Studio).
+return {
+  format = 1,
+  frame_w = 16,
+  frame_h = 16,
+  animations = {
+    { name = "girar", frames = { 1, 2, 3, 4 }, fps = 8 },
+  },
+}

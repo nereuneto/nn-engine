@@ -34,6 +34,8 @@ pub enum PropType {
     Value,
     /// Comportamento ("plataforma", ou o caminho do script).
     Behavior,
+    /// Nome de uma animação da imagem (`.anim`).
+    Anim,
 }
 
 impl PropType {
@@ -52,6 +54,7 @@ impl PropType {
             "var" => Self::Var,
             "value" => Self::Value,
             "behavior" => Self::Behavior,
+            "anim" => Self::Anim,
             _ => Self::Text,
         }
     }

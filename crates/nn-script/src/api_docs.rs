@@ -86,7 +86,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.draw.sprite",
         "(img, x, y, opts)",
-        "Desenha uma imagem ou quadro (opts: frame, w, h, scale, rotation, color, alpha, flip_x, flip_y).",
+        "Desenha uma imagem ou quadro (opts: frame, w, h, scale, rotation, color, alpha, flip_x, flip_y, tile_w, tile_h).",
     ),
     d(
         "nn.draw.rect",
@@ -283,6 +283,12 @@ pub const API_DOCS: &[ApiDoc] = &[
         "nn.assets.read",
         "(caminho)",
         "Conteúdo de um arquivo de texto.",
+    ),
+    d("nn.assets.exists", "(caminho)", "O arquivo existe no jogo?"),
+    d(
+        "nn.assets.animations",
+        "(imagem)",
+        "As animações do .anim da imagem: { nome = animação } (use com nn.animator).",
     ),
     // Áudio
     d("nn.audio", "", "Sons e música."),

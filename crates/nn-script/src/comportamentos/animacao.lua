@@ -1,15 +1,19 @@
--- Troca os quadros da imagem conforme o objeto anda, pula ou cai.
+-- Troca os quadros da imagem conforme o objeto anda, pula ou cai. Cada estado
+-- aceita o nome de uma animação do .anim da imagem ("andar") ou uma lista de
+-- quadros ("3-6").
 local B = {
   title = "Animação automática",
   description = "Troca os quadros da imagem quando o objeto está parado, andando, pulando ou caindo.",
   category = "Aparência",
   requires = { "sprite" },
   props = {
-    { "parado", "1", label = "Quadros parado", help = "Separados por vírgula; 1-4 vai do 1 ao 4." },
-    { "andando", "", label = "Quadros andando" },
-    { "pulando", "", label = "Quadros pulando" },
-    { "caindo", "", label = "Quadros caindo" },
-    { "fps", 10, label = "Quadros por segundo", min = 0.1 },
+    { "parado", "1", type = "anim", label = "Parado",
+      help = "Uma animação da imagem, ou quadros separados por vírgula (1-4 vai do 1 ao 4)." },
+    { "andando", "", type = "anim", label = "Andando" },
+    { "pulando", "", type = "anim", label = "Pulando" },
+    { "caindo", "", type = "anim", label = "Caindo" },
+    { "fps", 10, label = "Quadros por segundo", min = 0.1,
+      help = "Para listas de quadros (as animações da imagem têm o seu próprio ritmo)." },
     { "espelhar", true, label = "Vira a imagem", help = "A imagem olha para onde está indo." },
   },
 }
@@ -38,9 +42,12 @@ function B:start()
   self.ultimo_x, self.ultimo_y = self.obj.x, self.obj.y
 end
 
-function B:quadros(estado)
+-- Os quadros do estado (ou o nome da animação), passando para o próximo
+-- estado quando este está vazio.
+function B:quadros(estado, anims)
   while estado do
-    local texto = self[estado] or ""
+    local texto = tostring(self[estado] or "")
+    if anims and anims.by_name[texto] then return nil, texto end
     local c = self.cache[estado]
     if not c or c.texto ~= texto then
       c = { texto = texto, lista = lista(texto) }
@@ -76,12 +83,17 @@ function B:update(dt)
   elseif math.abs(vx) > 5 then
     estado = "andando"
   end
-  local quadros = self:quadros(estado)
+  if self.espelhar and math.abs(vx) > 5 then spr.flip_x = vx < 0 end
+  local quadros, nome = self:quadros(estado, spr._anims)
+  if nome then
+    spr:play(nome)
+    return
+  end
   if #quadros == 0 then return end
   if estado ~= self.estado then self.estado, self.tempo = estado, 0 end
   self.tempo = self.tempo + dt
+  if spr.animation ~= "" and spr._anims then spr:stop() end
   spr.frame = quadros[math.floor(self.tempo * self.fps) % #quadros + 1]
-  if self.espelhar and math.abs(vx) > 5 then spr.flip_x = vx < 0 end
 end
 
 return B

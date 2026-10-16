@@ -19,11 +19,12 @@ use crate::files::{self, FileKind, FileTree};
 use crate::game::GameProcess;
 use crate::hierarchy::{HierarchyAction, HierarchyPanel};
 use crate::inspector::{Inspector, InspectorAction};
+use crate::pixel_editor::{PixelAction, PixelDoc};
 use crate::scene_render::{SceneRenderer, Sizes};
 use crate::scene_view::{SceneAction, SceneDoc, SceneEnv};
 use crate::settings::{Mode, Settings};
 use crate::theme;
-use crate::viewers::{ImageView, MapView, SoundView, ViewerAction};
+use crate::viewers::{MapView, SoundView, ViewerAction};
 
 /// Uma aba.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -54,6 +55,8 @@ impl Tab {
             FileKind::Map if lower.ends_with(".tmj") => Tab::Map(rel.into()),
             FileKind::Map => Tab::Code(rel.into()),
             FileKind::Image => Tab::Image(rel.into()),
+            // A aba da imagem (o .anim abre junto com ela, em open_file).
+            FileKind::Anim => Tab::Code(rel.into()),
             FileKind::Sound => Tab::Sound(rel.into()),
             FileKind::Folder | FileKind::Font | FileKind::Other => return None,
         })
@@ -100,6 +103,8 @@ pub enum NewKind {
     VisualScene,
     Module,
     Folder,
+    /// Imagem para o editor de pixel art.
+    Image,
 }
 
 impl NewKind {
@@ -109,6 +114,7 @@ impl NewKind {
             NewKind::VisualScene => "Nova cena visual",
             NewKind::Module => "Novo script (módulo)",
             NewKind::Folder => "Nova pasta",
+            NewKind::Image => "Nova imagem (pixel art)",
         }
     }
 
@@ -117,6 +123,7 @@ impl NewKind {
             NewKind::Scene | NewKind::VisualScene => "nova_cena",
             NewKind::Module => "util",
             NewKind::Folder => "nova_pasta",
+            NewKind::Image => "desenho",
         }
     }
 }
@@ -174,6 +181,18 @@ pub enum Action {
     },
     /// Comando para o jogo aberto ("pause", "resume", "step").
     GameCommand(&'static str),
+    /// Gravar a paleta do projeto (`paleta.hex`).
+    SavePalette,
+    /// Dar o foco a esta aba (clicaram dentro dela).
+    FocusTab(Tab),
+    /// Criar uma imagem nova para o componente `ci` do objeto `id`.
+    NewImageFor {
+        scene: String,
+        id: u32,
+        ci: usize,
+        /// Nome sugerido (o do objeto).
+        name: String,
+    },
 }
 
 enum Dialog {
@@ -183,6 +202,10 @@ enum Dialog {
         name: String,
         error: Option<String>,
         focus: bool,
+        /// Imagem: largura e altura do quadro e quantos quadros.
+        size: [u32; 3],
+        /// Imagem pedida pelo Inspetor: (cena, objeto, componente) que a usa.
+        assign: Option<(String, u32, usize)>,
     },
     ConfirmDelete(String),
     CloseTab(String),
@@ -231,7 +254,10 @@ pub struct ProjectWorkspace {
     pub files: FileTree,
     pub file_panel: FilePanel,
     pub docs: HashMap<String, CodeDoc>,
-    images: HashMap<String, ImageView>,
+    /// Imagens abertas no editor de pixel art.
+    pub pixels: HashMap<String, PixelDoc>,
+    /// Paleta do projeto (`paleta.hex`), lida na primeira vez.
+    palette: Option<Vec<crate::pixel_ops::Color>>,
     sounds: HashMap<String, SoundView>,
     maps: HashMap<String, MapView>,
     pub console: Console,
@@ -265,6 +291,8 @@ pub struct ProjectWorkspace {
     started: std::time::Instant,
     /// Quantas vezes o jogo foi aberto (▶ Jogar ou Testar daqui).
     pub plays: u64,
+    /// Imagens criadas com "Nova imagem" (o tutorial confere).
+    pub created_images: Vec<String>,
 }
 
 impl std::fmt::Debug for ProjectWorkspace {
@@ -327,7 +355,8 @@ impl ProjectWorkspace {
             files,
             file_panel: FilePanel::default(),
             docs: HashMap::new(),
-            images: HashMap::new(),
+            pixels: HashMap::new(),
+            palette: None,
             sounds: HashMap::new(),
             maps: HashMap::new(),
             console: Console::default(),
@@ -352,6 +381,7 @@ impl ProjectWorkspace {
             script_objects: None,
             started: std::time::Instant::now(),
             plays: 0,
+            created_images: Vec::new(),
         };
         ws.reload_config();
         ws.console.info(format!(
@@ -389,6 +419,12 @@ impl ProjectWorkspace {
                     .filter(|s| s.is_dirty())
                     .map(|s| s.rel.clone()),
             )
+            .chain(
+                self.pixels
+                    .values()
+                    .filter(|s| s.is_dirty())
+                    .map(|s| s.rel.clone()),
+            )
             .collect();
         v.sort();
         v
@@ -398,6 +434,7 @@ impl ProjectWorkspace {
     pub fn is_dirty(&self, rel: &str) -> bool {
         self.docs.get(rel).is_some_and(CodeDoc::is_dirty)
             || self.scenes.get(rel).is_some_and(SceneDoc::is_dirty)
+            || self.pixels.get(rel).is_some_and(PixelDoc::is_dirty)
     }
 
     /// O que o autocompletar precisa saber para o arquivo `rel`.
@@ -457,6 +494,7 @@ impl ProjectWorkspace {
     pub fn discard_changes(&mut self) {
         self.docs.clear();
         self.scenes.clear();
+        self.pixels.clear();
     }
 
     /// Relê o config.lua (tamanho da tela e cor de fundo da cena).
@@ -481,6 +519,12 @@ impl ProjectWorkspace {
             match scene.save(&self.root) {
                 Ok(()) => saved.push(scene.rel.clone()),
                 Err(e) => errors.push(format!("{}: {e}", scene.rel)),
+            }
+        }
+        for img in self.pixels.values_mut().filter(|s| s.is_dirty()) {
+            match img.save(&self.root) {
+                Ok(()) => saved.push(img.rel.clone()),
+                Err(e) => errors.push(format!("{}: {e}", img.rel)),
             }
         }
         saved.sort();
@@ -614,7 +658,7 @@ impl ProjectWorkspace {
                 }
             }
             Tab::Image(r) => {
-                self.images.remove(r);
+                self.pixels.remove(r);
             }
             Tab::Sound(r) => {
                 if let Some(mut s) = self.sounds.remove(r) {
@@ -657,6 +701,14 @@ impl ProjectWorkspace {
 
     /// Abre um arquivo na aba certa (ou no programa padrão).
     pub fn open_file(&mut self, rel: &str, line: Option<usize>) {
+        // As animações abrem na aba da imagem delas.
+        if FileKind::of(Path::new(rel)) == FileKind::Anim
+            && line.is_none()
+            && let Some(img) = self.image_of_anim(rel)
+        {
+            self.open_file(&img, None);
+            return;
+        }
         let Some(tab) = Tab::for_file(rel) else {
             self.open_external(rel);
             return;
@@ -730,6 +782,25 @@ impl ProjectWorkspace {
         match self.dock.find_active_focused() {
             Some((_, Tab::Scene(r))) => Some(r.clone()),
             Some((_, Tab::Hierarchy | Tab::Inspector | Tab::Events)) => active,
+            _ => None,
+        }
+    }
+
+    /// A imagem (PNG) de um arquivo `.anim`, se existir.
+    fn image_of_anim(&self, rel: &str) -> Option<String> {
+        let base = rel
+            .strip_suffix(".anim")
+            .or_else(|| rel.strip_suffix(".ANIM"))?;
+        ["png", "PNG"]
+            .iter()
+            .map(|e| format!("{base}.{e}"))
+            .find(|p| self.root.join(p).is_file())
+    }
+
+    /// Imagem com o foco (recebe Desfazer e Salvar).
+    fn focused_image(&mut self) -> Option<String> {
+        match self.dock.find_active_focused() {
+            Some((_, Tab::Image(r))) => Some(r.clone()),
             _ => None,
         }
     }
@@ -851,8 +922,16 @@ impl ProjectWorkspace {
                 doc.disk_changed(&root);
                 doc.check_now(&self.lua);
             }
-            if let Some(v) = self.images.get_mut(rel) {
-                v.reload();
+            if let Some(v) = self.pixels.get_mut(rel) {
+                v.disk_changed(&root);
+            }
+            // O .anim mudou fora: a imagem dele relê (se não houver nada a perder).
+            if FileKind::of(Path::new(rel)) == FileKind::Anim {
+                for v in self.pixels.values_mut() {
+                    if crate::anim_file::anim_path(&v.rel) == *rel {
+                        v.disk_changed(&root);
+                    }
+                }
             }
             if let Some(v) = self.sounds.get_mut(rel) {
                 v.reload();
@@ -930,7 +1009,15 @@ impl ProjectWorkspace {
             },
             Command::Stop => self.stop(),
             Command::Undo | Command::Redo => {
-                if let Some(rel) = self.focused_scene()
+                if let Some(rel) = self.focused_image()
+                    && let Some(doc) = self.pixels.get_mut(&rel)
+                {
+                    if cmd == Command::Undo {
+                        doc.undo();
+                    } else {
+                        doc.redo();
+                    }
+                } else if let Some(rel) = self.focused_scene()
                     && let Some(doc) = self.scenes.get_mut(&rel)
                 {
                     doc.begin_frame();
@@ -944,7 +1031,9 @@ impl ProjectWorkspace {
                 }
             }
             Command::Save => {
-                if let Some(rel) = self.focused_scene() {
+                if let Some(rel) = self.focused_image() {
+                    self.save_doc(&rel);
+                } else if let Some(rel) = self.focused_scene() {
                     self.save_doc(&rel);
                 } else if let Some(rel) = self.active_code() {
                     self.save_doc(&rel);
@@ -1019,7 +1108,7 @@ impl ProjectWorkspace {
                 let tab = self.dock.find_active_focused().map(|(_, t)| t.clone());
                 if let Some(tab) = tab {
                     match &tab {
-                        Tab::Code(r) | Tab::Scene(r) if self.is_dirty(r) => {
+                        Tab::Code(r) | Tab::Scene(r) | Tab::Image(r) if self.is_dirty(r) => {
                             self.dialog = Some(Dialog::CloseTab(r.clone()));
                         }
                         _ => self.close_tab(&tab),
@@ -1251,6 +1340,18 @@ impl ProjectWorkspace {
     }
 
     fn save_doc(&mut self, rel: &str) {
+        if let Some(img) = self.pixels.get_mut(rel) {
+            match img.save(&self.root) {
+                Ok(()) => {
+                    self.console.info(format!("Salvo: {rel}"));
+                    self.files.rescan();
+                }
+                Err(e) => self
+                    .console
+                    .error(format!("Não foi possível salvar {rel}: {e}")),
+            }
+            return;
+        }
         if let Some(scene) = self.scenes.get_mut(rel) {
             match scene.save(&self.root) {
                 Ok(()) => {
@@ -1316,6 +1417,24 @@ impl ProjectWorkspace {
                         name: kind.default_name().into(),
                         error: None,
                         focus: true,
+                        size: [16, 16, 1],
+                        assign: None,
+                    });
+                }
+                Action::NewImageFor {
+                    scene,
+                    id,
+                    ci,
+                    name,
+                } => {
+                    self.dialog = Some(Dialog::NewItem {
+                        kind: NewKind::Image,
+                        parent: crate::file_panel::image_dir(&self.files, ""),
+                        name: files::safe_name(&name),
+                        error: None,
+                        focus: true,
+                        size: [16, 16, 1],
+                        assign: Some((scene, id, ci)),
                     });
                 }
                 Action::Import { dest } => {
@@ -1356,6 +1475,29 @@ impl ProjectWorkspace {
                 Action::CreateSceneScript(rel) => self.create_scene_script(&rel),
                 Action::NewBehaviorScript { scene, id } => self.new_behavior_script(&scene, id),
                 Action::CreatePrefab { id, dir } => self.create_prefab(id, dir),
+                Action::FocusTab(tab) => {
+                    if let Some(path) = self.dock.find_tab(&tab) {
+                        self.dock.set_focused_node_and_surface(path.node_path());
+                    }
+                }
+                Action::SavePalette => {
+                    let text: String = self
+                        .palette
+                        .iter()
+                        .flatten()
+                        .map(|c| crate::pixel_ops::to_hex(*c) + "\n")
+                        .collect();
+                    let path = self.root.join(crate::pixel_editor::PROJECT_PALETTE);
+                    match std::fs::write(&path, text) {
+                        Ok(()) => {
+                            self.files.rescan();
+                        }
+                        Err(e) => self.console.error(format!(
+                            "Não foi possível salvar {}: {e}",
+                            crate::pixel_editor::PROJECT_PALETTE
+                        )),
+                    }
+                }
                 Action::GameCommand(cmd) => {
                     if let Some(g) = &mut self.game {
                         g.send(&serde_json::json!({ "cmd": cmd }).to_string());
@@ -1439,8 +1581,16 @@ impl ProjectWorkspace {
                         *slot = Some(n);
                     }
                 }
+                let pixels: Vec<String> = self.pixels.keys().cloned().collect();
+                for k in pixels {
+                    if let Some(n) = fix(&k)
+                        && let Some(mut d) = self.pixels.remove(&k)
+                    {
+                        d.rel = n.clone();
+                        self.pixels.insert(n, d);
+                    }
+                }
                 // Visualizadores abrem de novo com o caminho novo.
-                self.images.retain(|k, _| fix(k).is_none());
                 self.maps.retain(|k, _| fix(k).is_none());
                 self.sounds.retain(|k, _| fix(k).is_none());
                 if let Some(f) = &self.focused_code
@@ -1549,7 +1699,12 @@ impl ProjectWorkspace {
                 files: &self.files,
                 file_panel: &mut self.file_panel,
                 docs: &mut self.docs,
-                images: &mut self.images,
+                pixels: &mut self.pixels,
+                palette: self.palette.get_or_insert_with(|| {
+                    std::fs::read_to_string(self.root.join(crate::pixel_editor::PROJECT_PALETTE))
+                        .map(|t| crate::pixel_ops::parse_hex_list(&t))
+                        .unwrap_or_default()
+                }),
                 sounds: &mut self.sounds,
                 maps: &mut self.maps,
                 console: &mut self.console,
@@ -1677,6 +1832,8 @@ impl ProjectWorkspace {
                 name,
                 error,
                 focus,
+                size,
+                assign,
             } => {
                 let kind = *kind;
                 let dirs: Vec<String> = std::iter::once(String::new())
@@ -1712,7 +1869,30 @@ impl ProjectWorkspace {
                     });
                     let mut file_name = name.trim().to_string();
                     if kind != NewKind::Folder && Path::new(&file_name).extension().is_none() {
-                        file_name.push_str(if kind == NewKind::VisualScene { ".cena" } else { ".lua" });
+                        file_name.push_str(match kind {
+                            NewKind::VisualScene => ".cena",
+                            NewKind::Image => ".png",
+                            _ => ".lua",
+                        });
+                    }
+                    if kind == NewKind::Image {
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            ui.label("Tamanho:");
+                            ui.add(egui::DragValue::new(&mut size[0]).range(1..=1024).suffix(" px"));
+                            ui.label("×");
+                            ui.add(egui::DragValue::new(&mut size[1]).range(1..=1024).suffix(" px"));
+                            for s in crate::pixel_editor::FRAME_SIZES {
+                                if ui.small_button(s.to_string()).clicked() {
+                                    *size = [s, s, size[2]];
+                                }
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Quadros:");
+                            ui.add(egui::DragValue::new(&mut size[2]).range(1..=64));
+                            ui.weak("(mais de um: uma folha para animar; dá para mudar depois)");
+                        });
                     }
                     let rel = files::join_rel(parent, &file_name);
                     ui.weak(format!("Será criado: {rel}"));
@@ -1721,6 +1901,9 @@ impl ProjectWorkspace {
                     }
                     if kind == NewKind::VisualScene {
                         ui.weak("Monte a cena arrastando imagens, mapas e sons para ela. Se precisar de código, crie o script dela no Inspetor.");
+                    }
+                    if kind == NewKind::Image {
+                        ui.weak("Abre no editor de pixel art. 16 × 16 é um bom tamanho para personagens e itens.");
                     }
                     if let Some(e) = error {
                         ui.colored_label(theme::ERROR, e.as_str());
@@ -1735,6 +1918,10 @@ impl ProjectWorkspace {
                                 NewKind::Scene => files::create_file(&self.root, parent, name, &files::scene_template(&rel)),
                                 NewKind::VisualScene => files::create_file(&self.root, parent, &file_name, &files::visual_scene_template()),
                                 NewKind::Module => files::create_file(&self.root, parent, name, &files::module_template(&rel)),
+                                NewKind::Image => {
+                                    let [w, h, n] = *size;
+                                    create_image(&self.root, &rel, w, h, n)
+                                }
                             };
                             match result {
                                 Ok(rel) => created = Some(rel),
@@ -1753,6 +1940,44 @@ impl ProjectWorkspace {
                     close = true;
                     self.console.info(format!("Criado: {rel}"));
                     self.files.rescan();
+                    if kind == NewKind::Image {
+                        self.created_images.push(rel.clone());
+                    }
+                    if let Some((scene, id, ci)) = assign.take() {
+                        let [w, h, n] = *size;
+                        if let Some(doc) = self.scenes.get_mut(&scene) {
+                            doc.begin_frame();
+                            doc.record(None);
+                            if let Some(c) =
+                                doc.data.find_mut(id).and_then(|o| o.components.get_mut(ci))
+                            {
+                                c.set("image", crate::scene_data::Prop::Str(rel.clone()));
+                                c.set(
+                                    "frame_w",
+                                    crate::scene_data::Prop::Num(if n > 1 {
+                                        w as f64
+                                    } else {
+                                        0.0
+                                    }),
+                                );
+                                c.set(
+                                    "frame_h",
+                                    crate::scene_data::Prop::Num(if n > 1 {
+                                        h as f64
+                                    } else {
+                                        0.0
+                                    }),
+                                );
+                                c.set("frame", crate::scene_data::Prop::Num(1.0));
+                                // Pixel art pequena aparece maior na cena.
+                                if c.num("w") <= 0.0 && w <= 64 {
+                                    c.set("w", crate::scene_data::Prop::Num(w as f64 * 4.0));
+                                    c.set("h", crate::scene_data::Prop::Num(h as f64 * 4.0));
+                                }
+                            }
+                            doc.end_frame();
+                        }
+                    }
                     if kind == NewKind::Folder {
                         self.file_panel.reveal(rel);
                     } else {
@@ -2072,6 +2297,78 @@ fn drop_overlay(ctx: &egui::Context, dest: Option<String>) {
     );
 }
 
+/// O tamanho de quadro que as cenas e prefabs usam para a imagem `rel`.
+fn frame_hint(
+    root: &Path,
+    files: &FileTree,
+    open: &HashMap<String, SceneDoc>,
+    rel: &str,
+) -> Option<(u32, u32)> {
+    fn find_in(objects: &[crate::scene_data::Object], rel: &str) -> Option<(u32, u32)> {
+        let mut found = None;
+        crate::scene_data::visit(objects, &mut |o| {
+            for c in &o.components {
+                if found.is_none()
+                    && c.kind == "sprite"
+                    && c.str("image") == rel
+                    && c.num("frame_w") > 0.0
+                    && c.num("frame_h") > 0.0
+                {
+                    found = Some((c.num("frame_w") as u32, c.num("frame_h") as u32));
+                }
+            }
+        });
+        found
+    }
+    if let Some(f) = open.values().find_map(|d| find_in(&d.data.objects, rel)) {
+        return Some(f);
+    }
+    for e in files
+        .files_of(FileKind::Scene)
+        .chain(files.files_of(FileKind::Prefab))
+    {
+        let Ok(text) = std::fs::read_to_string(root.join(&e.rel)) else {
+            continue;
+        };
+        if !text.contains(rel) {
+            continue;
+        }
+        let found = if e.rel.ends_with(".prefab") {
+            crate::scene_data::read_prefab(&text, &e.rel)
+                .ok()
+                .and_then(|o| find_in(std::slice::from_ref(&o), rel))
+        } else {
+            crate::scene_data::read(&text, &e.rel)
+                .ok()
+                .and_then(|s| find_in(&s.objects, rel))
+        };
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
+}
+
+/// Cria um PNG transparente (e o `.anim` com o tamanho do quadro, se tiver
+/// mais de um quadro).
+fn create_image(root: &Path, rel: &str, w: u32, h: u32, frames: u32) -> Result<String, String> {
+    let path = root.join(rel);
+    if path.exists() {
+        return Err(format!("Já existe um arquivo {rel}."));
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let (img, anim) = crate::pixel_editor::blank(w, h, frames);
+    img.save_with_format(&path, image::ImageFormat::Png)
+        .map_err(|e| format!("Não foi possível criar a imagem: {e}"))?;
+    if frames > 1 {
+        let anim_rel = crate::anim_file::anim_path(rel);
+        std::fs::write(root.join(&anim_rel), anim.write(rel)).map_err(|e| e.to_string())?;
+    }
+    Ok(rel.to_string())
+}
+
 /// Desenha cada aba.
 struct Viewer<'a> {
     root: &'a Path,
@@ -2079,7 +2376,8 @@ struct Viewer<'a> {
     files: &'a FileTree,
     file_panel: &'a mut FilePanel,
     docs: &'a mut HashMap<String, CodeDoc>,
-    images: &'a mut HashMap<String, ImageView>,
+    pixels: &'a mut HashMap<String, PixelDoc>,
+    palette: &'a mut Vec<crate::pixel_ops::Color>,
     sounds: &'a mut HashMap<String, SoundView>,
     maps: &'a mut HashMap<String, MapView>,
     console: &'a mut Console,
@@ -2139,6 +2437,7 @@ impl TabViewer for Viewer<'_> {
                 let name = r.rsplit('/').next().unwrap_or(r).to_string();
                 if self.docs.get(r.as_str()).is_some_and(CodeDoc::is_dirty)
                     || self.scenes.get(r.as_str()).is_some_and(SceneDoc::is_dirty)
+                    || self.pixels.get(r.as_str()).is_some_and(PixelDoc::is_dirty)
                 {
                     format!("{name} •")
                 } else {
@@ -2183,8 +2482,12 @@ impl TabViewer for Viewer<'_> {
                 self.docs.remove(r.as_str());
                 OnCloseResponse::Close
             }
+            Tab::Image(r) if self.pixels.get(r.as_str()).is_some_and(PixelDoc::is_dirty) => {
+                self.actions.push(Action::AskCloseTab(r.clone()));
+                OnCloseResponse::Ignore
+            }
             Tab::Image(r) => {
-                self.images.remove(r.as_str());
+                self.pixels.remove(r.as_str());
                 OnCloseResponse::Close
             }
             Tab::Sound(r) => {
@@ -2274,10 +2577,25 @@ impl TabViewer for Viewer<'_> {
                 }
             }
             Tab::Image(rel) => {
-                let path = self.root.join(rel.as_str());
-                let view = self.images.entry(rel.clone()).or_default();
-                if let Some(a) = view.ui(ui, &path, rel) {
-                    self.viewer_action(a);
+                if !self.pixels.contains_key(rel.as_str()) {
+                    let mut doc = PixelDoc::open(self.root, rel);
+                    if let Some((w, h)) = frame_hint(self.root, self.files, self.scenes, rel) {
+                        doc.hint_frame_size(w, h);
+                    }
+                    self.pixels.insert(rel.clone(), doc);
+                }
+                let doc = self.pixels.get_mut(rel.as_str()).expect("imagem aberta");
+                // Clicar na imagem dá o foco à aba (Ctrl+Z, Ctrl+S vêm para cá).
+                if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(ui.max_rect())
+                {
+                    self.actions.push(Action::FocusTab(Tab::Image(rel.clone())));
+                }
+                for a in doc.ui(ui, self.palette) {
+                    match a {
+                        PixelAction::Save => self.actions.push(Action::SaveDoc(rel.clone())),
+                        PixelAction::CopyText(t) => self.actions.push(Action::CopyText(t)),
+                        PixelAction::SavePalette => self.actions.push(Action::SavePalette),
+                    }
                 }
             }
             Tab::Sound(rel) => {
@@ -2316,9 +2634,16 @@ impl TabViewer for Viewer<'_> {
                     .active_scene
                     .as_deref()
                     .and_then(|r| self.scenes.get_mut(r));
+                let anim_files: Vec<String> = self
+                    .files
+                    .files_of(FileKind::Anim)
+                    .map(|e| e.rel.clone())
+                    .collect();
+                let anims = self.sizes.anims.all_names(self.root, &anim_files);
                 let env = crate::events_view::EventsEnv {
                     files: self.files,
                     vars: self.vars,
+                    anims: &anims,
                 };
                 for a in self.events.ui(ui, doc, &env) {
                     match a {
@@ -2355,6 +2680,16 @@ impl TabViewer for Viewer<'_> {
                                 self.actions.push(Action::NewBehaviorScript {
                                     scene: r.clone(),
                                     id,
+                                });
+                            }
+                        }
+                        InspectorAction::NewImage { id, ci, name } => {
+                            if let Some(r) = &active {
+                                self.actions.push(Action::NewImageFor {
+                                    scene: r.clone(),
+                                    id,
+                                    ci,
+                                    name,
                                 });
                             }
                         }
@@ -2395,6 +2730,18 @@ impl Viewer<'_> {
                 SceneAction::OpenAsText => self.actions.push(Action::OpenAsText(rel.to_string())),
                 SceneAction::Game(cmd) => self.actions.push(Action::GameCommand(cmd)),
             }
+        }
+        // Objetos com animação tocam na cena do editor também.
+        let mut animated = false;
+        crate::scene_data::visit(&doc.data.objects, &mut |o| {
+            animated |= o
+                .components
+                .iter()
+                .any(|c| c.kind == "sprite" && !c.str("animation").is_empty());
+        });
+        if animated {
+            ui.ctx()
+                .request_repaint_after(std::time::Duration::from_millis(33));
         }
         // Clicou nesta cena: a Hierarquia e o Inspetor passam a mostrá-la.
         if ui.ui_contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {

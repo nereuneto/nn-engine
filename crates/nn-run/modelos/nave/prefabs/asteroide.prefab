@@ -7,7 +7,7 @@ return {
     x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
     visible = true, layer = 2,
     components = {
-      { type = "sprite", image = "assets/imagens/asteroide.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+      { type = "sprite", image = "assets/imagens/asteroide.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
       { type = "behavior", script = "nn:perigo", empurrao = 0, some = true },
       { type = "behavior", script = "nn:movimento", tipo = "girar", velocidade = 60 },
     },

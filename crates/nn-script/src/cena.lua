@@ -21,7 +21,8 @@ M.FIELDS = {
   sprite = {
     { "image", "" }, { "frame_w", 0 }, { "frame_h", 0 }, { "frame", 1 },
     { "w", 0 }, { "h", 0 }, { "color", "#FFFFFF" }, { "flip_x", false },
-    { "flip_y", false }, { "pixel_art", true }, { "hud", false },
+    { "flip_y", false }, { "pixel_art", true }, { "fill", "stretch" }, { "animation", "" },
+    { "hud", false },
   },
   text = {
     { "text", "Texto" }, { "size", 32 }, { "color", "#FFFFFF" }, { "anchor", "center" },
@@ -78,6 +79,9 @@ local function defaults(kind)
   return list
 end
 
+local Sprite = {}
+Sprite.__index = Sprite
+
 local function copy_component(src)
   if src.type == M.BEHAVIOR then
     local c = {}
@@ -91,7 +95,171 @@ local function copy_component(src)
     if v == nil then v = f[2] end
     c[f[1]] = v
   end
+  if c.type == "sprite" then setmetatable(c, Sprite) end
   return c
+end
+
+-- Animações (arquivo .anim ao lado da imagem) ------------------------------
+--
+-- heroi.png → heroi.anim: o tamanho do quadro e as animações com nome.
+--
+--   return {
+--     format = 1, frame_w = 16, frame_h = 16,
+--     animations = {
+--       { name = "andar", frames = { 3, 4, 5, 6 }, fps = 10 },
+--       { name = "pulo", frames = { 7, 8 }, fps = 8, mode = "once", times = { 0.1, 0.3 } },
+--     },
+--   }
+
+M.ANIM_EXTENSION = "anim"
+
+--- Caminho do .anim de uma imagem (ou o próprio caminho, se já for .anim).
+function M.anim_path(image)
+  if image:lower():match("%.anim$") then return image end
+  local base = image:gsub("%.[^./\\]*$", "")
+  return base .. ".anim"
+end
+
+--- Lê e confere um .anim. Devolve { frame_w, frame_h, list, by_name }.
+function M.parse_anims(data, path)
+  if type(data) ~= "table" then error(path .. ": o .anim deve devolver uma tabela", 0) end
+  local out = {
+    frame_w = tonumber(data.frame_w) or 0, frame_h = tonumber(data.frame_h) or 0,
+    list = {}, by_name = {},
+  }
+  for i, a in ipairs(data.animations or {}) do
+    local name = tostring(a.name or ("animacao" .. i))
+    local frames = {}
+    for _, f in ipairs(a.frames or {}) do
+      local n = math.floor(tonumber(f) or 0)
+      if n >= 1 then table.insert(frames, n) end
+    end
+    if #frames == 0 then frames = { 1 } end
+    local fps = tonumber(a.fps) or 10
+    if fps <= 0 then fps = 10 end
+    local mode = a.mode or "loop"
+    if mode ~= "loop" and mode ~= "once" and mode ~= "pingpong" then
+      error(("%s: animação \"%s\": modo \"%s\" não existe (use loop, once ou pingpong)")
+        :format(path, name, tostring(mode)), 0)
+    end
+    local times = {}
+    for k = 1, #frames do
+      local v = a.times and tonumber(a.times[k])
+      times[k] = (v and v > 0) and v or 1 / fps
+    end
+    -- A passada completa: no pingpong, volta pelos do meio.
+    local seq = {}
+    for k = 1, #frames do table.insert(seq, k) end
+    if mode == "pingpong" then
+      for k = #frames - 1, 2, -1 do table.insert(seq, k) end
+    end
+    local total = 0
+    for _, k in ipairs(seq) do total = total + times[k] end
+    local anim = { name = name, frames = frames, fps = fps, mode = mode, times = times,
+      seq = seq, total = total }
+    table.insert(out.list, anim)
+    out.by_name[name] = anim
+  end
+  return out
+end
+
+--- As animações de uma imagem (lidas uma vez por cena), ou nil sem .anim.
+function M.load_anims(scene, image)
+  if image == nil or image == "" then return nil end
+  local path = M.anim_path(image)
+  scene._anims = scene._anims or {}
+  local cached = scene._anims[path]
+  if cached == nil then
+    cached = false
+    if nn.assets.exists(path) then
+      cached = M.parse_anims(M.load_data(path, "arquivo de animações"), path)
+    end
+    scene._anims[path] = cached
+  end
+  return cached or nil
+end
+
+--- Quadro da animação no instante t (e se ela já terminou).
+function M.anim_frame(anim, t)
+  if anim.mode == "once" then
+    if t >= anim.total then return anim.frames[#anim.frames], true end
+  else
+    t = t % anim.total
+  end
+  for _, k in ipairs(anim.seq) do
+    if t < anim.times[k] then return anim.frames[k], false end
+    t = t - anim.times[k]
+  end
+  return anim.frames[anim.seq[#anim.seq]], anim.mode == "once"
+end
+
+local function anim_names(anims)
+  local names = {}
+  for _, a in ipairs(anims.list) do table.insert(names, a.name) end
+  return table.concat(names, ", ")
+end
+
+--- Toca uma animação do .anim da imagem: obj.sprite:play("andar").
+--- Se já estiver tocando, continua (`restart = true` começa de novo).
+function Sprite:play(name, restart)
+  local anims = self._anims
+  if not anims then
+    error(("a imagem \"%s\" não tem animações (crie %s no NN Studio)")
+      :format(self.image, M.anim_path(self.image)), 2)
+  end
+  if not anims.by_name[name] then
+    error(("a animação \"%s\" não existe em %s (tem: %s)")
+      :format(tostring(name), M.anim_path(self.image), anim_names(anims)), 2)
+  end
+  if restart or self.animation ~= name or self._anim_name ~= name then
+    self.animation, self._anim_name, self._anim_time, self._anim_done = name, name, 0, false
+    self.frame = anims.by_name[name].frames[1]
+  end
+end
+
+--- Para a animação (o quadro atual fica).
+function Sprite:stop()
+  self.animation, self._anim_name = "", nil
+end
+
+--- A animação (de modo "once") chegou ao fim?
+function Sprite:finished()
+  return self._anim_done == true
+end
+
+--- Nomes das animações da imagem.
+function Sprite:animations()
+  local out = {}
+  for _, a in ipairs((self._anims or { list = {} }).list) do table.insert(out, a.name) end
+  return out
+end
+
+-- Avança as animações dos objetos; avisa quem termina ("animacao_terminou").
+local function update_animations(scene, dt)
+  for _, o in ipairs(scene.object_list) do
+    if o.alive then
+      for _, c in ipairs(o.components) do
+        local anims = c._anims
+        if anims and c.animation ~= "" then
+          local anim = anims.by_name[c.animation]
+          if anim then
+            if c._anim_name ~= c.animation then
+              -- Mudou por fora (obj.sprite.animation = "x" ou pelo editor).
+              c._anim_name, c._anim_time, c._anim_done = c.animation, 0, false
+            else
+              c._anim_time = (c._anim_time or 0) + dt
+            end
+            local frame, done = M.anim_frame(anim, c._anim_time)
+            c.frame = frame
+            if done and not c._anim_done then
+              c._anim_done = true
+              o:send("animacao_terminou", anim.name)
+            end
+          end
+        end
+      end
+    end
+  end
 end
 
 -- Objetos -------------------------------------------------------------------
@@ -263,6 +431,8 @@ local function load_data(path, what)
   end
   return data
 end
+
+M.load_data = function(...) return load_data(...) end
 
 --- O objeto guardado num .prefab (lido uma vez por cena).
 function M.load_prefab(scene, path)
@@ -554,6 +724,15 @@ function M.prepare(scene, o, c, live)
   local t = c.type
   if t == "sprite" then
     c._img, c._sheet = nil, false
+    c._anims = M.load_anims(scene, c.image)
+    if c._anims and c.frame_w <= 0 and c.frame_h <= 0 and c._anims.frame_w > 0 then
+      -- Sem tamanho de quadro no componente: o do .anim.
+      c.frame_w, c.frame_h = c._anims.frame_w, c._anims.frame_h
+    end
+    if c._anims and c.animation ~= "" and not c._anims.by_name[c.animation] then
+      error(("objeto \"%s\": a animação \"%s\" não existe em %s (tem: %s)")
+        :format(o.name, c.animation, M.anim_path(c.image), anim_names(c._anims)), 0)
+    end
     if c.image ~= "" then
       if c.frame_w > 0 and c.frame_h > 0 then
         c._img = nn.assets.sheet(c.image, c.frame_w, c.frame_h, { pixel_art = c.pixel_art })
@@ -655,6 +834,7 @@ function M.setup(scene, data, path)
   scene._by_id, scene._by_body = {}, {}
   scene._camera, scene._first_map = nil, nil
   scene._prefabs, scene._defs, scene._fx, scene._next_id = nil, nil, nil, nil
+  scene._anims = nil
   scene._gravity = data.gravity or -1800
   M.events.setup(scene, data, path)
   scene.background = (data.background ~= nil and data.background ~= "") and data.background or nil
@@ -798,6 +978,7 @@ function M.update(scene, dt)
   refresh_list(scene)
   M.events.step(scene, dt)
   refresh_list(scene)
+  update_animations(scene, dt)
   for _, o in ipairs(scene.object_list) do
     if o.particles then
       local x, y = o:world_transform()
@@ -825,17 +1006,25 @@ local function draw_object(o, alpha)
       local w, h = c.w, c.h
       if w <= 0 then w = c._sheet and c.frame_w or c._img.width end
       if h <= 0 then h = c._sheet and c.frame_h or c._img.height end
+      -- Repetir: cada cópia tem o tamanho do componente; a escala do objeto
+      -- diz quantas cópias cabem.
+      local tw, th
+      if c.fill == "repeat" then tw, th = w, h end
+      local frame = nil
+      if c._sheet then
+        frame = math.max(1, math.min(math.floor(c.frame), c._img.count))
+      end
       if c.hud then
         nn.screen.sprite(c._img, hx, hy, {
-          frame = c._sheet and c.frame or nil, origin_x = 0.5, origin_y = 0.5,
+          frame = frame, origin_x = 0.5, origin_y = 0.5,
           w = w * sx, h = h * sy, rotation = -rot * DEG,
-          color = c.color, flip_x = c.flip_x, flip_y = c.flip_y,
+          color = c.color, flip_x = c.flip_x, flip_y = c.flip_y, tile_w = tw, tile_h = th,
         })
       else
         nn.draw.sprite(c._img, x, y, {
-          frame = c._sheet and c.frame or nil,
+          frame = frame,
           w = w * sx, h = h * sy, rotation = rot * DEG,
-          color = c.color, flip_x = c.flip_x, flip_y = c.flip_y,
+          color = c.color, flip_x = c.flip_x, flip_y = c.flip_y, tile_w = tw, tile_h = th,
         })
       end
     elseif t == "shape" then

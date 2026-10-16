@@ -20,6 +20,8 @@ pub enum FileKind {
     /// Prefab: objeto pronto para várias cenas (`.prefab`).
     Prefab,
     Image,
+    /// Animações de uma imagem (`heroi.anim`, ao lado de `heroi.png`).
+    Anim,
     Sound,
     Map,
     Tileset,
@@ -38,6 +40,7 @@ impl FileKind {
             "lua" => FileKind::Lua,
             "cena" => FileKind::Scene,
             "prefab" => FileKind::Prefab,
+            "anim" => FileKind::Anim,
             "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" => FileKind::Image,
             "wav" | "ogg" | "mp3" | "flac" => FileKind::Sound,
             "tmj" | "tmx" => FileKind::Map,
@@ -56,6 +59,7 @@ impl FileKind {
             FileKind::Scene => "cena visual",
             FileKind::Prefab => "prefab",
             FileKind::Image => "imagem",
+            FileKind::Anim => "animações",
             FileKind::Sound => "som",
             FileKind::Map => "mapa",
             FileKind::Tileset => "tileset",
@@ -402,6 +406,32 @@ pub fn parent_dir(rel: &str, is_dir: bool) -> String {
 }
 
 /// Junta pasta relativa e nome.
+/// Um nome de arquivo a partir de um texto qualquer ("Herói 2" → "heroi_2").
+pub fn safe_name(text: &str) -> String {
+    let mut out = String::new();
+    for c in text.trim().chars() {
+        let c = match c {
+            'á' | 'à' | 'â' | 'ã' | 'Á' | 'À' | 'Â' | 'Ã' => 'a',
+            'é' | 'ê' | 'É' | 'Ê' => 'e',
+            'í' | 'Í' => 'i',
+            'ó' | 'ô' | 'õ' | 'Ó' | 'Ô' | 'Õ' => 'o',
+            'ú' | 'Ú' => 'u',
+            'ç' | 'Ç' => 'c',
+            c if c.is_ascii_alphanumeric() || c == '-' || c == '_' => c.to_ascii_lowercase(),
+            _ => '_',
+        };
+        if !(c == '_' && out.ends_with('_')) {
+            out.push(c);
+        }
+    }
+    let out = out.trim_matches('_').to_string();
+    if out.is_empty() {
+        "desenho".into()
+    } else {
+        out
+    }
+}
+
 pub fn join_rel(dir: &str, name: &str) -> String {
     if dir.is_empty() {
         name.to_string()

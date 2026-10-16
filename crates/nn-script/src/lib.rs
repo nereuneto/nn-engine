@@ -71,6 +71,9 @@ pub const SCENE_EXTENSION: &str = "cena";
 /// Extensão dos prefabs (um objeto pronto para usar em várias cenas).
 pub const PREFAB_EXTENSION: &str = "prefab";
 
+/// Extensão das animações de uma imagem (`heroi.png` → `heroi.anim`).
+pub const ANIM_EXTENSION: &str = "anim";
+
 /// Comportamentos prontos (`"nn:<id>"` no componente `behavior`): id e
 /// código Lua. O NN Studio lê as propriedades de cada um.
 pub const BEHAVIORS: &[(&str, &str)] = &[
@@ -124,6 +127,21 @@ end
 "#;
 /// Chave do registro Lua com o módulo das cenas visuais.
 const SCENE_RUNTIME_KEY: &str = "nn.cena";
+
+/// `nn.assets.animations(imagem)`: as animações do `.anim` da imagem, prontas
+/// para `nn.animator` (usa a mesma leitura das cenas visuais).
+const ANIMATIONS_LUA: &str = r#"
+local cena = ...
+function nn.assets.animations(image)
+  local path = cena.anim_path(image)
+  local data = cena.parse_anims(cena.load_data(path, "arquivo de animações"), path)
+  local out = {}
+  for _, a in ipairs(data.list) do
+    out[a.name] = nn.animation(a.frames, a.fps, a.mode, a.times)
+  end
+  return out
+end
+"#;
 
 /// Erro ao preparar o ambiente Lua.
 #[derive(Debug)]
@@ -200,6 +218,9 @@ impl ScriptRuntime {
             .set_name("@nn/eventos.lua")
             .call(scene_runtime.clone())?;
         scene_runtime.set("events", events)?;
+        lua.load(ANIMATIONS_LUA)
+            .set_name("@nn/animacoes.lua")
+            .call::<()>(scene_runtime.clone())?;
         lua.set_named_registry_value(SCENE_RUNTIME_KEY, scene_runtime)?;
         let vars = config_vars(&lua, source.as_ref());
         lua.load(VARS_LUA)
@@ -249,6 +270,7 @@ impl ScriptRuntime {
         let mut files = self.inner.source.files("lua");
         files.extend(self.inner.source.files(SCENE_EXTENSION));
         files.extend(self.inner.source.files(PREFAB_EXTENSION));
+        files.extend(self.inner.source.files(ANIM_EXTENSION));
         for (path, _) in files {
             let result = self
                 .inner
@@ -363,6 +385,7 @@ impl ScriptRuntime {
         let mut files = self.inner.source.files("lua");
         files.extend(self.inner.source.files(SCENE_EXTENSION));
         files.extend(self.inner.source.files(PREFAB_EXTENSION));
+        files.extend(self.inner.source.files(ANIM_EXTENSION));
         files.sort();
         files
     }

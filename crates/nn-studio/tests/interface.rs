@@ -1487,3 +1487,157 @@ fn tutorial_de_eventos_avanca_com_as_regras() {
     h.run_steps(2);
     assert!(h.state().tutorial.is_none());
 }
+
+/// Segura o botão do mouse e passa pelos pontos (um traço de lápis).
+fn traco(h: &mut Harness<'_, StudioApp>, pontos: &[egui::Pos2]) {
+    let ev = |h: &mut Harness<'_, StudioApp>, e: egui::Event| h.input_mut().events.push(e);
+    let botao = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: Modifiers::NONE,
+    };
+    ev(h, egui::Event::PointerMoved(pontos[0]));
+    h.step();
+    ev(h, botao(pontos[0], true));
+    h.step();
+    for p in &pontos[1..] {
+        ev(h, egui::Event::PointerMoved(*p));
+        h.step();
+    }
+    ev(h, botao(*pontos.last().unwrap(), false));
+    h.step();
+}
+
+#[test]
+fn tutorial_desenhe_seu_heroi_com_o_editor_de_pixel_art() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    let dir = temp("tutorial-pixel");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("desenhe-seu-heroi");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/desenhe-seu-heroi");
+    assert!(projeto.join("cenas/fase.cena").is_file());
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 1);
+
+    // ➕ Novo > Imagem (pixel art): o diálogo cria o PNG e abre o editor.
+    h.get_by_label("➕ Novo").click();
+    h.run_steps(2);
+    h.get_by_label("🎨 Imagem (pixel art)").click();
+    h.run_steps(2);
+    h.key_press(Key::Enter);
+    espera(&mut h, 2);
+    let rel = "assets/imagens/desenho.png";
+    assert_eq!(h.state().project().unwrap().created_images, [rel]);
+    assert!(projeto.join(rel).is_file());
+    assert!(tabs(&h).contains(&Tab::Image(rel.into())));
+    tela(&mut h, "pixel-novo");
+
+    // Desenhar com o mouse: um traço na tela do editor.
+    let tela_rect = nn_studio::tutorial::anchor_rect(&h.ctx, "pixel:tela").expect("tela do editor");
+    let c = tela_rect.center();
+    let doc = |h: &Harness<'_, StudioApp>| {
+        h.state()
+            .project()
+            .unwrap()
+            .pixels
+            .get(rel)
+            .unwrap()
+            .img
+            .clone()
+    };
+    // 16 × 16 ajustado na tela: cada pixel tem vários pontos da tela.
+    let passo = (tela_rect.height() - 24.0) / 16.0;
+    let linha: Vec<egui::Pos2> = (-6..=6)
+        .map(|i| c + egui::vec2(i as f32 * passo, 0.0))
+        .collect();
+    traco(&mut h, &linha);
+    let pintados = doc(&h).pixels().filter(|p| p.0[3] > 0).count();
+    assert!(pintados >= 12, "o traço pintou {pintados} pixels");
+    // O resto do desenho (e as cores), direto na imagem.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let d = ws.pixels.get_mut(rel).unwrap();
+        for (i, cor) in [[255, 0, 0, 255], [0, 0, 255, 255]].into_iter().enumerate() {
+            for x in 0..16 {
+                d.img.put_pixel(x, 2 + i as u32, image::Rgba(cor));
+            }
+        }
+    }
+    espera(&mut h, 4);
+    // Duplicar o quadro (botão do painel Quadros).
+    h.get_by_label("Duplicar").click();
+    espera(&mut h, 5);
+    assert_eq!(doc(&h).width(), 32);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let d = ws.pixels.get_mut(rel).unwrap();
+        assert_eq!(d.current, 1, "o quadro novo fica selecionado");
+        for y in 12..16 {
+            d.img.put_pixel(16 + 3, y, image::Rgba([0, 0, 0, 0]));
+            d.img.put_pixel(16 + 6, y, image::Rgba([0, 0, 0, 255]));
+        }
+    }
+    espera(&mut h, 6);
+    h.get_by_label("Animações (0)").click();
+    h.run_steps(2);
+    h.get_by_label("+ Nova animação").click();
+    h.run_steps(2);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let d = ws.pixels.get_mut(rel).unwrap();
+        assert_eq!(
+            d.anim.anims[0].frames.len(),
+            2,
+            "a primeira usa todos os quadros"
+        );
+        d.anim.anims[0].name = "andar".into();
+    }
+    espera(&mut h, 7);
+    tela(&mut h, "pixel-animacao");
+    // Ctrl+S com a imagem em foco (clicar nela deu o foco à aba).
+    h.key_press_modifiers(Modifiers::COMMAND, Key::S);
+    espera(&mut h, 8);
+    let anim = std::fs::read_to_string(projeto.join("assets/imagens/desenho.anim")).unwrap();
+    assert!(
+        anim.contains("name = \"andar\", frames = { 1, 2 }"),
+        "{anim}"
+    );
+    assert_eq!(image::open(projeto.join(rel)).unwrap().width(), 32);
+
+    // Na cena, com a animação.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.open_file("cenas/fase.cena", None);
+        let doc = ws.scenes.get_mut("cenas/fase.cena").unwrap();
+        let mut o = Object::new(50, "meu_heroi");
+        let mut s = Component::new("sprite");
+        s.set("image", Prop::Str(rel.into()));
+        o.components.push(s);
+        doc.data.objects.push(o);
+    }
+    espera(&mut h, 9);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut("cenas/fase.cena").unwrap();
+        let o = doc.data.objects.iter_mut().find(|o| o.id == 50).unwrap();
+        o.components[0].set("animation", Prop::Str("andar".into()));
+    }
+    espera(&mut h, 10);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 11);
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}

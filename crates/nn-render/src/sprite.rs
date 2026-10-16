@@ -85,6 +85,10 @@ pub struct Sprite {
     pub region: Rect,
     /// Modo de mistura com o fundo.
     pub blend: Blend,
+    /// Quantas vezes a região se repete em cada eixo, lado a lado (padrão
+    /// 1×1: a região estica no tamanho do sprite). Valores quebrados mostram
+    /// um pedaço da última repetição.
+    pub repeat: Vec2,
 }
 
 impl Sprite {
@@ -98,6 +102,7 @@ impl Sprite {
             color: Color::WHITE,
             region: Rect::FULL,
             blend: Blend::Alpha,
+            repeat: Vec2::ONE,
         }
     }
 
@@ -133,6 +138,13 @@ impl Sprite {
 
     pub fn blend(mut self, blend: Blend) -> Self {
         self.blend = blend;
+        self
+    }
+
+    /// Repete a imagem lado a lado em vez de esticar: `Vec2::new(4.0, 1.0)`
+    /// mostra a região 4 vezes na horizontal, dentro do tamanho do sprite.
+    pub fn repeat(mut self, times: Vec2) -> Self {
+        self.repeat = times;
         self
     }
 }

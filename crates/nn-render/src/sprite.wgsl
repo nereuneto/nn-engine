@@ -18,12 +18,18 @@ struct Instance {
     @location(3) rotation: f32,
     @location(4) region: vec4<f32>, // x, y, largura, altura (UV, origem em cima)
     @location(5) color: vec4<f32>,  // linear
+    @location(6) repeat: vec2<f32>, // repetições lado a lado (1, 1 = esticar)
 };
 
 struct VertexOut {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) color: vec4<f32>,
+    // Coordenada nas repetições (0..repeat) e a região, para o fragmento
+    // repetir a imagem dentro dela.
+    @location(2) tile: vec2<f32>,
+    @location(3) @interpolate(flat) region: vec4<f32>,
+    @location(4) @interpolate(flat) repeat: vec2<f32>,
 };
 
 @vertex
@@ -52,10 +58,21 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, inst: Instance) -> VertexOu
     let v = select(1.0 - corner.y, corner.y, view.y_down > 0.5);
     out.uv = inst.region.xy + vec2<f32>(corner.x, v) * inst.region.zw;
     out.color = inst.color;
+    out.tile = vec2<f32>(corner.x, v) * inst.repeat;
+    out.region = inst.region;
+    out.repeat = inst.repeat;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    return textureSample(sprite_texture, sprite_sampler, in.uv) * in.color;
+    // Sem repetição (o caso comum), a coordenada vem pronta do vértice.
+    var uv = in.uv;
+    if (any(in.repeat != vec2<f32>(1.0))) {
+        uv = in.region.xy + fract(in.tile) * in.region.zw;
+    }
+    // As derivadas vêm da coordenada contínua: sem costura entre as repetições.
+    let gx = dpdx(in.tile) * in.region.zw;
+    let gy = dpdy(in.tile) * in.region.zw;
+    return textureSampleGrad(sprite_texture, sprite_sampler, uv, gx, gy) * in.color;
 }

@@ -114,7 +114,7 @@ impl FilePanel {
         }
 
         ui.horizontal(|ui| {
-            ui.menu_button("➕ Novo", |ui| {
+            let novo = ui.menu_button("➕ Novo", |ui| {
                 let dir = self.target_dir(tree).unwrap_or_default();
                 if ui.button("🖼 Cena visual").on_hover_text("Uma tela do jogo montada com o mouse: arraste imagens, mapas e sons para ela").clicked() {
                     actions.push(Action::NewItem { kind: NewKind::VisualScene, parent: scene_dir(tree, &dir) });
@@ -122,6 +122,12 @@ impl FilePanel {
                 }
                 if ui.button("📜 Cena em código").on_hover_text("Uma tela do jogo escrita em Lua").clicked() {
                     actions.push(Action::NewItem { kind: NewKind::Scene, parent: scene_dir(tree, &dir) });
+                    ui.close();
+                }
+                let r = ui.button("🎨 Imagem (pixel art)").on_hover_text("Uma imagem nova para desenhar no editor de pixel art (personagem, item, cenário...)");
+                crate::tutorial::anchor_in(ui, "arquivos:nova-imagem", r.rect);
+                if r.clicked() {
+                    actions.push(Action::NewItem { kind: NewKind::Image, parent: image_dir(tree, &dir) });
                     ui.close();
                 }
                 if ui.button("🔧 Script (módulo)").on_hover_text("Código usado por várias cenas, com require").clicked() {
@@ -133,6 +139,7 @@ impl FilePanel {
                     ui.close();
                 }
             });
+            crate::tutorial::anchor_in(ui, "arquivos.novo", novo.response.rect);
             if ui
                 .button("📥 Importar")
                 .on_hover_text("Copiar imagens, sons e outros arquivos para o projeto.\nVocê também pode arrastar arquivos para esta janela.")
@@ -489,6 +496,13 @@ impl FilePanel {
             });
             ui.close();
         }
+        if ui.button("🎨 Nova imagem aqui").clicked() {
+            actions.push(Action::NewItem {
+                kind: NewKind::Image,
+                parent: dir.to_string(),
+            });
+            ui.close();
+        }
         if ui.button("🔧 Novo script aqui").clicked() {
             actions.push(Action::NewItem {
                 kind: NewKind::Module,
@@ -529,6 +543,22 @@ fn scene_dir(tree: &FileTree, chosen: &str) -> String {
     } else {
         "cenas".into()
     }
+}
+
+/// Pasta sugerida para imagens novas: a escolhida (se for de assets), ou
+/// `assets/imagens`.
+pub fn image_dir(tree: &FileTree, chosen: &str) -> String {
+    let default = ["assets/imagens", "assets"]
+        .iter()
+        .any(|d| tree.get(d).is_some_and(|e| e.is_dir));
+    if !chosen.is_empty() && (chosen.starts_with("assets") || !default) {
+        return chosen.to_string();
+    }
+    ["assets/imagens", "assets"]
+        .iter()
+        .find(|d| tree.get(d).is_some_and(|e| e.is_dir))
+        .map(|d| d.to_string())
+        .unwrap_or_default()
 }
 
 /// Pasta sugerida para módulos novos: a escolhida, ou `lib`, se existir.

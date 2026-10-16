@@ -40,7 +40,7 @@ return {
       x = -500, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 3,
       components = {
-        { type = "sprite", image = "assets/imagens/nave.png", frame_w = 16, frame_h = 16, frame = 1, w = 80, h = 80, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "sprite", image = "assets/imagens/nave.png", frame_w = 16, frame_h = 16, frame = 1, w = 80, h = 80, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
         { type = "body", body = "dynamic", shape = "box", w = 64, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:topdown", velocidade = 380 },
         { type = "behavior", script = "nn:atirar", direcao = "direita", distancia = 44, intervalo = 0.22, prefab = "prefabs/tiro.prefab", som = "assets/sons/tiro.wav", tecla = "space", velocidade = 900 },

@@ -137,6 +137,8 @@ pub struct Animation {
     frames: Vec<u32>,
     fps: f32,
     playback: Playback,
+    /// Duração de cada quadro, em segundos (`None`: todos duram `1 / fps`).
+    times: Option<Vec<f32>>,
 }
 
 impl Animation {
@@ -158,7 +160,47 @@ impl Animation {
             frames,
             fps,
             playback: Playback::Loop,
+            times: None,
         }
+    }
+
+    /// Dá a cada quadro a sua duração, em segundos (um valor por quadro, na
+    /// ordem de `frames`). Quadros sem valor, ou com valor que não é positivo,
+    /// usam `1 / fps`.
+    ///
+    /// ```
+    /// use nn_render::Animation;
+    /// // O segundo quadro fica parado meio segundo.
+    /// let golpe = Animation::new([0, 1, 2], 10.0).with_times([0.1, 0.5, 0.1]);
+    /// assert!((golpe.duration() - 0.7).abs() < 1e-6);
+    /// ```
+    pub fn with_times(mut self, times: impl IntoIterator<Item = f32>) -> Self {
+        let base = 1.0 / self.fps;
+        let mut list: Vec<f32> = times
+            .into_iter()
+            .map(|t| if t > 0.0 && t.is_finite() { t } else { base })
+            .collect();
+        list.resize(self.frames.len(), base);
+        list.truncate(self.frames.len());
+        self.times = if list.iter().all(|t| (t - base).abs() < 1e-6) {
+            None
+        } else {
+            Some(list)
+        };
+        self
+    }
+
+    /// Duração do quadro `i` da lista (em segundos).
+    pub fn frame_time(&self, i: usize) -> f32 {
+        match &self.times {
+            Some(t) => t[i],
+            None => 1.0 / self.fps,
+        }
+    }
+
+    /// Durações próprias de cada quadro, se houver.
+    pub fn times(&self) -> Option<&[f32]> {
+        self.times.as_deref()
     }
 
     pub fn once(mut self) -> Self {
@@ -185,7 +227,18 @@ impl Animation {
 
     /// Duração de uma passada completa, em segundos.
     pub fn duration(&self) -> f32 {
-        self.cycle_len() as f32 / self.fps
+        match &self.times {
+            None => self.cycle_len() as f32 / self.fps,
+            Some(_) => (0..self.cycle_len())
+                .map(|s| self.frame_time(self.cycle_index(s)))
+                .sum(),
+        }
+    }
+
+    /// Posição na lista de quadros do passo `s` de uma passada.
+    fn cycle_index(&self, s: usize) -> usize {
+        let n = self.frames.len();
+        if s < n { s } else { self.cycle_len() - s }
     }
 
     fn cycle_len(&self) -> usize {
@@ -197,6 +250,9 @@ impl Animation {
 
     /// Quadro (índice da spritesheet) no instante `time`, em segundos.
     pub fn frame_at(&self, time: f32) -> u32 {
+        if self.times.is_some() {
+            return self.frames[self.timed_index(time)];
+        }
         let n = self.frames.len();
         let step = (time.max(0.0) * self.fps) as usize;
         let i = match self.playback {
@@ -211,9 +267,35 @@ impl Animation {
         self.frames[i]
     }
 
+    /// Com durações por quadro: anda pela passada somando as durações.
+    fn timed_index(&self, time: f32) -> usize {
+        let total = self.duration();
+        let mut t = time.max(0.0);
+        if self.playback == Playback::Once {
+            if t >= total {
+                return self.frames.len() - 1;
+            }
+        } else {
+            t %= total;
+        }
+        for s in 0..self.cycle_len() {
+            let i = self.cycle_index(s);
+            let d = self.frame_time(i);
+            if t < d {
+                return i;
+            }
+            t -= d;
+        }
+        self.cycle_index(self.cycle_len() - 1)
+    }
+
     /// A animação já terminou no instante `time`? Só acontece com [`Playback::Once`].
     pub fn is_finished_at(&self, time: f32) -> bool {
-        self.playback == Playback::Once && time * self.fps >= self.frames.len() as f32
+        self.playback == Playback::Once
+            && match self.times {
+                None => time * self.fps >= self.frames.len() as f32,
+                Some(_) => time >= self.duration() - 1e-6,
+            }
     }
 }
 
@@ -341,6 +423,41 @@ mod tests {
         let quadros: Vec<u32> = (0..9).map(|i| a.frame_at(i as f32 + 0.5)).collect();
         assert_eq!(quadros, [0, 1, 2, 3, 2, 1, 0, 1, 2]);
         assert!((a.duration() - 6.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn duracao_por_quadro() {
+        let a = Animation::new([7, 8, 9], 10.0).with_times([0.1, 0.5, 0.1]);
+        let at = |t: f32| a.frame_at(t);
+        assert_eq!(
+            [at(0.05), at(0.15), at(0.55), at(0.65), at(0.75)],
+            [7, 8, 8, 9, 7]
+        );
+        let once = Animation::new([1, 2], 10.0).once().with_times([0.2, 0.3]);
+        assert_eq!(once.frame_at(0.25), 2);
+        assert!(!once.is_finished_at(0.4));
+        assert!(once.is_finished_at(0.5));
+        let pp = Animation::new([0, 1, 2], 10.0)
+            .ping_pong()
+            .with_times([1.0, 0.1, 0.1]);
+        // 0 (1 s), 1, 2, 1 e volta ao 0.
+        assert!((pp.duration() - 1.3).abs() < 1e-5);
+        assert_eq!(
+            [
+                pp.frame_at(0.5),
+                pp.frame_at(1.05),
+                pp.frame_at(1.15),
+                pp.frame_at(1.25)
+            ],
+            [0, 1, 2, 1]
+        );
+        // Tudo igual a 1/fps: sem lista própria.
+        assert!(
+            Animation::new([0, 1], 10.0)
+                .with_times([0.1, 0.1])
+                .times()
+                .is_none()
+        );
     }
 
     #[test]

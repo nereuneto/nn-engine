@@ -7,7 +7,7 @@ return {
     x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
     visible = true, layer = 2,
     components = {
-      { type = "sprite", image = "assets/imagens/tiro.png", frame_w = 8, frame_h = 8, frame = 1, w = 32, h = 32, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+      { type = "sprite", image = "assets/imagens/tiro.png", frame_w = 8, frame_h = 8, frame = 1, w = 32, h = 32, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
       { type = "behavior", script = "nn:temporario", fora_da_tela = true, tempo = 2 },
     },
   },

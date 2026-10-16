@@ -63,6 +63,9 @@ projeto continua aberto.
   placar no HUD e um evento para vencer.
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
+- **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
+  um personagem no [editor de pixel art](#editor-de-pixel-art), fazer um
+  segundo quadro, animar e pôr na cena.
 
 Eles ficam no Início (**🎓 Tutoriais**) e em **Ajuda > Tutoriais**.
 
@@ -98,9 +101,11 @@ só arquivos. A busca ignora acentos e aceita letras soltas ("cfg" acha
 - **Clique** num arquivo para abrir. Imagens mostram uma miniatura na lista;
   sons têm um ▶ para ouvir.
 - **➕ Novo:** cena visual (montada com o mouse, veja abaixo), cena em código
-  (já vem com um quadrado que anda), script (módulo para usar com `require`)
-  ou pasta. Cenas novas vão para `cenas/` e scripts para `lib/`, se essas
-  pastas existirem.
+  (já vem com um quadrado que anda), **imagem** (para desenhar no
+  [editor de pixel art](#editor-de-pixel-art): escolha o tamanho e quantos
+  quadros), script (módulo para usar com `require`) ou pasta. Cenas novas vão
+  para `cenas/`, imagens para `assets/imagens` e scripts para `lib/`, se
+  essas pastas existirem.
 - **Arraste** uma imagem, um mapa, um som ou um prefab do painel para dentro
   de uma cena visual (vira um objeto) ou para um campo de arquivo do Inspetor.
   Arraste um objeto da Hierarquia para uma pasta para criar um
@@ -201,7 +206,7 @@ desenhada por cima) e os **componentes**:
 
 | Componente | O que faz |
 |---|---|
-| Imagem (sprite) | Mostra uma imagem ou um quadro de uma spritesheet. Com **É uma tira de quadros**, escolha o quadro clicando na grade. |
+| Imagem (sprite) | Mostra uma imagem ou um quadro de uma spritesheet. Com **É uma tira de quadros**, escolha o quadro clicando na grade. **Animação** toca uma das [animações](#animações) da imagem (escolha no ☰), já na cena do editor. **Preencher: Repetir** repete a imagem lado a lado em vez de esticar: com escala 20, um bloco vira 20 blocos (chão, paredes, fundos). **🎨 Editar imagem** abre o [editor de pixel art](#editor-de-pixel-art); sem imagem, **🎨 Desenhar uma imagem nova** cria uma e já põe no objeto. |
 | Texto | Escreve um texto no mundo. |
 | Forma | Retângulo ou círculo de uma cor. |
 | Corpo físico | Cai, colide, para no chão (dinâmico, estático ou cinemático; caixa ou círculo; sensor; plataforma de mão única). |
@@ -241,7 +246,7 @@ com explicação ao passar o mouse.
 | Fases | Checkpoint | Ao passar, o jogador volta para cá quando perder. |
 | Fases | Ir para cena | Porta, saída, bandeira: leva para outra cena (ao encostar ou apertando uma tecla). |
 | Movimento | Movimento automático | Gira, flutua ou vai e volta sozinho (plataformas móveis, enfeites). |
-| Aparência | Animação automática | Troca os quadros da imagem quando está parado, andando, pulando ou caindo (`1-4`, `5,6`...). |
+| Aparência | Animação automática | Troca a animação quando o objeto está parado, andando, pulando ou caindo. Em cada estado, escolha uma das [animações](#animações) da imagem no ☰ (ou escreva quadros: `1-4`, `5,6`...). |
 | Aparência | Mostrar valor | Mostra variáveis do jogo num texto: `Moedas: {moedas}`. |
 | Ações | Atirar | Cria um tiro (um prefab) ao apertar uma tecla ou sozinho, de tempos em tempos. |
 | Ações | Gerador | Cria objetos (um prefab) de tempos em tempos. |
@@ -410,12 +415,84 @@ return cena
 
 A referência completa está no [guia do Lua](lua.md#cenas-visuais-cena).
 
+## Editor de pixel art
+
+Clicar numa imagem (PNG) abre o editor de pixel art. Ele grava PNG comum, que
+abre em qualquer programa; ao salvar, a cena do editor e o jogo aberto mostram
+o desenho novo na hora.
+
+![Editor de pixel art com a animação "andar" do herói](imagens/nn-studio-pixel-art.png)
+
+- **Ferramentas** (com atalho): **Lápis** (B), **Borracha** (E), **Balde**
+  (G: pinta a área da mesma cor), **Linha** (L), **Retângulo** (R),
+  **Círculo** (O), **Conta-gotas** (I) e **Seleção** (M). Botão esquerdo
+  pinta com a cor principal; o direito, com a secundária (que começa
+  transparente: apaga). Alt+clique pega a cor com qualquer ferramenta.
+  Shift deixa a linha reta e o retângulo e o círculo, iguais dos lados;
+  Shift+clique com o lápis faz uma linha desde o último ponto.
+- À direita: o tamanho do **pincel** ([ e ] mudam), **Preenchido** (retângulo
+  e círculo) e **Espelhado**, que desenha dos dois lados do quadro ao mesmo
+  tempo (bom para personagens de frente).
+- **Cores:** principal e secundária (X troca), e as paletas: as cores
+  desta imagem, a **paleta do projeto** (arquivo `paleta.hex`, para usar as
+  mesmas cores em todas as imagens) e paletas prontas (Sweetie 16, PICO-8,
+  Endesga 32).
+- **Seleção:** arraste para selecionar; arraste a seleção para mover.
+  Ctrl+C, Ctrl+X, Ctrl+V (entre imagens também), Delete apaga, Enter ou Esc
+  solta. **↔ / ↕ / Girar** espelham ou giram a seleção (ou o quadro todo).
+- **Vista:** role o mouse para aproximar (no ponto do mouse); arraste com o
+  botão do meio ou com Espaço para mover. **Ajustar** cabe tudo na tela.
+  **Grade** mostra os pixels de perto.
+- **Tamanho…** muda o tamanho da imagem (o desenho fica no canto de cima, à
+  esquerda). **Copiar código** copia o `nn.assets.texture(...)` ou o
+  `nn.assets.sheet(...)`.
+- Ctrl+Z / Ctrl+Y desfazem e refazem; Ctrl+S salva. Uma aba com • tem
+  alterações não salvas.
+
+### Quadros
+
+Marque **Quadros** e o tamanho de cada um (16 × 16, por exemplo) para dividir
+a imagem numa folha de sprites. **Folha** mostra todos e **Quadro** só o atual,
+maior. No painel de baixo (**Quadros**), clique num quadro para desenhar nele;
+**+ Novo quadro** e **Duplicar** criam o próximo (duplicar é o jeito mais
+rápido de fazer o passo seguinte de uma animação), **Excluir** tira, e ◀ ▶
+mudam de lugar. As animações acompanham: tirar o quadro 3 faz o 4 virar o 3
+nelas também. **Papel vegetal** mostra o quadro anterior clarinho por baixo
+(o anterior na animação escolhida, se o quadro estiver nela).
+
+O tamanho do quadro fica no arquivo de animações da imagem (abaixo); uma
+imagem sem esse arquivo usa o tamanho que as cenas já usam para ela.
+
+### Animações
+
+Uma animação é uma sequência de quadros com nome: "parado", "andar",
+"pular". Elas ficam num arquivo ao lado da imagem (`heroi.png` → `heroi.anim`)
+e servem para qualquer cena ou prefab que use a imagem. No painel de baixo,
+**Animações**:
+
+- **+ Nova animação** cria uma (a primeira já vem com todos os quadros).
+  Clique num nome para escolher; o ☰ usa todos os quadros, tira todos,
+  duplica ou exclui.
+- **Ritmo** (quadros por segundo) e **modo**: Repetir, Uma vez ou Ida e
+  volta.
+- A **linha do tempo** mostra os quadros da animação. Clique num **quadro da
+  folha** (embaixo) para pôr no fim, ou arraste para o lugar certo; arraste
+  dentro da linha do tempo para mudar a ordem. Botão direito num quadro: uma
+  **duração** própria (um quadro mais longo, como num golpe) ou tirar da
+  animação.
+- A **Prévia** (à direita) toca a animação escolhida.
+
+Para usar: no Inspetor, **Imagem > Animação** toca uma animação desde o
+começo; na **Animação automática**, cada estado (parado, andando, pulando,
+caindo) escolhe uma; os eventos têm **Tocar animação** e **Animação
+terminar**; no Lua, `obj.sprite:play("andar")`
+([guia do Lua](lua.md#animações-anim)). Os modelos Plataforma, Aventura e
+Vazio já vêm com `heroi.anim` e `moeda.anim`.
+
 ## Imagens, sons e mapas
 
-- **Imagens:** zoom (botões ou Ctrl + rolar), grade de pixels de perto e
-  **Quadros**, que mostra a divisão da spritesheet com o número de cada quadro
-  (o mesmo número que se usa no Lua). **Copiar código** copia o
-  `nn.assets.texture(...)` ou o `nn.assets.sheet(...)` com o tamanho do quadro.
+- **Imagens:** abrem no [editor de pixel art](#editor-de-pixel-art). Imagens
+  que não são PNG (a engine só lê PNG) mostram um aviso.
 - **Sons:** forma de onda, ▶ Tocar e o código `nn.assets.sound(...)`.
 - **Mapas do Tiled (.tmj):** prévia com os tiles e os objetos marcados (passe
   o mouse para ver o tipo). **Editar no Tiled** abre o mapa no programa
@@ -470,7 +547,7 @@ mensagem diz onde está o erro.
 | F5 / Shift+F5 | Jogar (ou reiniciar) / Parar |
 | F6 | Testar a partir da cena visual aberta |
 | Ctrl+S / Ctrl+Shift+S | Salvar / Salvar tudo |
-| Ctrl+Z / Ctrl+Y | Desfazer / refazer (na cena visual) |
+| Ctrl+Z / Ctrl+Y | Desfazer / refazer (na cena visual e no editor de pixel art) |
 | Ctrl+N | Nova cena visual |
 | Ctrl+Shift+N / Ctrl+O | Novo projeto / Abrir projeto |
 | Ctrl+Shift+P / Ctrl+P | Paleta de comandos / Abrir arquivo |
@@ -486,6 +563,9 @@ mensagem diz onde está o erro.
 | Setas, Shift+setas (na cena) | Mover 1 / 10 unidades |
 | Ctrl+D / Del (na cena) | Duplicar / apagar |
 | Ctrl+clique (na janela do jogo) | Selecionar o objeto no editor |
+| B E G L R O I M (na imagem) | Lápis, borracha, balde, linha, retângulo, círculo, conta-gotas, seleção |
+| X / [ ] / H (na imagem) | Trocar as cores / tamanho do pincel / espelhar |
+| , / . (na imagem) | Quadro anterior / próximo |
 | F1 | Guia do Lua |
 
 A lista também está em **Ajuda > Atalhos do teclado**.
@@ -533,8 +613,15 @@ o jogo.
   da cena), e o estado que o jogo manda diz quais regras dispararam.
 - O tutorial confere o projeto a cada quadro; os painéis marcam onde estão os
   botões que ele destaca.
+- O editor de pixel art guarda o desenho na memória e grava o PNG com a
+  biblioteca `image`. Os arquivos `.anim` são tabelas Lua lidas pela própria
+  engine (`cena.lua`, `parse_anims`) e pelo NN Studio no mesmo formato.
+- Repetir a imagem é feito no shader de sprites: cada sprite tem quantas
+  vezes a região se repete, então um chão de 20 blocos continua sendo um
+  desenho só.
 
 ## O que vem depois
 
-As próximas etapas do NN Studio trazem editores dentro do próprio editor:
-pixel art, animação, mapas, partículas e menus.
+As próximas etapas do NN Studio trazem mais editores dentro do próprio
+editor: mapas de tiles (pintados direto na cena, com autotile), partículas e
+menus.
