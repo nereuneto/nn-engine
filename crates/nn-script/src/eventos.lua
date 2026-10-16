@@ -119,10 +119,7 @@ local function number(v)
 end
 
 local function is_hud(o)
-  for _, c in ipairs(o.components) do
-    if c.hud then return true end
-  end
-  return false
+  return M.is_hud(o)
 end
 E.is_hud = is_hud
 
@@ -132,8 +129,8 @@ function E.hit(o, wx, wy, sx, sy)
   local hw, hh = o:bounds()
   if is_hud(o) then
     if not sx then return false end
-    local W, H = nn.window.size()
-    return math.abs(sx - (W / 2 + x)) <= hw and math.abs(sy - (H / 2 - y)) <= hh
+    local px, py = M.screen_pos(o, x, y)
+    return math.abs(sx - px) <= hw and math.abs(sy - py) <= hh
   end
   if not wx then return false end
   return math.abs(wx - x) <= hw and math.abs(wy - y) <= hh
@@ -262,7 +259,7 @@ E.CONDITIONS = {
   {
     id = "clicar", name = "Clique no objeto", category = "Controles", trigger = true,
     text = "clicar em {quem}",
-    help = "Clique do mouse no objeto (ou, num Botão, Enter / A do controle).",
+    help = "Clique do mouse no objeto. Nos botões e caixas de marcar, também Enter, espaço ou o A do controle; num campo de texto, Enter.",
     props = { who("quem") },
     lua = "nn.input.mouse_pressed(\"left\") -- em cima de {quem}",
     test = function(ctx, p, st, b)
@@ -274,6 +271,23 @@ E.CONDITIONS = {
       local clicked = ctx.scene._clicked or {}
       for _, o in ipairs(list) do
         if clicked[o] or by_signal[o] then table.insert(out, { este = o }) end
+      end
+      return out
+    end,
+  },
+  {
+    id = "mudou", name = "Mudar de valor", category = "Controles", trigger = true,
+    text = "{quem} mudar de valor",
+    help = "Um deslizador, uma caixa de marcar ou um campo de texto mudou (pelo jogador).",
+    props = { who("quem") },
+    lua = "-- o valor de {quem} mudou",
+    test = function(ctx, p, st, b)
+      local out = {}
+      local list = resolve(ctx.scene, p.quem, b)
+      local hit = {}
+      for _, s in ipairs(signals(ctx.scene, "mudou")) do hit[s.obj] = true end
+      for _, o in ipairs(list) do
+        if hit[o] then table.insert(out, { este = o }) end
       end
       return out
     end,
@@ -701,6 +715,21 @@ E.ACTIONS = {
     end,
   },
   {
+    id = "por_cima", name = "Abrir cena por cima", category = "Cenas",
+    text = "abrir a cena {cena} por cima",
+    help = "Pausa, opções, inventário: a cena aparece por cima e a de baixo fica parada até ela fechar.",
+    props = { { "cena", "", type = "scene", label = "Cena" } },
+    lua = "nn.scene.push(\"{cena}\", { por_cima = true })",
+    run = function(ctx, p) M.open_over(p.cena) end,
+  },
+  {
+    id = "fechar_cena", name = "Fechar esta cena", category = "Cenas",
+    text = "fechar esta cena (volta para a de baixo)",
+    help = "Numa cena aberta por cima: fecha e o jogo de baixo continua.",
+    lua = "nn.scene.pop()",
+    run = function(ctx) M.close_over(ctx.scene) end,
+  },
+  {
     id = "sair", name = "Fechar o jogo", category = "Cenas",
     text = "fechar o jogo",
     lua = "nn.quit()",
@@ -736,6 +765,19 @@ E.ACTIONS = {
     props = { who("alvo") },
     lua = "{alvo}:destroy()",
     run = function(ctx, p, b) each(ctx, p.alvo, b, function(o) o:destroy() end) end,
+  },
+  {
+    id = "botao_ativo", name = "Ativar ou desativar botão", category = "Objetos",
+    text = "{acao} o botão {alvo}",
+    help = "Um botão desativado fica cinza e não pode ser apertado.",
+    props = { { "acao", "desativar", options = { { "ativar", "ativar" }, { "desativar", "desativar" } } },
+      who("alvo") },
+    lua = "{alvo}.button.enabled = ...",
+    run = function(ctx, p, b)
+      each(ctx, p.alvo, b, function(o)
+        if o.button then o.button.enabled = p.acao == "ativar" end
+      end)
+    end,
   },
   {
     id = "mostrar", name = "Mostrar ou esconder", category = "Objetos",
@@ -782,8 +824,9 @@ E.ACTIONS = {
     lua = "{alvo}.text.text = \"{texto}\"",
     run = function(ctx, p, b)
       each(ctx, p.alvo, b, function(o)
-        if o.text then
-          o.text.text = fill(p.texto)
+        local c = o.text or o.button or o.checkbox
+        if c then
+          c.text = fill(p.texto)
           o._fixed_text = true
         end
       end)
@@ -934,6 +977,17 @@ E.ACTIONS = {
       if cur and cur.handle.stop then cur.handle:stop() end
       local h = nn.audio.play(nn.assets.sound(p.som), { loop = true, channel = "music", volume = number(p.volume) })
       M._music = { path = p.som, handle = h }
+    end,
+  },
+  {
+    id = "volume", name = "Volume", category = "Som",
+    text = "volume {canal} em {valor}%",
+    help = "Fica guardado: vale também na próxima vez que o jogo abrir.",
+    props = { { "canal", "musica", options = { { "musica", "da música" }, { "efeitos", "dos efeitos" }, { "geral", "geral" } } },
+      { "valor", 100, type = "value", label = "Volume (%)" } },
+    lua = "nn.audio.set_volume({valor} / 100, ({ musica = \"music\", efeitos = \"effects\" })[\"{canal}\"])",
+    run = function(ctx, p)
+      M.set_volume(p.canal, number(fill(tostring(p.valor))) / 100)
     end,
   },
   -- Comportamentos e mensagens
@@ -1190,7 +1244,10 @@ function E.step(scene, dt)
     local wx, wy = nn.input.mouse_world()
     local sx, sy = nn.input.mouse()
     for _, o in ipairs(scene.object_list) do
-      if o.alive and o:shown() and E.hit(o, wx, wy, sx, sy) then scene._clicked[o] = true end
+      -- Itens de menu avisam o clique ao soltar o botão (como "clicou").
+      if o.alive and not o._ui and o:shown() and E.hit(o, wx, wy, sx, sy) then
+        scene._clicked[o] = true
+      end
     end
   end
   for _, ctx in ipairs(list) do

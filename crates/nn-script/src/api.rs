@@ -245,6 +245,63 @@ fn draw_table(lua: &Lua, space: Space) -> Result<Table> {
     )?;
 
     t.set(
+        "panel",
+        lua.create_function(
+            move |lua, (x, y, w, h, opts): (f32, f32, f32, f32, Option<Table>)| {
+                let o = opts.as_ref();
+                with_ctx(lua, |c| {
+                    // No mundo, x, y é o centro; na tela, o canto de cima à
+                    // esquerda (como nn.screen.rect).
+                    let center = match space {
+                        Space::World => Vec2::new(x, y),
+                        Space::Screen => Vec2::new(x + w / 2.0, y + h / 2.0),
+                    };
+                    let mut panel = nn_render::Panel::new(center, Vec2::new(w, h))
+                        .color(opt_color(o, "color")?.unwrap_or(nn_core::Color::WHITE))
+                        .radius(opt::<f32>(o, "radius")?.unwrap_or(0.0));
+                    if let Some(b) = opt::<f32>(o, "border")? {
+                        let bc = opt_color(o, "border_color")?.unwrap_or(nn_core::Color::WHITE);
+                        panel = panel.border(b, bc);
+                    }
+                    if let Some(img) = opt::<Value>(o, "image")? {
+                        let (texture, region) = match &img {
+                            Value::UserData(ud) if ud.is::<LTexture>() => {
+                                (ud.borrow::<LTexture>()?.0, nn_render::Rect::FULL)
+                            }
+                            Value::UserData(ud) if ud.is::<LSheet>() => {
+                                let sheet = ud.borrow::<LSheet>()?.0;
+                                let frame = opt::<i64>(o, "frame")?.unwrap_or(1).max(1) as u32;
+                                let s = sheet
+                                    .sprite((frame - 1).min(sheet.frame_count().saturating_sub(1)));
+                                (s.texture, s.region)
+                            }
+                            other => {
+                                return Err(err(format!(
+                                    "image: esperava uma imagem ou spritesheet, recebeu {}",
+                                    other.type_name()
+                                )));
+                            }
+                        };
+                        panel = panel.image(nn_render::PanelImage {
+                            texture,
+                            region,
+                            slice: opt::<f32>(o, "slice")?.unwrap_or(4.0),
+                            scale: opt::<f32>(o, "slice_scale")?.unwrap_or(1.0),
+                        });
+                    }
+                    match space {
+                        Space::World => c.renderer.draw_panel(&panel),
+                        Space::Screen => {
+                            c.renderer.screen().draw_panel(&panel);
+                        }
+                    }
+                    Ok(())
+                })
+            },
+        )?,
+    )?;
+
+    t.set(
         "circle",
         lua.create_function(move |lua, (x, y, r, col): (f32, f32, f32, Value)| {
             let col = color(&col)?;

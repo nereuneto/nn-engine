@@ -167,7 +167,7 @@ fn key_rule(rule: &scene_data::Rule, modo: &str) -> bool {
 /// Os tutoriais, na ordem do menu.
 pub fn all() -> &'static [Tutorial] {
     static LIST: std::sync::OnceLock<Vec<Tutorial>> = std::sync::OnceLock::new();
-    LIST.get_or_init(|| vec![primeiro_jogo(), eventos(), desenhe(), tiles()])
+    LIST.get_or_init(|| vec![primeiro_jogo(), eventos(), desenhe(), tiles(), menu()])
 }
 
 pub fn find(id: &str) -> Option<&'static Tutorial> {
@@ -716,6 +716,138 @@ fn tiles() -> Tutorial {
             Step {
                 title: "Pronto: uma fase de tiles!",
                 text: "Testar salvou tudo: a cena e o mapa, em mapas/fase.tmj (no formato do Tiled; dá para abrir nele também). Ctrl+S salva os dois juntos.\n\nPróximos passos: no painel Tiles, + Terreno cria um terreno seu com um molde de 16 peças para desenhar no editor de pixel art. Ctrl + arrastar na cena copia um pedaço do mapa para o pincel; R gira e X espelha. O evento Trocar o tile tocado faz blocos que quebram.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+fn all_objects(doc: &crate::scene_view::SceneDoc) -> Vec<&Object> {
+    fn walk<'a>(list: &'a [Object], out: &mut Vec<&'a Object>) {
+        for o in list {
+            out.push(o);
+            walk(&o.children, out);
+        }
+    }
+    let mut out = Vec::new();
+    walk(&doc.data.objects, &mut out);
+    out
+}
+
+/// O objeto da cena aberta com os corações (componente Ícones).
+fn hearts(ws: &ProjectWorkspace) -> Option<&Object> {
+    objects(ws)
+        .into_iter()
+        .find(|o| o.component("icons").is_some())
+}
+
+/// A cena da pausa (a primeira cena aberta que abre por cima).
+fn pause_scene(ws: &ProjectWorkspace) -> Option<&crate::scene_view::SceneDoc> {
+    ws.scenes.values().find(|d| d.data.overlay)
+}
+
+fn menu() -> Tutorial {
+    Tutorial {
+        id: "monte-um-menu",
+        title: "Monte um menu",
+        summary: "Corações no HUD, presos no canto da tela, e um menu de pausa que abre por cima do jogo com Esc, com botões e um volume.",
+        minutes: 10,
+        template: Template::Vazio,
+        project: "Menu e HUD",
+        steps: vec![
+            Step {
+                title: "Interface",
+                text: "Menus e HUD (vidas, placar, botões) são montados com os componentes de Interface: Painel, Botão, Barra, Ícones, Deslizador, Caixa de marcar e Campo de texto.\n\nOs botões funcionam com o mouse, com as setas e com o controle, sem nenhum código. Neste tutorial você põe corações no HUD e faz um menu de pausa.",
+                target: None,
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Corações",
+                text: "Na barra da cena, clique em ➕ Objeto > Interface > Ícones. Os Ícones mostram uma imagem para cada ponto de uma variável: um coração para cada vida.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| hearts(ws).is_some()),
+            },
+            Step {
+                title: "Imagem e variável",
+                text: "No Inspetor, em Ícones: arraste coracao.png (assets > imagens) para o campo Imagem. Em Variável, clique no … e escolha vidas: o jogo começa com 3 vidas (Configurações do projeto). Mude Máximo para 3: quando perder uma vida, o coração que falta fica apagado.",
+                target: Some("inspetor:componente:icons"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    hearts(ws)
+                        .and_then(|o| o.component("icons"))
+                        .is_some_and(|c| {
+                            c.str("image").ends_with("coracao.png") && c.str("var") == "vidas"
+                        })
+                }),
+            },
+            Step {
+                title: "Preso no canto",
+                text: "Em Transformação, Preso em mostra a tela com 9 pontos. Clique no ponto de cima à esquerda: os corações vão para esse canto, e a posição passa a contar a partir dele. Assim eles ficam no canto em qualquer tamanho de janela.\n\nDá para arrastar na cena para ajustar. O 📐 na barra da cena mostra como fica em telas de outros formatos.",
+                target: Some("inspetor:ancora"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| hearts(ws).is_some_and(|o| o.anchor == "top_left")),
+            },
+            Step {
+                title: "A cena da pausa",
+                text: "No painel Arquivos, clique em ➕ Novo > 🖼 Cena visual. Chame de pausa, marque \"Abre por cima de outra cena\" e clique em Criar.\n\nEla já vem com um painel, um título e dois botões: Continuar (fecha a pausa) e Sair do jogo. A fase continua aparecendo embaixo, parada.",
+                target: Some("arquivos.novo"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| pause_scene(ws).is_some()),
+            },
+            Step {
+                title: "Um volume",
+                text: "Na cena da pausa: ➕ Objeto > Interface > Deslizador. No Inspetor, em Muda, escolha Volume da música.\n\nNa Hierarquia, arraste o deslizador para dentro de botoes: botoes é um Grupo, que arruma os filhos em coluna sozinho.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Hierarchy),
+                done: Some(|ws, _| {
+                    pause_scene(ws).is_some_and(|d| {
+                        all_objects(d).iter().any(|o| {
+                            o.component("layout").is_some()
+                                && o.children.iter().any(|c| {
+                                    c.component("slider")
+                                        .is_some_and(|s| s.str("target") != "variavel")
+                                })
+                        })
+                    })
+                }),
+            },
+            Step {
+                title: "Esc abre a pausa",
+                text: "Volte para a aba fase.cena. No painel Eventos: ➕ Regra da cena > Controles > Tecla ou botão, e escolha a tecla voltar (Esc, ou o B do controle). Em Então: ➕ ação > Cenas > Abrir cena por cima, e escolha cenas/pausa.cena.",
+                target: Some("eventos.regra_cena"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    ws.scenes.values().filter(|d| !d.data.overlay).any(|d| {
+                        d.data.events.iter().any(|r| {
+                            r.when.iter().any(|c| c.id == "tecla")
+                                && r.actions.iter().any(|a| {
+                                    a.id == "por_cima" && a.str("cena").ends_with("pausa.cena")
+                                })
+                        })
+                    })
+                }),
+            },
+            Step {
+                title: "Teste!",
+                text: "Com a aba fase.cena aberta, aperte ▶ Testar daqui (F6) e aperte Esc no jogo. Escolha os botões com o mouse ou com as setas e Enter; no deslizador, a esquerda e a direita mudam o volume (e ele fica guardado para a próxima vez).",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "As cores do tema",
+                text: "As cores dos botões e painéis vêm do tema da interface: em Configurações do projeto (Ctrl+Shift+P > configurações), abra Tema da interface. Mude a cor do Botão e salve: todos os botões do jogo mudam juntos.\n\nNo Inspetor, uma cor marcada \"do tema\" segue o tema; escolher outra cor muda só aquele componente (↺ tema volta).",
+                target: None,
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Pronto: HUD e menu!",
+                text: "Você fez um HUD preso no canto e uma pausa por cima do jogo, com botões e um volume, sem código.\n\nPróximos passos: ➕ Objeto > Interface > Menu com botões faz um título com Jogar, Opções e Sair. Um botão com Ao apertar: Abrir cena por cima abre uma tela de opções. A Barra mostra vida ou tempo; a Caixa de marcar liga a tela cheia; o Campo de texto pede o nome do jogador. O modelo Plataforma (visual) tem tudo isso pronto para ver.",
                 target: None,
                 show: None,
                 done: None,

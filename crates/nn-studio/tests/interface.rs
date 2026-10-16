@@ -1978,3 +1978,256 @@ fn pintar_na_cena_com_o_jogo_aberto_manda_os_tiles() {
     h.key_press_modifiers(Modifiers::SHIFT, Key::F5);
     h.run_steps(3);
 }
+
+#[test]
+fn interface_menu_pronto_ancora_e_tema() {
+    let dir = temp("interface");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    com_cena(&mut h, &proj);
+
+    // ➕ Objeto > Interface > Menu com botões: painel com 3 botões em coluna.
+    h.get_by_label("➕ Objeto").click();
+    h.run_steps(2);
+    submenu_interface(&mut h);
+    h.run_steps(3);
+    h.get_by_label("Menu com botões").click();
+    h.run_steps(3);
+    let menu = objeto(&h, "menu").clone();
+    assert!(menu.component("panel").is_some() && menu.component("layout").is_some());
+    let nomes: Vec<&str> = menu.children.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(nomes, ["jogar", "opcoes", "sair"]);
+    // O grupo arruma os botões em coluna, de cima para baixo.
+    let ys: Vec<f64> = menu.children.iter().map(|c| c.y).collect();
+    assert!(ys[0] > ys[1] && ys[1] > ys[2], "{ys:?}");
+    assert_eq!(cena(&h).selection, vec![menu.id]);
+    tela(&mut h, "interface-menu");
+
+    // Preso no canto de cima à esquerda: vai para o canto, com margem (o
+    // painel tem 320 × 276).
+    h.get_by_label("Preso em");
+    h.get_by_label("Preso em cima, à esquerda").click();
+    h.run();
+    let menu2 = objeto(&h, "menu").clone();
+    assert_eq!(menu2.anchor, "top_left");
+    assert_eq!((menu2.x, menu2.y), (24.0 + 160.0, -24.0 - 138.0));
+    // No editor, o canto do painel fica no canto da tela do jogo.
+    let t = cena(&h).data.world_transform(menu.id).unwrap();
+    assert!((t.x - 160.0 - (-640.0 + 24.0)).abs() < 1.0, "{}", t.x);
+
+    // A cor do botão vem do tema; mudar o tema muda o desenho.
+    let botao = menu2.children[0].component("button").unwrap();
+    assert_eq!(botao.str("color"), "");
+    assert_eq!(
+        nn_studio::scene_data::themed(botao.str("color"), "button"),
+        "#3FA7D6"
+    );
+    // Salvar grava a âncora.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(text.contains("anchor = \"top_left\""), "{text}");
+    assert!(text.contains("type = \"button\""), "{text}");
+}
+
+#[test]
+fn tutorial_monte_um_menu() {
+    use nn_studio::scene_data::{EventItem, Prop, Rule};
+    let dir = temp("tutorial-menu");
+    let mut h = studio_with(&dir, None, fake_game(&dir), true);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("monte-um-menu");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/menu-e-hud");
+    assert!(projeto.join("assets/imagens/coracao.png").is_file());
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    const FASE: &str = "cenas/fase.cena";
+    const PAUSA: &str = "cenas/pausa.cena";
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 1);
+
+    // ➕ Objeto > Interface > Ícones.
+    h.get_by_label("➕ Objeto").click();
+    h.run_steps(2);
+    submenu_interface(&mut h);
+    h.run_steps(3);
+    h.get_by_label("Ícones").click();
+    espera(&mut h, 2);
+    let id = h.state().project().unwrap().scenes[FASE].selection[0];
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut(FASE).unwrap();
+        let c = doc
+            .data
+            .find_mut(id)
+            .unwrap()
+            .components
+            .get_mut(0)
+            .unwrap();
+        c.set("image", Prop::Str("assets/imagens/coracao.png".into()));
+        c.set("var", Prop::Str("vidas".into()));
+        c.set("max", Prop::Num(3.0));
+    }
+    espera(&mut h, 3);
+    h.get_by_label("Preso em cima, à esquerda").click();
+    espera(&mut h, 4);
+    tela(&mut h, "menu-coracoes");
+
+    // ➕ Novo > Cena visual, por cima.
+    h.get_by_label("➕ Novo").click();
+    h.run_steps(2);
+    h.get_by_label("🖼 Cena visual").click();
+    h.run_steps(2);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.run_steps(1);
+    h.event(egui::Event::Text("pausa".into()));
+    h.run_steps(2);
+    h.get_by_label("Abre por cima de outra cena (pausa, opções)")
+        .click();
+    h.run_steps(1);
+    h.get_by_label("Criar").click();
+    espera(&mut h, 5);
+    let texto = std::fs::read_to_string(projeto.join(PAUSA)).unwrap();
+    assert!(texto.contains("overlay = true"), "{texto}");
+    assert!(tabs(&h).contains(&Tab::Scene(PAUSA.into())));
+
+    // O deslizador do volume, arrastado para dentro do grupo.
+    h.get_by_label("➕ Objeto").click();
+    h.run_steps(2);
+    submenu_interface(&mut h);
+    h.run_steps(3);
+    h.get_by_label("Deslizador").click();
+    h.run_steps(3);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut(PAUSA).unwrap();
+        let id = doc.selection[0];
+        let c = doc
+            .data
+            .find_mut(id)
+            .unwrap()
+            .components
+            .get_mut(0)
+            .unwrap();
+        c.set("target", Prop::Str("musica".into()));
+    }
+    h.run_steps(2);
+    let from = h.get_by_label("deslizador").rect().center();
+    let to = h.get_by_label("botoes").rect().center();
+    // (Com o tutorial aberto a tela redesenha sempre: passos contados.)
+    h.hover_at(from);
+    h.run_steps(1);
+    h.drag_at(from);
+    h.run_steps(1);
+    for i in 1..=6 {
+        h.hover_at(from + (to - from) * (i as f32 / 6.0));
+        h.run_steps(1);
+    }
+    h.drop_at(to);
+    h.run_steps(1);
+    espera(&mut h, 6);
+    tela(&mut h, "menu-pausa");
+
+    // Na fase, Esc abre a pausa por cima.
+    h.state_mut().project_mut().unwrap().open_file(FASE, None);
+    h.run_steps(2);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut(FASE).unwrap();
+        let mut quando = EventItem {
+            id: "tecla".into(),
+            ..Default::default()
+        };
+        quando.set("modo", Prop::Str("apertar".into()));
+        quando.set("tecla", Prop::Str("voltar".into()));
+        let mut entao = EventItem {
+            id: "por_cima".into(),
+            ..Default::default()
+        };
+        entao.set("cena", Prop::Str(PAUSA.into()));
+        doc.data.events.push(Rule {
+            when: vec![quando],
+            actions: vec![entao],
+            ..Default::default()
+        });
+    }
+    espera(&mut h, 7);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 8);
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 9);
+    // Testar salvou as duas cenas.
+    let fase = std::fs::read_to_string(projeto.join(FASE)).unwrap();
+    assert!(
+        fase.contains("anchor = \"top_left\"") && fase.contains("act = \"por_cima\""),
+        "{fase}"
+    );
+    let pausa = std::fs::read_to_string(projeto.join(PAUSA)).unwrap();
+    assert!(pausa.contains("target = \"musica\""), "{pausa}");
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}
+
+/// Abre o submenu Interface do ➕ Objeto (já aberto).
+fn submenu_interface(h: &mut Harness<'_, StudioApp>) {
+    h.get_by(|n| n.label().is_some_and(|l| l.starts_with("Interface")))
+        .hover();
+}
+
+#[test]
+fn modelo_plataforma_abre_os_menus_no_editor() {
+    let dir = temp("modelo-menus");
+    let proj = dir.join("jogo");
+    nn_run::create_project(&nn_run::NewOptions {
+        dir: proj.clone(),
+        title: None,
+        template: nn_run::Template::Visual,
+    })
+    .unwrap();
+    // (O título tem um herói animado: a tela redesenha sempre.)
+    let options = StudioOptions {
+        settings_path: Some(dir.join("preferencias.json")),
+        open: Some(proj.clone()),
+        exe: Some(fake_game(&dir)),
+    };
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .wgpu()
+        .build_eframe(move |cc| {
+            let mut app = StudioApp::new(&cc.egui_ctx, options);
+            app.set_render_state(cc.wgpu_render_state.clone());
+            app
+        });
+    h.run_steps(4);
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("cenas/opcoes.cena", None);
+    h.run_steps(4);
+    let doc = &h.state().project().unwrap().scenes["cenas/opcoes.cena"];
+    assert!(doc.data.overlay);
+    // Abrir não muda nada (os grupos já vêm arrumados).
+    assert!(!doc.is_dirty());
+    h.get_by_label("musica").click();
+    h.run_steps(4);
+    h.get_by_label("Deslizador");
+    tela(&mut h, "modelo-opcoes");
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("cenas/fase.cena", None);
+    // (As moedas animadas redesenham sempre: passos contados.)
+    h.run_steps(4);
+    assert!(!h.state().project().unwrap().scenes["cenas/fase.cena"].is_dirty());
+    h.get_by_label("vidas").click();
+    h.run_steps(4);
+    tela(&mut h, "modelo-hud");
+}

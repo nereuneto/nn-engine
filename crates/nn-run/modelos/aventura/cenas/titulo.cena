@@ -18,7 +18,7 @@ return {
       x = 0, y = 170, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "{{TITULO}}", size = 72, color = "#FFD166", anchor = "center", hud = false },
+        { type = "text", text = "{{TITULO}}", size = 72, color = "#FFD166", anchor = "center", font = "", hud = false },
       },
     },
     {
@@ -26,7 +26,7 @@ return {
       x = 0, y = 80, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Pegue a chave, abra a porta e encontre o tesouro", size = 26, color = "#B8C4D6", anchor = "center", hud = false },
+        { type = "text", text = "Pegue a chave, abra a porta e encontre o tesouro", size = 26, color = "#B8C4D6", anchor = "center", font = "", hud = false },
       },
     },
     {
@@ -43,7 +43,7 @@ return {
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Jogar", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "text", text = "Jogar", size = 40, color = "#FFFFFF", anchor = "center", font = "", hud = false },
         { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/mapa.cena", foco = true },
       },
     },
@@ -52,7 +52,7 @@ return {
       x = 0, y = -190, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Sair", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "text", text = "Sair", size = 40, color = "#FFFFFF", anchor = "center", font = "", hud = false },
         { type = "behavior", script = "nn:botao", acao = "sair" },
       },
     },

@@ -18,7 +18,7 @@ return {
       x = 0, y = 150, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "{{TITULO}}", size = 72, color = "#FFD166", anchor = "center", hud = false },
+        { type = "text", text = "{{TITULO}}", size = 72, color = "#FFD166", anchor = "center", font = "", hud = false },
       },
     },
     {
@@ -26,7 +26,7 @@ return {
       x = 0, y = 60, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Setas ou WASD para andar, espaço para pular", size = 26, color = "#B8C4D6", anchor = "center", hud = false },
+        { type = "text", text = "Setas ou WASD para andar, espaço para pular, Esc para pausar", size = 26, color = "#B8C4D6", anchor = "center", font = "", hud = false },
       },
     },
     {
@@ -39,21 +39,37 @@ return {
       },
     },
     {
-      id = 4, name = "jogar",
-      x = 0, y = -60, rotation = 0, scale_x = 1, scale_y = 1,
-      visible = true, layer = 0,
-      components = {
-        { type = "text", text = "Jogar", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
-        { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/fase.cena", foco = true },
-      },
-    },
-    {
-      id = 5, name = "sair",
+      id = 4, name = "menu",
       x = 0, y = -130, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Sair", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
-        { type = "behavior", script = "nn:botao", acao = "sair" },
+        { type = "layout", arrange = "vertical", spacing = 14, columns = 2, align = "center" },
+      },
+      children = {
+        {
+          id = 5, name = "jogar",
+          x = 0, y = 74, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "button", text = "Jogar", size = 28, w = 240, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "cena", scene = "cenas/fase.cena", sound = "", focus = true, enabled = true, hud = true },
+          },
+        },
+        {
+          id = 6, name = "opcoes",
+          x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "button", text = "Opções", size = 28, w = 240, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "por_cima", scene = "cenas/opcoes.cena", sound = "", focus = false, enabled = true, hud = true },
+          },
+        },
+        {
+          id = 7, name = "sair",
+          x = 0, y = -74, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "button", text = "Sair", size = 28, w = 240, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "sair", scene = "", sound = "", focus = false, enabled = true, hud = true },
+          },
+        },
       },
     },
   },

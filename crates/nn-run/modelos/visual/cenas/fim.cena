@@ -10,7 +10,7 @@ return {
       x = 0, y = 80, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Você chegou ao fim!", size = 56, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "text", text = "Você chegou ao fim!", size = 56, color = "#FFFFFF", anchor = "center", font = "", hud = false },
       },
     },
     {
@@ -18,7 +18,7 @@ return {
       x = 0, y = -10, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "", size = 32, color = "#FFD166", anchor = "center", hud = false },
+        { type = "text", text = "", size = 32, color = "#FFD166", anchor = "center", font = "", hud = false },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Moedas: {moedas}" },
       },
     },
@@ -27,7 +27,7 @@ return {
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Jogar de novo", size = 36, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "text", text = "Jogar de novo", size = 36, color = "#FFFFFF", anchor = "center", font = "", hud = false },
         { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/titulo.cena", foco = true },
       },
     },

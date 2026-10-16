@@ -15,11 +15,15 @@ Cada objeto faz o que faz por causa dos **comportamentos** dele (no Inspetor):
 - `inimigo`: Patrulha e Perigo (dá para derrotar pulando em cima).
 - `plataforma_movel`: Movimento automático (sobe e desce, e leva o herói junto).
 - `saida`: um **evento** (painel Eventos) leva para `cenas/fim.cena` quando o herói encosta nela, mas só depois de pegar todas as moedas. Outro evento, da cena, deixa a saída verde nessa hora.
-- `placar`: texto fixo na tela (HUD) com Mostrar valor.
-
 As variáveis do jogo (`moedas`, `vidas`) ficam no `config.lua` e valem de uma cena para outra.
 
-O jogo começa na tela de título (`cenas/titulo.cena`), com botões feitos com o comportamento **Botão**; o evento dela zera as variáveis a cada jogo novo.
+## Interface: HUD e menus
+
+- O **HUD** da fase fica preso à tela: `vidas` (componente **Ícones**, um coração para cada vida, preso no canto de cima à esquerda), `moedas` (texto com Mostrar valor) e `progresso` (componente **Barra**, que enche com as moedas), presos no canto de cima à direita. No Inspetor, **Preso em** escolhe o canto: o HUD continua no canto em qualquer tamanho de janela.
+- O título (`cenas/titulo.cena`) tem um **Grupo** que arruma três **Botões** em coluna: Jogar, Opções e Sair. Dá para escolher com o mouse, as setas ou o controle. O evento da cena zera as variáveis a cada jogo novo.
+- **Esc** na fase abre a **pausa** (`cenas/pausa.cena`) **por cima**: a fase continua aparecendo, parada, até a pausa fechar.
+- **Opções** (`cenas/opcoes.cena`) abre por cima do título ou da pausa, com **Deslizadores** para o volume da música e dos efeitos e uma **Caixa de marcar** para a tela cheia. As escolhas ficam guardadas para a próxima vez.
+- As cores dos botões e painéis vêm do **tema da interface** (Configurações do projeto). Mude o tema e todos os menus mudam juntos.
 
 ## Eventos: "Quando... Então..."
 

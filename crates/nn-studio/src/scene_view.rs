@@ -71,7 +71,7 @@ pub fn diff(before: &SceneData, after: &SceneData) -> Vec<LiveChange> {
             out.push(events(o.id, &o.events));
         }
         for key in [
-            "name", "x", "y", "rotation", "scale_x", "scale_y", "visible", "layer",
+            "name", "x", "y", "rotation", "scale_x", "scale_y", "visible", "layer", "anchor",
         ] {
             let (old, new) = (b.field(key), o.field(key));
             if old != new
@@ -630,9 +630,33 @@ impl SceneDoc {
     pub fn add_prepared(&mut self, mut o: Object, x: f64, y: f64) -> u32 {
         self.record(None);
         let id = self.data.next_id();
-        o.id = id;
+        // Ele e os filhos ganham ids novos.
+        fn number(o: &mut Object, next: &mut u32) {
+            o.id = *next;
+            *next += 1;
+            for c in &mut o.children {
+                number(c, next);
+            }
+        }
+        let mut next = id;
+        number(&mut o, &mut next);
         o.x = x.round();
         o.y = y.round();
+        // Na tela (HUD), a posição conta a partir do ponto da tela.
+        if self.prefab_root().is_none() && self.data.is_screen(&o) {
+            let local = self.data.root_unplace(
+                &o,
+                Transform {
+                    x,
+                    y,
+                    rotation: 0.0,
+                    scale_x: 1.0,
+                    scale_y: 1.0,
+                },
+            );
+            o.x = local.x.round();
+            o.y = local.y.round();
+        }
         match self.prefab_root() {
             Some(root) => {
                 if let Some(t) = self.data.world_transform(root) {
@@ -820,6 +844,8 @@ impl SceneDoc {
             });
         }
         self.toolbar(ui, env, &mut actions);
+        // Grupos: os filhos ficam onde o jogo vai pôr.
+        scene_render::arrange_all(&mut self.data, env.root, env.sizes);
 
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         response.widget_info(|| {
@@ -870,7 +896,7 @@ impl SceneDoc {
             }
         }
 
-        self.draw_guides(&painter, rect, env);
+        self.draw_guides(&painter, rect);
         if self.painting.is_some() {
             self.paint_input(ui, &response, rect, env, &mut actions);
             self.draw_overlays(&painter, rect, env);
@@ -1040,9 +1066,9 @@ impl SceneDoc {
                 ui.separator();
             }
             let menu = ui.menu_button("➕ Objeto", |ui| {
-                if let Some((name, comps)) = add_object_menu(ui) {
+                if let Some(o) = add_object_menu(ui) {
                     let (x, y) = self.view_center();
-                    self.add_object(name, x, y, comps);
+                    self.add_prepared(o, x, y);
                     ui.close();
                 }
                 let r = ui.button("Mapa de tiles...").on_hover_text("Um mapa para pintar com tiles: chão, paredes, plataformas");
@@ -1053,6 +1079,25 @@ impl SceneDoc {
                 }
             });
             crate::tutorial::anchor(ui.ctx(), "cena.objeto", menu.response.rect);
+            // Ver o HUD em telas de outras proporções.
+            let ratio = scene_data::preview();
+            let current = scene_data::PREVIEWS
+                .iter()
+                .find(|p| (p.1 - ratio).abs() < 1e-6)
+                .map_or("do jogo", |p| p.0);
+            let r = egui::ComboBox::from_id_salt("tela-previa")
+                .selected_text(format!("📐 {current}"))
+                .width(90.0)
+                .show_ui(ui, |ui| {
+                    for (label, r) in scene_data::PREVIEWS {
+                        if ui.selectable_label((r - ratio).abs() < 1e-6, label).clicked() {
+                            scene_data::set_preview(r);
+                        }
+                    }
+                })
+                .response
+                .on_hover_text("Ver como o HUD e os menus ficam em telas de outros formatos (só no editor)");
+            crate::tutorial::anchor(ui.ctx(), "cena.tela", r.rect);
             ui.label(format!("{:.0}%", self.camera.zoom * 100.0))
                 .on_hover_text("Zoom: role o mouse. Mover a vista: botão do meio, ou Espaço + arrastar.");
             if ui.button("⛶ Enquadrar").on_hover_text("F").clicked()
@@ -1063,7 +1108,7 @@ impl SceneDoc {
         });
     }
 
-    fn draw_guides(&self, painter: &egui::Painter, rect: Rect, env: &SceneEnv) {
+    fn draw_guides(&self, painter: &egui::Painter, rect: Rect) {
         let cam = &self.camera;
         // Grade (só quando dá para ver as linhas).
         let step_px = self.grid * cam.zoom;
@@ -1105,7 +1150,8 @@ impl SceneDoc {
         );
         // Moldura da tela do jogo: onde a câmera começa.
         let (cx, cy, zoom) = self.camera_start();
-        let (w, h) = (env.design.0 / zoom, env.design.1 / zoom);
+        let (sw, sh) = scene_data::screen_size();
+        let (w, h) = (sw / zoom, sh / zoom);
         let a = cam.to_screen(rect, cx - w / 2.0, cy + h / 2.0);
         let b = cam.to_screen(rect, cx + w / 2.0, cy - h / 2.0);
         painter.rect_stroke(
@@ -1114,10 +1160,15 @@ impl SceneDoc {
             Stroke::new(1.5, Color32::from_white_alpha(120)),
             egui::StrokeKind::Middle,
         );
+        // O nome fica por fora da moldura, para não cobrir o HUD no canto.
         painter.text(
-            a + Vec2::new(4.0, 2.0),
-            egui::Align2::LEFT_TOP,
-            "tela do jogo",
+            a + Vec2::new(2.0, -2.0),
+            egui::Align2::LEFT_BOTTOM,
+            &if scene_data::preview() > 0.0 {
+                format!("tela do jogo ({sw:.0}×{sh:.0})")
+            } else {
+                "tela do jogo".to_string()
+            },
             egui::FontId::proportional(11.0),
             Color32::from_white_alpha(150),
         );
@@ -2026,8 +2077,9 @@ impl SceneDoc {
     }
 }
 
-/// Itens do menu "Adicionar objeto": devolve o nome e os componentes.
-pub fn add_object_menu(ui: &mut egui::Ui) -> Option<(&'static str, Vec<Component>)> {
+/// Itens do menu "Adicionar objeto": devolve o objeto pronto (com id 0;
+/// [`SceneDoc::add_prepared`] numera ele e os filhos).
+pub fn add_object_menu(ui: &mut egui::Ui) -> Option<Object> {
     let items: [(&str, &str, &[&str]); 8] = [
         ("Vazio", "objeto", &[]),
         ("Imagem (sprite)", "sprite", &["sprite"]),
@@ -2038,18 +2090,101 @@ pub fn add_object_menu(ui: &mut egui::Ui) -> Option<(&'static str, Vec<Component
         ("Som", "som", &["sound"]),
         ("Partículas", "particulas", &["particles"]),
     ];
+    let mut out = None;
     for (label, name, comps) in items {
         if ui.button(label).clicked() {
-            let mut list: Vec<Component> = comps.iter().map(|k| Component::new(k)).collect();
+            let mut o = Object::new(0, name);
+            o.components = comps.iter().map(|k| Component::new(k)).collect();
             if label == "Círculo"
-                && let Some(c) = list.first_mut()
+                && let Some(c) = o.components.first_mut()
             {
                 c.set("shape", Prop::Str("circle".into()));
             }
-            return Some((name, list));
+            out = Some(o);
         }
     }
-    None
+    let r = ui.menu_button("Interface", |ui| {
+        if let Some(o) = interface_menu(ui) {
+            out = Some(o);
+            ui.close();
+        }
+    });
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:interface", r.response.rect);
+    out
+}
+
+/// O submenu Interface: menus e HUD.
+fn interface_menu(ui: &mut egui::Ui) -> Option<Object> {
+    let items: [(&str, &str, &str, &str); 8] = [
+        ("Painel", "painel", "panel", "Fundo de menu ou de HUD"),
+        (
+            "Botão",
+            "botao",
+            "button",
+            "Aperta com mouse, teclado ou controle",
+        ),
+        ("Barra", "barra", "bar", "Vida, energia, tempo"),
+        ("Ícones", "icones", "icons", "Corações, vidas, moedas"),
+        ("Deslizador", "deslizador", "slider", "Volume, dificuldade"),
+        ("Caixa de marcar", "caixa", "checkbox", "Liga e desliga"),
+        (
+            "Campo de texto",
+            "campo",
+            "textfield",
+            "Para digitar um nome",
+        ),
+        (
+            "Grupo (arrumar filhos)",
+            "grupo",
+            "layout",
+            "Põe os filhos em coluna, linha ou grade",
+        ),
+    ];
+    let mut out = None;
+    for (label, name, kind, tip) in items {
+        let r = ui.button(label).on_hover_text(tip);
+        crate::tutorial::anchor(ui.ctx(), &format!("cena.objeto:{kind}"), r.rect);
+        if r.clicked() {
+            let mut o = Object::new(0, name);
+            o.components.push(Component::new(kind));
+            out = Some(o);
+        }
+    }
+    ui.separator();
+    let r = ui
+        .button("Menu com botões")
+        .on_hover_text("Um painel com um grupo de 3 botões: Jogar, Opções e Sair");
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:menu", r.rect);
+    if r.clicked() {
+        out = Some(menu_with_buttons());
+    }
+    out
+}
+
+/// Um menu pronto: painel que arruma 3 botões em coluna.
+pub fn menu_with_buttons() -> Object {
+    let mut menu = Object::new(0, "menu");
+    let mut panel = Component::new("panel");
+    panel.set("w", Prop::Num(320.0));
+    panel.set("h", Prop::Num(276.0));
+    menu.components.push(panel);
+    menu.components.push(Component::new("layout"));
+    for (name, text, action, focus) in [
+        ("jogar", "Jogar", "cena", true),
+        ("opcoes", "Opções", "por_cima", false),
+        ("sair", "Sair", "sair", false),
+    ] {
+        let mut b = Object::new(0, name);
+        let mut c = Component::new("button");
+        c.set("text", Prop::Str(text.into()));
+        c.set("action", Prop::Str(action.into()));
+        if focus {
+            c.set("focus", Prop::Bool(true));
+        }
+        b.components.push(c);
+        menu.children.push(b);
+    }
+    menu
 }
 
 fn icon_letter(o: &Object) -> &'static str {

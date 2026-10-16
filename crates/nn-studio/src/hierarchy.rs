@@ -102,9 +102,9 @@ impl HierarchyPanel {
         }
         ui.horizontal(|ui| {
             ui.menu_button("➕", |ui| {
-                if let Some((name, comps)) = add_object_menu(ui) {
+                if let Some(o) = add_object_menu(ui) {
                     let (x, y) = doc.view_center();
-                    doc.add_object(name, x, y, comps);
+                    doc.add_prepared(o, x, y);
                     ui.close();
                 }
                 if ui.button("Mapa de tiles...").clicked() {

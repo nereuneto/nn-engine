@@ -16,6 +16,7 @@ No NN Studio, **Ajuda > Tutorial: seu primeiro jogo** mostra, passo a passo, com
 - `imagens/bandeira.png`: bandeira de chegada.
 - `imagens/inimigos.png`: lesma (quadros 1 a 3) e morcego (quadros 5 a 7).
 - `imagens/chave.png`: chave brilhando (4 quadros).
+- `imagens/coracao.png`: coração para mostrar as vidas no HUD (componente **Ícones**). O tutorial **Monte um menu** mostra como.
 - `imagens/terreno.png` e `terreno.tsj`: tiles para montar fases com **➕ Objeto > Mapa de tiles**: terra com grama (plataforma), grama e água (vista de cima), tábua, tijolo, pedra, lava animada, espinhos e enfeites. O tutorial **Monte uma fase com tiles** mostra como.
 - `sons/`: moeda, pulo, dano e vitória.
 

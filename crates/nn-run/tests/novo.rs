@@ -206,6 +206,67 @@ fn modelo_visual_roda_a_fase_e_pega_moedas() {
 }
 
 #[test]
+fn modelo_visual_tem_menus_pausa_e_opcoes() {
+    let base = temp("visual-menus");
+    let dir = base.join("jogo");
+    let r = create_project(&NewOptions {
+        dir: dir.clone(),
+        title: None,
+        template: Template::Visual,
+    })
+    .unwrap();
+    for f in [
+        "cenas/pausa.cena",
+        "cenas/opcoes.cena",
+        "assets/imagens/coracao.png",
+    ] {
+        assert!(r.files.contains(&f.to_string()), "{f}");
+    }
+    let Some(mut h) = headless(&dir, &base.join("dados")) else {
+        return;
+    };
+    h.run_frames(3);
+    // Título: Jogar já vem com foco; Enter entra na fase.
+    toque(&mut h, KeyCode::Enter);
+    h.run_frames(60);
+    assert_eq!(h.game.len(), 1);
+    // Esc: a pausa abre por cima.
+    toque(&mut h, KeyCode::Escape);
+    h.run_frames(2);
+    assert_eq!(h.game.len(), 2, "pausou");
+    // Para baixo: Opções; Enter abre as opções por cima da pausa.
+    toque(&mut h, KeyCode::ArrowDown);
+    toque(&mut h, KeyCode::Enter);
+    h.run_frames(2);
+    assert_eq!(h.game.len(), 3, "opções por cima da pausa");
+    // O foco começa em Voltar; duas vezes para cima chega no volume dos
+    // efeitos, e a esquerda abaixa (e guarda).
+    toque(&mut h, KeyCode::ArrowUp);
+    toque(&mut h, KeyCode::ArrowUp);
+    toque(&mut h, KeyCode::ArrowLeft);
+    h.run_frames(2);
+    let efeitos = h
+        .ctx
+        .save
+        .get("nn_opcoes")
+        .and_then(|v| v.get("efeitos"))
+        .and_then(|v| v.as_f64());
+    assert!(
+        efeitos.is_some_and(|v| (v - 0.9).abs() < 1e-6),
+        "{efeitos:?}"
+    );
+    // Esc fecha as opções e depois a pausa: volta à fase.
+    toque(&mut h, KeyCode::Escape);
+    h.run_frames(2);
+    assert_eq!(h.game.len(), 2);
+    toque(&mut h, KeyCode::Escape);
+    h.run_frames(2);
+    assert_eq!(h.game.len(), 1, "voltou para a fase");
+    drop(h);
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+#[test]
 fn nao_sobrescreve_pasta_com_arquivos() {
     let dir = temp("ocupada");
     std::fs::create_dir_all(&dir).unwrap();

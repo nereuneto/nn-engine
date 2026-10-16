@@ -28,7 +28,7 @@ return {
       x = 0, y = 170, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "{{TITULO}}", size = 72, color = "#7FD3FF", anchor = "center", hud = false },
+        { type = "text", text = "{{TITULO}}", size = 72, color = "#7FD3FF", anchor = "center", font = "", hud = false },
       },
     },
     {
@@ -36,7 +36,7 @@ return {
       x = 0, y = 90, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Setas ou WASD para mover, espaço para atirar", size = 26, color = "#B8C4D6", anchor = "center", hud = false },
+        { type = "text", text = "Setas ou WASD para mover, espaço para atirar", size = 26, color = "#B8C4D6", anchor = "center", font = "", hud = false },
       },
     },
     {
@@ -54,7 +54,7 @@ return {
       x = 0, y = -60, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Recorde: 0", size = 28, color = "#FFD166", anchor = "center", hud = false },
+        { type = "text", text = "Recorde: 0", size = 28, color = "#FFD166", anchor = "center", font = "", hud = false },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Recorde: {recorde}" },
       },
     },
@@ -63,7 +63,7 @@ return {
       x = 0, y = -140, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Jogar", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "text", text = "Jogar", size = 40, color = "#FFFFFF", anchor = "center", font = "", hud = false },
         { type = "behavior", script = "nn:botao", acao = "cena", cena = "cenas/jogo.cena", foco = true },
       },
     },
@@ -72,7 +72,7 @@ return {
       x = 0, y = -210, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Sair", size = 40, color = "#FFFFFF", anchor = "center", hud = false },
+        { type = "text", text = "Sair", size = 40, color = "#FFFFFF", anchor = "center", font = "", hud = false },
         { type = "behavior", script = "nn:botao", acao = "sair" },
       },
     },

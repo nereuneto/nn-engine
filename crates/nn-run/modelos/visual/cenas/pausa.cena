@@ -1,0 +1,70 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#00000099",
+  gravity = -1800,
+  overlay = true,
+  events = {
+    { comment = "Esc de novo também fecha a pausa." },
+    { when = {
+        { cond = "tecla", modo = "apertar", tecla = "voltar" },
+      }, actions = {
+        { act = "fechar_cena" },
+      } },
+  },
+  objects = {
+    {
+      id = 1, name = "janela",
+      x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "panel", w = 360, h = 380, color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, hud = true },
+      },
+      children = {
+        {
+          id = 2, name = "titulo",
+          x = 0, y = 130, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 1,
+          components = {
+            { type = "text", text = "Pausa", size = 48, color = "#FFD166", anchor = "center", font = "", hud = true },
+          },
+        },
+        {
+          id = 3, name = "botoes",
+          x = 0, y = -40, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 1,
+          components = {
+            { type = "layout", arrange = "vertical", spacing = 14, columns = 2, align = "center" },
+          },
+          children = {
+            {
+              id = 4, name = "continuar",
+              x = 0, y = 74, rotation = 0, scale_x = 1, scale_y = 1,
+              visible = true, layer = 0,
+              components = {
+                { type = "button", text = "Continuar", size = 28, w = 240, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "fechar", scene = "", sound = "", focus = true, enabled = true, hud = true },
+              },
+            },
+            {
+              id = 5, name = "opcoes",
+              x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+              visible = true, layer = 0,
+              components = {
+                { type = "button", text = "Opções", size = 28, w = 240, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "por_cima", scene = "cenas/opcoes.cena", sound = "", focus = false, enabled = true, hud = true },
+              },
+            },
+            {
+              id = 6, name = "sair",
+              x = 0, y = -74, rotation = 0, scale_x = 1, scale_y = 1,
+              visible = true, layer = 0,
+              components = {
+                { type = "button", text = "Sair para o título", size = 28, w = 240, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "cena", scene = "cenas/titulo.cena", sound = "", focus = false, enabled = true, hud = true },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+}

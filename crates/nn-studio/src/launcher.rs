@@ -122,7 +122,7 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
         ),
         Template::Visual => (
             "Plataforma",
-            "Fase de plataforma montada no editor, sem código: herói, inimigo, moedas, placar e uma saída que só abre com todas as moedas.",
+            "Fase de plataforma montada no editor, sem código: herói, inimigo, moedas, HUD com corações, pausa com Esc, opções de volume e uma saída que só abre com todas as moedas.",
         ),
         Template::Aventura => (
             "Aventura",

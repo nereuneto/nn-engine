@@ -61,10 +61,16 @@ return {
     moedas = 0,
     vidas = 3,
   },
+  theme = {               -- tema da interface (menus e HUD das cenas visuais)
+    button = "#E76F51",
+    font = "assets/fontes/minha.ttf",
+  },
 }
 ```
 
 Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#variáveis-do-jogo-nnvars).
+
+**Tema da interface** (`theme`): as cores que os [componentes de interface](#interface-menus-e-hud) usam quando a cor deles está vazia: `text` (#FFFFFF), `button` (#3FA7D6), `hover` (#5BC0EB, botão com foco), `press` (#2E86AB, apertado), `disabled` (#5B6472), `panel` (#1E2A3AE6), `border` (#FFFFFF40) e `accent` (#FFD166, barras e marcas), além de `font` (um `.ttf` ou `.otf`; vazio = a fonte da engine) e `sound` (som dos botões). Só o que você muda precisa estar no arquivo. No código, o tema completo fica em `nn.theme`.
 
 **Tamanho fixo do jogo** (`resolution`): sem ele, o jogo enxerga o tamanho da janela (janela maior mostra mais coisa). Com `resolution = { largura, altura }`, a câmera, `nn.screen`, `nn.window.size()`, `nn.camera.view()` e o mouse usam sempre esse tamanho, e a imagem se ajusta à janela conforme `scale`: `"fit"` (padrão) aumenta ou diminui mantendo a proporção, com faixas pretas quando a janela tem outra proporção; `"stretch"` ocupa a janela toda, mesmo distorcendo; `"pixel"` só aumenta em números inteiros (2×, 3×...), para pixel art nítida. O texto é desenhado no tamanho real da tela, então continua nítido. Os modelos visuais vêm com `resolution = { 1280, 720 }`. Rodando da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), o jogo recarrega ao salvar, a não ser que o `config.lua` diga `hot_reload = false`; o jogo exportado não recarrega. O NN Studio também edita estas opções num formulário (**Editar > Configurações do projeto**), sem mexer nos comentários do arquivo.
 
@@ -146,6 +152,7 @@ return {
   script = "cenas/fase.lua",     -- opcional: o código da cena
   background = "#5FB3E0",        -- opcional: cor de fundo (senão, a do config.lua)
   gravity = -1800,               -- gravidade da física (negativa = cai)
+  overlay = false,               -- abre por cima de outra cena (pausa, opções)
   objects = {
     {
       id = 4, name = "heroi",
@@ -161,18 +168,41 @@ return {
 }
 ```
 
-Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), `scale_x`, `scale_y`, `visible`, `locked` (só para o editor), `layer` (camada maior é desenhada por cima), `components` e `children`. Campos que faltam usam o valor padrão. Os componentes:
+Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), `scale_x`, `scale_y`, `visible`, `locked` (só para o editor), `layer` (camada maior é desenhada por cima), `anchor` (num objeto da raiz que fica na tela: o ponto da tela de onde a posição conta, veja abaixo), `components` e `children`. Campos que faltam usam o valor padrão. Os componentes:
 
 | `type` | Campos (padrão) |
 |---|---|
 | `sprite` | `image`, `frame_w`, `frame_h` (0 = imagem inteira, ou o tamanho do `.anim` da imagem), `frame` (1), `w`, `h` (0 = tamanho da imagem), `color` ("#FFFFFF"), `flip_x`, `flip_y`, `pixel_art` (true), `fill` ("stretch" ou "repeat": repete a imagem lado a lado; `w` e `h` são o tamanho de cada cópia e a escala do objeto diz quantas cabem), `animation` ("": uma [animação](#animações-anim) da imagem para tocar desde o começo) |
-| `text` | `text`, `size` (32), `color`, `anchor` ("center", "left", "right"...) |
+| `text` | `text`, `size` (32), `color`, `anchor` ("center", "left", "right"...), `font` ("": a do tema) |
 | `shape` | `shape` ("rect" ou "circle"), `w`, `h` (64), `radius` (32), `color` |
 | `body` | `body` ("dynamic", "static" ou "kinematic"), `shape` ("box" ou "circle"), `w`, `h` (32), `radius` (16), `sensor`, `one_way`, `bounce` (0), `gravity_scale` (1), `tag` (padrão: o nome do objeto) |
 | `map` | `map` (arquivo .tmj), `scale` (1), `collision` (true) |
-| (sprite, text, shape) | `hud` (false): fixo na tela, em vez de andar com o mundo. A posição conta a partir do centro da tela (y para cima). |
+| (sprite, text, shape) | `hud` (false): fixo na tela, em vez de andar com o mundo. A posição conta a partir do centro da tela, ou do ponto escolhido em `anchor` (y para cima). |
 
 A cena e cada objeto também podem ter `events`, as regras [Quando... Então...](#eventos-quando-então).
+
+#### Interface: menus e HUD
+
+Os componentes de interface ficam presos à tela (`hud = true`, o padrão deles). Cores vazias (`""`) usam o [tema](#configlua) do projeto.
+
+| `type` | Campos (padrão) |
+|---|---|
+| `panel` | `w` (320), `h` (220), `color` ("": tema `panel`), `radius` (12), `border` (0), `border_color`, `image` (moldura em 9 fatias), `slice` (4: pixels dos cantos da imagem), `slice_scale` (4) |
+| `button` | `text` ("Botão"), `size` (28), `w` (240), `h` (60), `color`, `hover_color`, `press_color`, `text_color`, `radius` (12), `border`, `border_color`, `image`, `slice`, `slice_scale`, `icon`, `font`, `action` ("nada", "cena", "por_cima", "fechar", "reiniciar", "sair"), `scene`, `sound`, `focus` (false: começa com o foco), `enabled` (true) |
+| `bar` | `w` (240), `h` (24), `var` (variável do jogo), `value` (1), `max` (1), `max_var`, `color` ("": tema `accent`), `back_color`, `radius` (6), `border`, `border_color`, `direction` ("right", "left", "up", "down") |
+| `icons` | `image`, `frame`, `frame_w`, `frame_h`, `var`, `count` (3, sem variável), `max` (0: só os que tem; com máximo, os que faltam ficam com `empty_color`), `size` (32), `spacing` (6), `color`, `empty_color`, `align` ("left", "center", "right"), `pixel_art` |
+| `slider` | `w` (240), `h` (12), `target` ("variavel", "musica", "efeitos", "geral"), `var`, `value` (0.5), `min` (0), `max` (1), `step` (0: um décimo), `color`, `back_color`, `knob_color`, `knob` (28) |
+| `checkbox` | `text` ("Opção"), `size` (26), `box` (36), `target` ("variavel" ou "tela_cheia"), `var`, `checked`, `color`, `check_color`, `text_color`, `font` |
+| `textfield` | `text`, `placeholder` ("Digite aqui"), `var` (guarda o texto), `w` (320), `h` (56), `size` (26), `max` (20 letras), `color`, `text_color`, `border` (2), `border_color`, `radius` (8), `font` |
+| `layout` | `arrange` ("vertical", "horizontal", "grid", "none"): arruma os filhos do objeto, com `spacing` (16), `columns` (2, na grade) e `align` ("start", "center", "end") |
+
+**Preso na tela.** A posição de um objeto da raiz que fica na tela conta a partir do ponto `anchor`: `"top_left"`, `"top"`, `"top_right"`, `"left"`, `"center"` (padrão), `"right"`, `"bottom_left"`, `"bottom"` ou `"bottom_right"`, com y para cima. `{ anchor = "top_left", x = 40, y = -40 }` fica a 40 pixels do canto em qualquer tamanho de janela.
+
+**Foco.** Botões, deslizadores, caixas de marcar e campos de texto recebem o foco com o mouse (passando por cima), as setas ou WASD (para o item mais perto naquela direção), Tab e o direcional do controle. Enter, espaço ou o A do controle apertam; num deslizador, esquerda e direita mudam o valor; num campo de texto, as letras vão para o texto (Backspace apaga). Um botão apertado manda a mensagem `clicou` ao objeto (a condição `clicar` dos eventos); um valor que muda dispara a condição `mudou`. Os volumes e a tela cheia escolhidos ficam guardados (chave `nn_opcoes` do [nn.save](#nnsave)) e valem de novo ao abrir o jogo.
+
+**Cenas por cima.** Com `overlay = true`, ou aberta com `nn.scene.push(cena, { por_cima = true })` (a ação `por_cima`), a cena aparece por cima da de baixo, que continua desenhada e **parada** até ela fechar (`nn.scene.pop()`, a ação `fechar_cena` ou um botão `fechar`). O `background` dela vira um véu sobre a de baixo (use uma cor transparente, como `"#00000099"`), e os objetos ficam na tela.
+
+No script, `obj.button`, `obj.bar`, `obj.slider`... são os componentes (`obj.button.enabled = false`, `obj.bar.max = 5`), e `self:open_over(cena)` e `self:close_over()` abrem e fecham cenas por cima.
 | `camera` | `follow` (nome do objeto a seguir), `smooth` (6), `zoom` (1), `limit_to_map` (true) |
 | `sound` | `sound`, `autoplay` (true), `loop`, `volume` (1), `channel` ("effects" ou "music") |
 | `behavior` | `script` (`"nn:plataforma"` para um [pronto](#comportamentos-prontos) ou o caminho de um `.lua`) e as propriedades dele, soltas: `{ type = "behavior", script = "nn:patrulha", velocidade = 60 }` |
@@ -378,6 +408,7 @@ Condições (`cond`):
 | `levou_dano` / `vida_acabou` | `quem` (precisa do comportamento Vida) |
 | `animacao_terminou` | `quem`, `nome` ("" = qualquer uma; só animações de modo "once") |
 | `mensagem` | `quem`, `msg` (de `obj:send("msg")`, de comportamentos ou da ação `mensagem`) |
+| `mudou` | `quem` (um deslizador, caixa de marcar ou campo de texto mudou pelo jogador) |
 
 Ações (`act`):
 
@@ -388,10 +419,13 @@ Ações (`act`):
 | `zerar` | — (`nn.reset_vars()`) |
 | `ir_para_cena` | `cena`, `escurecer` (0.5 s) |
 | `reiniciar` | `como` ("comeco", "checkpoint", "zerar": do começo, zerando as variáveis) |
+| `por_cima` | `cena` (abre por cima: a de baixo fica parada) |
+| `fechar_cena` | — (fecha a cena aberta por cima) |
 | `sair` | — (fecha o jogo) |
 | `criar` | `prefab`, `onde` (na posição de quem), `dx`, `dy`, `vx`, `vy` |
 | `destruir` | `alvo` |
 | `mostrar` | `acao` ("mostrar", "esconder"), `alvo` |
+| `botao_ativo` | `acao` ("ativar", "desativar"), `alvo` (um botão desativado fica cinza) |
 | `mover` | `alvo`, `modo` ("para": a posição; "somar": andando), `x`, `y` |
 | `velocidade` | `modo` ("definir", "somar": empurrão), `alvo`, `vx`, `vy` (no corpo físico, se houver) |
 | `texto` / `imagem` / `quadro` / `cor` | `alvo` e `texto` / `imagem` / `quadro` / `cor` |
@@ -400,6 +434,7 @@ Ações (`act`):
 | `tremer` | `forca`, `tempo` |
 | `som` | `som`, `volume` |
 | `musica` | `acao` ("tocar", "parar"), `som`, `volume` |
+| `volume` | `canal` ("musica", "efeitos", "geral"), `valor` (%; fica guardado) |
 | `comportamento` | `acao` ("ligar", "desligar"), `nome` (ex.: "plataforma"), `alvo` |
 | `mensagem` | `msg`, `alvo` |
 | `esperar` | `segundos` |
@@ -427,12 +462,20 @@ As duas tabelas têm as mesmas funções; muda só o espaço.
 | `rect(x, y, w, h, cor)` | Retângulo de cor sólida. |
 | `text(texto, x, y, opts)` | Texto. |
 | `circle(x, y, raio, cor)` | Círculo de cor sólida (`x, y` é o centro nos dois espaços). |
+| `panel(x, y, w, h, opts)` | Painel: retângulo com cantos arredondados e borda, ou uma imagem em 9 fatias. |
 
 Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`, `tile_w`, `tile_h` (repetir em vez de esticar: o tamanho de cada cópia; `{ w = 640, h = 32, tile_w = 32, tile_h = 32 }` desenha 20 blocos).
 
 Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `font`.
 `anchor` diz qual ponto do texto fica em `x, y`: `topleft` (padrão), `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright`.
 `align` alinha as linhas de um texto com `\n`: `left`, `center`, `right`.
+
+Opções de `panel`: `color`, `radius` (cantos), `border` (largura) e `border_color`, ou `image` (uma imagem, ou uma spritesheet com `frame`) com `slice` (pixels de cada canto que não esticam) e `slice_scale` (quanto cada pixel do canto cresce; 3 ou 4 para pixel art). No mundo, `x, y` é o centro; na tela, o canto de cima à esquerda. Cores com transparência ficam certas, sem a borda escurecer o fundo.
+
+```lua
+nn.screen.panel(20, 20, 300, 120, { color = "#1E2A3AE6", radius = 12, border = 2, border_color = "#FFFFFF40" })
+nn.screen.panel(20, 160, 300, 120, { image = moldura, slice = 6, slice_scale = 4 })
+```
 
 `nn.text_size(texto, opts)` devolve `largura, altura` sem desenhar.
 
@@ -452,6 +495,7 @@ Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `f
 | `mouse_world()` | Posição do cursor no mundo. |
 | `mouse_down(b)`, `mouse_pressed(b)`, `mouse_released(b)` | Botão `"left"` (padrão), `"right"` ou `"middle"`. |
 | `scroll()` | Rolagem do mouse neste frame. |
+| `text()` | O texto digitado neste frame, com acentos e maiúsculas (para campos de texto). |
 
 Nomes de teclas: `"a"` a `"z"`, `"0"` a `"9"`, `"space"`, `"enter"`, `"escape"`, `"tab"`, `"backspace"`, `"delete"`, `"shift"`, `"ctrl"`, `"alt"`, `"left"`, `"right"`, `"up"`, `"down"`, `"f1"` a `"f12"`.
 

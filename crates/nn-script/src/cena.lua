@@ -26,7 +26,7 @@ M.FIELDS = {
   },
   text = {
     { "text", "Texto" }, { "size", 32 }, { "color", "#FFFFFF" }, { "anchor", "center" },
-    { "hud", false },
+    { "font", "" }, { "hud", false },
   },
   shape = {
     { "shape", "rect" }, { "w", 64 }, { "h", 64 }, { "radius", 32 }, { "color", "#3FA7D6" },
@@ -53,13 +53,103 @@ M.FIELDS = {
     { "size_end", 0 }, { "color_start", "#FFFFFF" }, { "color_end", "#FFFFFF00" },
     { "blend", "alpha" }, { "emitting", true },
   },
+  -- Interface (menus e HUD). Cores vazias ("") usam o tema do projeto
+  -- (config.lua, `theme`).
+  panel = {
+    { "w", 320 }, { "h", 220 }, { "color", "" }, { "radius", 12 }, { "border", 0 },
+    { "border_color", "" }, { "image", "" }, { "slice", 4 }, { "slice_scale", 4 },
+    { "hud", true },
+  },
+  button = {
+    { "text", "Botão" }, { "size", 28 }, { "w", 240 }, { "h", 60 }, { "color", "" },
+    { "hover_color", "" }, { "press_color", "" }, { "text_color", "" }, { "radius", 12 },
+    { "border", 0 }, { "border_color", "" }, { "image", "" }, { "slice", 4 },
+    { "slice_scale", 4 }, { "icon", "" }, { "font", "" }, { "action", "nada" },
+    { "scene", "" }, { "sound", "" }, { "focus", false }, { "enabled", true },
+    { "hud", true },
+  },
+  bar = {
+    { "w", 240 }, { "h", 24 }, { "var", "" }, { "value", 1 }, { "max", 1 },
+    { "max_var", "" }, { "color", "" }, { "back_color", "#00000080" }, { "radius", 6 },
+    { "border", 0 }, { "border_color", "" }, { "direction", "right" }, { "hud", true },
+  },
+  icons = {
+    { "image", "" }, { "frame", 1 }, { "frame_w", 0 }, { "frame_h", 0 }, { "var", "" },
+    { "count", 3 }, { "max", 0 }, { "size", 32 }, { "spacing", 6 }, { "color", "#FFFFFF" },
+    { "empty_color", "#FFFFFF40" }, { "align", "left" }, { "pixel_art", true },
+    { "hud", true },
+  },
+  slider = {
+    { "w", 240 }, { "h", 12 }, { "target", "variavel" }, { "var", "" }, { "value", 0.5 },
+    { "min", 0 }, { "max", 1 }, { "step", 0 }, { "color", "" }, { "back_color", "#00000080" },
+    { "knob_color", "#FFFFFF" }, { "knob", 28 }, { "hud", true },
+  },
+  checkbox = {
+    { "text", "Opção" }, { "size", 26 }, { "box", 36 }, { "target", "variavel" },
+    { "var", "" }, { "checked", false }, { "color", "" }, { "check_color", "" },
+    { "text_color", "" }, { "font", "" }, { "hud", true },
+  },
+  textfield = {
+    { "text", "" }, { "placeholder", "Digite aqui" }, { "var", "" }, { "w", 320 },
+    { "h", 56 }, { "size", 26 }, { "max", 20 }, { "color", "#00000080" },
+    { "text_color", "" }, { "border", 2 }, { "border_color", "" }, { "radius", 8 },
+    { "font", "" }, { "hud", true },
+  },
+  -- Grupo: arruma os filhos sozinho (em coluna, em linha ou em grade).
+  layout = {
+    { "arrange", "vertical" }, { "spacing", 16 }, { "columns", 2 }, { "align", "center" },
+  },
 }
+
+-- Componentes de interface (desenhados como painéis e ficam no HUD).
+M.UI_KINDS = {
+  panel = true, button = true, bar = true, icons = true, slider = true,
+  checkbox = true, textfield = true,
+}
+
+-- Tema do projeto (`theme` no config.lua): o que vale quando a cor de um
+-- componente de interface está vazia.
+M.THEME = {
+  font = "", text = "#FFFFFF", button = "#3FA7D6", hover = "#5BC0EB",
+  press = "#2E86AB", disabled = "#5B6472", panel = "#1E2A3AE6", border = "#FFFFFF40",
+  accent = "#FFD166", sound = "",
+}
+
+--- O valor do tema (o do config.lua ou o padrão).
+function M.theme(key)
+  local t = rawget(nn, "theme")
+  local v = type(t) == "table" and t[key] or nil
+  if v == nil or v == "" then return M.THEME[key] end
+  return v
+end
+
+-- Cor do componente, ou a do tema quando vazia.
+local function themed(value, key)
+  if value == nil or value == "" then return M.theme(key) end
+  return value
+end
+M.themed = themed
+
+-- Fontes lidas uma vez (o caminho vazio usa a do tema, ou a padrão).
+local fonts = {}
+function M.font(path)
+  if path == nil or path == "" then path = M.theme("font") end
+  if path == nil or path == "" then return nil end
+  local f = fonts[path]
+  if f == nil then
+    local ok, loaded = pcall(nn.assets.font, path)
+    f = ok and loaded or false
+    if not ok then print(("fonte não encontrada: %s"):format(path)) end
+    fonts[path] = f
+  end
+  return f or nil
+end
 
 -- Campos do objeto, na ordem de gravação (os filhos e componentes vêm depois).
 M.OBJECT_FIELDS = {
   { "id", 0 }, { "name", "Objeto" }, { "x", 0 }, { "y", 0 }, { "rotation", 0 },
   { "scale_x", 1 }, { "scale_y", 1 }, { "visible", true }, { "locked", false },
-  { "layer", 0 },
+  { "layer", 0 }, { "anchor", "" },
 }
 
 -- Campos da cena.
@@ -74,7 +164,8 @@ local function defaults(kind)
   local list = M.FIELDS[kind]
   if not list then
     error(("componente desconhecido: \"%s\" (use %s)"):format(
-      tostring(kind), "sprite, text, shape, body, map, camera, sound, particles ou behavior"), 0)
+      tostring(kind), "sprite, text, shape, body, map, camera, sound, particles, panel, "
+      .. "button, bar, icons, slider, checkbox, textfield, layout ou behavior"), 0)
   end
   return list
 end
@@ -355,8 +446,53 @@ function Object:send(msg, ...)
   return result
 end
 
+-- Quantos ícones mostrar: o valor da variável (ou `count`) e, com `max`,
+-- os vazios até ele.
+local function icons_count(c)
+  local n = c.count
+  if c.var ~= "" then n = tonumber(nn.vars and nn.vars[c.var]) or 0 end
+  n = math.max(0, math.floor(n))
+  return n, math.max(n, math.floor(c.max or 0))
+end
+M.icons_count = icons_count
+
+local function text_opts(c, size)
+  return { size = size or c.size, font = M.font(c.font) }
+end
+
+--- Largura e altura de um componente (sem a escala do objeto), ou nada.
+function M.component_size(c)
+  local t = c.type
+  if t == "sprite" then
+    if not c._img then return nil end
+    local w, h = c.w, c.h
+    if w <= 0 then w = c._sheet and c.frame_w or c._img.width end
+    if h <= 0 then h = c._sheet and c.frame_h or c._img.height end
+    return w, h
+  elseif t == "shape" then
+    if c.shape == "circle" then return c.radius * 2, c.radius * 2 end
+    return c.w, c.h
+  elseif t == "text" then
+    if c.text == "" then return 0, c.size end
+    return nn.text_size(c.text, text_opts(c))
+  elseif t == "panel" or t == "button" or t == "bar" or t == "textfield" then
+    return c.w, c.h
+  elseif t == "slider" then
+    return c.w + c.knob, math.max(c.h, c.knob)
+  elseif t == "checkbox" then
+    local tw = 0
+    if c.text ~= "" then tw = nn.text_size(c.text, text_opts(c)) + c.box * 0.4 end
+    return c.box + tw, math.max(c.box, c.size * 1.2)
+  elseif t == "icons" then
+    local _, k = icons_count(c)
+    k = math.max(k, 1)
+    return k * c.size + (k - 1) * c.spacing, c.size
+  end
+  return nil
+end
+
 --- Metade da largura e da altura do objeto no mundo: do corpo físico, se
---- houver, senão da imagem ou da forma.
+--- houver, senão da imagem, da forma, do texto ou do componente de interface.
 function Object:bounds()
   local b = self.body
   if b and b.alive then
@@ -366,18 +502,8 @@ function Object:bounds()
   local _, _, _, sx, sy = self:world_transform()
   sx, sy = math.abs(sx), math.abs(sy)
   for _, c in ipairs(self.components) do
-    if c.type == "sprite" and c._img then
-      local w, h = c.w, c.h
-      if w <= 0 then w = c._sheet and c.frame_w or c._img.width end
-      if h <= 0 then h = c._sheet and c.frame_h or c._img.height end
-      return w * sx / 2, h * sy / 2
-    elseif c.type == "shape" then
-      if c.shape == "circle" then
-        local r = c.radius * math.max(sx, sy)
-        return r, r
-      end
-      return c.w * sx / 2, c.h * sy / 2
-    end
+    local w, h = M.component_size(c)
+    if w and w > 0 and h > 0 then return w * sx / 2, h * sy / 2 end
   end
   return 16 * sx, 16 * sy
 end
@@ -431,6 +557,44 @@ function Object:move_to(x, y)
   end
 end
 
+-- Tela (HUD) ----------------------------------------------------------------
+
+-- Pontos da tela para prender o HUD: fração da largura e da altura (do
+-- canto de cima à esquerda).
+M.ANCHORS = {
+  top_left = { 0, 0 }, top = { 0.5, 0 }, top_right = { 1, 0 },
+  left = { 0, 0.5 }, center = { 0.5, 0.5 }, right = { 1, 0.5 },
+  bottom_left = { 0, 1 }, bottom = { 0.5, 1 }, bottom_right = { 1, 1 },
+}
+
+--- O objeto fica preso à tela? (Algum componente de HUD, ou a cena está
+--- aberta por cima de outra.)
+function M.is_hud(o)
+  if o.scene and o.scene.overlay then return true end
+  local layout = false
+  for _, c in ipairs(o.components) do
+    if c.hud then return true end
+    if c.type == "layout" then layout = true end
+  end
+  -- Um Grupo que arruma filhos presos à tela também fica na tela.
+  if layout then
+    for _, ch in ipairs(o.children or {}) do
+      if M.is_hud(ch) then return true end
+    end
+  end
+  return false
+end
+
+--- Onde fica na tela (pixels, y para baixo) o ponto x, y (do mundo do
+--- objeto) de um objeto de HUD: a âncora do objeto da raiz mais x, y.
+function M.screen_pos(o, x, y)
+  local root = o
+  while root.parent do root = root.parent end
+  local a = M.ANCHORS[root.anchor or ""] or M.ANCHORS.center
+  local W, H = nn.window.size()
+  return W * a[1] + x, H * a[2] - y
+end
+
 -- Prefabs -------------------------------------------------------------------
 
 M.PREFAB_EXTENSION = "prefab"
@@ -438,6 +602,7 @@ M.PREFAB_EXTENSION = "prefab"
 -- Campos próprios de cada instância; o resto vem do prefab.
 M.INSTANCE_FIELDS = {
   "id", "name", "x", "y", "rotation", "scale_x", "scale_y", "visible", "locked", "layer",
+  "anchor",
 }
 
 local function load_data(path, what)
@@ -524,7 +689,8 @@ local function build_object(scene, data, parent, fresh, depth)
     local comp = copy_component(c)
     table.insert(o.components, comp)
     if o[comp.type] == nil and (comp.type == "sprite" or comp.type == "text"
-        or comp.type == "shape" or comp.type == "camera") then
+        or comp.type == "shape" or comp.type == "camera" or comp.type == "layout"
+        or M.UI_KINDS[comp.type]) then
       o[comp.type] = comp
     end
   end
@@ -738,6 +904,302 @@ local function make_particles(o, c)
   o.particles:set_position(x, y)
 end
 
+-- Interface ------------------------------------------------------------------
+
+-- Opções do jogador (volume, tela cheia), guardadas entre as partidas.
+local OPTIONS_KEY = "nn_opcoes"
+local VOLUME_CHANNELS = { musica = "music", efeitos = "effects", geral = false }
+
+local function options()
+  local ok, t = pcall(nn.save.get, OPTIONS_KEY)
+  return (ok and type(t) == "table") and t or {}
+end
+
+local function save_option(key, value)
+  local t = options()
+  t[key] = value
+  pcall(nn.save.set, OPTIONS_KEY, t)
+end
+
+local function volume(target)
+  local ch = VOLUME_CHANNELS[target]
+  if ch == nil then return nil end
+  return nn.audio.volume(ch or nil)
+end
+
+--- Muda o volume ("musica", "efeitos" ou "geral", de 0 a 1) e guarda.
+function M.set_volume(target, v)
+  local ch = VOLUME_CHANNELS[target]
+  if ch == nil then return end
+  v = math.max(0, math.min(1, v))
+  nn.audio.set_volume(v, ch or nil)
+  save_option(target, v)
+end
+
+local options_applied = false
+local function apply_options()
+  if options_applied then return end
+  options_applied = true
+  local t = options()
+  for target, ch in pairs(VOLUME_CHANNELS) do
+    if type(t[target]) == "number" then nn.audio.set_volume(t[target], ch or nil) end
+  end
+  if type(t.tela_cheia) == "boolean" then nn.window.set_fullscreen(t.tela_cheia) end
+end
+
+--- Abre a cena por cima da atual (pausa, opções): a de baixo continua
+--- aparecendo e fica parada até esta fechar.
+function M.open_over(path)
+  if path and path ~= "" then nn.scene.push(path, { por_cima = true }) end
+end
+
+--- Fecha a cena aberta por cima (volta para a de baixo).
+function M.close_over(scene)
+  if scene.overlay then nn.scene.pop() end
+end
+
+local function slider_value(c)
+  local v = volume(c.target)
+  if v == nil then
+    v = c.value
+    if c.var ~= "" then v = tonumber(nn.vars[c.var]) or c.min end
+  end
+  return v
+end
+
+local function set_slider(c, v)
+  local lo, hi = math.min(c.min, c.max), math.max(c.min, c.max)
+  v = math.max(lo, math.min(hi, v))
+  if c.step > 0 then v = c.min + math.floor((v - c.min) / c.step + 0.5) * c.step end
+  if VOLUME_CHANNELS[c.target] ~= nil then
+    M.set_volume(c.target, (v - c.min) / ((c.max - c.min) ~= 0 and (c.max - c.min) or 1))
+  elseif c.var ~= "" then
+    nn.vars[c.var] = v
+  else
+    c.value = v
+  end
+end
+
+local function checked(c)
+  if c.target == "tela_cheia" then return nn.window.fullscreen() end
+  if c.var ~= "" then return nn.vars[c.var] == true end
+  return c.checked
+end
+
+local function field_text(c)
+  if c.var ~= "" then
+    local v = nn.vars[c.var]
+    return v == nil and "" or tostring(v)
+  end
+  return c.text
+end
+
+local function set_field(c, text)
+  if c.var ~= "" then nn.vars[c.var] = text else c.text = text end
+end
+
+local function bar_fraction(c)
+  local v, max = c.value, c.max
+  if c.var ~= "" then v = tonumber(nn.vars[c.var]) or 0 end
+  if c.max_var ~= "" then max = tonumber(nn.vars[c.max_var]) or max end
+  if max <= 0 then return 0 end
+  return math.max(0, math.min(1, v / max))
+end
+M.bar_fraction = bar_fraction
+
+local function play_click(c)
+  local snd = (c.sound ~= nil and c.sound ~= "") and c.sound or M.theme("sound")
+  if snd and snd ~= "" then
+    pcall(function() nn.audio.play(nn.assets.sound(snd)) end)
+  end
+end
+
+-- Avisa os eventos que o valor do item mudou ("Mudar de valor").
+local function changed(scene, o)
+  if M.events then M.events.signal(scene, { kind = "mudou", obj = o }) end
+end
+
+--- Aperta o botão: som, o evento "Clique no objeto" e a ação dele.
+local function press_button(scene, o, c)
+  play_click(c)
+  o:send("clicou")
+  local a = c.action
+  if a == "cena" and c.scene ~= "" then
+    nn.scene.switch(c.scene, nil, { fade = 0.4 })
+  elseif a == "por_cima" then
+    M.open_over(c.scene)
+  elseif a == "fechar" then
+    M.close_over(scene)
+  elseif a == "reiniciar" then
+    scene:restart()
+  elseif a == "sair" then
+    nn.quit({ fade = 0.4 })
+  end
+end
+
+-- Liga o componente de interface ao foco do teclado e do mouse (uma vez).
+local function register_ui(scene, o, c)
+  if c._item or not M.ui then return end
+  local t = c.type
+  local item = { obj = o, comp = c, kind = t }
+  if t == "button" then
+    item.enabled = function() return c.enabled end
+    item.press = function() press_button(scene, o, c) end
+    item.start_focus = c.focus
+  elseif t == "slider" then
+    item.step = function(dir)
+      local span = c.max - c.min
+      set_slider(c, slider_value(c) + dir * (c.step > 0 and c.step or span / 10))
+      changed(scene, o)
+    end
+    item.drag = function()
+      local x, y = o:world_transform()
+      local mx
+      if M.is_hud(o) then
+        x = M.screen_pos(o, x, y)
+        mx = nn.input.mouse()
+      else
+        mx = nn.input.mouse_world()
+      end
+      if not mx then return end
+      local _, _, _, sx = o:world_transform()
+      local w = c.w * math.abs(sx)
+      local t01 = (mx - (x - w / 2)) / (w ~= 0 and w or 1)
+      local before = slider_value(c)
+      set_slider(c, c.min + t01 * (c.max - c.min))
+      if slider_value(c) ~= before then changed(scene, o) end
+    end
+  elseif t == "checkbox" then
+    item.press = function()
+      local v = not checked(c)
+      if c.target == "tela_cheia" then
+        nn.window.set_fullscreen(v)
+        save_option("tela_cheia", v)
+      elseif c.var ~= "" then
+        nn.vars[c.var] = v
+      else
+        c.checked = v
+      end
+      play_click(c)
+      o:send("clicou")
+      changed(scene, o)
+    end
+  elseif t == "textfield" then
+    item.type = function(str)
+      if str == "" then return end
+      local cur = field_text(c)
+      local room = math.max(0, c.max - (utf8.len(cur) or #cur))
+      local add, n = {}, 0
+      for _, code in utf8.codes(str) do
+        if n >= room then break end
+        table.insert(add, utf8.char(code))
+        n = n + 1
+      end
+      if n > 0 then
+        set_field(c, cur .. table.concat(add))
+        changed(scene, o)
+      end
+    end
+    item.erase = function()
+      local cur = field_text(c)
+      local last = utf8.offset(cur, -1)
+      if last then
+        set_field(c, cur:sub(1, last - 1))
+        changed(scene, o)
+      end
+    end
+    -- Enter no campo: como clicar num botão (para confirmar).
+    item.press = function() o:send("clicou") end
+  else
+    return
+  end
+  o._ui = true
+  c._item = M.ui.add(scene, item)
+end
+
+-- Imagem de um componente de interface (com quadros, se pedir).
+local function ui_image(c, path, frame_w, frame_h)
+  if path == nil or path == "" then return nil end
+  if frame_w and frame_w > 0 and frame_h and frame_h > 0 then
+    return nn.assets.sheet(path, frame_w, frame_h, { pixel_art = c.pixel_art ~= false })
+  end
+  return nn.assets.texture(path, { pixel_art = c.pixel_art ~= false })
+end
+
+local function prepare_ui(scene, o, c)
+  local t = c.type
+  if t == "panel" or t == "button" then
+    c._img = ui_image(c, c.image)
+  end
+  if t == "button" then c._icon = ui_image(c, c.icon) end
+  if t == "icons" then c._img = ui_image(c, c.image, c.frame_w, c.frame_h) end
+  register_ui(scene, o, c)
+end
+
+-- Grupo: põe os filhos em coluna, em linha ou em grade, em volta do objeto.
+local function arrange(o, l)
+  local list = {}
+  for _, ch in ipairs(o.children) do
+    if ch.alive and ch.visible then
+      local w, h = 0, 0
+      for _, c in ipairs(ch.components) do
+        local cw, chh = M.component_size(c)
+        if cw then
+          w, h = math.max(w, cw), math.max(h, chh)
+        end
+      end
+      table.insert(list, { o = ch, w = w * math.abs(ch.scale_x), h = h * math.abs(ch.scale_y) })
+    end
+  end
+  if #list == 0 then return end
+  local gap = l.spacing
+  local function cross(size, total)
+    if l.align == "start" then return -total / 2 + size / 2 end
+    if l.align == "end" then return total / 2 - size / 2 end
+    return 0
+  end
+  if l.arrange == "vertical" or l.arrange == "horizontal" then
+    local vertical = l.arrange == "vertical"
+    local total, widest = 0, 0
+    for _, it in ipairs(list) do
+      total = total + (vertical and it.h or it.w)
+      widest = math.max(widest, vertical and it.w or it.h)
+    end
+    total = total + gap * (#list - 1)
+    local pos = total / 2
+    for _, it in ipairs(list) do
+      local size = vertical and it.h or it.w
+      local along = pos - size / 2
+      if vertical then
+        it.o.x, it.o.y = cross(it.w, widest), along
+      else
+        it.o.x, it.o.y = -along, cross(it.h, widest)
+      end
+      pos = pos - size - gap
+    end
+  elseif l.arrange == "grid" then
+    local cols = math.max(1, math.floor(l.columns))
+    local cw, chh = 0, 0
+    for _, it in ipairs(list) do cw, chh = math.max(cw, it.w), math.max(chh, it.h) end
+    local rows = math.ceil(#list / cols)
+    local n = math.min(cols, #list)
+    local W = n * cw + (n - 1) * gap
+    local H = rows * chh + (rows - 1) * gap
+    for i, it in ipairs(list) do
+      local col, row = (i - 1) % cols, (i - 1) // cols
+      it.o.x = -W / 2 + cw / 2 + col * (cw + gap)
+      it.o.y = H / 2 - chh / 2 - row * (chh + gap)
+    end
+  end
+end
+
+--- Arruma os filhos dos objetos com Grupo.
+function M.arrange_all(scene)
+  for _, o in ipairs(scene.object_list) do
+    if o.alive and o.layout and o.layout.arrange ~= "none" then arrange(o, o.layout) end
+  end
+end
+
 --- Carrega o que o componente precisa (imagem, corpo, som...).
 function M.prepare(scene, o, c, live)
   local t = c.type
@@ -780,6 +1242,8 @@ function M.prepare(scene, o, c, live)
     end
   elseif t == "particles" then
     make_particles(o, c)
+  elseif M.UI_KINDS[t] then
+    prepare_ui(scene, o, c)
   elseif t == "camera" then
     scene._camera = scene._camera or o
   end
@@ -808,7 +1272,10 @@ function M.teardown(scene)
   scene._playing = {}
 end
 
-local PREPARE_ORDER = { "map", "sprite", "body", "sound", "particles", "camera" }
+local PREPARE_ORDER = {
+  "map", "sprite", "body", "sound", "particles", "panel", "button", "bar", "icons",
+  "slider", "checkbox", "textfield", "camera",
+}
 
 -- Mapas antes dos corpos: a câmera e a colisão dependem deles.
 local function prepare_all(scene, list)
@@ -855,6 +1322,8 @@ function M.setup(scene, data, path)
   scene._prefabs, scene._defs, scene._fx, scene._next_id = nil, nil, nil, nil
   scene._anims = nil
   scene._gravity = data.gravity or -1800
+  apply_options()
+  if M.ui then M.ui.setup(scene) end
   M.events.setup(scene, data, path)
   scene.background = (data.background ~= nil and data.background ~= "") and data.background or nil
 
@@ -863,12 +1332,16 @@ function M.setup(scene, data, path)
   scene.world = nil
   if needs_world(scene.object_list) then ensure_world(scene) end
   prepare_all(scene, scene.object_list)
+  M.arrange_all(scene)
   sort_objects(scene)
 
-  if scene.background then nn.window.set_clear_color(scene.background) end
-  nn.camera.set_zoom(1)
-  nn.camera.set_position(0, 0)
-  M.update_camera(scene, 0, true)
+  -- Aberta por cima de outra cena: a câmera e o fundo são os da de baixo.
+  if not scene.overlay then
+    if scene.background then nn.window.set_clear_color(scene.background) end
+    nn.camera.set_zoom(1)
+    nn.camera.set_position(0, 0)
+    M.update_camera(scene, 0, true)
+  end
   start_behaviors(scene.object_list)
 end
 
@@ -993,6 +1466,7 @@ end
 
 function M.update(scene, dt)
   refresh_list(scene)
+  if M.ui then M.ui.update(scene, dt) end
   each_behavior(scene, "update", dt)
   refresh_list(scene)
   M.events.step(scene, dt)
@@ -1006,7 +1480,198 @@ function M.update(scene, dt)
     end
   end
   for _, fx in pairs(scene._fx or {}) do fx:update(dt) end
-  M.update_camera(scene, dt, false)
+  M.arrange_all(scene)
+  if not scene.overlay then M.update_camera(scene, dt, false) end
+end
+
+-- Desenha um painel com centro em (x, y) no mundo, ou em (hx, hy) na tela.
+local function panel_at(hud, x, y, hx, hy, w, h, opts)
+  if w <= 0 or h <= 0 then return end
+  if hud then
+    nn.screen.panel(hx - w / 2, hy - h / 2, w, h, opts)
+  else
+    nn.draw.panel(x, y, w, h, opts)
+  end
+end
+
+local function text_at(hud, x, y, hx, hy, str, opts)
+  if hud then nn.screen.text(str, hx, hy, opts) else nn.draw.text(str, x, y, opts) end
+end
+
+local function image_at(hud, img, x, y, hx, hy, opts)
+  if hud then
+    opts.origin_x, opts.origin_y = 0.5, 0.5
+    nn.screen.sprite(img, hx, hy, opts)
+  else
+    nn.draw.sprite(img, x, y, opts)
+  end
+end
+
+local function circle_at(hud, x, y, hx, hy, r, color)
+  if hud then nn.screen.circle(hx, hy, r, color) else nn.draw.circle(x, y, r, color) end
+end
+
+local function ui_state(o, c)
+  if not (M.ui and c._item) then return "normal" end
+  return M.ui.state(o.scene, c._item)
+end
+
+-- Cor de fundo de um botão em cada estado.
+local function button_color(c, state)
+  if c._img then
+    if state == "hover" then return c.hover_color ~= "" and c.hover_color or "#FFF2C2" end
+    if state == "press" then return c.press_color ~= "" and c.press_color or "#BBBBBB" end
+    if state == "disabled" then return "#888888AA" end
+    return c.color ~= "" and c.color or "#FFFFFF"
+  end
+  if state == "hover" then return themed(c.hover_color, "hover") end
+  if state == "press" then return themed(c.press_color, "press") end
+  if state == "disabled" then return M.theme("disabled") end
+  return themed(c.color, "button")
+end
+
+local function panel_opts(c, color, border_color)
+  local opts = {
+    color = color, radius = c.radius, border = c.border,
+    border_color = border_color or themed(c.border_color, "border"),
+  }
+  if c._img then
+    opts.image, opts.slice, opts.slice_scale = c._img, c.slice, c.slice_scale
+  end
+  return opts
+end
+
+-- Desenha um componente de interface. `at(dx, dy)` dá a posição (mundo e
+-- tela) de um ponto deslocado dx, dy (y para cima) do centro do objeto.
+local function draw_ui(o, c, hud, at, sx, sy)
+  local t = c.type
+  local x, y, hx, hy = at(0, 0)
+  if t == "panel" then
+    panel_at(hud, x, y, hx, hy, c.w * sx, c.h * sy, panel_opts(c, themed(c.color, "panel")))
+  elseif t == "button" then
+    local state = ui_state(o, c)
+    local w, h = c.w * sx, c.h * sy
+    local bc = state == "hover" and themed(c.border_color, "accent") or nil
+    panel_at(hud, x, y, hx, hy, w, h, panel_opts(c, button_color(c, state), bc))
+    local tc = themed(c.text_color, "text")
+    if state == "disabled" then tc = "#FFFFFF80" end
+    local size = c.size * sy
+    local topts = { size = size, color = tc, anchor = "center", font = M.font(c.font) }
+    local dx = 0
+    if c._icon then
+      local isz = h * 0.6
+      local tw = c.text ~= "" and nn.text_size(c.text, topts) or 0
+      local gap = c.text ~= "" and size * 0.4 or 0
+      local total = isz + gap + tw
+      local ix, iy, ihx, ihy = at(-total / 2 + isz / 2, 0)
+      image_at(hud, c._icon, ix, iy, ihx, ihy, { w = isz, h = isz })
+      dx = -total / 2 + isz + gap + tw / 2
+    end
+    if c.text ~= "" then
+      local tx, ty, thx, thy = at(dx, 0)
+      text_at(hud, tx, ty, thx, thy, c.text, topts)
+    end
+  elseif t == "bar" then
+    local w, h = c.w * sx, c.h * sy
+    panel_at(hud, x, y, hx, hy, w, h, {
+      color = c.back_color, radius = c.radius, border = c.border,
+      border_color = themed(c.border_color, "border"),
+    })
+    local f = bar_fraction(c)
+    if f > 0 then
+      local fw, fh, dx, dy = w, h, 0, 0
+      if c.direction == "left" then
+        fw = w * f; dx = w / 2 - fw / 2
+      elseif c.direction == "up" then
+        fh = h * f; dy = -h / 2 + fh / 2
+      elseif c.direction == "down" then
+        fh = h * f; dy = h / 2 - fh / 2
+      else
+        fw = w * f; dx = -w / 2 + fw / 2
+      end
+      local fx, fy, fhx, fhy = at(dx, dy)
+      panel_at(hud, fx, fy, fhx, fhy, fw, fh, {
+        color = themed(c.color, "accent"), radius = math.min(c.radius, fw / 2, fh / 2),
+      })
+    end
+  elseif t == "icons" then
+    local n, k = icons_count(c)
+    local size, gap = c.size * sy, c.spacing * sx
+    local total = k * size + math.max(0, k - 1) * gap
+    local start = -total / 2
+    if c.align == "left" then start = 0 elseif c.align == "right" then start = -total end
+    for i = 1, k do
+      local ix, iy, ihx, ihy = at(start + (i - 1) * (size + gap) + size / 2, 0)
+      local color = i <= n and c.color or c.empty_color
+      if c._img then
+        local opts = { w = size, h = size, color = color }
+        if c.frame_w > 0 and c.frame_h > 0 then opts.frame = math.max(1, math.floor(c.frame)) end
+        image_at(hud, c._img, ix, iy, ihx, ihy, opts)
+      else
+        circle_at(hud, ix, iy, ihx, ihy, size / 2, i <= n and themed("", "accent") or c.empty_color)
+      end
+    end
+  elseif t == "slider" then
+    local state = ui_state(o, c)
+    local w, h = c.w * sx, c.h * sy
+    panel_at(hud, x, y, hx, hy, w, h, { color = c.back_color, radius = h / 2 })
+    local span = c.max - c.min
+    local f = span ~= 0 and (slider_value(c) - c.min) / span or 0
+    f = math.max(0, math.min(1, f))
+    if f > 0 then
+      local fx, fy, fhx, fhy = at(-w / 2 + w * f / 2, 0)
+      panel_at(hud, fx, fy, fhx, fhy, w * f, h, { color = themed(c.color, "accent"), radius = h / 2 })
+    end
+    local kx, ky, khx, khy = at(-w / 2 + w * f, 0)
+    local r = c.knob * sy / 2
+    if state == "hover" or state == "press" then
+      circle_at(hud, kx, ky, khx, khy, r * 1.35, "#FFFFFF55")
+    end
+    circle_at(hud, kx, ky, khx, khy, r, c.knob_color)
+  elseif t == "checkbox" then
+    local state = ui_state(o, c)
+    local box = c.box * sy
+    local topts = { size = c.size * sy, color = themed(c.text_color, "text"), anchor = "left", font = M.font(c.font) }
+    local tw = c.text ~= "" and (nn.text_size(c.text, topts) + box * 0.4) or 0
+    local total = box + tw
+    local bx, by, bhx, bhy = at(-total / 2 + box / 2, 0)
+    local border = state == "hover" and themed("", "accent") or themed("", "border")
+    panel_at(hud, bx, by, bhx, bhy, box, box, {
+      color = themed(c.color, "panel"), radius = box * 0.2, border = math.max(2, box * 0.08),
+      border_color = border,
+    })
+    if checked(c) then
+      local inner = box * 0.5
+      panel_at(hud, bx, by, bhx, bhy, inner, inner, { color = themed(c.check_color, "accent"), radius = inner * 0.25 })
+    end
+    if c.text ~= "" then
+      local tx, ty, thx, thy = at(-total / 2 + box + box * 0.4, 0)
+      text_at(hud, tx, ty, thx, thy, c.text, topts)
+    end
+  elseif t == "textfield" then
+    local state = ui_state(o, c)
+    local w, h = c.w * sx, c.h * sy
+    local focused = state == "hover" and c._item and M.ui.focused(o.scene) == c._item
+    panel_at(hud, x, y, hx, hy, w, h, {
+      color = c.color, radius = c.radius, border = c.border,
+      border_color = focused and themed("", "accent") or themed(c.border_color, "border"),
+    })
+    local value = field_text(c)
+    local pad = math.min(12, w * 0.1)
+    local tx, ty, thx, thy = at(-w / 2 + pad, 0)
+    local topts = { size = c.size * sy, color = themed(c.text_color, "text"), anchor = "left", font = M.font(c.font) }
+    if value == "" and not focused then
+      topts.color = "#FFFFFF66"
+      text_at(hud, tx, ty, thx, thy, c.placeholder, topts)
+    elseif value ~= "" then
+      text_at(hud, tx, ty, thx, thy, value, topts)
+    end
+    if focused and (nn.time.elapsed() % 1) < 0.6 then
+      local vw = value ~= "" and nn.text_size(value, topts) or 0
+      local cx, cy, chx, chy = at(-w / 2 + pad + vw + 2, 0)
+      panel_at(hud, cx, cy, chx, chy, 2, c.size * sy, { color = themed(c.text_color, "text") })
+    end
+  end
 end
 
 local function draw_object(o, alpha)
@@ -1015,12 +1680,16 @@ local function draw_object(o, alpha)
     x = o._px + (o.x - o._px) * alpha
     y = o._py + (o.y - o._py) * alpha
   end
-  -- HUD: mesma posição de quando a câmera está no começo (0, 0), mas presa
-  -- à tela (o centro da janela é o 0, 0).
-  local W, H = nn.window.size()
-  local hx, hy = W / 2 + x, H / 2 - y
+  -- HUD: a âncora na tela mais a posição (y para cima); sem âncora, o
+  -- centro da tela, como estaria com a câmera no começo (0, 0).
+  local hx, hy = M.screen_pos(o, x, y)
+  local overlay = o.scene and o.scene.overlay
+  local function at(dx, dy)
+    return x + dx, y + dy, hx + dx, hy - dy
+  end
   for _, c in ipairs(o.components) do
     local t = c.type
+    local hud = c.hud or overlay
     if t == "sprite" and c._img then
       local w, h = c.w, c.h
       if w <= 0 then w = c._sheet and c.frame_w or c._img.width end
@@ -1033,7 +1702,7 @@ local function draw_object(o, alpha)
       if c._sheet then
         frame = math.max(1, math.min(math.floor(c.frame), c._img.count))
       end
-      if c.hud then
+      if hud then
         nn.screen.sprite(c._img, hx, hy, {
           frame = frame, origin_x = 0.5, origin_y = 0.5,
           w = w * sx, h = h * sy, rotation = -rot * DEG,
@@ -1047,22 +1716,22 @@ local function draw_object(o, alpha)
         })
       end
     elseif t == "shape" then
-      local draw = c.hud and nn.screen or nn.draw
+      local draw = hud and nn.screen or nn.draw
       local px, py = x, y
-      if c.hud then px, py = hx, hy end
+      if hud then px, py = hx, hy end
       if c.shape == "circle" then
         draw.circle(px, py, c.radius * math.max(math.abs(sx), math.abs(sy)), c.color)
       else
         local w, h = c.w * math.abs(sx), c.h * math.abs(sy)
-        if c.hud then
+        if hud then
           draw.rect(px - w / 2, py - h / 2, w, h, c.color)
         else
           draw.rect(px, py, w, h, c.color)
         end
       end
     elseif t == "text" then
-      local opts = { size = c.size * math.abs(sy), color = c.color, anchor = c.anchor }
-      if c.hud then
+      local opts = { size = c.size * math.abs(sy), color = c.color, anchor = c.anchor, font = M.font(c.font) }
+      if hud then
         nn.screen.text(c.text, hx, hy, opts)
       else
         nn.draw.text(c.text, x, y, opts)
@@ -1071,12 +1740,19 @@ local function draw_object(o, alpha)
       o.map:draw()
     elseif t == "particles" and o.particles then
       o.particles:draw()
+    elseif M.UI_KINDS[t] then
+      draw_ui(o, c, hud, at, math.abs(sx), math.abs(sy))
     end
   end
 end
 
 function M.draw(scene)
   local alpha = nn.time.alpha()
+  -- Por cima de outra cena: o fundo é um véu sobre a cena de baixo.
+  if scene.overlay and scene.background then
+    local W, H = nn.window.size()
+    nn.screen.rect(0, 0, W, H, scene.background)
+  end
   for _, o in ipairs(scene._draw_list or {}) do
     if o.alive and o:shown() then draw_object(o, alpha) end
   end
@@ -1237,6 +1913,8 @@ function M.new(data, path)
   end
 
   function scene:enter(args)
+    -- "Abrir cena por cima": a de baixo continua aparecendo, parada.
+    if type(args) == "table" and args.por_cima then self.overlay = true end
     M.setup(self, data, path)
     local cp = M.checkpoints[path]
     if args and args.checkpoint and cp then
@@ -1260,7 +1938,7 @@ function M.new(data, path)
   end
 
   function scene:resume()
-    if self.background then nn.window.set_clear_color(self.background) end
+    if self.background and not self.overlay then nn.window.set_clear_color(self.background) end
     call("resume", self)
   end
 
@@ -1327,6 +2005,30 @@ function M.new(data, path)
   function scene:restart(opts)
     opts = opts or {}
     nn.scene.switch(path, { checkpoint = opts.checkpoint }, { fade = opts.fade or 0.5 })
+  end
+
+  --- Para o comportamento Botão: entra no foco do teclado e do mouse.
+  function scene:_ui_add(item)
+    return M.ui and M.ui.add(self, item)
+  end
+
+  --- O item de menu com o foco (ou nil).
+  function scene:_ui_focused()
+    return M.ui and M.ui.focused(self)
+  end
+
+  --- Abre uma cena por cima desta (o jogo daqui fica parado embaixo).
+  function scene:open_over(p)
+    M.open_over(p)
+  end
+
+  --- Fecha esta cena, se foi aberta por cima de outra.
+  function scene:close_over()
+    M.close_over(self)
+  end
+
+  function scene:_ui_state(item)
+    return M.ui and M.ui.state(self, item) or "normal"
   end
 
   function scene:_live(msg)

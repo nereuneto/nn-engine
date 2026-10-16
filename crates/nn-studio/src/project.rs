@@ -210,6 +210,8 @@ enum Dialog {
         size: [u32; 3],
         /// Imagem pedida pelo Inspetor: (cena, objeto, componente) que a usa.
         assign: Option<(String, u32, usize)>,
+        /// Cena visual que abre por cima de outra (pausa, opções).
+        overlay: bool,
     },
     ConfirmDelete(String),
     CloseTab(String),
@@ -546,6 +548,9 @@ impl ProjectWorkspace {
     fn reload_config(&mut self) {
         let text = std::fs::read_to_string(self.root.join("config.lua")).unwrap_or_default();
         self.config = config_lua::read(&text, &self.title).unwrap_or_default();
+        crate::scene_data::set_project_ui(self.config.theme.clone(), self.config.vars.clone());
+        let (w, h) = self.config.game_size();
+        crate::scene_data::set_screen_size(w as f64, h as f64);
     }
 
     pub fn save_all(&mut self) -> Result<(), String> {
@@ -1631,6 +1636,7 @@ impl ProjectWorkspace {
                         focus: true,
                         size: [16, 16, 1],
                         assign: None,
+                        overlay: false,
                     });
                 }
                 Action::NewImageFor {
@@ -1647,6 +1653,7 @@ impl ProjectWorkspace {
                         focus: true,
                         size: [16, 16, 1],
                         assign: Some((scene, id, ci)),
+                        overlay: false,
                     });
                 }
                 Action::Import { dest } => {
@@ -2058,6 +2065,7 @@ impl ProjectWorkspace {
                 focus,
                 size,
                 assign,
+                overlay,
             } => {
                 let kind = *kind;
                 let dirs: Vec<String> = std::iter::once(String::new())
@@ -2124,7 +2132,15 @@ impl ProjectWorkspace {
                         ui.weak("A cena já vem com um quadrado que anda com WASD, as setas ou o controle.");
                     }
                     if kind == NewKind::VisualScene {
-                        ui.weak("Monte a cena arrastando imagens, mapas e sons para ela. Se precisar de código, crie o script dela no Inspetor.");
+                        let r = ui
+                            .checkbox(overlay, "Abre por cima de outra cena (pausa, opções)")
+                            .on_hover_text("A cena de baixo continua aparecendo e fica parada até esta fechar. Já vem com um menu: Continuar e Sair.");
+                        crate::tutorial::anchor_in(ui, "novo:por-cima", r.rect);
+                        if *overlay {
+                            ui.weak("Já vem com um painel e botões. Abra ela com o evento Abrir cena por cima, ou com um botão.");
+                        } else {
+                            ui.weak("Monte a cena arrastando imagens, mapas e sons para ela. Se precisar de código, crie o script dela no Inspetor.");
+                        }
                     }
                     if kind == NewKind::Image {
                         ui.weak("Abre no editor de pixel art. 16 × 16 é um bom tamanho para personagens e itens.");
@@ -2140,7 +2156,14 @@ impl ProjectWorkspace {
                             let result = match kind {
                                 NewKind::Folder => files::create_folder(&self.root, parent, name),
                                 NewKind::Scene => files::create_file(&self.root, parent, name, &files::scene_template(&rel)),
-                                NewKind::VisualScene => files::create_file(&self.root, parent, &file_name, &files::visual_scene_template()),
+                                NewKind::VisualScene => {
+                                    let text = if *overlay {
+                                        files::overlay_scene_template()
+                                    } else {
+                                        files::visual_scene_template()
+                                    };
+                                    files::create_file(&self.root, parent, &file_name, &text)
+                                }
                                 NewKind::Module => files::create_file(&self.root, parent, name, &files::module_template(&rel)),
                                 NewKind::Image => {
                                     let [w, h, n] = *size;
@@ -2474,6 +2497,13 @@ impl ProjectWorkspace {
 
 /// Lista das variáveis do jogo (`vars` do config.lua). Devolve `false` se
 /// algum nome for inválido ou repetido.
+/// Os nomes das variáveis são válidos e não se repetem?
+fn vars_valid(vars: &[(String, crate::scene_data::Prop)]) -> bool {
+    vars.iter().all(|(name, _)| {
+        config_lua::valid_var_name(name) && vars.iter().filter(|(n, _)| n == name).count() == 1
+    })
+}
+
 fn vars_editor(ui: &mut egui::Ui, vars: &mut Vec<(String, crate::scene_data::Prop)>) -> bool {
     use crate::scene_data::Prop;
     ui.label(RichText::new("Variáveis do jogo").strong());
@@ -3367,6 +3397,49 @@ impl Viewer<'_> {
             }
             return;
         }
+        let changed = self
+            .form
+            .original
+            .as_ref()
+            .map(|o| config_lua::changes(o, &self.form.values))
+            .unwrap_or_default();
+        let vars_ok = vars_valid(&self.form.values.vars);
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(
+                    !changed.is_empty() && vars_ok,
+                    egui::Button::new("💾 Salvar configurações")
+                        .fill(theme::ACCENT.gamma_multiply(0.7)),
+                )
+                .clicked()
+            {
+                let text = std::fs::read_to_string(&path).unwrap_or_default();
+                let new = config_lua::update(&text, &changed, &self.form.values);
+                match files::write_atomic(&path, &new) {
+                    Ok(()) => {
+                        self.form.original = Some(self.form.values.clone());
+                        self.console.info("Configurações salvas em config.lua.");
+                    }
+                    Err(e) => self
+                        .console
+                        .error(format!("Não foi possível salvar o config.lua: {e}")),
+                }
+            }
+            if ui
+                .add_enabled(!changed.is_empty(), egui::Button::new("Desfazer"))
+                .clicked()
+                && let Some(o) = &self.form.original
+            {
+                self.form.values = o.clone();
+            }
+            if self.mode.is_full() && ui.button("Abrir config.lua").clicked() {
+                self.actions.push(Action::OpenFile {
+                    rel: "config.lua".into(),
+                    line: None,
+                });
+            }
+        });
+        ui.add_space(8.0);
         let full = self.mode.is_full();
         let scenes: Vec<String> = self
             .files
@@ -3493,50 +3566,161 @@ impl Viewer<'_> {
             ui.weak("Mais opções no modo Completo (botão Completo, no alto à direita).");
         }
         ui.add_space(14.0);
-        let vars_ok = vars_editor(ui, &mut self.form.values.vars);
-        ui.add_space(12.0);
-        let changed = self
-            .form
-            .original
-            .as_ref()
-            .map(|o| config_lua::changes(o, &self.form.values))
-            .unwrap_or_default();
-        ui.horizontal(|ui| {
-            if ui
-                .add_enabled(
-                    !changed.is_empty() && vars_ok,
-                    egui::Button::new("💾 Salvar configurações")
-                        .fill(theme::ACCENT.gamma_multiply(0.7)),
-                )
-                .clicked()
-            {
-                let text = std::fs::read_to_string(&path).unwrap_or_default();
-                let new = config_lua::update(&text, &changed, &self.form.values);
-                match files::write_atomic(&path, &new) {
-                    Ok(()) => {
-                        self.form.original = Some(self.form.values.clone());
-                        self.console.info("Configurações salvas em config.lua.");
-                    }
-                    Err(e) => self
-                        .console
-                        .error(format!("Não foi possível salvar o config.lua: {e}")),
-                }
-            }
-            if ui
-                .add_enabled(!changed.is_empty(), egui::Button::new("Desfazer"))
-                .clicked()
-                && let Some(o) = &self.form.original
-            {
-                self.form.values = o.clone();
-            }
-            if full && ui.button("Abrir config.lua").clicked() {
-                self.actions.push(Action::OpenFile {
-                    rel: "config.lua".into(),
-                    line: None,
-                });
-            }
-        });
+        vars_editor(ui, &mut self.form.values.vars);
+        ui.add_space(14.0);
+        let fonts: Vec<String> = self
+            .files
+            .files_of(FileKind::Font)
+            .map(|e| e.rel.clone())
+            .collect();
+        let sounds: Vec<String> = self
+            .files
+            .files_of(FileKind::Sound)
+            .map(|e| e.rel.clone())
+            .collect();
+        theme_editor(ui, &mut self.form.values, &fonts, &sounds);
     }
+}
+
+/// Tema da interface: as cores, a fonte e o som que os menus e o HUD usam
+/// quando o componente não escolhe outros.
+fn theme_editor(ui: &mut egui::Ui, v: &mut ConfigValues, fonts: &[String], sounds: &[String]) {
+    let r = egui::CollapsingHeader::new(RichText::new("Tema da interface").strong())
+        .id_salt("config-tema")
+        .show(ui, |ui| theme_form(ui, v, fonts, sounds));
+    crate::tutorial::anchor(ui.ctx(), "config:tema", r.header_response.rect);
+}
+
+fn theme_form(ui: &mut egui::Ui, v: &mut ConfigValues, fonts: &[String], sounds: &[String]) {
+    ui.weak("Cores, fonte e som dos menus e do HUD. Botões, painéis e barras usam estas, a não ser que você escolha outra no Inspetor.");
+    ui.add_space(4.0);
+    let set = |v: &mut ConfigValues, key: &str, value: String| {
+        let default = crate::scene_data::schema()
+            .theme
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, d)| d.clone())
+            .unwrap_or_default();
+        v.theme.retain(|(k, _)| k != key);
+        if value != default {
+            v.theme.push((key.to_string(), value));
+            v.theme.sort();
+        }
+    };
+    let colors = [
+        ("text", "Texto"),
+        ("button", "Botão"),
+        ("hover", "Botão com foco"),
+        ("press", "Botão apertado"),
+        ("disabled", "Botão desligado"),
+        ("panel", "Painel"),
+        ("border", "Bordas"),
+        ("accent", "Destaque (barras, ✓)"),
+    ];
+    ui.horizontal_top(|ui| {
+        egui::Grid::new("grade-tema")
+            .num_columns(2)
+            .spacing([12.0, 6.0])
+            .show(ui, |ui| {
+                for (key, label) in colors {
+                    ui.label(format!("{label}:"));
+                    ui.horizontal(|ui| {
+                        let current = v.theme_value(key);
+                        let mut c = crate::scene_render::egui_color(&current).to_srgba_unmultiplied();
+                        if ui.color_edit_button_srgba_unmultiplied(&mut c).changed() {
+                            let hex = if c[3] == 255 {
+                                format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])
+                            } else {
+                                format!("#{:02X}{:02X}{:02X}{:02X}", c[0], c[1], c[2], c[3])
+                            };
+                            set(v, key, hex);
+                        }
+                        ui.weak(&current);
+                    });
+                    ui.end_row();
+                }
+                for (key, label, list, tip) in [
+                    ("font", "Fonte", fonts, "Arquivo .ttf ou .otf (ponha na pasta assets/fontes). Vazio = a fonte da engine."),
+                    ("sound", "Som dos botões", sounds, "Toca quando um botão é apertado."),
+                ] {
+                    ui.label(format!("{label}:")).on_hover_text(tip);
+                    let current = v.theme_value(key);
+                    let mut chosen = current.clone();
+                    egui::ComboBox::from_id_salt(("tema", key))
+                        .selected_text(if current.is_empty() {
+                            "(nenhum)".to_string()
+                        } else {
+                            current.clone()
+                        })
+                        .width(220.0)
+                        .truncate()
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut chosen, String::new(), "(nenhum)");
+                            for f in list {
+                                ui.selectable_value(&mut chosen, f.clone(), f);
+                            }
+                        });
+                    if chosen != current {
+                        set(v, key, chosen);
+                    }
+                    ui.end_row();
+                }
+            });
+        ui.add_space(16.0);
+        theme_preview(ui, v);
+    });
+    if !v.theme.is_empty() && ui.button("Voltar ao tema padrão").clicked() {
+        v.theme.clear();
+    }
+}
+
+/// Um painel com um botão em cada estado e uma barra, nas cores do tema.
+fn theme_preview(ui: &mut egui::Ui, v: &ConfigValues) {
+    let color = |k: &str| crate::scene_render::egui_color(&v.theme_value(k));
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(220.0, 230.0), egui::Sense::hover());
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, 4.0, egui::Color32::from_rgb(0x30, 0x40, 0x30));
+    let panel = rect.shrink(12.0);
+    p.rect_filled(panel, 10.0, color("panel"));
+    p.rect_stroke(
+        panel,
+        10.0,
+        egui::Stroke::new(1.5, color("border")),
+        egui::StrokeKind::Inside,
+    );
+    let text = color("text");
+    for (i, (key, label)) in [
+        ("button", "Normal"),
+        ("hover", "Com foco"),
+        ("press", "Apertado"),
+        ("disabled", "Desligado"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let b = egui::Rect::from_center_size(
+            egui::pos2(panel.center().x, panel.top() + 26.0 + i as f32 * 40.0),
+            egui::vec2(150.0, 32.0),
+        );
+        p.rect_filled(b, 8.0, color(key));
+        p.text(
+            b.center(),
+            egui::Align2::CENTER_CENTER,
+            label,
+            egui::FontId::proportional(14.0),
+            text,
+        );
+    }
+    let bar = egui::Rect::from_min_size(
+        egui::pos2(panel.center().x - 75.0, panel.bottom() - 28.0),
+        egui::vec2(150.0, 12.0),
+    );
+    p.rect_filled(bar, 4.0, egui::Color32::from_black_alpha(128));
+    p.rect_filled(
+        egui::Rect::from_min_size(bar.min, egui::vec2(bar.width() * 0.65, bar.height())),
+        4.0,
+        color("accent"),
+    );
 }
 
 /// Endereço do guia do Lua.

@@ -65,6 +65,10 @@ pub const SCENE_RUNTIME: &str = include_str!("cena.lua");
 /// condições e ações (`catalog()`), que o NN Studio também lê.
 pub const EVENTS_RUNTIME: &str = include_str!("eventos.lua");
 
+/// Código Lua da interação dos menus das cenas visuais (foco, mouse,
+/// teclado, controle e digitação).
+pub const INTERFACE_RUNTIME: &str = include_str!("interface.lua");
+
 /// Extensão dos arquivos de cena visual.
 pub const SCENE_EXTENSION: &str = "cena";
 
@@ -218,10 +222,16 @@ impl ScriptRuntime {
             .set_name("@nn/eventos.lua")
             .call(scene_runtime.clone())?;
         scene_runtime.set("events", events)?;
+        let interface: Table = lua
+            .load(INTERFACE_RUNTIME)
+            .set_name("@nn/interface.lua")
+            .call(scene_runtime.clone())?;
+        scene_runtime.set("ui", interface)?;
         lua.load(ANIMATIONS_LUA)
             .set_name("@nn/animacoes.lua")
             .call::<()>(scene_runtime.clone())?;
         lua.set_named_registry_value(SCENE_RUNTIME_KEY, scene_runtime)?;
+        set_theme(&lua, source.as_ref());
         let vars = config_vars(&lua, source.as_ref());
         lua.load(VARS_LUA)
             .set_name("@nn/vars.lua")
@@ -347,6 +357,7 @@ impl ScriptRuntime {
     /// Variáveis novas no config.lua passam a existir em `nn.vars`.
     fn merge_config_vars(&self) {
         let lua = &self.inner.lua;
+        set_theme(lua, self.inner.source.as_ref());
         let vars = config_vars(lua, self.inner.source.as_ref());
         let merge = lua
             .globals()
@@ -428,6 +439,19 @@ impl ScriptRuntime {
 }
 
 /// A tabela `vars` do config.lua (vazia se não houver).
+/// `nn.theme`: o tema da interface (`theme` do config.lua).
+fn set_theme(lua: &Lua, source: &dyn AssetSource) {
+    let read = || -> Option<Table> {
+        let bytes = source.read(Path::new("config.lua")).ok()?;
+        let config: Table = lua.load(&bytes).set_name("@config.lua").eval().ok()?;
+        config.get::<Option<Table>>("theme").ok().flatten()
+    };
+    let theme = read().unwrap_or_else(|| lua.create_table().expect("tabela Lua"));
+    if let Ok(nn) = lua.globals().get::<Table>("nn") {
+        let _ = nn.set("theme", theme);
+    }
+}
+
 fn config_vars(lua: &Lua, source: &dyn AssetSource) -> Table {
     let read = || -> Option<Table> {
         let bytes = source.read(Path::new("config.lua")).ok()?;
