@@ -11,7 +11,7 @@ cargo nn novo ../meu-jogo     # cria a pasta com um jogo pequeno e completo
 cargo nn ../meu-jogo          # joga
 ```
 
-O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"`, `--modelo visual` (uma fase de plataforma montada no [NN Studio](studio.md), sem código, com [comportamentos](#comportamentos) prontos e um [prefab](#prefabs)) e `--modelo minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
+O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"` e `--modelo`, que escolhe o modelo: `visual` (fase de plataforma montada no [NN Studio](studio.md), sem código, com [comportamentos](#comportamentos), [eventos](#eventos-quando-então) e um [prefab](#prefabs)), `aventura` (visto de cima: chave, porta e tesouro), `nave` (tiros, asteroides e recorde salvo), `vazio` (cena vazia com um pacote de imagens e sons) ou `minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
 
 Para ver jogos prontos:
 
@@ -48,6 +48,8 @@ return {
   id = "meu-jogo",        -- nome da pasta onde o progresso é salvo (padrão: o título)
   width = 1280,           -- tamanho inicial da janela
   height = 720,
+  resolution = { 1280, 720 }, -- tamanho fixo do jogo (opcional, veja abaixo)
+  scale = "fit",          -- como ele se ajusta à janela: "fit", "stretch" ou "pixel"
   fullscreen = false,     -- começar em tela cheia
   start = "main.lua",     -- cena inicial
   clear_color = "#1A1F1C",
@@ -62,7 +64,9 @@ return {
 }
 ```
 
-Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#variáveis-do-jogo-nnvars). Rodando da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), o jogo recarrega ao salvar, a não ser que o `config.lua` diga `hot_reload = false`; o jogo exportado não recarrega. O NN Studio também edita estas opções num formulário (**Editar > Configurações do projeto**), sem mexer nos comentários do arquivo.
+Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#variáveis-do-jogo-nnvars).
+
+**Tamanho fixo do jogo** (`resolution`): sem ele, o jogo enxerga o tamanho da janela (janela maior mostra mais coisa). Com `resolution = { largura, altura }`, a câmera, `nn.screen`, `nn.window.size()`, `nn.camera.view()` e o mouse usam sempre esse tamanho, e a imagem se ajusta à janela conforme `scale`: `"fit"` (padrão) aumenta ou diminui mantendo a proporção, com faixas pretas quando a janela tem outra proporção; `"stretch"` ocupa a janela toda, mesmo distorcendo; `"pixel"` só aumenta em números inteiros (2×, 3×...), para pixel art nítida. O texto é desenhado no tamanho real da tela, então continua nítido. Os modelos visuais vêm com `resolution = { 1280, 720 }`. Rodando da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), o jogo recarrega ao salvar, a não ser que o `config.lua` diga `hot_reload = false`; o jogo exportado não recarrega. O NN Studio também edita estas opções num formulário (**Editar > Configurações do projeto**), sem mexer nos comentários do arquivo.
 
 As mensagens de erro do Lua aparecem em português ("tentou chamar um valor nil (vazio) (método 'pular')"), na tela de erro do jogo e no console do NN Studio.
 
@@ -167,6 +171,8 @@ Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), 
 | `body` | `body` ("dynamic", "static" ou "kinematic"), `shape` ("box" ou "circle"), `w`, `h` (32), `radius` (16), `sensor`, `one_way`, `bounce` (0), `gravity_scale` (1), `tag` (padrão: o nome do objeto) |
 | `map` | `map` (arquivo .tmj), `scale` (1), `collision` (true) |
 | (sprite, text, shape) | `hud` (false): fixo na tela, em vez de andar com o mundo. A posição conta a partir do centro da tela (y para cima). |
+
+A cena e cada objeto também podem ter `events`, as regras [Quando... Então...](#eventos-quando-então).
 | `camera` | `follow` (nome do objeto a seguir), `smooth` (6), `zoom` (1), `limit_to_map` (true) |
 | `sound` | `sound`, `autoplay` (true), `loop`, `volume` (1), `channel` ("effects" ou "music") |
 | `behavior` | `script` (`"nn:plataforma"` para um [pronto](#comportamentos-prontos) ou o caminho de um `.lua`) e as propriedades dele, soltas: `{ type = "behavior", script = "nn:patrulha", velocidade = 60 }` |
@@ -192,6 +198,7 @@ Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), 
 | `obj:bounds()` | Metade da largura e da altura (do corpo, da imagem ou da forma). |
 | `obj:touching(outro, margem)` | Os dois estão encostando? |
 | `obj:move_to(x, y)` | Leva o objeto (e o corpo) para lá, parado. |
+| `obj:mouse_over()` | O mouse está em cima do objeto? (Num objeto de HUD, confere na tela.) |
 
 A cena também tem:
 
@@ -259,7 +266,7 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 |---|---|---|
 | `nn:plataforma` | Jogador de plataforma: anda e pula (setas, WASD, espaço, controle). Precisa de corpo dinâmico. | `velocidade` (320), `pulo` (860), `pulos_no_ar` (0), `coiote` (0.1), `pulo_variavel` (true) |
 | `nn:topdown` | Jogador visto de cima: anda nas 4 direções. | `velocidade` (260) |
-| `nn:vida` | Pontos de vida; recebe `dano(n)` e `curar(n)`. | `vidas` (3), `variavel` ("vidas": espelha numa variável do jogo), `invencivel` (1 s), `ao_acabar` ("reiniciar", "checkpoint", "cena", "destruir"), `cena`, `piscar` (true) |
+| `nn:vida` | Pontos de vida; recebe `dano(n)` e `curar(n)`. | `vidas` (3), `variavel` ("vidas": espelha numa variável do jogo), `invencivel` (1 s), `ao_acabar` ("reiniciar", "checkpoint", "cena", "destruir", "nada"), `cena`, `piscar` (true) |
 | `nn:patrulha` | Anda até uma parede (ou a beirada) e volta. Precisa de corpo. | `velocidade` (120), `direcao` ("direita"), `beirada` (true), `espelhar` (true) |
 | `nn:perseguir` | Vai atrás do alvo quando ele chega perto. | `alvo` ("" = jogador), `velocidade` (150), `visao` (320), `voar` (false), `espelhar` (true) |
 | `nn:perigo` | Machuca quem encosta. | `quem` (""), `acao` ("dano", "checkpoint", "reiniciar"), `dano` (1), `pisar` (false: pular em cima destrói), `some` (false), `empurrao` (520) |
@@ -272,6 +279,9 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:atirar` | Cria um prefab andando. | `prefab`, `tecla` ("x"; vazio = sozinho), `intervalo` (0.3), `velocidade` (700), `direcao` ("frente", "jogador", "direita", "cima"), `som`, `distancia` (24) |
 | `nn:gerador` | Cria um prefab de tempos em tempos. | `prefab`, `intervalo` (2), `maximo` (10), `espalhar_x`, `espalhar_y` (0), `comecar_ja` (false) |
 | `nn:temporario` | Some depois de um tempo ou fora da tela. | `tempo` (3), `fora_da_tela` (true) |
+| `nn:botao` | Botão de menu: destaca com o mouse ou as setas (teclado e controle); clique, Enter ou A apertam. Manda a mensagem `clicou` e faz a ação. | `acao` ("nada", "cena", "reiniciar", "sair"), `cena`, `foco` (false: começa selecionado), `cor` ("#FFD166": cor ao destacar), `aumentar` (1.1), `som` |
+
+A **Vida** também tem `ao_acabar = "nada"` (um evento decide o que fazer) e avisa por mensagem: `levou_dano` a cada dano e `vida_acabou` no fim. O **Coletável** manda `coletou` (com o item) para quem pegou. Essas mensagens chegam aos comportamentos (como funções) e aos [eventos](#eventos-quando-então).
 
 Os prontos são escritos em Lua, com a mesma API dos seus: o código deles está em `crates/nn-script/src/comportamentos/` e é um bom ponto de partida para um comportamento novo.
 
@@ -317,6 +327,80 @@ if nn.vars.vidas <= 0 then nn.scene.switch("cenas/fim.cena") end
 ```
 
 Variáveis novas no `config.lua` aparecem no jogo aberto ao salvar.
+
+### Eventos: "Quando... Então..."
+
+Eventos são regras escritas no `.cena` (no campo `events` da cena) ou num objeto (no campo `events` dele, que vai junto quando o objeto é um prefab). No [NN Studio](studio.md#eventos-quando-então) elas são montadas no painel Eventos, lidas como frases; no arquivo, ficam assim:
+
+```lua
+events = {
+  { comment = "Com uma chave, a porta abre." },
+  { when = {
+      { cond = "encostando", quem = "@jogador", em = "@este" },
+      { cond = "variavel", var = "chaves", op = ">=", valor = 1 },
+    }, actions = {
+      { act = "variavel", var = "chaves", op = "subtrair", valor = 1 },
+      { act = "som", som = "assets/sons/porta.wav" },
+      { act = "destruir", alvo = "@este" },
+    } },
+  { mode = "enquanto", off = true, when = { ... }, actions = { ... } },
+},
+```
+
+- **`when`**: as condições (todas precisam valer). `nao = true` inverte uma condição.
+- **`actions`**: as ações, em ordem. `esperar` atrasa as seguintes.
+- **`mode`**: sem ele (ou `"quando"`), a regra roda uma vez quando as condições **passam a valer**, ou a cada vez que um gatilho (apertar uma tecla, encostar...) acontece. Com `"enquanto"`, roda a cada quadro enquanto tudo vale.
+- **`off = true`** desliga a regra; **`comment`** sozinho é uma linha de comentário.
+- **Quem é quem**, nos campos `quem`, `em` e `alvo`: `"@este"` é o dono da regra (numa regra da cena, o jogador), `"@outro"` é o outro objeto da condição (em quem encostou, o item pego, quem mandou a mensagem), `"@jogador"` são os objetos com comportamento de jogador, e qualquer outro texto é o nome de um objeto (todos com esse nome).
+- Textos aceitam `{variavel}` (trocado pelo valor): `"Pontos: {pontos}"`, e o `valor` de uma variável pode ser outra: `valor = "{pontos}"`.
+- As regras rodam a cada quadro, depois dos comportamentos. Com o jogo aberto pelo editor, mudar as regras vale na hora.
+
+Condições (`cond`):
+
+| `cond` | Campos |
+|---|---|
+| `comecou` | — (a cena começou; numa regra de objeto, o objeto apareceu) |
+| `a_cada` / `depois_de` | `segundos` |
+| `chance` | `chance` (%) |
+| `tecla` | `modo` ("apertar", "soltar", "segurar"), `tecla` (uma tecla como "space", "x", "shift", ou um grupo: "pular", "confirmar", "voltar", "acao", "esquerda", "direita", "cima", "baixo", "qualquer") |
+| `clicar` | `quem` (clique do mouse no objeto, ou Enter num Botão) |
+| `encostar` / `desencostar` / `encostando` | `quem`, `em` |
+| `perto` | `quem`, `distancia`, `alvo` |
+| `variavel` | `var`, `op` ("==", "~=", "<", ">", "<=", ">="), `valor` |
+| `acabaram` | `nome` (não sobrou nenhum objeto com esse nome) |
+| `destruido` / `saiu_da_tela` | `quem` |
+| `no_chao` | `quem`, `onde` ("chao", "ar") |
+| `visivel` | `quem`, `estado` ("visivel", "escondido") |
+| `pegar` | `quem`, `item` ("" = qualquer coletável) |
+| `levou_dano` / `vida_acabou` | `quem` (precisa do comportamento Vida) |
+| `mensagem` | `quem`, `msg` (de `obj:send("msg")`, de comportamentos ou da ação `mensagem`) |
+
+Ações (`act`):
+
+| `act` | Campos |
+|---|---|
+| `variavel` | `var`, `op` ("somar", "subtrair", "definir", "maior", "menor"), `valor` |
+| `salvar` / `carregar` | `var` ("" = todas): grava no disco com [nn.save](#nnsave) (chave `vars.<nome>`) / lê de volta |
+| `zerar` | — (`nn.reset_vars()`) |
+| `ir_para_cena` | `cena`, `escurecer` (0.5 s) |
+| `reiniciar` | `como` ("comeco", "checkpoint", "zerar": do começo, zerando as variáveis) |
+| `sair` | — (fecha o jogo) |
+| `criar` | `prefab`, `onde` (na posição de quem), `dx`, `dy`, `vx`, `vy` |
+| `destruir` | `alvo` |
+| `mostrar` | `acao` ("mostrar", "esconder"), `alvo` |
+| `mover` | `alvo`, `modo` ("para": a posição; "somar": andando), `x`, `y` |
+| `velocidade` | `modo` ("definir", "somar": empurrão), `alvo`, `vx`, `vy` (no corpo físico, se houver) |
+| `texto` / `imagem` / `quadro` / `cor` | `alvo` e `texto` / `imagem` / `quadro` / `cor` |
+| `faiscas` | `alvo`, `cor`, `quantidade` |
+| `tremer` | `forca`, `tempo` |
+| `som` | `som`, `volume` |
+| `musica` | `acao` ("tocar", "parar"), `som`, `volume` |
+| `comportamento` | `acao` ("ligar", "desligar"), `nome` (ex.: "plataforma"), `alvo` |
+| `mensagem` | `msg`, `alvo` |
+| `esperar` | `segundos` |
+| `console` | `texto` |
+
+O catálogo completo (com as frases que o NN Studio mostra e o Lua equivalente de cada item) está em `crates/nn-script/src/eventos.lua`.
 
 ## Referência da API
 
@@ -751,4 +835,4 @@ Enquanto a tela escurece, a cena que está saindo continua desenhada mas fica pa
 
 ### Outros
 
-`print(...)` escreve no terminal (log da engine). `nn.version` é a versão da engine. `nn.vars` e `nn.reset_vars()`: veja [variáveis do jogo](#variáveis-do-jogo-nnvars). Variáveis globais são compartilhadas entre as cenas e sobrevivem à recarga.
+`print(...)` escreve no terminal (log da engine). Com [tamanho fixo do jogo](#configlua), `nn.window.size()` devolve esse tamanho. `nn.version` é a versão da engine. `nn.vars` e `nn.reset_vars()`: veja [variáveis do jogo](#variáveis-do-jogo-nnvars). Variáveis globais são compartilhadas entre as cenas e sobrevivem à recarga.

@@ -747,14 +747,8 @@ fn item_line(
         if !prefix.is_empty() {
             ui.label(RichText::new(prefix).weak());
         }
-        if condition {
-            let r = ui
-                .selectable_label(item.not, RichText::new("não").small())
-                .on_hover_text("Inverte: vale quando isto NÃO acontece");
-            if r.clicked() {
-                item.not = !item.not;
-                edit.structure();
-            }
+        if condition && item.not {
+            ui.label(RichText::new("não").strong().color(theme::WARNING));
         }
         for piece in def.pieces() {
             match piece {
@@ -782,6 +776,15 @@ fn item_line(
         {
             show_adv = !show_adv;
             ui.data_mut(|d| d.insert_temp(adv_id, show_adv));
+        }
+        if condition
+            && ui
+                .selectable_label(item.not, RichText::new("não").small())
+                .on_hover_text("Inverte: vale quando isto NÃO acontece")
+                .clicked()
+        {
+            item.not = !item.not;
+            edit.structure();
         }
         if ui
             .small_button("✖")
