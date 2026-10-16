@@ -43,7 +43,7 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
         ),
         Template::Visual => (
             "Cena visual",
-            "Uma fase de plataforma montada no editor, com o mouse: herói, plataformas e moedas, e um script curto com as regras.",
+            "Uma fase de plataforma montada no editor, sem código: herói, inimigo, moedas e placar, cada um com seus comportamentos prontos.",
         ),
         Template::Minimo => (
             "Mínimo",

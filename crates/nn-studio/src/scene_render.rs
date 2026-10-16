@@ -241,12 +241,32 @@ pub fn local_bounds(o: &Object, root: &Path, sizes: &mut Sizes, icon: f64) -> (L
 pub struct Placed<'a> {
     pub object: &'a Object,
     pub world: Transform,
+    /// O objeto da cena que se seleciona clicando aqui: ele mesmo, ou a
+    /// instância do prefab de onde este filho vem.
+    pub owner: u32,
+}
+
+impl Placed<'_> {
+    /// É um objeto da própria cena (não um filho vindo de um prefab)?
+    pub fn is_own(&self) -> bool {
+        self.owner == self.object.id
+    }
 }
 
 /// Objetos visíveis em ordem de desenho (camada, depois a ordem da árvore),
-/// como a engine faz.
+/// como a engine faz. Inclui os filhos que vêm dos prefabs.
 pub fn draw_order(scene: &SceneData) -> Vec<Placed<'_>> {
-    fn walk<'a>(list: &'a [Object], parent: Option<Transform>, out: &mut Vec<Placed<'a>>) {
+    fn walk<'a>(
+        scene: &SceneData,
+        list: &'a [Object],
+        parent: Option<Transform>,
+        owner: Option<u32>,
+        out: &mut Vec<Placed<'a>>,
+        depth: usize,
+    ) {
+        if depth > 16 {
+            return;
+        }
         for o in list {
             if !o.visible {
                 continue;
@@ -254,14 +274,27 @@ pub fn draw_order(scene: &SceneData) -> Vec<Placed<'_>> {
             let local = Transform::of(o);
             let world = match parent {
                 Some(p) => p.apply(local),
-                None => local,
+                None => scene.root_place(o, local),
             };
-            out.push(Placed { object: o, world });
-            walk(&o.children, Some(world), out);
+            let me = owner.unwrap_or(o.id);
+            out.push(Placed {
+                object: o,
+                world,
+                owner: me,
+            });
+            walk(
+                scene,
+                o.prefab_children(),
+                Some(world),
+                Some(me),
+                out,
+                depth + 1,
+            );
+            walk(scene, &o.children, Some(world), owner, out, depth + 1);
         }
     }
     let mut out = Vec::new();
-    walk(&scene.objects, None, &mut out);
+    walk(scene, &scene.objects, None, None, &mut out, 0);
     out.sort_by_key(|p| p.object.layer);
     out
 }

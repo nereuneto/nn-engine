@@ -2,7 +2,6 @@
 -- comentários escritos aqui se perdem.
 return {
   format = 1,
-  script = "cenas/fase.lua",
   background = "#5FB3E0",
   gravity = -1800,
   objects = {
@@ -11,7 +10,7 @@ return {
       x = 0, y = -260, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "shape", shape = "rect", w = 1400, h = 40, radius = 32, color = "#3E8948" },
+        { type = "shape", shape = "rect", w = 1400, h = 40, radius = 32, color = "#3E8948", hud = false },
         { type = "body", body = "static", shape = "box", w = 1400, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
     },
@@ -20,7 +19,7 @@ return {
       x = -280, y = -110, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "shape", shape = "rect", w = 240, h = 24, radius = 32, color = "#8B5E34" },
+        { type = "shape", shape = "rect", w = 240, h = 24, radius = 32, color = "#8B5E34", hud = false },
         { type = "body", body = "static", shape = "box", w = 240, h = 24, radius = 16, sensor = false, one_way = true, bounce = 0, gravity_scale = 1, tag = "" },
       },
     },
@@ -29,60 +28,92 @@ return {
       x = 260, y = 20, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "shape", shape = "rect", w = 240, h = 24, radius = 32, color = "#8B5E34" },
+        { type = "shape", shape = "rect", w = 240, h = 24, radius = 32, color = "#8B5E34", hud = false },
         { type = "body", body = "static", shape = "box", w = 240, h = 24, radius = 16, sensor = false, one_way = true, bounce = 0, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 4, name = "heroi",
-      x = 0, y = -180, rotation = 0, scale_x = 1, scale_y = 1,
-      visible = true, layer = 2,
+      id = 4, name = "plataforma_movel",
+      x = -560, y = 120, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
       components = {
-        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true },
-        { type = "body", body = "dynamic", shape = "box", w = 40, h = 60, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "shape", shape = "rect", w = 160, h = 24, radius = 32, color = "#B07A3F", hud = false },
+        { type = "body", body = "kinematic", shape = "box", w = 160, h = 24, radius = 16, sensor = false, one_way = true, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "behavior", script = "nn:movimento", altura = 12, distancia_x = 0, distancia_y = -200, duracao = 4, tipo = "ir_e_voltar", velocidade = 90 },
       },
     },
     {
-      id = 5, name = "moeda",
-      x = -280, y = -50, rotation = 0, scale_x = 1, scale_y = 1,
-      visible = true, layer = 1,
+      id = 5, name = "heroi",
+      x = 0, y = -180, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 2,
       components = {
-        { type = "sprite", image = "assets/imagens/moeda.png", frame_w = 16, frame_h = 16, frame = 1, w = 40, h = 40, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true },
-        { type = "body", body = "static", shape = "circle", w = 32, h = 32, radius = 18, sensor = true, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, hud = false },
+        { type = "body", body = "dynamic", shape = "box", w = 40, h = 60, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "behavior", script = "nn:plataforma", coiote = 0.1, pulo = 860, pulo_variavel = true, pulos_no_ar = 0, velocidade = 320 },
+        { type = "behavior", script = "nn:animacao", andando = "5-8", caindo = "7", espelhar = true, fps = 10, parado = "1-2", pulando = "6" },
+        { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", cena = "", invencivel = 1, piscar = true, variavel = "vidas", vidas = 3 },
       },
     },
     {
       id = 6, name = "moeda",
-      x = 260, y = 80, rotation = 0, scale_x = 1, scale_y = 1,
+      x = -280, y = -50, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
-      components = {
-        { type = "sprite", image = "assets/imagens/moeda.png", frame_w = 16, frame_h = 16, frame = 1, w = 40, h = 40, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true },
-        { type = "body", body = "static", shape = "circle", w = 32, h = 32, radius = 18, sensor = true, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
-      },
+      prefab = "prefabs/moeda.prefab",
     },
     {
       id = 7, name = "moeda",
+      x = 260, y = 80, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 8, name = "moeda",
       x = 520, y = -200, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 9, name = "moeda",
+      x = -560, y = 200, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 10, name = "inimigo",
+      x = -280, y = -80, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
       components = {
-        { type = "sprite", image = "assets/imagens/moeda.png", frame_w = 16, frame_h = 16, frame = 1, w = 40, h = 40, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true },
-        { type = "body", body = "static", shape = "circle", w = 32, h = 32, radius = 18, sensor = true, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "shape", shape = "rect", w = 36, h = 28, radius = 32, color = "#D64545", hud = false },
+        { type = "body", body = "dynamic", shape = "box", w = 36, h = 28, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "behavior", script = "nn:patrulha", beirada = true, direcao = "esquerda", espelhar = true, velocidade = 60 },
+        { type = "behavior", script = "nn:perigo", acao = "dano", dano = 1, empurrao = 520, pisar = true, quem = "", some = false },
       },
     },
     {
-      id = 8, name = "placar",
-      x = 0, y = 300, rotation = 0, scale_x = 1, scale_y = 1,
+      id = 11, name = "abismo",
+      x = 0, y = -700, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = false, layer = 0,
+      components = {
+        { type = "shape", shape = "rect", w = 6000, h = 60, radius = 32, color = "#00000000", hud = false },
+        { type = "behavior", script = "nn:perigo", acao = "checkpoint", dano = 1, empurrao = 520, pisar = false, quem = "", some = false },
+      },
+    },
+    {
+      id = 12, name = "saida",
+      x = 640, y = -200, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 1,
+      components = {
+        { type = "shape", shape = "rect", w = 24, h = 80, radius = 32, color = "#F2C14E", hud = false },
+        { type = "behavior", script = "nn:ir_para_cena", cena = "cenas/fim.cena", escurecer = 0.5, quem = "", tecla = false },
+      },
+    },
+    {
+      id = 13, name = "placar",
+      x = 0, y = 320, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 5,
       components = {
-        { type = "text", text = "Moedas: 0", size = 36, color = "#FFFFFF", anchor = "center" },
-      },
-    },
-    {
-      id = 9, name = "som_moeda",
-      x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
-      visible = true, layer = 0,
-      components = {
-        { type = "sound", sound = "assets/sons/moeda.wav", autoplay = false, loop = false, volume = 1, channel = "effects" },
+        { type = "text", text = "Moedas: 0", size = 32, color = "#FFFFFF", anchor = "center", hud = true },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Moedas: {moedas}    Vidas: {vidas}" },
       },
     },
   },

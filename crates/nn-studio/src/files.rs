@@ -17,6 +17,8 @@ pub enum FileKind {
     Lua,
     /// Cena visual do NN Studio (`.cena`).
     Scene,
+    /// Prefab: objeto pronto para várias cenas (`.prefab`).
+    Prefab,
     Image,
     Sound,
     Map,
@@ -35,6 +37,7 @@ impl FileKind {
         match ext.as_str() {
             "lua" => FileKind::Lua,
             "cena" => FileKind::Scene,
+            "prefab" => FileKind::Prefab,
             "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp" => FileKind::Image,
             "wav" | "ogg" | "mp3" | "flac" => FileKind::Sound,
             "tmj" | "tmx" => FileKind::Map,
@@ -51,6 +54,7 @@ impl FileKind {
             FileKind::Folder => "pasta",
             FileKind::Lua => "script Lua",
             FileKind::Scene => "cena visual",
+            FileKind::Prefab => "prefab",
             FileKind::Image => "imagem",
             FileKind::Sound => "som",
             FileKind::Map => "mapa",

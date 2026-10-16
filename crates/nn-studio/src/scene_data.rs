@@ -75,16 +75,23 @@ pub fn format_num(n: f64) -> String {
     if s == "-0" { "0".into() } else { s.to_string() }
 }
 
+/// Tipo do componente de comportamento (script com propriedades).
+pub const BEHAVIOR: &str = "behavior";
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Component {
     pub kind: String,
-    /// Campos na ordem do arquivo.
+    /// Campos na ordem do arquivo. Num comportamento: `script` e depois as
+    /// propriedades em ordem alfabética.
     pub props: Vec<(String, Prop)>,
 }
 
 impl Component {
     /// Componente novo, com os valores padrão.
     pub fn new(kind: &str) -> Self {
+        if kind == BEHAVIOR {
+            return Self::behavior("", &[]);
+        }
         let props = schema()
             .fields(kind)
             .map(|f| f.to_vec())
@@ -93,6 +100,37 @@ impl Component {
             kind: kind.to_string(),
             props,
         }
+    }
+
+    /// Comportamento com o script e os valores das propriedades.
+    pub fn behavior(script: &str, props: &[(String, Prop)]) -> Self {
+        let mut c = Self {
+            kind: BEHAVIOR.to_string(),
+            props: vec![("script".to_string(), Prop::Str(script.to_string()))],
+        };
+        for (k, v) in props {
+            c.set(k, v.clone());
+        }
+        c
+    }
+
+    pub fn is_behavior(&self) -> bool {
+        self.kind == BEHAVIOR
+    }
+
+    /// Mantém `script` primeiro e o resto em ordem alfabética (num
+    /// comportamento a ordem não importa, e assim o arquivo fica estável).
+    fn normalize(&mut self) {
+        if self.is_behavior() {
+            self.props.sort_by(|(a, _), (b, _)| {
+                (a != "script").cmp(&(b != "script")).then_with(|| a.cmp(b))
+            });
+        }
+    }
+
+    /// Tira um campo (propriedade que o script não tem mais).
+    pub fn remove(&mut self, key: &str) {
+        self.props.retain(|(k, _)| k != key);
     }
 
     pub fn get(&self, key: &str) -> Option<&Prop> {
@@ -114,9 +152,30 @@ impl Component {
     pub fn set(&mut self, key: &str, value: Prop) {
         match self.props.iter_mut().find(|(k, _)| k == key) {
             Some((_, v)) => *v = value,
-            None => self.props.push((key.to_string(), value)),
+            None => {
+                self.props.push((key.to_string(), value));
+                self.normalize();
+            }
         }
     }
+
+    /// Algum campo `hud` ligado (preso à tela)?
+    pub fn is_hud(&self) -> bool {
+        matches!(self.kind.as_str(), "sprite" | "text" | "shape") && self.bool("hud")
+    }
+}
+
+/// Ligação de uma instância com o prefab.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrefabLink {
+    /// Arquivo `.prefab`.
+    pub path: String,
+    /// O objeto do prefab como está no disco (para saber o que a instância
+    /// mudou e para desenhar os filhos dele). `None` enquanto não foi lido ou
+    /// se o arquivo sumiu.
+    pub base: Option<Box<Object>>,
+    /// Mudanças lidas do arquivo, guardadas enquanto o prefab não foi lido.
+    pub raw: Vec<(usize, Vec<(String, Prop)>)>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -133,8 +192,12 @@ pub struct Object {
     /// Travado no editor (não seleciona clicando na cena).
     pub locked: bool,
     pub layer: i64,
+    /// Numa instância de prefab, os componentes já com as mudanças dela.
     pub components: Vec<Component>,
+    /// Filhos do próprio objeto (numa instância, além dos do prefab).
     pub children: Vec<Object>,
+    /// Instância de um prefab.
+    pub prefab: Option<PrefabLink>,
 }
 
 impl Object {
@@ -152,11 +215,85 @@ impl Object {
             layer: 0,
             components: Vec::new(),
             children: Vec::new(),
+            prefab: None,
         }
     }
 
     pub fn component(&self, kind: &str) -> Option<&Component> {
         self.components.iter().find(|c| c.kind == kind)
+    }
+
+    /// Preso à tela (HUD): algum componente visual com `hud`.
+    pub fn is_hud(&self) -> bool {
+        self.components.iter().any(Component::is_hud)
+    }
+
+    /// Filhos que vêm do prefab (só para desenhar; não são editados aqui).
+    pub fn prefab_children(&self) -> &[Object] {
+        match &self.prefab {
+            Some(PrefabLink {
+                base: Some(base), ..
+            }) => &base.children,
+            _ => &[],
+        }
+    }
+
+    /// O que a instância mudou em relação ao prefab: (componente, campos).
+    pub fn overrides(&self) -> Vec<(usize, Vec<(String, Prop)>)> {
+        let Some(link) = &self.prefab else {
+            return Vec::new();
+        };
+        let Some(base) = &link.base else {
+            return link.raw.clone();
+        };
+        let mut out = Vec::new();
+        for (i, c) in self.components.iter().enumerate() {
+            let Some(b) = base.components.get(i) else {
+                continue;
+            };
+            let changed: Vec<(String, Prop)> = c
+                .props
+                .iter()
+                .filter(|(k, v)| b.get(k) != Some(v))
+                .cloned()
+                .collect();
+            if !changed.is_empty() {
+                out.push((i, changed));
+            }
+        }
+        out
+    }
+
+    /// Campo `key` do componente `index` difere do prefab?
+    pub fn is_overridden(&self, index: usize, key: &str) -> bool {
+        let Some(PrefabLink {
+            base: Some(base), ..
+        }) = &self.prefab
+        else {
+            return false;
+        };
+        let mine = self.components.get(index).and_then(|c| c.get(key));
+        let theirs = base.components.get(index).and_then(|c| c.get(key));
+        mine != theirs
+    }
+
+    /// Liga (ou religa) a instância ao prefab `base`: os componentes passam a
+    /// ser os do prefab, com as mudanças que a instância já tinha.
+    pub fn link_prefab(&mut self, base: Object) {
+        let overrides = self.overrides();
+        let mut comps = base.components.clone();
+        for (i, fields) in overrides {
+            if let Some(c) = comps.get_mut(i) {
+                for (k, v) in fields {
+                    c.set(&k, v);
+                }
+            }
+        }
+        self.components = comps;
+        if let Some(link) = &mut self.prefab {
+            link.base = Some(Box::new(base));
+            link.raw.clear();
+        }
     }
 
     /// Valor de um campo do objeto (para o ajuste ao vivo).
@@ -317,54 +454,163 @@ pub fn read(text: &str, name: &str) -> Result<SceneData, String> {
     Ok(scene)
 }
 
+fn read_component(c: &Table, name: &str, obj: &str) -> Result<Component, String> {
+    let kind = string(c, "type");
+    if kind == BEHAVIOR {
+        let mut comp = Component::behavior(&string(c, "script"), &[]);
+        for pair in c.pairs::<String, Value>() {
+            let Ok((k, v)) = pair else { continue };
+            if k == "type" || k == "script" {
+                continue;
+            }
+            if let Some(p) = to_prop(&v) {
+                comp.set(&k, p);
+            }
+        }
+        return Ok(comp);
+    }
+    let Some(fields) = schema().fields(&kind) else {
+        return Err(format!(
+            "{name}: componente desconhecido \"{kind}\" no objeto \"{obj}\""
+        ));
+    };
+    let mut comp = Component {
+        kind: kind.clone(),
+        props: Vec::new(),
+    };
+    for (key, default) in fields {
+        let v = c
+            .get::<Value>(key.as_str())
+            .ok()
+            .and_then(|v| to_prop(&v))
+            .unwrap_or_else(|| default.clone());
+        comp.props.push((key.clone(), v));
+    }
+    Ok(comp)
+}
+
 fn read_objects(list: &Table, name: &str) -> Result<Vec<Object>, String> {
     let mut out = Vec::new();
     for o in list.sequence_values::<Table>() {
         let o = o.map_err(|e| format!("{name}: objeto inválido: {e}"))?;
-        let mut obj = Object::new(num(&o, "id", 0.0).max(0.0) as u32, "Objeto");
-        let n = string(&o, "name");
-        if !n.is_empty() {
-            obj.name = n;
-        }
-        obj.x = num(&o, "x", 0.0);
-        obj.y = num(&o, "y", 0.0);
-        obj.rotation = num(&o, "rotation", 0.0);
-        obj.scale_x = num(&o, "scale_x", 1.0);
-        obj.scale_y = num(&o, "scale_y", 1.0);
-        obj.visible = boolean(&o, "visible", true);
-        obj.locked = boolean(&o, "locked", false);
-        obj.layer = num(&o, "layer", 0.0) as i64;
-        if let Ok(Value::Table(comps)) = o.get::<Value>("components") {
-            for c in comps.sequence_values::<Table>() {
-                let c = c.map_err(|e| format!("{name}: componente inválido: {e}"))?;
-                let kind = string(&c, "type");
-                let Some(fields) = schema().fields(&kind) else {
-                    return Err(format!(
-                        "{name}: componente desconhecido \"{kind}\" no objeto \"{}\"",
-                        obj.name
-                    ));
-                };
-                let mut comp = Component {
-                    kind: kind.clone(),
-                    props: Vec::new(),
-                };
-                for (key, default) in fields {
-                    let v = c
-                        .get::<Value>(key.as_str())
-                        .ok()
-                        .and_then(|v| to_prop(&v))
-                        .unwrap_or_else(|| default.clone());
-                    comp.props.push((key.clone(), v));
-                }
-                obj.components.push(comp);
-            }
-        }
-        if let Ok(Value::Table(children)) = o.get::<Value>("children") {
-            obj.children = read_objects(&children, name)?;
-        }
-        out.push(obj);
+        out.push(read_object(&o, name)?);
     }
     Ok(out)
+}
+
+fn read_object(o: &Table, name: &str) -> Result<Object, String> {
+    let mut obj = Object::new(num(o, "id", 0.0).max(0.0) as u32, "Objeto");
+    let n = string(o, "name");
+    if !n.is_empty() {
+        obj.name = n;
+    }
+    obj.x = num(o, "x", 0.0);
+    obj.y = num(o, "y", 0.0);
+    obj.rotation = num(o, "rotation", 0.0);
+    obj.scale_x = num(o, "scale_x", 1.0);
+    obj.scale_y = num(o, "scale_y", 1.0);
+    obj.visible = boolean(o, "visible", true);
+    obj.locked = boolean(o, "locked", false);
+    obj.layer = num(o, "layer", 0.0) as i64;
+    let prefab = string(o, "prefab");
+    if !prefab.is_empty() {
+        let mut raw = Vec::new();
+        if let Ok(Value::Table(list)) = o.get::<Value>("overrides") {
+            for ov in list.sequence_values::<Table>() {
+                let ov = ov.map_err(|e| format!("{name}: mudança inválida: {e}"))?;
+                let index = num(&ov, "component", 0.0) as usize;
+                if index == 0 {
+                    continue;
+                }
+                let mut fields: Vec<(String, Prop)> = ov
+                    .pairs::<String, Value>()
+                    .filter_map(Result::ok)
+                    .filter(|(k, _)| k != "component")
+                    .filter_map(|(k, v)| to_prop(&v).map(|p| (k, p)))
+                    .collect();
+                fields.sort_by(|a, b| a.0.cmp(&b.0));
+                raw.push((index - 1, fields));
+            }
+        }
+        obj.prefab = Some(PrefabLink {
+            path: prefab,
+            base: None,
+            raw,
+        });
+    } else if let Ok(Value::Table(comps)) = o.get::<Value>("components") {
+        for c in comps.sequence_values::<Table>() {
+            let c = c.map_err(|e| format!("{name}: componente inválido: {e}"))?;
+            obj.components.push(read_component(&c, name, &obj.name)?);
+        }
+    }
+    if let Ok(Value::Table(children)) = o.get::<Value>("children") {
+        obj.children = read_objects(&children, name)?;
+    }
+    Ok(obj)
+}
+
+/// Lê um `.prefab`: um objeto (com filhos).
+pub fn read_prefab(text: &str, name: &str) -> Result<Object, String> {
+    let lua = Lua::new();
+    let value: Value = lua
+        .load(text)
+        .set_name(format!("@{name}"))
+        .eval()
+        .map_err(|e| nn_script::translate_error(e.to_string().trim()))?;
+    let Value::Table(t) = value else {
+        return Err(format!("{name}: o prefab deve devolver uma tabela"));
+    };
+    let Ok(Value::Table(o)) = t.get::<Value>("object") else {
+        return Err(format!("{name}: o prefab precisa de `object = {{ ... }}`"));
+    };
+    let mut obj = read_object(&o, name)?;
+    let mut scene = SceneData {
+        objects: vec![obj],
+        ..Default::default()
+    };
+    fix_ids(&mut scene);
+    obj = scene.objects.remove(0);
+    Ok(obj)
+}
+
+/// Lê um prefab do disco, já com os prefabs que ele usa ligados.
+pub fn load_prefab(root: &std::path::Path, rel: &str) -> Result<Object, String> {
+    load_prefab_at(root, rel, 0)
+}
+
+fn load_prefab_at(root: &std::path::Path, rel: &str, depth: usize) -> Result<Object, String> {
+    if depth > 8 {
+        return Err(format!("{rel}: prefabs demais um dentro do outro"));
+    }
+    let text = std::fs::read_to_string(root.join(rel)).map_err(|e| format!("{rel}: {e}"))?;
+    let mut obj = read_prefab(&text, rel)?;
+    link_tree(std::slice::from_mut(&mut obj), root, depth + 1);
+    Ok(obj)
+}
+
+fn link_tree(list: &mut [Object], root: &std::path::Path, depth: usize) {
+    for o in list {
+        if let Some(link) = &o.prefab
+            && let Ok(base) = load_prefab_at(root, &link.path.clone(), depth)
+        {
+            o.link_prefab(base);
+        }
+        link_tree(&mut o.children, root, depth);
+    }
+}
+
+/// Grava um `.prefab`.
+pub fn write_prefab(obj: &Object) -> String {
+    let mut s = String::from(
+        "-- Prefab do NN Studio: um objeto pronto para usar em várias cenas.\n\
+         -- Dá para editar à mão; ao salvar pelo editor, comentários se perdem.\n\
+         return {\n  format = 1,\n  object = ",
+    );
+    let mut body = String::new();
+    write_objects(&mut body, std::slice::from_ref(obj), 1);
+    s.push_str(body.trim_start());
+    s.push_str("}\n");
+    s
 }
 
 /// Garante ids únicos e maiores que zero.
@@ -440,7 +686,24 @@ fn write_objects(s: &mut String, list: &[Object], depth: usize) {
             s.push_str(" locked = true,");
         }
         s.push('\n');
-        if !o.components.is_empty() {
+        if let Some(link) = &o.prefab {
+            s.push_str(&format!(
+                "{inner}prefab = {},\n",
+                crate::config_lua::lua_string(&link.path)
+            ));
+            let overrides = o.overrides();
+            if !overrides.is_empty() {
+                s.push_str(&format!("{inner}overrides = {{\n"));
+                for (i, fields) in overrides {
+                    let mut line = format!("component = {}", i + 1);
+                    for (k, v) in fields {
+                        line.push_str(&format!(", {k} = {}", v.to_lua()));
+                    }
+                    s.push_str(&format!("{inner}  {{ {line} }},\n"));
+                }
+                s.push_str(&format!("{inner}}},\n"));
+            }
+        } else if !o.components.is_empty() {
             s.push_str(&format!("{inner}components = {{\n"));
             for c in &o.components {
                 let mut line = format!("type = {}", crate::config_lua::lua_string(&c.kind));
@@ -469,6 +732,21 @@ pub fn visit(list: &[Object], f: &mut impl FnMut(&Object)) {
 }
 
 impl SceneData {
+    /// Liga (ou religa, depois que um prefab mudou) as instâncias aos
+    /// prefabs do disco, mantendo o que cada instância mudou.
+    pub fn link_prefabs(&mut self, root: &std::path::Path) {
+        link_tree(&mut self.objects, root, 0);
+    }
+
+    /// Tem alguma instância deste prefab?
+    pub fn uses_prefab(&self, rel: &str) -> bool {
+        let mut found = false;
+        visit(&self.objects, &mut |o| {
+            found |= o.prefab.as_ref().is_some_and(|l| l.path == rel);
+        });
+        found
+    }
+
     pub fn next_id(&self) -> u32 {
         let mut max = 0;
         visit(&self.objects, &mut |o| max = max.max(o.id));
@@ -577,7 +855,7 @@ impl SceneData {
         if let Some(w) = world {
             let local = match parent.and_then(|p| self.world_transform(p)) {
                 Some(pw) => pw.to_local(w),
-                None => w,
+                None => self.root_unplace(&obj, w),
             };
             obj.x = local.x;
             obj.y = local.y;
@@ -614,14 +892,83 @@ impl SceneData {
         Some(new_id)
     }
 
-    /// Posição, rotação e escala no mundo.
+    /// Posição, rotação e escala no mundo. Objetos presos à tela (HUD)
+    /// aparecem no editor dentro da moldura da tela do jogo.
     pub fn world_transform(&self, id: u32) -> Option<Transform> {
         let o = self.find(id)?;
         let local = Transform::of(o);
         match self.parent_of(id)? {
-            None => Some(local),
+            None => Some(self.root_place(o, local)),
             Some(p) => Some(self.world_transform(p)?.apply(local)),
         }
+    }
+
+    /// Como [`SceneData::world_transform`], sem o ajuste do HUD.
+    fn plain_world_transform(&self, id: u32) -> Option<Transform> {
+        let o = self.find(id)?;
+        let local = Transform::of(o);
+        match self.parent_of(id)? {
+            None => Some(local),
+            Some(p) => Some(self.plain_world_transform(p)?.apply(local)),
+        }
+    }
+
+    /// Onde fica um objeto da raiz no mundo do editor.
+    pub fn root_place(&self, o: &Object, local: Transform) -> Transform {
+        if !o.is_hud() {
+            return local;
+        }
+        // No jogo, o HUD fica onde estaria com a câmera no começo, sem zoom.
+        let (cx, cy, zoom) = self.camera_start();
+        Transform {
+            x: cx + local.x / zoom,
+            y: cy + local.y / zoom,
+            rotation: local.rotation,
+            scale_x: local.scale_x / zoom,
+            scale_y: local.scale_y / zoom,
+        }
+    }
+
+    /// O contrário de [`SceneData::root_place`].
+    pub fn root_unplace(&self, o: &Object, world: Transform) -> Transform {
+        if !o.is_hud() {
+            return world;
+        }
+        let (cx, cy, zoom) = self.camera_start();
+        Transform {
+            x: (world.x - cx) * zoom,
+            y: (world.y - cy) * zoom,
+            rotation: world.rotation,
+            scale_x: world.scale_x * zoom,
+            scale_y: world.scale_y * zoom,
+        }
+    }
+
+    /// Onde a câmera começa (x, y) e o zoom dela: a primeira câmera da cena,
+    /// ou quem ela segue.
+    pub fn camera_start(&self) -> (f64, f64, f64) {
+        let mut out = None;
+        visit(&self.objects, &mut |o| {
+            if out.is_some() {
+                return;
+            }
+            if let Some(c) = o.component("camera") {
+                let zoom = c.num("zoom").max(0.01);
+                let target = c.str("follow");
+                let mut pos = self.plain_world_transform(o.id).map(|t| (t.x, t.y));
+                if !target.is_empty() {
+                    visit(&self.objects, &mut |t| {
+                        if t.name == target {
+                            pos = self.plain_world_transform(t.id).map(|w| (w.x, w.y));
+                        }
+                    });
+                }
+                if let Some((x, y)) = pos {
+                    out = Some((x, y, zoom));
+                }
+            }
+        });
+        out.unwrap_or((0.0, 0.0, 1.0))
     }
 
     /// Todos os ids, em ordem de desenho do arquivo (pais antes dos filhos).
@@ -916,11 +1263,16 @@ mod tests {
         for text in [
             // (No Windows, o git pode trazer o arquivo com CRLF.)
             include_str!("../../nn-run/modelos/visual/cenas/fase.cena").replace("\r\n", "\n"),
+            include_str!("../../nn-run/modelos/visual/cenas/fim.cena").replace("\r\n", "\n"),
             crate::files::visual_scene_template(),
         ] {
             let scene = read(&text, "modelo").unwrap();
             assert_eq!(write(&scene), text);
         }
+        let prefab =
+            include_str!("../../nn-run/modelos/visual/prefabs/moeda.prefab").replace("\r\n", "\n");
+        let obj = read_prefab(&prefab, "moeda").unwrap();
+        assert_eq!(write_prefab(&obj), prefab);
     }
 
     #[test]

@@ -160,6 +160,7 @@ impl FilePanel {
                 if r.clicked() {
                     self.selected = Some(String::new());
                 }
+                accept_object(ui, &r, "", actions);
                 r.context_menu(|ui| self.folder_menu(ui, "", mode, actions));
 
                 if !self.filter.trim().is_empty() {
@@ -386,6 +387,9 @@ impl FilePanel {
                     crate::files::human_size(e.size)
                 ))
             };
+            if e.is_dir {
+                accept_object(ui, &r, &e.rel, actions);
+            }
             if self.scroll_to.as_deref() == Some(e.rel.as_str()) {
                 r.scroll_to_me(Some(egui::Align::Center));
                 self.scroll_to = None;
@@ -557,6 +561,27 @@ fn thumbnail(ctx: &egui::Context, path: &std::path::Path, rel: &str) -> Option<T
     ))
 }
 
+/// Objeto da Hierarquia solto numa pasta: vira prefab nela.
+fn accept_object(ui: &egui::Ui, r: &egui::Response, dir: &str, actions: &mut Vec<Action>) {
+    if r.dnd_hover_payload::<crate::scene_view::ObjectDrag>()
+        .is_some()
+    {
+        ui.painter().rect_stroke(
+            r.rect,
+            3.0,
+            egui::Stroke::new(1.5, ui.visuals().selection.bg_fill),
+            egui::StrokeKind::Inside,
+        );
+        r.clone().on_hover_text("Solte para criar um prefab aqui");
+    }
+    if let Some(p) = r.dnd_release_payload::<crate::scene_view::ObjectDrag>() {
+        actions.push(Action::CreatePrefab {
+            id: p.0,
+            dir: Some(dir.to_string()),
+        });
+    }
+}
+
 /// Desenha o ícone de um tipo de arquivo (sem depender de fontes de emoji).
 pub fn paint_icon(painter: &egui::Painter, rect: egui::Rect, kind: FileKind, open: bool) {
     use egui::{Color32, Pos2, Rect, Stroke, vec2};
@@ -577,6 +602,7 @@ pub fn paint_icon(painter: &egui::Painter, rect: egui::Rect, kind: FileKind, ope
     let (fill, mark) = match kind {
         FileKind::Lua => (rgb(0x4A, 0x86, 0xD8), "lines"),
         FileKind::Scene => (rgb(0xD9, 0x5B, 0x8A), "picture"),
+        FileKind::Prefab => (rgb(0x4A, 0x9C, 0xF0), "box"),
         FileKind::Text => (rgb(0x8A, 0x93, 0x9E), "lines"),
         FileKind::Map => (rgb(0x4C, 0xA8, 0x5A), "grid"),
         FileKind::Tileset => (rgb(0x3E, 0x8E, 0x7E), "grid"),
@@ -664,6 +690,20 @@ pub fn paint_icon(painter: &egui::Painter, rect: egui::Rect, kind: FileKind, ope
                 Pos2::new(page.right() - 3.0, page.center().y - 1.0),
                 1.3,
                 white,
+            );
+        }
+        "box" => {
+            // Um cubo: o prefab é um objeto pronto.
+            let b = Rect::from_center_size(page.center() + vec2(0.0, 1.0), vec2(6.0, 6.0));
+            painter.rect_stroke(b, 0.0, s, egui::StrokeKind::Middle);
+            painter.line_segment([b.left_top(), b.left_top() + vec2(1.5, -1.5)], s);
+            painter.line_segment([b.right_top(), b.right_top() + vec2(1.5, -1.5)], s);
+            painter.line_segment(
+                [
+                    b.left_top() + vec2(1.5, -1.5),
+                    b.right_top() + vec2(1.5, -1.5),
+                ],
+                s,
             );
         }
         "letter" => {

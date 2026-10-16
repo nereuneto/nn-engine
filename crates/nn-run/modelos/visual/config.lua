@@ -10,4 +10,7 @@ return {
   clear_color = "#14202E",
   -- A fase é uma cena visual: abra-a no NN Studio para mexer com o mouse.
   start = "cenas/fase.cena",
+  -- Variáveis do jogo (nn.vars): valem de uma cena para outra. Os
+  -- comportamentos Coletável e Vida mexem nelas; Mostrar valor mostra.
+  vars = { moedas = 0, vidas = 3 },
 }

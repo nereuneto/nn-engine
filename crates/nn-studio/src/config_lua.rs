@@ -3,6 +3,8 @@
 
 use mlua::{Lua, Table, Value};
 
+use crate::scene_data::Prop;
+
 /// As opções do `config.lua` que o formulário edita.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConfigValues {
@@ -18,6 +20,8 @@ pub struct ConfigValues {
     /// Cor de fundo, `#RRGGBB`.
     pub clear_color: String,
     pub start: String,
+    /// Variáveis do jogo (`vars`), em ordem alfabética.
+    pub vars: Vec<(String, Prop)>,
 }
 
 impl Default for ConfigValues {
@@ -34,6 +38,7 @@ impl Default for ConfigValues {
             fixed_hz: 60,
             clear_color: "#1E1E28".into(),
             start: "main.lua".into(),
+            vars: Vec::new(),
         }
     }
 }
@@ -44,6 +49,8 @@ pub enum LuaValue {
     Str(String),
     Int(i64),
     Bool(bool),
+    /// Código Lua pronto (uma tabela, por exemplo).
+    Raw(String),
 }
 
 impl LuaValue {
@@ -53,6 +60,7 @@ impl LuaValue {
             LuaValue::Str(s) => lua_string(s),
             LuaValue::Int(n) => n.to_string(),
             LuaValue::Bool(b) => b.to_string(),
+            LuaValue::Raw(s) => s.clone(),
         }
     }
 }
@@ -118,6 +126,19 @@ pub fn read(text: &str, default_title: &str) -> Result<ConfigValues, String> {
     if let Some(n) = num(get("fixed_hz")) {
         v.fixed_hz = n.max(1);
     }
+    if let Value::Table(vars) = get("vars") {
+        for (k, val) in vars.pairs::<String, Value>().filter_map(Result::ok) {
+            let p = match val {
+                Value::Integer(i) => Prop::Num(i as f64),
+                Value::Number(n) => Prop::Num(n),
+                Value::Boolean(b) => Prop::Bool(b),
+                Value::String(s) => Prop::Str(s.to_string_lossy()),
+                _ => continue,
+            };
+            v.vars.push((k, p));
+        }
+        v.vars.sort_by(|a, b| a.0.cmp(&b.0));
+    }
     for (key, field) in [
         ("fullscreen", &mut v.fullscreen),
         ("resizable", &mut v.resizable),
@@ -160,7 +181,31 @@ pub fn changes(old: &ConfigValues, new: &ConfigValues) -> Vec<(&'static str, Lua
     b("resizable", old.resizable, new.resizable);
     b("vsync", old.vsync, new.vsync);
     b("hot_reload", old.hot_reload, new.hot_reload);
+    if old.vars != new.vars {
+        out.push(("vars", LuaValue::Raw(vars_lua(&new.vars))));
+    }
     out
+}
+
+/// Nome de variável válido no Lua (`moedas`, `vidas_extra`).
+pub fn valid_var_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// `{ moedas = 0, vidas = 3 }`.
+pub fn vars_lua(vars: &[(String, Prop)]) -> String {
+    if vars.is_empty() {
+        return "{}".into();
+    }
+    let mut sorted: Vec<_> = vars.to_vec();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+    let items: Vec<String> = sorted
+        .iter()
+        .map(|(k, v)| format!("{k} = {}", v.to_lua()))
+        .collect();
+    format!("{{ {} }}", items.join(", "))
 }
 
 /// Reescreve o `config.lua` com os valores novos. Cada `chave = valor` que já
@@ -197,6 +242,7 @@ fn value_of(v: &ConfigValues, key: &str) -> Option<LuaValue> {
         "resizable" => LuaValue::Bool(v.resizable),
         "vsync" => LuaValue::Bool(v.vsync),
         "hot_reload" => LuaValue::Bool(v.hot_reload),
+        "vars" => LuaValue::Raw(vars_lua(&v.vars)),
         _ => return None,
     })
 }
@@ -231,6 +277,9 @@ pub fn generate(v: &ConfigValues) -> String {
     }
     if v.fixed_hz != d.fixed_hz {
         line("fixed_hz", LuaValue::Int(v.fixed_hz as i64));
+    }
+    if !v.vars.is_empty() {
+        line("vars", LuaValue::Raw(vars_lua(&v.vars)));
     }
     s.push_str("}\n");
     s
@@ -382,6 +431,34 @@ mod tests {
     use super::*;
 
     const PADRAO: &str = "-- Configuração do jogo.\nreturn {\n  title = \"Meu jogo\",\n  -- Não mude depois de distribuir.\n  id = \"meu-jogo\",\n  width = 1280,\n  height = 720,\n  clear_color = \"#14202E\",\n  start = \"cenas/titulo.lua\",\n}\n";
+
+    #[test]
+    fn variaveis_do_jogo() {
+        let text =
+            "return {\n  title = \"X\",\n  -- placar\n  vars = { vidas = 3, moedas = 0 },\n}\n";
+        let old = read(text, "x").unwrap();
+        assert_eq!(
+            old.vars,
+            vec![
+                ("moedas".to_string(), Prop::Num(0.0)),
+                ("vidas".to_string(), Prop::Num(3.0))
+            ]
+        );
+        let mut new = old.clone();
+        new.vars.push(("nome".into(), Prop::Str("Ana".into())));
+        new.vars.retain(|(k, _)| k != "vidas");
+        let out = update(text, &changes(&old, &new), &new);
+        assert!(out.contains("-- placar"), "{out}");
+        assert!(
+            out.contains("vars = { moedas = 0, nome = \"Ana\" },"),
+            "{out}"
+        );
+        assert_eq!(read(&out, "x").unwrap().vars.len(), 2);
+        // Sem `vars` no arquivo: entra no fim.
+        let out = update(PADRAO, &changes(&read(PADRAO, "x").unwrap(), &new), &new);
+        assert!(out.contains("vars = {"), "{out}");
+        assert!(valid_var_name("vidas_2") && !valid_var_name("2vidas") && !valid_var_name("a b"));
+    }
 
     #[test]
     fn le_valores_e_padroes() {

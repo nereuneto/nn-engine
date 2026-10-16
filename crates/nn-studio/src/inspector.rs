@@ -7,8 +7,9 @@ use std::time::SystemTime;
 
 use eframe::egui::{self, Color32, RichText, Vec2};
 
+use crate::behaviors::{self, BehaviorInfo, Catalog, PropType};
 use crate::files::{FileKind, FileTree};
-use crate::scene_data::{Component, Prop};
+use crate::scene_data::{Component, Object, Prop};
 use crate::scene_view::{FileDrag, SceneDoc};
 use crate::settings::Mode;
 
@@ -133,7 +134,13 @@ const SPRITE_FIELDS: &[F] = &[
     f("flip_x", "Espelhar na horizontal", W::Bool),
     adv("flip_y", "Espelhar na vertical", W::Bool),
     adv("pixel_art", "Pixel art (sem suavizar)", W::Bool),
+    HUD,
 ];
+
+const HUD: F = help(
+    f("hud", "Fixo na tela (HUD)", W::Bool),
+    "Não anda com a câmera: placar, vidas, botões. A posição conta a partir do centro da tela.",
+);
 
 const TEXT_FIELDS: &[F] = &[
     f("text", "Texto", W::Multiline),
@@ -143,6 +150,7 @@ const TEXT_FIELDS: &[F] = &[
         f("anchor", "Âncora", W::Choice(ANCHORS)),
         "Qual ponto do texto fica na posição do objeto.",
     ),
+    HUD,
 ];
 
 const SHAPE_FIELDS: &[F] = &[
@@ -155,6 +163,7 @@ const SHAPE_FIELDS: &[F] = &[
     f("h", "Altura", SIZE),
     f("radius", "Raio", SIZE),
     f("color", "Cor", W::Color),
+    HUD,
 ];
 
 const BODY_FIELDS: &[F] = &[
@@ -378,6 +387,10 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "camera" => ("Câmera", "Onde a câmera começa, ou quem ela segue."),
         "sound" => ("Som", "Toca um som ou música quando a cena começa."),
         "particles" => ("Partículas", "Fumaça, faíscas, poeira, chuva..."),
+        "behavior" => (
+            "Comportamento",
+            "Um script com propriedades: pronto (andar, pular, coletar...) ou do jogo.",
+        ),
         _ => ("Componente", ""),
     }
 }
@@ -388,11 +401,203 @@ pub enum InspectorAction {
     OpenFile(String),
     /// Criar o script da cena.
     CreateScript,
+    /// Criar um script de comportamento novo e pôr neste objeto.
+    NewBehaviorScript(u32),
 }
 
 #[derive(Default)]
 pub struct Inspector {
     images: HashMap<String, (Option<SystemTime>, egui::TextureHandle)>,
+    /// Informações dos comportamentos (lidas dos scripts).
+    pub catalog: Catalog,
+    /// Pedidos feitos enquanto desenha.
+    actions_out: Vec<InspectorAction>,
+}
+
+/// Cor das instâncias de prefab.
+pub const PREFAB: Color32 = Color32::from_rgb(0x6A, 0xB0, 0xF5);
+
+/// Um `.lua` que pode ser um comportamento (não é cena nem configuração).
+fn is_behavior_candidate(rel: &str) -> bool {
+    rel != "config.lua" && rel != "main.lua" && !rel.starts_with("cenas/")
+}
+
+/// Rótulo de um campo (em negrito e com ↺ quando a instância mudou o valor
+/// do prefab).
+fn field_row(ui: &mut egui::Ui, spec: &Spec, overridden: bool, reverts: &mut Vec<String>) -> bool {
+    ui.horizontal(|ui| {
+        let text = if overridden {
+            RichText::new(&spec.label).strong().color(PREFAB)
+        } else {
+            RichText::new(&spec.label)
+        };
+        let r = ui.label(text);
+        if !spec.help.is_empty() {
+            r.on_hover_text(&spec.help);
+        }
+        if overridden
+            && ui
+                .small_button("↺")
+                .on_hover_text("Voltar ao valor do prefab")
+                .clicked()
+        {
+            reverts.push(spec.key.clone());
+        }
+    });
+    true
+}
+
+/// Aplica as mudanças de um componente (um passo de desfazer).
+fn apply_changes(
+    doc: &mut SceneDoc,
+    o: &Object,
+    ci: usize,
+    changes: Vec<(String, Prop)>,
+    reverts: Vec<String>,
+) {
+    if changes.is_empty() && reverts.is_empty() {
+        return;
+    }
+    let first = changes
+        .first()
+        .map(|c| c.0.clone())
+        .or_else(|| reverts.first().cloned())
+        .unwrap_or_default();
+    let key = format!("{}:{ci}:{first}", o.id);
+    doc.record(if reverts.is_empty() { Some(&key) } else { None });
+    let base: Option<Component> = o
+        .prefab
+        .as_ref()
+        .and_then(|l| l.base.as_ref())
+        .and_then(|b| b.components.get(ci).cloned());
+    if let Some(c) = doc
+        .data
+        .find_mut(o.id)
+        .and_then(|x| x.components.get_mut(ci))
+    {
+        for (k, v) in changes {
+            c.set(&k, v);
+        }
+        for k in reverts {
+            match base.as_ref().and_then(|b| b.get(&k)) {
+                Some(v) => c.set(&k, v.clone()),
+                None => c.remove(&k),
+            }
+        }
+    }
+}
+
+/// Um campo pronto para mostrar: do componente (fixo) ou de um
+/// comportamento (vem do script).
+#[derive(Debug, Clone)]
+struct Spec {
+    key: String,
+    label: String,
+    w: Wd,
+    help: String,
+}
+
+#[derive(Debug, Clone)]
+enum Wd {
+    Num {
+        speed: f64,
+        min: f64,
+        max: f64,
+        suffix: &'static str,
+    },
+    Int {
+        min: f64,
+        max: f64,
+    },
+    Bool,
+    Text,
+    Multiline,
+    Color,
+    Choice(Vec<(String, String)>),
+    File(FileKind),
+    /// Cena (.cena ou .lua).
+    Scene,
+    /// Objeto da cena; o texto é o que mostrar quando vazio.
+    Object(&'static str),
+}
+
+impl From<&F> for Spec {
+    fn from(f: &F) -> Self {
+        let w = match f.w {
+            W::Num {
+                speed,
+                min,
+                max,
+                suffix,
+            } => Wd::Num {
+                speed,
+                min,
+                max,
+                suffix,
+            },
+            W::Int { min, max } => Wd::Int { min, max },
+            W::Bool => Wd::Bool,
+            W::Text => Wd::Text,
+            W::Multiline => Wd::Multiline,
+            W::Color => Wd::Color,
+            W::Choice(list) => Wd::Choice(
+                list.iter()
+                    .map(|(k, l)| (k.to_string(), l.to_string()))
+                    .collect(),
+            ),
+            W::File(k) => Wd::File(k),
+            W::Object => Wd::Object("(nenhum)"),
+        };
+        Spec {
+            key: f.key.to_string(),
+            label: f.label.to_string(),
+            w,
+            help: f.help.to_string(),
+        }
+    }
+}
+
+/// O campo de uma propriedade de comportamento.
+fn behavior_spec(info: &BehaviorInfo, p: &behaviors::PropSpec) -> Spec {
+    let w = match p.kind {
+        PropType::Number if p.integer => Wd::Int {
+            min: p.min.unwrap_or(-1_000_000.0),
+            max: p.max.unwrap_or(1_000_000.0),
+        },
+        PropType::Number => {
+            let range = p.max.unwrap_or(1000.0) - p.min.unwrap_or(0.0);
+            let base = p.default.num().abs();
+            Wd::Num {
+                speed: if base < 5.0 && range <= 20.0 {
+                    0.01
+                } else {
+                    1.0
+                },
+                min: p.min.unwrap_or(-1_000_000.0),
+                max: p.max.unwrap_or(1_000_000.0),
+                suffix: "",
+            }
+        }
+        PropType::Bool => Wd::Bool,
+        PropType::Text => Wd::Text,
+        PropType::Color => Wd::Color,
+        PropType::Choice => Wd::Choice(p.options.clone()),
+        PropType::Object => Wd::Object(if info.is_builtin() {
+            "(o jogador)"
+        } else {
+            "(nenhum)"
+        }),
+        PropType::Scene => Wd::Scene,
+        PropType::Prefab => Wd::File(FileKind::Prefab),
+        PropType::Sound => Wd::File(FileKind::Sound),
+        PropType::Image => Wd::File(FileKind::Image),
+    };
+    Spec {
+        key: p.key.clone(),
+        label: p.label.clone(),
+        w,
+        help: p.help.clone(),
+    }
 }
 
 impl std::fmt::Debug for Inspector {
@@ -455,6 +660,7 @@ impl Inspector {
                     });
                 }
             });
+        actions.append(&mut self.actions_out);
         actions
     }
 
@@ -667,16 +873,86 @@ impl Inspector {
             }
         }
 
+        // Instância de prefab: os componentes vêm dele.
+        let instance = o.prefab.clone();
+        if let Some(link) = &instance {
+            let mut unlink = false;
+            egui::Frame::group(ui.style()).show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("Prefab").strong().color(PREFAB));
+                    ui.label(&link.path);
+                });
+                if link.base.is_none() {
+                    ui.colored_label(
+                        crate::theme::ERROR,
+                        "O arquivo do prefab não foi encontrado (ou tem erro).",
+                    );
+                } else {
+                    ui.weak("Mudanças aqui valem só para este objeto (aparecem em negrito, com ↺ para voltar ao do prefab).");
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("Abrir prefab").clicked() {
+                        self.actions_out.push(InspectorAction::OpenFile(link.path.clone()));
+                    }
+                    if ui
+                        .button("Desvincular")
+                        .on_hover_text("Vira um objeto comum: os filhos do prefab passam a ser dele e mudanças no prefab não chegam mais.")
+                        .clicked()
+                    {
+                        unlink = true;
+                    }
+                });
+            });
+            if unlink {
+                doc.record(None);
+                let mut next = doc.data.next_id();
+                if let Some(obj) = doc.data.find_mut(id) {
+                    let mut kids: Vec<Object> = obj.prefab_children().to_vec();
+                    fn renumber(o: &mut Object, next: &mut u32) {
+                        o.id = *next;
+                        *next += 1;
+                        for c in &mut o.children {
+                            renumber(c, next);
+                        }
+                    }
+                    for k in &mut kids {
+                        renumber(k, &mut next);
+                    }
+                    kids.append(&mut obj.children);
+                    obj.children = kids;
+                    obj.prefab = None;
+                }
+                return;
+            }
+        }
+
         let names: Vec<String> = {
             let mut v = Vec::new();
             crate::scene_data::visit(&doc.data.objects, &mut |x| v.push(x.name.clone()));
             v
         };
+        let root = files.root().to_path_buf();
+        let infos: Vec<Option<BehaviorInfo>> = o
+            .components
+            .iter()
+            .map(|c| {
+                (c.is_behavior() && !c.str("script").is_empty())
+                    .then(|| self.catalog.get(&root, c.str("script")))
+            })
+            .collect();
         let mut remove = None;
         let mut swap = None;
+        let mut add: Vec<Component> = Vec::new();
         let count = o.components.len();
         for (ci, comp) in o.components.iter().enumerate() {
-            let (title, _) = component_info(&comp.kind);
+            let (mut title, mut desc) = {
+                let (t, d) = component_info(&comp.kind);
+                (t.to_string(), d.to_string())
+            };
+            if let Some(info) = &infos[ci] {
+                title = info.title.clone();
+                desc = info.description.clone();
+            }
             let state = egui::collapsing_header::CollapsingState::load_with_default_open(
                 ui.ctx(),
                 ui.id().with(("componente", id, ci, &comp.kind)),
@@ -684,7 +960,13 @@ impl Inspector {
             );
             state
                 .show_header(ui, |ui| {
-                    ui.label(RichText::new(title).strong());
+                    let r = ui.label(RichText::new(&title).strong());
+                    if !desc.is_empty() {
+                        r.on_hover_text(&desc);
+                    }
+                    if instance.is_some() {
+                        return;
+                    }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.menu_button("☰", |ui| {
                             if ci > 0 && ui.button("Subir").clicked() {
@@ -703,7 +985,23 @@ impl Inspector {
                     });
                 })
                 .body(|ui| {
-                    self.component_ui(ui, doc, id, ci, comp, files, sizes, &names, full);
+                    if comp.is_behavior() {
+                        self.behavior_ui(
+                            ui,
+                            doc,
+                            &o,
+                            ci,
+                            comp,
+                            infos[ci].as_ref(),
+                            files,
+                            sizes,
+                            &names,
+                            full,
+                            &mut add,
+                        );
+                    } else {
+                        self.component_ui(ui, doc, id, ci, comp, files, sizes, &names, full);
+                    }
                 });
         }
         if let Some(ci) = remove {
@@ -718,7 +1016,18 @@ impl Inspector {
                 obj.components.swap(a, b);
             }
         }
+        if !add.is_empty() {
+            doc.record(None);
+            if let Some(obj) = doc.data.find_mut(id) {
+                obj.components.extend(add);
+            }
+        }
         ui.add_space(8.0);
+        if instance.is_some() {
+            ui.weak("Para pôr ou tirar componentes, abra o prefab: a mudança vale para todas as cópias.");
+            return;
+        }
+        let mut chosen: Vec<Component> = Vec::new();
         ui.menu_button("➕ Adicionar componente", |ui| {
             for kind in &crate::scene_data::schema().order {
                 let (title, desc) = component_info(kind);
@@ -737,14 +1046,180 @@ impl Inspector {
                             c.set("h", Prop::Num(h.round()));
                         }
                     }
-                    doc.record(None);
-                    if let Some(obj) = doc.data.find_mut(id) {
-                        obj.components.push(c);
-                    }
+                    chosen.push(c);
                     ui.close();
                 }
             }
+            ui.separator();
+            ui.label(RichText::new("Comportamentos").weak());
+            for cat in behaviors::categories() {
+                ui.menu_button(cat, |ui| {
+                    for b in behaviors::builtins().iter().filter(|b| b.category == cat) {
+                        if ui.button(&b.title).on_hover_text(&b.description).clicked() {
+                            // Quem precisa de corpo físico já ganha um.
+                            if b.requires.iter().any(|r| r == "body")
+                                && o.component("body").is_none()
+                            {
+                                let mut body = Component::new("body");
+                                if let Some((w, h)) = visible_size(&o, sizes, files) {
+                                    body.set("w", Prop::Num(w.round()));
+                                    body.set("h", Prop::Num(h.round()));
+                                }
+                                chosen.push(body);
+                            }
+                            chosen.push(Component::behavior(&b.script, &b.defaults()));
+                            ui.close();
+                        }
+                    }
+                });
+            }
+            ui.menu_button("Script do jogo", |ui| {
+                if ui
+                    .button("➕ Novo script...")
+                    .on_hover_text("Cria um arquivo em scripts/ com o modelo de comportamento")
+                    .clicked()
+                {
+                    self.actions_out
+                        .push(InspectorAction::NewBehaviorScript(id));
+                    ui.close();
+                }
+                let scripts: Vec<String> = files
+                    .files_of(FileKind::Lua)
+                    .map(|e| e.rel.clone())
+                    .filter(|r| is_behavior_candidate(r))
+                    .collect();
+                if !scripts.is_empty() {
+                    ui.separator();
+                }
+                for rel in scripts {
+                    if ui.button(&rel).clicked() {
+                        let info = self.catalog.get(&root, &rel);
+                        chosen.push(Component::behavior(&rel, &info.defaults()));
+                        ui.close();
+                    }
+                }
+            });
         });
+        if !chosen.is_empty() {
+            doc.record(None);
+            if let Some(obj) = doc.data.find_mut(id) {
+                obj.components.extend(chosen);
+            }
+        }
+    }
+
+    /// Um comportamento: escolher o script e as propriedades dele.
+    #[allow(clippy::too_many_arguments)]
+    fn behavior_ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        doc: &mut SceneDoc,
+        o: &Object,
+        ci: usize,
+        comp: &Component,
+        info: Option<&BehaviorInfo>,
+        files: &FileTree,
+        sizes: &mut crate::scene_render::Sizes,
+        names: &[String],
+        full: bool,
+        add: &mut Vec<Component>,
+    ) {
+        let id = o.id;
+        let _ = sizes;
+        let mut changes: Vec<(String, Prop)> = Vec::new();
+        let mut reverts: Vec<String> = Vec::new();
+        let script = comp.str("script").to_string();
+        let Some(info) = info else {
+            ui.weak("Escolha um comportamento em ➕ Adicionar componente.");
+            return;
+        };
+        if let Some(e) = &info.error {
+            ui.colored_label(crate::theme::ERROR, e);
+        }
+        if !info.is_builtin() {
+            ui.horizontal(|ui| {
+                ui.weak(&script);
+                if ui.small_button("Abrir script").clicked() {
+                    self.actions_out
+                        .push(InspectorAction::OpenFile(script.clone()));
+                }
+            });
+        }
+        // Do que ele precisa.
+        for req in &info.requires {
+            if o.component(req).is_none() {
+                let (title, _) = component_info(req);
+                ui.horizontal_wrapped(|ui| {
+                    ui.colored_label(crate::theme::WARNING, format!("⚠ Precisa de: {title}"));
+                    if o.prefab.is_none() && ui.small_button("Adicionar").clicked() {
+                        add.push(Component::new(req));
+                    }
+                });
+            }
+        }
+        let value = |key: &str| -> Prop {
+            comp.get(key)
+                .cloned()
+                .or_else(|| info.prop(key).map(|p| p.default.clone()))
+                .unwrap_or(Prop::Str(String::new()))
+        };
+        egui::Grid::new(("grade-comportamento", id, ci))
+            .num_columns(2)
+            .spacing([8.0, 4.0])
+            .show(ui, |ui| {
+                for p in &info.props {
+                    if p.advanced && !full {
+                        continue;
+                    }
+                    if let Some((other, values)) = &p.show_if {
+                        let v = value(other);
+                        let v = match &v {
+                            Prop::Str(s) => s.clone(),
+                            other => other.to_lua(),
+                        };
+                        if !values.contains(&v) {
+                            continue;
+                        }
+                    }
+                    let spec = behavior_spec(info, p);
+                    let overridden = o.is_overridden(ci, &p.key);
+                    if field_row(ui, &spec, overridden, &mut reverts) {
+                        // (a linha mostrou o rótulo)
+                    }
+                    let current = value(&p.key);
+                    if let Some(new) = field_widget(ui, &spec, &current, files, names, (id, ci)) {
+                        changes.push((p.key.clone(), new));
+                    }
+                    ui.end_row();
+                }
+            });
+        if info.props.is_empty() && info.error.is_none() {
+            ui.weak("Este comportamento não tem propriedades.");
+        }
+        // Valores guardados de propriedades que o script não tem mais.
+        let stale: Vec<String> = comp
+            .props
+            .iter()
+            .map(|(k, _)| k.clone())
+            .filter(|k| k != "script" && info.prop(k).is_none() && info.error.is_none())
+            .collect();
+        if !stale.is_empty() && o.prefab.is_none() {
+            ui.horizontal_wrapped(|ui| {
+                ui.weak(format!(
+                    "Valores que o script não usa mais: {}",
+                    stale.join(", ")
+                ));
+                if ui.small_button("Limpar").clicked() {
+                    doc.record(None);
+                    if let Some(c) = doc.data.find_mut(id).and_then(|x| x.components.get_mut(ci)) {
+                        for k in &stale {
+                            c.remove(k);
+                        }
+                    }
+                }
+            });
+        }
+        apply_changes(doc, o, ci, changes, reverts);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -761,6 +1236,10 @@ impl Inspector {
         full: bool,
     ) {
         let mut changes: Vec<(String, Prop)> = Vec::new();
+        let mut reverts: Vec<String> = Vec::new();
+        let object = doc.data.find(id).cloned();
+        let obj = object.as_ref();
+        let is_instance = obj.is_some_and(|x| x.prefab.is_some());
         let circle = comp.str("shape") == "circle";
         egui::Grid::new(("grade-componente", id, ci))
             .num_columns(2)
@@ -782,13 +1261,13 @@ impl Inspector {
                     if comp.kind == "sprite" && spec.key == "frame" && comp.num("frame_w") <= 0.0 {
                         continue;
                     }
-                    let label = ui.label(spec.label);
-                    if !spec.help.is_empty() {
-                        label.on_hover_text(spec.help);
-                    }
-                    let current = comp.get(spec.key).cloned().unwrap_or(Prop::Num(0.0));
-                    if let Some(new) = field_widget(ui, spec, &current, files, names, (id, ci)) {
-                        changes.push((spec.key.to_string(), new));
+                    let spec = Spec::from(spec);
+                    let overridden =
+                        is_instance && obj.is_some_and(|x| x.is_overridden(ci, &spec.key));
+                    field_row(ui, &spec, overridden, &mut reverts);
+                    let current = comp.get(&spec.key).cloned().unwrap_or(Prop::Num(0.0));
+                    if let Some(new) = field_widget(ui, &spec, &current, files, names, (id, ci)) {
+                        changes.push((spec.key.clone(), new));
                     }
                     ui.end_row();
                 }
@@ -856,14 +1335,8 @@ impl Inspector {
             changes.push(("radius".into(), Prop::Num((w.max(h) / 2.0).round())));
         }
 
-        if !changes.is_empty() {
-            let key = format!("{id}:{ci}:{}", changes[0].0);
-            doc.record(Some(&key));
-            if let Some(c) = doc.data.find_mut(id).and_then(|o| o.components.get_mut(ci)) {
-                for (k, v) in changes {
-                    c.set(&k, v);
-                }
-            }
+        if let Some(o) = obj {
+            apply_changes(doc, o, ci, changes, reverts);
         }
     }
 
@@ -981,14 +1454,15 @@ fn visible_size(
 /// Mostra o controle de um campo. Devolve o valor novo, se mudou.
 fn field_widget(
     ui: &mut egui::Ui,
-    spec: &F,
+    spec: &Spec,
     current: &Prop,
     files: &FileTree,
     names: &[String],
     salt: (u32, usize),
 ) -> Option<Prop> {
-    match spec.w {
-        W::Num {
+    let width = ui.available_width().clamp(80.0, 180.0);
+    match &spec.w {
+        Wd::Num {
             speed,
             min,
             max,
@@ -997,136 +1471,163 @@ fn field_widget(
             let mut v = current.num();
             ui.add(
                 egui::DragValue::new(&mut v)
-                    .speed(speed)
-                    .range(min..=max)
-                    .suffix(suffix),
+                    .speed(*speed)
+                    .range(*min..=*max)
+                    .suffix(*suffix),
             )
             .changed()
             .then_some(Prop::Num(v))
         }
-        W::Int { min, max } => {
+        Wd::Int { min, max } => {
             let mut v = current.num().round();
             ui.add(
                 egui::DragValue::new(&mut v)
                     .speed(0.1)
-                    .range(min..=max)
+                    .range(*min..=*max)
                     .max_decimals(0),
             )
             .changed()
             .then_some(Prop::Num(v.round()))
         }
-        W::Bool => {
+        Wd::Bool => {
             let mut v = current.bool();
             ui.checkbox(&mut v, "").changed().then_some(Prop::Bool(v))
         }
-        W::Text => {
+        Wd::Text => {
             let mut v = current.str().to_string();
-            ui.add(
-                egui::TextEdit::singleline(&mut v)
-                    .desired_width(ui.available_width().clamp(80.0, 180.0)),
-            )
-            .changed()
-            .then_some(Prop::Str(v))
+            ui.add(egui::TextEdit::singleline(&mut v).desired_width(width))
+                .changed()
+                .then_some(Prop::Str(v))
         }
-        W::Multiline => {
+        Wd::Multiline => {
             let mut v = current.str().to_string();
             ui.add(
                 egui::TextEdit::multiline(&mut v)
                     .desired_rows(2)
-                    .desired_width(ui.available_width().clamp(80.0, 180.0)),
+                    .desired_width(width),
             )
             .changed()
             .then_some(Prop::Str(v))
         }
-        W::Color => {
+        Wd::Color => {
             let mut c = hex_to_rgba(current.str());
             ui.color_edit_button_srgba_unmultiplied(&mut c)
                 .changed()
                 .then(|| Prop::Str(rgba_to_hex(c)))
         }
-        W::Choice(options) => {
+        Wd::Choice(options) => {
             let mut v = current.str().to_string();
             let text = options
                 .iter()
                 .find(|(k, _)| *k == v)
-                .map(|(_, l)| *l)
-                .unwrap_or(v.as_str())
-                .to_string();
+                .map(|(_, l)| l.clone())
+                .unwrap_or_else(|| v.clone());
             let mut changed = false;
-            egui::ComboBox::from_id_salt(("escolha", salt, spec.key))
-                .width(ui.available_width().clamp(80.0, 180.0))
+            egui::ComboBox::from_id_salt(("escolha", salt, &spec.key))
+                .width(width)
                 .truncate()
                 .selected_text(text)
                 .show_ui(ui, |ui| {
                     for (k, l) in options {
-                        if ui.selectable_value(&mut v, k.to_string(), *l).changed() {
+                        if ui.selectable_value(&mut v, k.clone(), l).changed() {
                             changed = true;
                         }
                     }
                 });
             changed.then_some(Prop::Str(v))
         }
-        W::Object => {
+        Wd::Object(empty) => {
             let mut v = current.str().to_string();
             let mut changed = false;
-            egui::ComboBox::from_id_salt(("objeto", salt, spec.key))
-                .width(ui.available_width().clamp(80.0, 180.0))
+            egui::ComboBox::from_id_salt(("objeto", salt, &spec.key))
+                .width(width)
                 .truncate()
                 .selected_text(if v.is_empty() {
-                    "(nenhum)".to_string()
+                    empty.to_string()
                 } else {
                     v.clone()
                 })
                 .show_ui(ui, |ui| {
-                    changed |= ui
-                        .selectable_value(&mut v, String::new(), "(nenhum)")
-                        .changed();
+                    changed |= ui.selectable_value(&mut v, String::new(), *empty).changed();
+                    let mut seen = std::collections::HashSet::new();
                     for n in names {
-                        changed |= ui.selectable_value(&mut v, n.clone(), n).changed();
+                        if seen.insert(n) {
+                            changed |= ui.selectable_value(&mut v, n.clone(), n).changed();
+                        }
                     }
                 });
             changed.then_some(Prop::Str(v))
         }
-        W::File(kind) => {
-            let mut v = current.str().to_string();
-            let mut changed = false;
-            // Na caixa, só o nome do arquivo (o caminho todo fica na dica).
-            let short = v.rsplit('/').next().unwrap_or(&v).to_string();
-            let r = egui::ComboBox::from_id_salt(("arquivo", salt, spec.key))
-                .selected_text(if v.is_empty() {
-                    "(nenhum)".to_string()
-                } else {
-                    short
-                })
-                .width(ui.available_width().clamp(80.0, 180.0))
-                .truncate()
-                .show_ui(ui, |ui| {
-                    changed |= ui
-                        .selectable_value(&mut v, String::new(), "(nenhum)")
-                        .changed();
-                    for e in files.files_of(kind) {
-                        if kind == FileKind::Map && !e.rel.to_lowercase().ends_with(".tmj") {
-                            continue;
-                        }
-                        changed |= ui.selectable_value(&mut v, e.rel.clone(), &e.rel).changed();
-                    }
-                })
-                .response
-                .on_hover_text(if v.is_empty() {
-                    "Escolha na lista ou arraste do painel Arquivos para cá.".to_string()
-                } else {
-                    format!("{v}\nEscolha na lista ou arraste do painel Arquivos para cá.")
-                });
-            // Arrastar um arquivo do painel para o campo.
-            if let Some(p) = r.dnd_release_payload::<FileDrag>()
-                && crate::files::FileKind::of(std::path::Path::new(&p.0)) == kind
-            {
-                v = p.0.clone();
-                changed = true;
-            }
-            changed.then_some(Prop::Str(v))
+        Wd::Scene => {
+            let list: Vec<String> = files
+                .files_of(FileKind::Scene)
+                .chain(files.files_of(FileKind::Lua))
+                .map(|e| e.rel.clone())
+                .filter(|r| r != "config.lua")
+                .collect();
+            file_combo(ui, spec, current, &list, salt, |p| {
+                matches!(
+                    FileKind::of(std::path::Path::new(p)),
+                    FileKind::Scene | FileKind::Lua
+                )
+            })
+        }
+        Wd::File(kind) => {
+            let kind = *kind;
+            let list: Vec<String> = files
+                .files_of(kind)
+                .map(|e| e.rel.clone())
+                .filter(|r| kind != FileKind::Map || r.to_lowercase().ends_with(".tmj"))
+                .collect();
+            file_combo(ui, spec, current, &list, salt, |p| {
+                FileKind::of(std::path::Path::new(p)) == kind
+            })
         }
     }
+}
+
+/// Lista de arquivos, aceitando arrastar do painel Arquivos.
+fn file_combo(
+    ui: &mut egui::Ui,
+    spec: &Spec,
+    current: &Prop,
+    list: &[String],
+    salt: (u32, usize),
+    accepts: impl Fn(&str) -> bool,
+) -> Option<Prop> {
+    let mut v = current.str().to_string();
+    let mut changed = false;
+    // Na caixa, só o nome do arquivo (o caminho todo fica na dica).
+    let short = v.rsplit('/').next().unwrap_or(&v).to_string();
+    let r = egui::ComboBox::from_id_salt(("arquivo", salt, &spec.key))
+        .selected_text(if v.is_empty() {
+            "(nenhum)".to_string()
+        } else {
+            short
+        })
+        .width(ui.available_width().clamp(80.0, 180.0))
+        .truncate()
+        .show_ui(ui, |ui| {
+            changed |= ui
+                .selectable_value(&mut v, String::new(), "(nenhum)")
+                .changed();
+            for rel in list {
+                changed |= ui.selectable_value(&mut v, rel.clone(), rel).changed();
+            }
+        })
+        .response
+        .on_hover_text(if v.is_empty() {
+            "Escolha na lista ou arraste do painel Arquivos para cá.".to_string()
+        } else {
+            format!("{v}\nEscolha na lista ou arraste do painel Arquivos para cá.")
+        });
+    if let Some(p) = r.dnd_release_payload::<FileDrag>()
+        && accepts(&p.0)
+    {
+        v = p.0.clone();
+        changed = true;
+    }
+    changed.then_some(Prop::Str(v))
 }
 
 #[cfg(test)]
