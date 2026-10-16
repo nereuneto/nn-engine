@@ -1049,7 +1049,10 @@ mod tests {
         // Salvar sem mudar nada não muda o arquivo (nada de diferenças à toa).
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../nn-run/modelos");
         for rel in ["visual/mapas/fase.tmj", "aventura/mapas/mapa.tmj"] {
-            let text = std::fs::read_to_string(root.join(rel)).unwrap();
+            // (No Windows, o git pode trocar o fim de linha por \r\n.)
+            let text = std::fs::read_to_string(root.join(rel))
+                .unwrap()
+                .replace("\r\n", "\n");
             let m = MapDoc::open(&root, rel).unwrap();
             assert_eq!(m.text(), text, "{rel}");
         }

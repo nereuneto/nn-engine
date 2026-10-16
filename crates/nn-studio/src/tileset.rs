@@ -512,7 +512,10 @@ mod tests {
     fn tileset_dos_modelos_ja_esta_no_formato_do_editor() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../nn-run/modelos");
         let rel = "comum/imagens/terreno.tsj";
-        let text = std::fs::read_to_string(root.join(rel)).unwrap();
+        // (No Windows, o git pode trocar o fim de linha por \r\n.)
+        let text = std::fs::read_to_string(root.join(rel))
+            .unwrap()
+            .replace("\r\n", "\n");
         let doc = TilesetDoc::open(&root, rel).unwrap();
         assert_eq!(doc.text(), text);
     }
