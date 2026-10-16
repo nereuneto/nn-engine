@@ -23,9 +23,10 @@ projetos em Lua da ferramenta `nn`, então dá para alternar entre os dois.
 - **✨ Novo projeto:** escolha o nome do jogo, onde criar e o modelo:
   - **Padrão:** um jogo pequeno e completo (título com menu, partida, pausa, fim
     e recorde salvo). É o melhor jeito de começar pelo código.
-  - **Cena visual:** uma fase de plataforma montada no editor, com o mouse
-    (herói, plataformas, moedas e placar), e um script curto com as regras. O
-    jeito de começar pelo editor.
+  - **Cena visual:** uma fase de plataforma montada no editor, **sem
+    nenhuma linha de código**: herói, plataformas (uma delas móvel), moedas
+    (um prefab), inimigo, abismo, saída para a tela de fim e placar, tudo com
+    comportamentos prontos. O jeito de começar pelo editor.
   - **Mínimo:** só uma cena com um quadrado que anda.
 - **📂 Abrir projeto:** escolha a pasta do jogo (a que tem o `config.lua` ou o
   `main.lua`). Também dá para **arrastar a pasta** para a janela.
@@ -65,8 +66,10 @@ só arquivos. A busca ignora acentos e aceita letras soltas ("cfg" acha
   (já vem com um quadrado que anda), script (módulo para usar com `require`)
   ou pasta. Cenas novas vão para `cenas/` e scripts para `lib/`, se essas
   pastas existirem.
-- **Arraste** uma imagem, um mapa ou um som do painel para dentro de uma cena
-  visual (vira um objeto) ou para um campo de arquivo do Inspetor.
+- **Arraste** uma imagem, um mapa, um som ou um prefab do painel para dentro
+  de uma cena visual (vira um objeto) ou para um campo de arquivo do Inspetor.
+  Arraste um objeto da Hierarquia para uma pasta para criar um
+  [prefab](#prefabs).
 - **📥 Importar** ou **arrastar arquivos** do computador para a janela:
   imagens vão para `assets/imagens`, sons para `assets/sons` e fontes para
   `assets/fontes`. Com uma pasta selecionada no painel, vão para ela. Nada é
@@ -87,6 +90,14 @@ só arquivos. A busca ignora acentos e aceita letras soltas ("cfg" acha
   mensagem, em português, aparece embaixo. Clique nela para ir até a linha.
 - **Recuo automático:** Enter mantém o recuo e soma um nível depois de `then`,
   `do`, `function(...)`, `{`... Tab e Shift+Tab recuam as linhas selecionadas.
+- **Autocompletar:** ao digitar `nn.`, `self.`, `obj.`, `self.obj.`,
+  `self.objects.`, `nn.vars.` (e outros), aparece a lista do que existe ali,
+  com a descrição de cada item. **Ctrl+Espaço** abre a lista a qualquer
+  momento; setas escolhem, **Enter** ou **Tab** completam, **Esc** fecha.
+  A lista conhece os objetos das cenas que usam o script, as variáveis do
+  jogo e, dentro de aspas, os arquivos do projeto (`"assets/imagens/...`).
+- Ao abrir parênteses de uma função (`nn.draw.rect(`), os parâmetros aparecem
+  acima do cursor; passar o mouse sobre um nome mostra a descrição.
 - **Ctrl+/** comenta ou descomenta as linhas.
 - **Ctrl+F** busca (Enter vai para a próxima, Shift+Enter para a anterior;
   "Aa" diferencia maiúsculas). **Ctrl+H** substitui. **Ctrl+G** vai para uma
@@ -101,7 +112,9 @@ só arquivos. A busca ignora acentos e aceita letras soltas ("cfg" acha
 ## Cenas visuais
 
 Uma cena visual (arquivo `.cena`) é montada com o mouse: você põe objetos,
-arruma no lugar e ajusta as propriedades, sem escrever código. Ela roda na
+arruma no lugar, ajusta as propriedades e dá a eles **comportamentos prontos**
+(andar e pular, patrulhar, ser coletado, machucar, levar para outra fase...),
+sem escrever código. Ela roda na
 engine como qualquer outra cena (`nn.scene.switch("cenas/fase.cena")`, cena
 inicial no `config.lua`, exportação, recarregar ao salvar). Crie uma com
 **Ctrl+N** ou **➕ Novo > Cena visual**.
@@ -129,7 +142,8 @@ retângulo "tela do jogo" mostra o que cabe na janela (o tamanho do
   imagem, um retângulo, um círculo, um texto, uma câmera, um som ou
   partículas no meio da vista.
 - **Arrastar arquivos** do painel Arquivos para a cena: uma imagem vira um
-  sprite, um mapa `.tmj` vira um mapa, um som vira um objeto de som.
+  sprite, um mapa `.tmj` vira um mapa, um som vira um objeto de som e um
+  `.prefab` vira uma instância do prefab.
 - **Colisões** mostra os corpos físicos (verde) por cima.
 
 ### Hierarquia
@@ -139,7 +153,8 @@ clique duas vezes (ou **F2**) para renomear. O 👁 esconde e o cadeado trava (u
 objeto travado não é selecionado clicando na cena). **Arraste** um objeto para
 mudar a ordem ou solte em cima de outro para virar filho dele: o filho anda,
 gira e escala junto com o pai. O botão direito tem Duplicar, Criar filho
-vazio, Tirar do pai e Excluir; o campo 🔍 filtra pelo nome.
+vazio, Tirar do pai, **📦 Criar prefab** e Excluir; o campo 🔍 filtra pelo
+nome. Instâncias de prefab aparecem em azul.
 
 ### Inspetor
 
@@ -158,10 +173,90 @@ desenhada por cima) e os **componentes**:
 | Câmera | Onde a câmera começa, ou quem ela segue (com suavidade e limite no mapa). |
 | Som | Toca um som ou música quando a cena começa. |
 | Partículas | Fumaça, faíscas, poeira, chuva... |
+| Comportamento | Um comportamento pronto ou um script seu (veja abaixo). |
 
 **➕ Adicionar componente** acrescenta outro; o menu ☰ de cada um sobe, desce
 ou remove. Campos de arquivo aceitam arrastar do painel Arquivos. No modo
 Simples, opções avançadas ficam escondidas.
+
+Imagem, texto e forma têm a opção **HUD**: o objeto fica **fixo na tela**
+(placar, vidas, botões), em vez de andar com o mundo. Na cena, ele aparece
+dentro do retângulo da tela do jogo; a posição é contada a partir do centro da
+tela.
+
+### Comportamentos (sem código)
+
+Um comportamento é uma peça pronta de lógica que você põe num objeto pelo
+Inspetor: **➕ Adicionar componente** mostra os comportamentos por categoria.
+Cada um tem suas propriedades (velocidade, altura do pulo, quantas vidas...),
+com explicação ao passar o mouse.
+
+![Herói do modelo "Cena visual" com os comportamentos no Inspetor](imagens/nn-studio-comportamentos.png)
+
+| Categoria | Comportamento | O que faz |
+|---|---|---|
+| Jogador | Jogador de plataforma | Anda para os lados e pula (setas, WASD, espaço ou controle), com tolerância na beirada e pulo mais alto segurando. Pede um corpo físico. |
+| Jogador | Jogador top-down | Anda em todas as direções (jogo visto de cima). |
+| Jogador | Vida | Pontos de vida. Quando acabam: reinicia a cena, volta ao checkpoint, vai para outra cena ou o objeto some. |
+| Inimigos | Patrulha | Anda até bater numa parede (ou chegar na beirada) e volta. |
+| Inimigos | Perseguir | Vai atrás do jogador (ou de outro objeto) quando ele chega perto; andando ou voando. |
+| Inimigos | Perigo | Espinho, lava, inimigo: tira vida, manda de volta ao checkpoint ou reinicia. Com **Pisar derrota**, pular em cima destrói o inimigo. |
+| Itens | Coletável | Some quando o jogador encosta e soma numa variável do jogo (com som e brilho). |
+| Fases | Checkpoint | Ao passar, o jogador volta para cá quando perder. |
+| Fases | Ir para cena | Porta, saída, bandeira: leva para outra cena (ao encostar ou apertando uma tecla). |
+| Movimento | Movimento automático | Gira, flutua ou vai e volta sozinho (plataformas móveis, enfeites). |
+| Aparência | Animação automática | Troca os quadros da imagem quando está parado, andando, pulando ou caindo (`1-4`, `5,6`...). |
+| Aparência | Mostrar valor | Mostra variáveis do jogo num texto: `Moedas: {moedas}`. |
+| Ações | Atirar | Cria um tiro (um prefab) ao apertar uma tecla ou sozinho, de tempos em tempos. |
+| Ações | Gerador | Cria objetos (um prefab) de tempos em tempos. |
+| Ações | Destruir depois | Some depois de um tempo ou ao sair da tela. |
+
+"Quem" e "Alvo", quando ficam vazios, querem dizer **o jogador** (o objeto com
+um comportamento de jogador). Se um comportamento precisa de algo que o objeto
+não tem (um corpo físico, uma imagem), o Inspetor avisa e oferece adicionar; ao
+escolher um comportamento que precisa de corpo, ele já vem junto.
+
+**Seus próprios comportamentos:** **➕ Adicionar componente > Script do jogo >
+Novo script...** cria `scripts/<nome>.lua` com um modelo comentado e já põe no
+objeto. As propriedades declaradas no script (`props`) aparecem no Inspetor do
+mesmo jeito que as dos prontos, e cada objeto pode ter valores diferentes. O
+formato está no [guia do Lua](lua.md#comportamentos).
+
+### Prefabs
+
+Um prefab (arquivo `.prefab`) é um objeto pronto para usar várias vezes, em
+várias cenas: uma moeda, um inimigo, um tiro.
+
+- **Criar:** botão direito no objeto da Hierarquia > **📦 Criar prefab** (vai
+  para `prefabs/`), ou arraste o objeto para uma pasta do painel Arquivos.
+  O objeto vira uma instância do prefab novo.
+- **Usar:** arraste o `.prefab` do painel Arquivos para a cena.
+- **Editar:** clique no `.prefab` no painel Arquivos (ou **Abrir prefab** no
+  Inspetor). Ele abre numa aba como uma cena; ao salvar, **todas as
+  instâncias** mudam, em todas as cenas.
+- **Mudar só uma instância:** mude a posição, o nome ou qualquer propriedade
+  do objeto principal no Inspetor. O que for diferente do prefab fica em
+  **negrito**, com um ↺ para voltar ao valor do prefab. Os filhos do prefab
+  seguem sempre o prefab.
+- **Desvincular** (no Inspetor) transforma a instância num objeto comum, com
+  uma cópia de tudo.
+- No jogo, `scene:spawn("prefabs/tiro.prefab", x, y)` cria um na hora (é o que
+  Atirar e Gerador fazem).
+
+### Variáveis do jogo e HUD
+
+As **variáveis do jogo** guardam o que vale para o jogo todo: moedas, vidas,
+pontos, chaves. Elas são criadas em **Configurações do projeto > Variáveis do
+jogo** (ficam no `config.lua`, em `vars`) e:
+
+- passam de uma cena para outra e voltam ao valor inicial quando o jogo
+  reinicia (ou quando a Vida acaba e a cena reinicia);
+- são usadas pelos comportamentos: Coletável soma, Vida mostra as vidas que
+  restam, Mostrar valor escreve no texto;
+- no código, ficam em `nn.vars` (`nn.vars.moedas = nn.vars.moedas + 1`).
+
+Para um placar: um objeto de texto com **HUD** marcado e o comportamento
+**Mostrar valor** com `Moedas: {moedas}  Vidas: {vidas}`.
 
 ### Desfazer e salvar
 
@@ -182,10 +277,23 @@ Com o jogo aberto mostrando a cena, aparece **• Ao vivo** na barra da cena: o
 que você mudar no Inspetor ou arrastando na cena aparece no jogo **na hora,
 sem salvar**. Para guardar a mudança, salve; para descartar, desfaça.
 
+E o caminho de volta, do jogo para o editor:
+
+- **Fantasmas:** onde um objeto está agora no jogo (se andou para longe do
+  lugar onde você o pôs), a cena mostra o contorno tracejado dele.
+- **No jogo:** no Inspetor, a posição atual do objeto no jogo e os valores dos
+  comportamentos que mudaram (as vidas que restam, por exemplo) aparecem em
+  ciano. **Manter** traz o valor para a cena (e dá para desfazer). Sem nada
+  selecionado, o Inspetor mostra as variáveis do jogo agora.
+- **Pausar / Continuar / Avançar 1 quadro**, na barra da cena, congelam o
+  jogo para olhar com calma.
+- **Ctrl+clique** num objeto, na janela do jogo, seleciona ele no editor.
+
 ### O script da cena
 
-A cena pode ter um script Lua (no Inspetor, **Script > Criar**). Ele recebe os
-mesmos callbacks de uma cena em código (`enter`, `fixed_update`, `update`,
+Para regras que nenhum comportamento cobre, a cena pode ter um script Lua (no
+Inspetor, **Script > Criar**). Ele recebe os mesmos callbacks de uma cena em
+código (`enter`, `fixed_update`, `update`,
 `draw`...) e encontra os objetos em `self.objects`, pelo nome:
 
 ```lua
@@ -236,9 +344,12 @@ A referência completa está no [guia do Lua](lua.md#cenas-visuais-cena).
 
 **Editar > Configurações do projeto** (ou o botão no Início) mostra um
 formulário com o título, o tamanho da janela, tela cheia, cor de fundo e a cena
-inicial. No modo Completo também o identificador dos saves, VSync, janela
-redimensionável, recarregar ao salvar e passos fixos por segundo. Tudo fica no
-`config.lua`: o NN Studio troca só os valores, sem mexer nos seus comentários.
+inicial (uma cena em código ou uma cena visual), além das
+[variáveis do jogo](#variáveis-do-jogo-e-hud): nome e valor inicial (número,
+texto ou sim/não). No modo Completo também o identificador dos saves, VSync,
+janela redimensionável, recarregar ao salvar e passos fixos por segundo. Tudo
+fica no `config.lua`: o NN Studio troca só os valores, sem mexer nos seus
+comentários.
 
 ## Exportar
 
@@ -260,6 +371,7 @@ mensagem diz onde está o erro.
 | Ctrl+Shift+P / Ctrl+P | Paleta de comandos / Abrir arquivo |
 | Ctrl+F / Ctrl+H / Ctrl+G | Buscar / Substituir / Ir para a linha |
 | Ctrl+/ | Comentar linhas |
+| Ctrl+Espaço | Autocompletar (no editor de código) |
 | Tab / Shift+Tab | Recuar / desfazer recuo |
 | Ctrl+W | Fechar aba |
 | Ctrl+= / Ctrl+- / Ctrl+0 | Aumentar / diminuir / tamanho normal da interface |
@@ -268,6 +380,7 @@ mensagem diz onde está o erro.
 | F / Esc (na cena) | Enquadrar / limpar a seleção |
 | Setas, Shift+setas (na cena) | Mover 1 / 10 unidades |
 | Ctrl+D / Del (na cena) | Duplicar / apagar |
+| Ctrl+clique (na janela do jogo) | Selecionar o objeto no editor |
 | F1 | Guia do Lua |
 
 A lista também está em **Ajuda > Atalhos do teclado**.
@@ -297,12 +410,19 @@ o jogo.
   com o renderer da engine na GPU do próprio editor.
 - **Testar daqui** roda `nn-studio --jogar <pasta> --cena <arquivo>`. O ajuste
   ao vivo vai pela entrada padrão do jogo, uma linha JSON por mudança
-  (`{"scene": "cenas/fase.cena", "id": 3, "field": "x", "value": 120}`); o
-  jogo avisa no log qual cena está na frente.
+  (`{"scene": "cenas/fase.cena", "id": 3, "field": "x", "value": 120}`, ou
+  `{"cmd": "pause"}`, `"resume"`, `"step"`). O jogo responde pelo log: qual
+  cena está na frente, o estado dos objetos (10 vezes por segundo, em JSON) e
+  o objeto do Ctrl+clique.
+- Os comportamentos prontos são módulos Lua dentro da engine
+  (`crates/nn-script/src/comportamentos/`), escritos com a mesma API que um
+  script seu usaria. O Inspetor lê a lista de propriedades de cada um rodando
+  o módulo num Lua separado, sem o jogo.
+- O autocompletar e as descrições vêm de `nn_script::api_docs`, a mesma lista
+  que um teste confere contra a API de verdade.
 
 ## O que vem depois
 
-As próximas etapas do NN Studio trazem comportamentos prontos sem código
-(andar, pular, seguir, coletar...), prefabs, as variáveis do script no
-Inspetor, eventos "Quando... Então...", o tutorial guiado e editores de pixel
-art, animação, mapas, partículas e menus dentro do próprio editor.
+As próximas etapas do NN Studio trazem eventos "Quando... Então..." (regras
+montadas sem código), o tutorial guiado, mais modelos de jogo e editores de
+pixel art, animação, mapas, partículas e menus dentro do próprio editor.
