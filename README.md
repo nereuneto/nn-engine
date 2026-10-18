@@ -1,6 +1,6 @@
 # nn-engine
 
-Engine de jogos 2D em Rust, construída sobre [wgpu](https://wgpu.rs) e [winit](https://github.com/rust-windowing/winit). Os jogos podem ser escritos em **Lua** ou em **Rust**.
+Engine de jogos 2D (e, em construção, 3D) em Rust, construída sobre [wgpu](https://wgpu.rs) e [winit](https://github.com/rust-windowing/winit). Os jogos podem ser escritos em **Lua** ou em **Rust**.
 
 Plataformas suportadas: **Windows** e **Linux**.
 
@@ -67,9 +67,10 @@ O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado 
 ```sh
 cargo nn jogos/plataforma   # plataforma: 2 fases do Tiled, inimigos, fundo em camadas, menus, recordes
 cargo nn jogos/demo         # menu, coletar moedas e pausa
+cargo nn jogos/cubos3d      # 3D: campo low-poly, câmera que gira com o mouse
 ```
 
-Os dois são feitos inteiramente em Lua. O de plataforma tem duas fases (a segunda é liberada ao completar a primeira), inimigos que patrulham e perseguem (pise em cima para derrotar), funciona com teclado, mouse (nos menus) e **controle** (Xbox, PlayStation, Switch Pro e genéricos), e guarda as opções, as fases liberadas e os recordes de cada fase.
+Os três são feitos inteiramente em Lua. O de plataforma tem duas fases (a segunda é liberada ao completar a primeira), inimigos que patrulham e perseguem (pise em cima para derrotar), funciona com teclado, mouse (nos menus) e **controle** (Xbox, PlayStation, Switch Pro e genéricos), e guarda as opções, as fases liberadas e os recordes de cada fase.
 
 ### Exportar um jogo
 
@@ -158,7 +159,7 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 |---|---|
 | `nn-core` | Tipos base: `Color`, `Time`, `FixedTimestep` |
 | `nn-input` | Estado de teclado, mouse e controles (`key_down`, `pad_pressed`, `move_vector()`...) e ações com nome |
-| `nn-render` | GPU, texturas, câmera 2D, sprites em lote, spritesheets, animação, texto e tamanho fixo do jogo ajustado à janela |
+| `nn-render` | GPU, texturas, câmera 2D, sprites em lote, spritesheets, animação, texto, tamanho fixo do jogo ajustado à janela e o mundo 3D (`d3`: malhas, câmera em perspectiva, sol e névoa) |
 | `nn-audio` | Efeitos sonoros e música (sobre o [kira](https://github.com/tesselode/kira)) com volume por canal, sintetizador simples |
 | `nn-app` | Janela, loop principal, trait `Game`, cenas, assets, interface (menus), dados salvos, leitura dos controles ([gilrs](https://gitlab.com/gilrs-project/gilrs)) e modo sem janela (`Headless`) para testes |
 | `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, camadas, raycast |

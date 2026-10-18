@@ -1,0 +1,403 @@
+//! `nn.d3`: o mundo 3D para os scripts — formas, câmera, luz e névoa.
+
+use std::collections::HashMap;
+
+use glam::{Vec2, Vec3};
+use mlua::{Lua, Result, Table, UserData, UserDataFields, Value};
+use nn_render::d3::{self, Camera3D, Mesh, MeshId, Transform3};
+
+use crate::api::with_ctx;
+use crate::convert::{color, err, opt, opt_color};
+use crate::types::LTexture;
+
+/// Uma malha 3D já enviada para a GPU.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LMesh {
+    pub id: MeshId,
+    triangles: usize,
+    size: Vec3,
+}
+
+impl UserData for LMesh {
+    fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
+        f.add_field_method_get("triangles", |_, this| Ok(this.triangles));
+        f.add_field_method_get("width", |_, this| Ok(this.size.x));
+        f.add_field_method_get("height", |_, this| Ok(this.size.y));
+        f.add_field_method_get("depth", |_, this| Ok(this.size.z));
+    }
+}
+
+/// As formas prontas já criadas (uma de cada tipo e detalhe basta).
+#[derive(Debug, Default)]
+struct ShapeCache(HashMap<(&'static str, u32), LMesh>);
+
+fn upload(lua: &Lua, mesh: &Mesh) -> Result<LMesh> {
+    let (min, max) = mesh.bounds();
+    with_ctx(lua, |c| {
+        Ok(LMesh {
+            id: c.renderer.create_mesh(mesh),
+            triangles: mesh.triangle_count(),
+            size: max - min,
+        })
+    })
+}
+
+fn shape(lua: &Lua, name: &'static str, detail: u32, make: fn(u32) -> Mesh) -> Result<LMesh> {
+    if let Some(m) = lua
+        .app_data_ref::<ShapeCache>()
+        .and_then(|c| c.0.get(&(name, detail)).copied())
+    {
+        return Ok(m);
+    }
+    let mesh = upload(lua, &make(detail))?;
+    if let Some(mut cache) = lua.app_data_mut::<ShapeCache>() {
+        cache.0.insert((name, detail), mesh);
+    }
+    Ok(mesh)
+}
+
+/// Um ponto `{x, y, z}` ou `{x =, y =, z =}`.
+fn vec3(v: &Value, what: &str) -> Result<Vec3> {
+    let Value::Table(t) = v else {
+        return Err(err(format!(
+            "{what}: use um ponto {{x, y, z}}, recebeu {}",
+            v.type_name()
+        )));
+    };
+    let get = |i: i64, k: &str| -> Result<f32> {
+        let named: Option<f32> = t.get(k)?;
+        let indexed: Option<f32> = t.get(i)?;
+        Ok(named.or(indexed).unwrap_or(0.0))
+    };
+    Ok(Vec3::new(get(1, "x")?, get(2, "y")?, get(3, "z")?))
+}
+
+fn opt_vec3(opts: Option<&Table>, key: &str) -> Result<Option<Vec3>> {
+    match opt::<Value>(opts, key)? {
+        None | Some(Value::Nil) => Ok(None),
+        Some(v) => vec3(&v, key).map(Some),
+    }
+}
+
+fn point_table(lua: &Lua, p: Vec3) -> Result<Table> {
+    let t = lua.create_table()?;
+    t.set("x", p.x)?;
+    t.set("y", p.y)?;
+    t.set("z", p.z)?;
+    Ok(t)
+}
+
+fn detail(n: Option<u32>, default: u32, min: u32, max: u32) -> u32 {
+    n.unwrap_or(default).clamp(min, max)
+}
+
+/// Posição, rotação (graus) e escala das opções de desenho.
+fn transform(opts: Option<&Table>) -> Result<Transform3> {
+    let n = |k: &str, d: f32| -> Result<f32> { Ok(opt::<f32>(opts, k)?.unwrap_or(d)) };
+    let scale = n("scale", 1.0)?;
+    Ok(
+        Transform3::at(Vec3::new(n("x", 0.0)?, n("y", 0.0)?, n("z", 0.0)?))
+            .rotation_degrees(n("rx", 0.0)?, n("ry", 0.0)?, n("rz", 0.0)?)
+            .scaled(Vec3::new(n("sx", scale)?, n("sy", scale)?, n("sz", scale)?)),
+    )
+}
+
+fn camera_table(lua: &Lua, cam: &Camera3D) -> Result<Table> {
+    let t = point_table(lua, cam.position)?;
+    t.set("target", point_table(lua, cam.target)?)?;
+    t.set("fov", cam.fov)?;
+    t.set("near", cam.near)?;
+    t.set("far", cam.far)?;
+    Ok(t)
+}
+
+/// Uma malha feita no script: pontos e triângulos (cada um com três índices,
+/// a partir de 1, no sentido anti-horário vistos de fora).
+fn custom_mesh(opts: &Table) -> Result<Mesh> {
+    let points: Table = opts
+        .get::<Option<Table>>("points")?
+        .ok_or_else(|| err("nn.d3.mesh: faltou \"points\" (a lista de pontos {x, y, z})"))?;
+    let tris: Table = opts
+        .get::<Option<Table>>("triangles")?
+        .ok_or_else(|| err("nn.d3.mesh: faltou \"triangles\" (a lista de triângulos {1, 2, 3})"))?;
+    let pts: Vec<Vec3> = points
+        .sequence_values::<Value>()
+        .enumerate()
+        .map(|(i, v)| vec3(&v?, &format!("ponto {}", i + 1)))
+        .collect::<Result<_>>()?;
+    let colors: Option<Table> = opts.get("colors")?;
+    let base = match opts.get::<Value>("color")? {
+        Value::Nil => nn_core::Color::WHITE,
+        v => color(&v)?,
+    };
+    let mut mesh = Mesh::new();
+    for (i, t) in tris.sequence_values::<Table>().enumerate() {
+        let t = t.map_err(|_| err(format!("triângulo {}: use {{a, b, c}}", i + 1)))?;
+        let mut p = [Vec3::ZERO; 3];
+        for (k, slot) in p.iter_mut().enumerate() {
+            let idx: i64 = t
+                .get::<Option<i64>>(k as i64 + 1)?
+                .ok_or_else(|| err(format!("triângulo {}: precisa de três pontos", i + 1)))?;
+            *slot = *pts
+                .get((idx - 1).max(0) as usize)
+                .filter(|_| idx >= 1)
+                .ok_or_else(|| {
+                    err(format!(
+                        "triângulo {}: o ponto {idx} não existe (há {} pontos)",
+                        i + 1,
+                        pts.len()
+                    ))
+                })?;
+        }
+        let c = match &colors {
+            Some(list) => match list.get::<Value>(i as i64 + 1)? {
+                Value::Nil => base,
+                v => color(&v)?,
+            },
+            None => base,
+        };
+        mesh.flat_triangle(p[0], p[1], p[2], c);
+    }
+    Ok(mesh)
+}
+
+pub(crate) fn table(lua: &Lua) -> Result<Table> {
+    lua.set_app_data(ShapeCache::default());
+    let t = lua.create_table()?;
+
+    t.set(
+        "cube",
+        lua.create_function(|lua, ()| shape(lua, "cube", 0, |_| d3::shapes::cube()))?,
+    )?;
+    t.set(
+        "plane",
+        lua.create_function(|lua, ()| shape(lua, "plane", 0, |_| d3::shapes::plane()))?,
+    )?;
+    t.set(
+        "sphere",
+        lua.create_function(|lua, n: Option<u32>| {
+            shape(lua, "sphere", detail(n, 2, 0, 5), d3::shapes::sphere)
+        })?,
+    )?;
+    t.set(
+        "cylinder",
+        lua.create_function(|lua, n: Option<u32>| {
+            shape(lua, "cylinder", detail(n, 16, 3, 128), d3::shapes::cylinder)
+        })?,
+    )?;
+    t.set(
+        "cone",
+        lua.create_function(|lua, n: Option<u32>| {
+            shape(lua, "cone", detail(n, 16, 3, 128), d3::shapes::cone)
+        })?,
+    )?;
+    t.set(
+        "capsule",
+        lua.create_function(|lua, n: Option<u32>| {
+            shape(lua, "capsule", detail(n, 16, 3, 128), d3::shapes::capsule)
+        })?,
+    )?;
+    t.set(
+        "mesh",
+        lua.create_function(|lua, opts: Table| upload(lua, &custom_mesh(&opts)?))?,
+    )?;
+
+    t.set(
+        "draw",
+        lua.create_function(|lua, (mesh, opts): (Value, Option<Table>)| {
+            let mesh = match &mesh {
+                Value::UserData(ud) if ud.is::<LMesh>() => *ud.borrow::<LMesh>()?,
+                other => {
+                    return Err(err(format!(
+                        "nn.d3.draw: o primeiro valor deve ser uma malha (nn.d3.cube(), ...), recebeu {}",
+                        other.type_name()
+                    )));
+                }
+            };
+            let o = opts.as_ref();
+            let model = transform(o)?.matrix();
+            let col = opt_color(o, "color")?.unwrap_or(nn_core::Color::WHITE);
+            let image = match opt::<Value>(o, "image")? {
+                None | Some(Value::Nil) => None,
+                Some(Value::UserData(ud)) if ud.is::<LTexture>() => Some(ud.borrow::<LTexture>()?.0),
+                Some(other) => {
+                    return Err(err(format!(
+                        "\"image\" deve ser uma imagem (nn.assets.texture), recebeu {}",
+                        other.type_name()
+                    )));
+                }
+            };
+            with_ctx(lua, |c| {
+                match image {
+                    Some(tex) => c.renderer.draw_mesh_textured(mesh.id, model, col, tex),
+                    None => c.renderer.draw_mesh(mesh.id, model, col),
+                }
+                Ok(())
+            })
+        })?,
+    )?;
+
+    t.set(
+        "camera",
+        lua.create_function(|lua, opts: Option<Table>| {
+            with_ctx(lua, |c| {
+                let mut cam = c.renderer.camera3d();
+                if let Some(o) = opts.as_ref() {
+                    let o = Some(o);
+                    let n = |k: &str, d: f32| -> Result<f32> { Ok(opt::<f32>(o, k)?.unwrap_or(d)) };
+                    cam.position = Vec3::new(
+                        n("x", cam.position.x)?,
+                        n("y", cam.position.y)?,
+                        n("z", cam.position.z)?,
+                    );
+                    if let Some(target) = opt_vec3(o, "target")? {
+                        cam.target = target;
+                    }
+                    cam.fov = n("fov", cam.fov)?.clamp(1.0, 179.0);
+                    cam.near = n("near", cam.near)?.max(0.001);
+                    cam.far = n("far", cam.far)?.max(cam.near + 0.01);
+                    c.renderer.set_camera3d(cam);
+                }
+                camera_table(lua, &cam)
+            })
+        })?,
+    )?;
+    t.set(
+        "look_at",
+        lua.create_function(
+            |lua, (x, y, z, tx, ty, tz): (f32, f32, f32, Option<f32>, Option<f32>, Option<f32>)| {
+                with_ctx(lua, |c| {
+                    let mut cam = c.renderer.camera3d();
+                    cam.position = Vec3::new(x, y, z);
+                    cam.target = Vec3::new(tx.unwrap_or(0.0), ty.unwrap_or(0.0), tz.unwrap_or(0.0));
+                    c.renderer.set_camera3d(cam);
+                    Ok(())
+                })
+            },
+        )?,
+    )?;
+    t.set(
+        "orbit",
+        lua.create_function(|lua, opts: Table| {
+            let o = Some(&opts);
+            let target = opt_vec3(o, "target")?.unwrap_or(Vec3::ZERO);
+            let distance = opt::<f32>(o, "distance")?.unwrap_or(8.0).max(0.01);
+            let yaw = opt::<f32>(o, "yaw")?.unwrap_or(0.0).to_radians();
+            let pitch = opt::<f32>(o, "pitch")?
+                .unwrap_or(25.0)
+                .clamp(-89.0, 89.0)
+                .to_radians();
+            let offset = Vec3::new(
+                yaw.sin() * pitch.cos(),
+                pitch.sin(),
+                yaw.cos() * pitch.cos(),
+            ) * distance;
+            with_ctx(lua, |c| {
+                let mut cam = c.renderer.camera3d();
+                cam.target = target;
+                cam.position = target + offset;
+                c.renderer.set_camera3d(cam);
+                camera_table(lua, &cam)
+            })
+        })?,
+    )?;
+
+    t.set(
+        "light",
+        lua.create_function(|lua, opts: Option<Table>| {
+            with_ctx(lua, |c| {
+                let mut l = c.renderer.light3d();
+                if let Some(o) = opts.as_ref() {
+                    let o = Some(o);
+                    if let Some(dir) = opt_vec3(o, "sun")? {
+                        if dir.length_squared() < 1e-8 {
+                            return Err(err("\"sun\": a direção do sol não pode ser {0, 0, 0}"));
+                        }
+                        l.sun_direction = dir.normalize();
+                    }
+                    if let Some(col) = opt_color(o, "sun_color")? {
+                        l.sun_color = col;
+                    }
+                    if let Some(col) = opt_color(o, "sky")? {
+                        l.sky = col;
+                    }
+                    if let Some(col) = opt_color(o, "ground")? {
+                        l.ground = col;
+                    }
+                    match opt::<Value>(o, "fog")? {
+                        None | Some(Value::Nil) => {}
+                        Some(Value::Boolean(false)) => l.fog = None,
+                        Some(Value::Table(f)) => {
+                            let f = Some(&f);
+                            let near = opt::<f32>(f, "near")?.unwrap_or(10.0);
+                            let far = opt::<f32>(f, "far")?.unwrap_or(near + 40.0);
+                            if far <= near {
+                                return Err(err("névoa: \"far\" precisa ser maior que \"near\""));
+                            }
+                            let col = opt_color(f, "color")?.unwrap_or(l.sky);
+                            l.fog = Some((col, near.max(0.0), far));
+                        }
+                        Some(other) => {
+                            return Err(err(format!(
+                                "\"fog\": use {{color =, near =, far =}} ou false, recebeu {}",
+                                other.type_name()
+                            )));
+                        }
+                    }
+                    c.renderer.set_light3d(l);
+                }
+                Ok(())
+            })
+        })?,
+    )?;
+
+    t.set(
+        "to_screen",
+        lua.create_function(|lua, (x, y, z): (f32, f32, f32)| {
+            with_ctx(lua, |c| {
+                let size = c.viewport().as_vec2();
+                Ok(
+                    match c.renderer.camera3d().screen_point(Vec3::new(x, y, z), size) {
+                        Some(p) => (Some(p.x), Some(p.y)),
+                        None => (None, None),
+                    },
+                )
+            })
+        })?,
+    )?;
+    t.set(
+        "ray",
+        lua.create_function(|lua, (sx, sy): (f32, f32)| {
+            with_ctx(lua, |c| {
+                let size = c.viewport().as_vec2();
+                let (o, d) = c.renderer.camera3d().ray(Vec2::new(sx, sy), size);
+                Ok((o.x, o.y, o.z, d.x, d.y, d.z))
+            })
+        })?,
+    )?;
+    t.set(
+        "ground_point",
+        lua.create_function(|lua, (sx, sy, height): (f32, f32, Option<f32>)| {
+            with_ctx(lua, |c| {
+                let size = c.viewport().as_vec2();
+                let (o, d) = c.renderer.camera3d().ray(Vec2::new(sx, sy), size);
+                let h = height.unwrap_or(0.0);
+                if d.y.abs() < 1e-6 {
+                    return Ok((None, None, None));
+                }
+                let t = (h - o.y) / d.y;
+                if t < 0.0 {
+                    return Ok((None, None, None));
+                }
+                let p = o + d * t;
+                Ok((Some(p.x), Some(p.y), Some(p.z)))
+            })
+        })?,
+    )?;
+    t.set(
+        "count",
+        lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.renderer.last_mesh_count())))?,
+    )?;
+
+    Ok(t)
+}

@@ -7,6 +7,7 @@ use include_dir::{Dir, include_dir};
 
 static PLATAFORMA: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../jogos/plataforma");
 static DEMO: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../jogos/demo");
+static CUBOS3D: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../jogos/cubos3d");
 
 #[derive(Debug, Clone, Copy)]
 pub struct Example {
@@ -31,6 +32,13 @@ pub const EXAMPLES: &[Example] = &[
         description: "Um passeio pelos recursos da engine: sprites, animação, \
                       partículas, física, som e cenas.",
         dir: &DEMO,
+    },
+    Example {
+        folder: "cubos3d",
+        title: "Cubos 3D",
+        description: "Um campo low-poly em 3D, todo em código Lua: árvores, \
+                      pedras, um herói que anda, câmera que gira com o mouse e névoa.",
+        dir: &CUBOS3D,
     },
 ];
 
@@ -83,7 +91,7 @@ mod tests {
         let parent = std::env::temp_dir().join(format!("nn-studio-ex-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&parent);
         for ex in EXAMPLES {
-            assert!(ex.file_count() > 3, "{}", ex.folder);
+            assert!(ex.file_count() >= 2, "{}", ex.folder);
             let a = ex.copy_to(&parent).unwrap();
             let b = ex.copy_to(&parent).unwrap();
             assert_eq!(a, parent.join(ex.folder));

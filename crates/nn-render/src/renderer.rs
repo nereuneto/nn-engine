@@ -809,17 +809,17 @@ impl Renderer {
                     occlusion_query_set: None,
                     multiview_mask: None,
                 });
-                if let (Some(p), Some(_)) = (present, &background) {
-                    if let Some((x, y, w, h)) = scissor(p, viewport) {
-                        pass.set_viewport(p.origin.x, p.origin.y, p.size.x, p.size.y, 0.0, 1.0);
-                        pass.set_scissor_rect(x, y, w, h);
-                        pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
-                        pass.set_pipeline(&self.pipeline);
-                        pass.set_bind_group(0, &self.screen_view.bind_group, &[]);
-                        let white = &self.textures[self.white.0 as usize];
-                        pass.set_bind_group(1, &white.bind_group, &[]);
-                        pass.draw(0..6, background_index..background_index + 1);
-                    }
+                if let (Some(p), Some(_)) = (present, &background)
+                    && let Some((x, y, w, h)) = scissor(p, viewport)
+                {
+                    pass.set_viewport(p.origin.x, p.origin.y, p.size.x, p.size.y, 0.0, 1.0);
+                    pass.set_scissor_rect(x, y, w, h);
+                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    pass.set_pipeline(&self.pipeline);
+                    pass.set_bind_group(0, &self.screen_view.bind_group, &[]);
+                    let white = &self.textures[self.white.0 as usize];
+                    pass.set_bind_group(1, &white.bind_group, &[]);
+                    pass.draw(0..6, background_index..background_index + 1);
                 }
             }
             let aspect = logical.x.max(1) as f32 / logical.y.max(1) as f32;

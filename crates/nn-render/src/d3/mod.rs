@@ -59,7 +59,11 @@ impl Camera3D {
     }
 
     pub fn view(&self) -> Mat4 {
-        let up = if (self.target - self.position).normalize_or_zero().cross(self.up).length() < 1e-4
+        let up = if (self.target - self.position)
+            .normalize_or_zero()
+            .cross(self.up)
+            .length()
+            < 1e-4
         {
             // Olhando reto para cima ou para baixo: outro "cima".
             Vec3::Z
@@ -495,8 +499,7 @@ impl Renderer3D {
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&view));
 
         // Agrupa por malha e textura (uma chamada por grupo).
-        self.draws
-            .sort_by_key(|d| (d.mesh, d.texture.0));
+        self.draws.sort_by_key(|d| (d.mesh, d.texture.0));
         if self.draws.len() > self.capacity {
             self.capacity = self.draws.len().next_power_of_two();
             self.instances = Self::instance_buffer(device, self.capacity);
@@ -542,7 +545,8 @@ impl Renderer3D {
         while i < self.draws.len() {
             let (mesh, tex) = (self.draws[i].mesh, self.draws[i].texture);
             let mut j = i + 1;
-            while j < self.draws.len() && self.draws[j].mesh == mesh && self.draws[j].texture == tex {
+            while j < self.draws.len() && self.draws[j].mesh == mesh && self.draws[j].texture == tex
+            {
                 j += 1;
             }
             let m = &self.meshes[mesh.0 as usize];

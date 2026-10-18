@@ -3,7 +3,7 @@
 
 use glam::{Mat4, UVec2, Vec2, Vec3};
 use nn_core::Color;
-use nn_render::d3::{shapes, Camera3D, Light3D, Transform3};
+use nn_render::d3::{Camera3D, Light3D, Transform3, shapes};
 use nn_render::{Camera2D, GpuContext, OffscreenTarget, Presentation, Renderer, ScaleMode};
 
 const SIZE: UVec2 = UVec2::new(64, 64);
@@ -41,7 +41,9 @@ impl Harness {
     fn render(&mut self, clear: Color) -> Vec<u8> {
         self.renderer
             .render(self.target.view(), SIZE, &Camera2D::default(), Some(clear));
-        self.target.read_rgba(&self.gpu).expect("leitura dos pixels")
+        self.target
+            .read_rgba(&self.gpu)
+            .expect("leitura dos pixels")
     }
 }
 
