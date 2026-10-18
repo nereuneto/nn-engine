@@ -154,6 +154,8 @@ pub struct Renderer {
     last_stats: RenderStats,
     /// Tamanho fixo do jogo dentro do alvo (ou `None`: o alvo inteiro).
     presentation: Option<crate::Presentation>,
+    /// O mundo 3D, desenhado antes do 2D.
+    d3: crate::d3::Renderer3D,
 }
 
 impl Renderer {
@@ -288,6 +290,7 @@ impl Renderer {
 
         let instance_buffer = Self::create_instance_buffer(&device, Self::INITIAL_CAPACITY);
 
+        let d3 = crate::d3::Renderer3D::new(&device, format, &texture_layout);
         let mut renderer = Self {
             device,
             queue,
@@ -308,6 +311,7 @@ impl Renderer {
             instance_capacity: Self::INITIAL_CAPACITY,
             last_stats: RenderStats::default(),
             presentation: None,
+            d3,
         };
         renderer.white =
             renderer.create_texture(UVec2::ONE, &[255, 255, 255, 255], TextureOptions::default());
@@ -779,6 +783,60 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("nn sprite frame"),
             });
+        // Com 3D, o quadro vira três passos: limpar (e o fundo do jogo), as
+        // malhas com profundidade e por fim o 2D por cima.
+        let has_3d = self.d3.has_draws();
+        let mut load = load;
+        if has_3d {
+            let area = match present {
+                Some(p) => (p.origin.x, p.origin.y, p.size.x, p.size.y),
+                None => (0.0, 0.0, viewport.x as f32, viewport.y as f32),
+            };
+            if background.is_some() || matches!(load, wgpu::LoadOp::Clear(_)) {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("nn clear pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: target,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                if let (Some(p), Some(_)) = (present, &background)
+                    && let Some((x, y, w, h)) = scissor(p, viewport)
+                {
+                    pass.set_viewport(p.origin.x, p.origin.y, p.size.x, p.size.y, 0.0, 1.0);
+                    pass.set_scissor_rect(x, y, w, h);
+                    pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
+                    pass.set_pipeline(&self.pipeline);
+                    pass.set_bind_group(0, &self.screen_view.bind_group, &[]);
+                    let white = &self.textures[self.white.0 as usize];
+                    pass.set_bind_group(1, &white.bind_group, &[]);
+                    pass.draw(0..6, background_index..background_index + 1);
+                }
+            }
+            let aspect = logical.x.max(1) as f32 / logical.y.max(1) as f32;
+            self.d3.render(
+                &self.device,
+                &self.queue,
+                &mut encoder,
+                target,
+                viewport,
+                area,
+                aspect,
+                self.format.is_srgb(),
+                &self.textures,
+            );
+            load = wgpu::LoadOp::Load;
+        }
+        let background = if has_3d { None } else { background };
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("nn sprite pass"),
@@ -799,19 +857,14 @@ impl Renderer {
             pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
             let mut current_blend = None;
             if let Some(p) = present {
-                let vw = viewport.max(UVec2::ONE).as_vec2();
-                let min = p.origin.clamp(Vec2::ZERO, vw);
-                let max = (p.origin + p.size).clamp(Vec2::ZERO, vw);
                 pass.set_viewport(p.origin.x, p.origin.y, p.size.x, p.size.y, 0.0, 1.0);
-                let (x, y) = (min.x as u32, min.y as u32);
-                let (w, h) = ((max.x - min.x) as u32, (max.y - min.y) as u32);
-                if w == 0 || h == 0 {
+                let Some((x, y, w, h)) = scissor(p, viewport) else {
                     drop(pass);
                     self.queue.submit([encoder.finish()]);
                     self.world.clear();
                     self.screen.clear();
                     return self.last_stats;
-                }
+                };
                 pass.set_scissor_rect(x, y, w, h);
                 if background.is_some() {
                     pass.set_pipeline(&self.pipeline);
@@ -855,6 +908,75 @@ impl Renderer {
         self.world.clear();
         self.screen.clear();
         self.last_stats
+    }
+
+    // ------------------------------------------------------------------
+    // 3D
+    // ------------------------------------------------------------------
+
+    /// Envia uma malha para a GPU. Guarde o [`MeshId`](crate::d3::MeshId) e
+    /// desenhe com [`Renderer::draw_mesh`] quantas vezes quiser.
+    pub fn create_mesh(&mut self, mesh: &crate::d3::Mesh) -> crate::d3::MeshId {
+        let srgb = self.format.is_srgb();
+        let vertices: Vec<crate::d3::Vertex3> = mesh
+            .vertices
+            .iter()
+            .map(|v| {
+                let mut v = *v;
+                if srgb {
+                    let [r, g, b, a] = v.color;
+                    let c = Color::rgba(r, g, b, a).to_linear();
+                    v.color = [c.r, c.g, c.b, c.a];
+                }
+                v
+            })
+            .collect();
+        self.d3
+            .create_mesh(&self.device, &self.queue, &vertices, &mesh.indices)
+    }
+
+    /// Desenha a malha no mundo 3D com a matriz `model` (posição, rotação e
+    /// escala; veja [`Transform3`](crate::d3::Transform3)) e a cor `color`
+    /// multiplicando a dos vértices.
+    pub fn draw_mesh(&mut self, mesh: crate::d3::MeshId, model: Mat4, color: Color) {
+        let srgb = self.format.is_srgb();
+        self.d3.draw(mesh, model, color, self.white, srgb);
+    }
+
+    /// Como [`Renderer::draw_mesh`], com uma textura (pelas coordenadas `uv`
+    /// dos vértices).
+    pub fn draw_mesh_textured(
+        &mut self,
+        mesh: crate::d3::MeshId,
+        model: Mat4,
+        color: Color,
+        texture: TextureId,
+    ) {
+        let srgb = self.format.is_srgb();
+        self.d3.draw(mesh, model, color, texture, srgb);
+    }
+
+    /// A câmera 3D (vale até ser trocada).
+    pub fn set_camera3d(&mut self, camera: crate::d3::Camera3D) {
+        self.d3.camera = camera;
+    }
+
+    pub fn camera3d(&self) -> crate::d3::Camera3D {
+        self.d3.camera
+    }
+
+    /// O sol, a luz ambiente e a névoa do mundo 3D.
+    pub fn set_light3d(&mut self, light: crate::d3::Light3D) {
+        self.d3.light = light;
+    }
+
+    pub fn light3d(&self) -> crate::d3::Light3D {
+        self.d3.light
+    }
+
+    /// Quantas malhas foram desenhadas no último frame.
+    pub fn last_mesh_count(&self) -> u32 {
+        self.d3.last_count
     }
 
     /// Números do último [`Renderer::render`].
@@ -943,4 +1065,15 @@ impl ScreenPainter<'_> {
         }
         self
     }
+}
+
+/// O retângulo do jogo dentro do alvo, em pixels inteiros (ou `None` se ficou
+/// sem área).
+fn scissor(p: crate::Presentation, viewport: UVec2) -> Option<(u32, u32, u32, u32)> {
+    let vw = viewport.max(UVec2::ONE).as_vec2();
+    let min = p.origin.clamp(Vec2::ZERO, vw);
+    let max = (p.origin + p.size).clamp(Vec2::ZERO, vw);
+    let (x, y) = (min.x as u32, min.y as u32);
+    let (w, h) = ((max.x - min.x) as u32, (max.y - min.y) as u32);
+    (w > 0 && h > 0).then_some((x, y, w, h))
 }

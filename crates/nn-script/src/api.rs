@@ -799,6 +799,7 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
 
     nn.set("physics", crate::physics::table(lua)?)?;
     nn.set("particles", crate::particles::constructor(lua)?)?;
+    nn.set("d3", crate::d3::table(lua)?)?;
     nn.set("tilemap", crate::tilemap::table(lua)?)?;
     nn.set("ui", crate::ui::table(lua)?)?;
     nn.set("save", crate::save::table(lua)?)?;

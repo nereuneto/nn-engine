@@ -18,6 +18,7 @@ Para ver jogos prontos:
 ```sh
 cargo nn jogos/demo         # menu, coletar moedas, pausa
 cargo nn jogos/plataforma   # plataforma com mapa do Tiled e física
+cargo nn jogos/cubos3d      # 3D: campo low-poly, câmera que gira com o mouse
 ```
 
 `cargo nn <pasta>` roda o projeto Lua da pasta. Durante o desenvolvimento, **salve qualquer `.lua`, imagem ou som e o jogo atualiza na hora**, sem fechar a janela e sem perder o estado. Se um script tiver erro, ele aparece na própria janela com o arquivo e a linha; corrija, salve e o jogo continua.
@@ -785,6 +786,141 @@ function cena:draw() brilho:draw(); fumaca:draw() end
 | `follow` | As partículas acompanham o emissor quando ele anda (o jato de uma nave). Padrão `false`: ficam onde nasceram (um rastro). |
 
 O emissor tem `x`, `y`, `emitting` e `rate` (leitura e escrita), `count` e `finished`, e os métodos `:burst(n, x, y)`, `:set_position(x, y)`, `:update(dt)`, `:draw()`, `:draw_screen()` e `:clear()`.
+
+### nn.d3 (3D)
+
+O mundo 3D é desenhado **antes** de todo o 2D: sprites, `nn.screen` e menus ficam por cima, então o HUD de um jogo 3D é feito como sempre. O visual é *low-poly*: cada face recebe um tom só de luz, vindo do sol e de uma luz ambiente do céu e do chão. As coordenadas usam **Y para cima** e a unidade é livre (pense em metros: o cubo pronto tem 1 de lado).
+
+#### Seu primeiro mundo 3D, passo a passo
+
+**1. Uma forma e uma câmera.** As formas prontas são criadas uma vez (no `enter`) e desenhadas quantas vezes quiser:
+
+```lua
+local cena = {}
+
+function cena:enter()
+  self.cubo = nn.d3.cube()
+  nn.d3.look_at(3, 2, 5, 0, 0, 0)   -- câmera em (3, 2, 5) olhando para o meio
+end
+
+function cena:draw()
+  nn.d3.draw(self.cubo, { color = "#FF6B6B" })
+end
+
+return cena
+```
+
+**2. Chão e posições.** `x`, `y`, `z` levam a forma para outro lugar; `scale` (ou `sx`, `sy`, `sz`) muda o tamanho:
+
+```lua
+self.chao = nn.d3.plane()
+-- no draw:
+nn.d3.draw(self.chao, { scale = 20, color = "#7BC86C" })   -- um gramado de 20 × 20
+nn.d3.draw(self.cubo, { x = 2, y = 0.5, z = -1 })          -- y = 0.5: apoiado no chão
+```
+
+**3. Girar.** `rx`, `ry` e `rz` são graus em volta de cada eixo. `ry` é o mais usado: virar para os lados.
+
+```lua
+nn.d3.draw(self.cubo, { y = 0.5, ry = nn.time.elapsed() * 90 })   -- uma volta a cada 4 segundos
+```
+
+**4. Luz e névoa.** O sol tem uma direção (para onde a luz vai, de cima para baixo); a névoa esconde o que está longe e combina com a cor de fundo:
+
+```lua
+nn.window.set_clear_color("#9FD3E8")
+nn.d3.light({
+  sun = { -0.5, -1, -0.3 },
+  sky = "#8FA9C8", ground = "#5A5040",
+  fog = { color = "#9FD3E8", near = 15, far = 50 },
+})
+```
+
+**5. Câmera que segue.** `nn.d3.orbit` põe a câmera girando em volta de um ponto, perfeito para seguir o jogador visto de trás:
+
+```lua
+nn.d3.orbit({ target = { jogador.x, 1, jogador.z }, distance = 10, yaw = self.yaw, pitch = 25 })
+```
+
+**6. Clicar no chão.** `nn.d3.ground_point` diz onde o mouse toca o chão:
+
+```lua
+local mx, my = nn.input.mouse()
+if mx and nn.input.mouse_pressed("left") then
+  local x, y, z = nn.d3.ground_point(mx, my)
+  if x then destino = { x = x, z = z } end
+end
+```
+
+O exemplo completo, com árvores, pedras, um herói que anda para onde a câmera olha e cubos que caem onde você clica, está em `jogos/cubos3d`.
+
+#### Formas
+
+| Função | Forma |
+|---|---|
+| `nn.d3.cube()` | Cubo de lado 1, centrado na origem. |
+| `nn.d3.plane()` | Quadrado de lado 1 deitado (o chão), virado para cima. |
+| `nn.d3.sphere(detalhe)` | Esfera de diâmetro 1. `detalhe` de 0 (20 faces, uma pedra) a 5; padrão 2. |
+| `nn.d3.cylinder(lados)` | Cilindro de altura 1 e diâmetro 1 (padrão 16 lados). |
+| `nn.d3.cone(lados)` | Cone de altura 1, base de diâmetro 1, ponta para cima. Com poucos lados, um pinheiro. |
+| `nn.d3.capsule(lados)` | Cápsula de altura 1 e diâmetro 0,5: o corpo de um personagem simples. |
+| `nn.d3.mesh(opts)` | Uma malha sua (abaixo). |
+
+Chamar a mesma forma de novo devolve a mesma malha (não gasta memória). A malha tem `triangles`, `width`, `height` e `depth`.
+
+Para montar uma forma ponto a ponto, dê os pontos e os triângulos (cada um com três números de pontos, no **sentido anti-horário visto de fora**; o lado de dentro não é desenhado). `colors` dá uma cor para cada triângulo:
+
+```lua
+local piramide = nn.d3.mesh({
+  points = { {-0.5, 0, -0.5}, {0.5, 0, -0.5}, {0.5, 0, 0.5}, {-0.5, 0, 0.5}, {0, 1, 0} },
+  triangles = { {4, 3, 5}, {3, 2, 5}, {2, 1, 5}, {1, 4, 5}, {1, 2, 3}, {1, 3, 4} },
+  colors = { "#FFD166", "#F4A259", "#FFD166", "#F4A259", "#C9853A", "#C9853A" },
+})
+```
+
+#### Desenhar
+
+`nn.d3.draw(malha, opts)`, chamado no `draw` da cena:
+
+| Opção | Descrição |
+|---|---|
+| `x`, `y`, `z` | Posição (padrão 0). |
+| `rx`, `ry`, `rz` | Rotação em graus: inclinar, virar e rolar. |
+| `scale` | Tamanho (padrão 1). `sx`, `sy`, `sz` mudam um eixo só. |
+| `color` | Cor (multiplica a da malha; padrão branco). |
+| `image` | Uma imagem de `nn.assets.texture` aplicada nas faces. |
+
+#### Câmera
+
+| Função | Descrição |
+|---|---|
+| `nn.d3.look_at(x, y, z, ax, ay, az)` | Câmera em `x, y, z` olhando para o ponto `ax, ay, az`. |
+| `nn.d3.orbit(opts)` | Câmera em volta de `target` (`{x, y, z}`), a `distance`, girada `yaw` graus para os lados e `pitch` graus para cima. |
+| `nn.d3.camera(opts)` | Muda só o que for dado (`x`, `y`, `z`, `target`, `fov` em graus, `near`, `far`) e devolve a câmera como ficou. Sem nada, só devolve. |
+
+A câmera continua a mesma ao trocar de cena; cada cena 3D costuma ajustá-la no `enter`.
+
+#### Luz
+
+`nn.d3.light(opts)` muda só o que for dado:
+
+| Opção | Descrição |
+|---|---|
+| `sun` | Direção da luz do sol, `{x, y, z}` (para baixo: `y` negativo). |
+| `sun_color` | Cor e força do sol (mais escuro = mais fraco; `"#000000"` desliga). |
+| `sky`, `ground` | Luz ambiente que vem de cima e de baixo: deixa as sombras coloridas, nunca pretas. |
+| `fog` | `{ color =, near =, far = }`: a névoa começa em `near` e cobre tudo em `far`. `false` desliga. |
+
+#### Da tela para o 3D e de volta
+
+| Função | Descrição |
+|---|---|
+| `nn.d3.to_screen(x, y, z)` | Onde o ponto aparece na tela (`x, y`), ou `nil` se estiver atrás da câmera. Bom para nomes e barras de vida em cima de coisas 3D. |
+| `nn.d3.ground_point(x, y, altura)` | Onde o ponto da tela toca o chão na `altura` dada (padrão 0): `x, y, z`, ou `nil` se olhar para o céu. |
+| `nn.d3.ray(x, y)` | O raio que sai da câmera pelo ponto da tela: origem e direção (seis números). |
+| `nn.d3.count()` | Quantas malhas foram desenhadas no último quadro. |
+
+Em breve: modelos `.glb` (Blender e outros), sombras, física 3D e o 3D no NN Studio.
 
 ### nn.ui
 

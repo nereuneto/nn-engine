@@ -1,4 +1,4 @@
-//! Renderer 2D da nn-engine.
+//! Renderer da nn-engine: 2D e o mundo 3D ([`d3`]).
 //!
 //! - [`GpuContext`]: conexão com a GPU.
 //! - [`Renderer`]: desenha [`Sprite`]s e [`Text`]os em lote, agrupando por
@@ -9,10 +9,12 @@
 //! - [`OffscreenTarget`]: renderiza em memória (testes e capturas).
 //! - [`Presentation`]: tamanho fixo do jogo ajustado à janela.
 //! - [`Panel`]: painéis de menus (cantos arredondados, borda, 9 fatias).
+//! - [`d3`]: malhas 3D com luz, câmera em perspectiva e formas prontas.
 
 mod animation;
 mod camera;
 mod context;
+pub mod d3;
 mod offscreen;
 mod panel;
 mod parallax;

@@ -455,6 +455,88 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Põe o foco no item n de um painel.",
     ),
     d("nn.ui.reset", "(nome)", "Esquece o foco de um painel."),
+    // 3D
+    d(
+        "nn.d3",
+        "",
+        "O mundo 3D: formas, câmera, luz e névoa. É desenhado antes do 2D (o HUD fica por cima).",
+    ),
+    d("nn.d3.cube", "()", "Cubo de lado 1, centrado na origem."),
+    d(
+        "nn.d3.plane",
+        "()",
+        "Chão quadrado de lado 1, deitado (virado para cima).",
+    ),
+    d(
+        "nn.d3.sphere",
+        "(detalhe)",
+        "Esfera de diâmetro 1. Detalhe de 0 a 5 (padrão 2; menos = mais facetada).",
+    ),
+    d(
+        "nn.d3.cylinder",
+        "(lados)",
+        "Cilindro de altura 1 e diâmetro 1 (padrão 16 lados).",
+    ),
+    d(
+        "nn.d3.cone",
+        "(lados)",
+        "Cone de altura 1 e diâmetro 1 na base (padrão 16 lados).",
+    ),
+    d(
+        "nn.d3.capsule",
+        "(lados)",
+        "Cápsula de altura 1 e diâmetro 0,5 (bom para personagens).",
+    ),
+    d(
+        "nn.d3.mesh",
+        "(opts)",
+        "Malha sua: { points = {{x,y,z}, ...}, triangles = {{1,2,3}, ...}, color, colors (uma por triângulo) }.",
+    ),
+    d(
+        "nn.d3.draw",
+        "(malha, opts)",
+        "Desenha a malha (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, color, image).",
+    ),
+    d(
+        "nn.d3.camera",
+        "(opts)",
+        "Muda a câmera (opts: x, y, z, target = {x, y, z}, fov, near, far) e devolve como ela ficou.",
+    ),
+    d(
+        "nn.d3.look_at",
+        "(x, y, z, alvo_x, alvo_y, alvo_z)",
+        "Põe a câmera em x, y, z olhando para o alvo.",
+    ),
+    d(
+        "nn.d3.orbit",
+        "(opts)",
+        "Câmera girando em volta de um ponto (opts: target, distance, yaw e pitch em graus).",
+    ),
+    d(
+        "nn.d3.light",
+        "(opts)",
+        "Luz (opts: sun = direção {x, y, z}, sun_color, sky, ground, fog = {color, near, far} ou false).",
+    ),
+    d(
+        "nn.d3.to_screen",
+        "(x, y, z)",
+        "Onde um ponto 3D aparece na tela (x, y), ou nil se estiver atrás da câmera.",
+    ),
+    d(
+        "nn.d3.ray",
+        "(x, y)",
+        "Raio que sai da câmera pelo ponto da tela: origem (x, y, z) e direção (x, y, z).",
+    ),
+    d(
+        "nn.d3.ground_point",
+        "(x, y, altura)",
+        "Onde o ponto da tela (o mouse, por ex.) toca o chão na altura dada (padrão 0): x, y, z ou nil.",
+    ),
+    d(
+        "nn.d3.count",
+        "()",
+        "Quantas malhas foram desenhadas no último quadro.",
+    ),
 ];
 
 /// Campos e métodos de um tipo de valor (para completar depois do `.`).
