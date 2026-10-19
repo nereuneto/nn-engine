@@ -35,6 +35,8 @@ pub struct Context {
     pub(crate) effects: crate::effects::Effects,
     pub(crate) fullscreen: bool,
     pub(crate) fullscreen_request: Option<bool>,
+    /// O jogo quer o mouse preso (cursor escondido, para girar a câmera).
+    pub(crate) mouse_captured: bool,
     pub(crate) timestep: FixedTimestep,
     /// Tamanho do jogo (o da janela, ou o fixo do config).
     pub(crate) viewport: UVec2,
@@ -69,6 +71,7 @@ impl Context {
             effects: Default::default(),
             fullscreen: config.fullscreen,
             fullscreen_request: None,
+            mouse_captured: false,
             timestep: FixedTimestep::from_hz(config.fixed_hz),
             viewport,
             window: viewport,
@@ -150,6 +153,18 @@ impl Context {
     pub fn is_fullscreen(&self) -> bool {
         self.fullscreen_request.unwrap_or(self.fullscreen)
     }
+    /// Prende o mouse na janela e esconde o cursor (`true`), para girar a
+    /// câmera com [`nn_input::Input::mouse_delta`], ou solta (`false`). Ao
+    /// sair da janela (Alt+Tab), o mouse é solto e volta a ser preso quando
+    /// ela recebe o foco de novo.
+    pub fn set_mouse_captured(&mut self, captured: bool) {
+        self.mouse_captured = captured;
+    }
+
+    pub fn mouse_captured(&self) -> bool {
+        self.mouse_captured
+    }
+
 }
 
 /// Um jogo (ou qualquer aplicação) rodando na nn-engine.

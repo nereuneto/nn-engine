@@ -370,6 +370,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
         })?,
     )?;
 
+    t.set("third_person", crate::camera3d::constructor(lua)?)?;
     t.set(
         "light",
         lua.create_function(|lua, opts: Option<Table>| {

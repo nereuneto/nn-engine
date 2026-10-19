@@ -323,3 +323,35 @@ fn personagem_entra_no_sensor() {
     // O sensor não barra.
     assert!(w.position(p).unwrap().x > 2.5);
 }
+
+#[test]
+fn personagem_vai_junto_com_a_plataforma() {
+    let mut w = World3::default();
+    chao(&mut w);
+    let plataforma = w
+        .add(&BodyDesc {
+            kind: BodyKind3::Kinematic,
+            shape: Shape3::Box(Vec3::new(3.0, 0.4, 3.0)),
+            position: Vec3::new(0.0, 2.0, 0.0),
+            ..Default::default()
+        })
+        .unwrap();
+    let p = personagem(&mut w, Vec3::new(0.0, 2.3, 0.0));
+    passos(&mut w, 0.5);
+    assert!(w.on_ground(p));
+    w.set_velocity(plataforma, Vec3::new(2.0, 0.0, 0.0));
+    passos(&mut w, 1.0);
+    let px = w.position(plataforma).unwrap().x;
+    let pos = w.position(p).unwrap();
+    assert!((px - 2.0).abs() < 0.1, "a plataforma andou: {px}");
+    assert!((pos.x - px).abs() < 0.15, "o personagem foi junto: {pos} / {px}");
+    assert!((pos.y - 2.2).abs() < 0.1, "em cima dela: {pos}");
+    // Subindo também.
+    w.set_velocity(plataforma, Vec3::new(0.0, 1.0, 0.0));
+    passos(&mut w, 1.0);
+    let pos = w.position(p).unwrap();
+    assert!((pos.y - 3.2).abs() < 0.15, "subiu junto: {pos}");
+    assert!(w.on_ground(p));
+}
+
+

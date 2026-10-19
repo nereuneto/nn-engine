@@ -196,6 +196,11 @@ pub const API_DOCS: &[ApiDoc] = &[
     ),
     d("nn.input.mouse_world", "()", "Posição do mouse no mundo."),
     d(
+        "nn.input.mouse_delta",
+        "()",
+        "Quanto o mouse andou neste quadro (dx, dy), mesmo preso: para girar a câmera.",
+    ),
+    d(
         "nn.input.mouse_down",
         "(botao)",
         "Botão do mouse segurado (\"left\", \"right\", \"middle\").",
@@ -425,6 +430,12 @@ pub const API_DOCS: &[ApiDoc] = &[
     d("nn.window.size", "()", "Largura e altura da janela."),
     d("nn.window.set_clear_color", "(cor)", "Cor de fundo."),
     d("nn.window.fullscreen", "()", "Está em tela cheia?"),
+    d(
+        "nn.window.capture_mouse",
+        "(sim)",
+        "Prende o mouse e esconde o cursor (true) ou solta (false). Preso, use nn.input.mouse_delta.",
+    ),
+    d("nn.window.mouse_captured", "()", "O mouse está preso?"),
     d(
         "nn.window.set_fullscreen",
         "(sim)",
