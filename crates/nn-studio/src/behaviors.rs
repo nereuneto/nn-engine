@@ -157,6 +157,16 @@ impl BehaviorInfo {
             .map(|p| (p.key.clone(), p.default.clone()))
             .collect()
     }
+
+    /// Os valores iniciais numa cena 2D ou 3D (só as propriedades que valem
+    /// nela, com o padrão dela).
+    pub fn defaults_for(&self, three_d: bool) -> Vec<(String, Prop)> {
+        self.props
+            .iter()
+            .filter(|p| p.fits(three_d))
+            .map(|p| (p.key.clone(), p.default_for(three_d)))
+            .collect()
+    }
 }
 
 fn to_prop(v: &Value) -> Option<Prop> {

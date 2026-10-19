@@ -638,3 +638,140 @@ fn terreno_com_morro_agua_e_jogador() {
     assert!((y - 0.5 - novo).abs() < 0.3, "no morro novo: {y} ({novo})");
     assert_eq!(h.game.0.error(), None);
 }
+
+#[test]
+fn inimigos_vida_perigo_e_tiro_no_3d() {
+    let dir = projeto(
+        "inimigos",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            (
+                "prefabs/tiro.prefab",
+                r#"return { format = 1, object = { id = 1, name = "tiro",
+  components = {
+    { type = "shape3d", shape = "sphere" },
+    { type = "body3d", body = "dynamic", sensor = true, gravity_scale = 0 },
+    { type = "behavior", script = "nn:perigo", quem = "Bicho", dano = 1, some = true },
+  } } }"#,
+            ),
+            (
+                "cenas/mundo.cena",
+                &format!(
+                    r##"return {{ format = 1, mode = "3d", gravity = -20, script = "cenas/obs.lua",
+  environment = {{ fog = false, shadows = false }},
+  objects = {{
+    {CHAO},
+    {{ id = 10, name = "Herói", y = 0.1, z = 10,
+      components = {{ {{ type = "model", file = "modelos/heroi.glb" }},
+        {{ type = "behavior", script = "nn:jogador3d", prender_mouse = false }},
+        {{ type = "behavior", script = "nn:vida", vidas = 3, variavel = "vidas", invencivel = 1, ao_acabar = "nada" }},
+        {{ type = "behavior", script = "nn:atirar", prefab = "prefabs/tiro.prefab", tecla = "x", direcao = "frente" }} }} }},
+    {{ id = 11, name = "Bicho", x = -3, z = 0,
+      components = {{ {{ type = "model", file = "modelos/bicho.glb" }},
+        {{ type = "behavior", script = "nn:inimigo3d", andar = "patrulha", x = 6, z = 0, visao = 4 }},
+        {{ type = "behavior", script = "nn:vida", vidas = 2, variavel = "", ao_acabar = "destruir", barra = true }} }} }},
+    {{ id = 12, name = "Lava", x = 8, y = 0.25, z = 10, scale_y = 0.5,
+      components = {{ {{ type = "shape3d", shape = "cube", color = "#FF5500" }},
+        {{ type = "behavior", script = "nn:perigo", dano = 1 }} }} }},
+  }} }}"##
+                ),
+            ),
+        ],
+    );
+    com_modelos(&dir);
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    let pos = |rt: &ScriptRuntime, nome: &str| -> (f64, f64, f64) {
+        let v: Vec<f64> = lua(rt, &format!("{{ C.objects['{nome}']:position3d() }}"));
+        (v[0], v[1], v[2])
+    };
+    h.run_frames(10);
+    assert_eq!(h.game.0.error(), None);
+    let x0 = pos(&rt, "Bicho").0;
+    // Patrulha: anda em X e toca "andar".
+    h.run_frames(60);
+    let (x1, y1, _) = pos(&rt, "Bicho");
+    assert!(x1 > x0 + 1.0, "patrulhou: {x0} → {x1}");
+    assert!(y1.abs() < 0.1, "no chão: {y1}");
+    assert_eq!(
+        lua::<String>(&rt, "C.objects.Bicho:animator().animation"),
+        "andar"
+    );
+    // O herói chega perto: o bicho persegue e encosta. Perde uma vida e é
+    // empurrado para longe.
+    rt.lua()
+        .load("C.objects['Herói']:move_to(C.objects.Bicho.x, 0.1, C.objects.Bicho.z + 3)")
+        .exec()
+        .unwrap();
+    let mut levou = false;
+    for _ in 0..120 {
+        h.run_frames(1);
+        if lua::<f64>(&rt, "nn.vars.vidas") < 3.0 {
+            levou = true;
+            break;
+        }
+    }
+    assert!(levou, "o bicho alcançou o herói");
+    assert_eq!(lua::<f64>(&rt, "nn.vars.vidas"), 2.0);
+    h.run_frames(15);
+    let (hx, _, hz) = pos(&rt, "Herói");
+    let (bx, _, bz) = pos(&rt, "Bicho");
+    assert!(
+        ((hx - bx).powi(2) + (hz - bz).powi(2)).sqrt() > 1.2,
+        "empurrado"
+    );
+    // Pisa em cima: o bicho perde uma vida (tem 2); pisa de novo: some.
+    for vez in 0..2 {
+        h.run_frames(70); // passa a invencibilidade do herói
+        rt.lua()
+            .load("local b = C.objects.Bicho; C.objects['Herói']:move_to(b.x, 3, b.z)")
+            .exec()
+            .unwrap();
+        let mut pisou = false;
+        for _ in 0..60 {
+            h.run_frames(1);
+            let vivo: bool = lua(
+                &rt,
+                "C.objects.Bicho ~= nil and C.objects.Bicho.alive == true",
+            );
+            let vidas: f64 = lua(
+                &rt,
+                "(C.objects.Bicho and C.objects.Bicho:behavior('vida').atual) or 0",
+            );
+            if (vez == 0 && vidas < 2.0) || (vez == 1 && !vivo) {
+                pisou = true;
+                break;
+            }
+        }
+        assert!(pisou, "pisão {}", vez + 1);
+    }
+    assert_eq!(h.game.0.error(), None);
+    // O herói atira para a frente (o +Z dele).
+    rt.lua()
+        .load("C.objects['Herói']:move_to(0, 0.1, 0); C.objects['Herói'].ry = 0")
+        .exec()
+        .unwrap();
+    h.run_frames(5);
+    let antes: i64 = lua(&rt, "#C:find_all('tiro')");
+    h.ctx.input.press_key(KeyCode::KeyX);
+    h.run_frames(2);
+    h.ctx.input.release_key(KeyCode::KeyX);
+    assert_eq!(lua::<i64>(&rt, "#C:find_all('tiro')"), antes + 1);
+    h.run_frames(5);
+    let (_, ty, tz) = pos(&rt, "tiro");
+    assert!(tz > 1.0 && ty > 0.5, "o tiro voa para a frente: {ty} {tz}");
+    // Some sozinho depois de 3 s.
+    h.run_frames(200);
+    assert_eq!(lua::<i64>(&rt, "#C:find_all('tiro')"), 0);
+    // A lava tira vida também.
+    h.run_frames(60);
+    let antes: f64 = lua(&rt, "nn.vars.vidas");
+    rt.lua()
+        .load("C.objects['Herói']:move_to(8, 0.6, 10)")
+        .exec()
+        .unwrap();
+    h.run_frames(10);
+    assert!(lua::<f64>(&rt, "nn.vars.vidas") < antes, "a lava queima");
+    assert_eq!(h.game.0.error(), None);
+}

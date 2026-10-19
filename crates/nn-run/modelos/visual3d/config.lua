@@ -11,5 +11,5 @@ return {
   clear_color = "#BFE3F2",
   start = "cenas/ilha.cena",
   -- Variáveis do jogo (nn.vars): crie em Configurações do projeto.
-  vars = { estrelas = 0, moedas = 0 },
+  vars = { estrelas = 0, moedas = 0, vidas = 3 },
 }

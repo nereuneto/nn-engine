@@ -94,6 +94,10 @@ projeto continua aberto.
 - **Pinte um terreno** (uns 12 minutos), a partir do modelo Vazio 3D: um
   morro, um buraco que vira lago com água, cores de pedra e areia, árvores
   espalhadas com o pincel e um herói para passear ([terreno](#terreno)).
+- **Inimigos no 3D** (uns 12 minutos), a partir do modelo Vazio 3D: um
+  herói com vida e corações na tela, um besouro que persegue e machuca
+  (e morre se você pular em cima), uma barra de vida e uma poça de lava
+  ([inimigos no 3D](#inimigos-vida-e-dano-no-3d)).
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -767,11 +771,36 @@ Nos eventos, **Soltar partículas**, **Ligar ou desligar partículas**,
 **saindo de**: o som sai do objeto escolhido (no Herói, o pulo; numa porta,
 o rangido). O **Coletável** solta um brilho 3D ao ser pego.
 
+### Inimigos, vida e dano no 3D
+
+- **Vida** (Jogador > Vida) vale no 3D como no 2D: o herói tem vidas (na
+  variável **vidas**), fica invencível e pisca um pouco depois de um dano e,
+  quando elas acabam, a cena começa de novo (ou volta ao checkpoint, ou vai
+  para outra cena). Num inimigo, **Quando acabar: some** e **Barra de vida em
+  cima** mostram quanto falta.
+- **Corações na tela:** um objeto com **Interface > Ícones**, a imagem
+  `coracao.png` e a variável **vidas** (os modelos 3D já trazem).
+- **Inimigo 3D** (Inimigos): anda **indo e voltando** (até o X e o Z que
+  você escolher, a partir de onde ele começa), **sem rumo** por perto ou
+  fica **parado**; quando o herói chega a menos que **Vê o jogador a**,
+  persegue (e desiste se ele fugir para longe). Quem encosta perde uma vida e
+  é empurrado; **pular em cima** derrota o inimigo (com Vida, tira uma vida
+  dele a cada pisão). Num modelo animado, como o `bicho.glb`, ele toca
+  *parado* e *andar* sozinho, e preso numa parede, troca de rumo.
+- **Perigo** (Inimigos): lava, espinhos, um tiro. Machuca e empurra quem
+  encosta.
+- **Atirar** (Ações): no 3D, o tiro (um prefab) sai da frente do objeto,
+  da altura escolhida, e some sozinho depois de uns segundos. Um prefab de
+  bola com **Corpo 3D** (só detecta) e **Perigo** com *Machuca* = o nome do
+  inimigo derruba inimigos de longe.
+
 ### Comportamentos e eventos no 3D
 
 Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
 
-- **Jogador 3D** (Jogador);
+- **Jogador 3D** e **Vida** (Jogador);
+- **Inimigo 3D** e **Perigo** (Inimigos);
+- **Atirar** e **Destruir depois** (Ações);
 - **Coletável** (Itens): some quando o jogador encosta e soma numa variável;
 - **Girar e flutuar** (Movimento): gira em volta de um eixo e sobe e desce
   devagar (estrelas, moedas);

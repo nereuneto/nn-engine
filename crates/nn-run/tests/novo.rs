@@ -535,6 +535,9 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     };
     h.run_frames(30);
     assert_eq!(h.game.0.error(), None);
+    // Dois besouros andando e três corações no HUD.
+    assert_eq!(lua::<i64>(&rt, "return #cena:find_all('Besouro')"), 2);
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.vidas"), 3);
     // O herói está em pé na ilha e a câmera atrás dele: W anda para −Z.
     let y: f64 = lua(&rt, "return cena.objects['Herói'].y");
     assert!(y.abs() < 0.1, "em pé no chão: {y}");

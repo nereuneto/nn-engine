@@ -109,6 +109,7 @@ pub const BEHAVIORS: &[(&str, &str)] = &[
     ),
     ("botao", include_str!("comportamentos/botao.lua")),
     ("jogador3d", include_str!("comportamentos/jogador3d.lua")),
+    ("inimigo3d", include_str!("comportamentos/inimigo3d.lua")),
     ("girar3d", include_str!("comportamentos/girar3d.lua")),
     (
         "plataforma3d",

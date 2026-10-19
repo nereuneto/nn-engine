@@ -3341,3 +3341,123 @@ fn tutorial_pinte_um_terreno_avanca_sozinho_ate_o_fim() {
     h.run_steps(4);
     assert!(h.state().tutorial.is_none());
 }
+
+#[test]
+fn tutorial_inimigos_3d_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    let dir = temp("tutorial-inimigos-3d");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("inimigos-3d");
+    h.run_steps(4);
+    assert!(
+        dir.join("projetos/inimigos-3d/assets/imagens/coracao.png")
+            .is_file()
+    );
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    h.run_steps(4);
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/mundo.cena").unwrap()
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    let modelo = |id: u32, name: &str, file: &str| {
+        let mut o = Object::new(id, name);
+        let mut c = Component::new("model");
+        c.set("file", Prop::Str(file.into()));
+        o.components.push(c);
+        o
+    };
+    espera(&mut h, 1);
+    let mut heroi = modelo(10, "heroi", "modelos/heroi.glb");
+    heroi
+        .components
+        .push(Component::behavior("nn:jogador3d", &[]));
+    doc(&mut h).data.objects.push(heroi);
+    espera(&mut h, 2);
+    let n = doc(&mut h).data.objects.len() - 1;
+    doc(&mut h).data.objects[n]
+        .components
+        .push(Component::behavior("nn:vida", &[]));
+    espera(&mut h, 3);
+    let mut hud = Object::new(11, "coracoes");
+    let mut icons = Component::new("icons");
+    icons.set("var", Prop::Str("vidas".into()));
+    hud.components.push(icons);
+    doc(&mut h).data.objects.push(hud);
+    espera(&mut h, 4);
+    let mut bicho = modelo(12, "bicho", "modelos/bicho.glb");
+    bicho
+        .components
+        .push(Component::behavior("nn:inimigo3d", &[]));
+    doc(&mut h).data.objects.push(bicho);
+    espera(&mut h, 5);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 6);
+    let n = doc(&mut h).data.objects.len() - 1;
+    doc(&mut h).data.objects[n]
+        .components
+        .push(Component::behavior(
+            "nn:vida",
+            &[
+                ("ao_acabar".into(), Prop::Str("destruir".into())),
+                ("barra".into(), Prop::Bool(true)),
+            ],
+        ));
+    espera(&mut h, 7);
+    let mut lava = Object::new(13, "lava");
+    lava.components.push(Component::new("shape3d"));
+    lava.components.push(Component::behavior("nn:perigo", &[]));
+    doc(&mut h).data.objects.push(lava);
+    espera(&mut h, 8);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 9);
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}
+
+/// Numa cena 3D, o Inspetor de um comportamento só mostra as propriedades
+/// que valem nela, com o padrão do 3D (o empurrão do Perigo em m/s).
+#[test]
+fn cena_3d_comportamentos_com_padroes_do_3d() {
+    let dir = temp("cena-3d-padroes");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena3d(&mut h, &proj);
+    let cubo = objeto(&h, "Cubo").id;
+    cena_mut(&mut h).selection = vec![cubo];
+    h.run();
+    h.get_by_label("➕ Adicionar componente").click();
+    h.run();
+    h.get_by_label_contains("Inimigos").click();
+    h.run();
+    h.get_by_label("Inimigo 3D");
+    h.get_by_label("Perigo").click();
+    h.run();
+    let o = objeto(&h, "Cubo").clone();
+    let p = o
+        .components
+        .iter()
+        .find(|c| c.str("script") == "nn:perigo")
+        .unwrap();
+    assert_eq!(p.num("empurrao"), 7.0, "o padrão do 3D");
+    // Atirar: "Some ao sair da tela" (só do 2D) não aparece no 3D; a altura
+    // de saída (só do 3D) aparece.
+    h.get_by_label("➕ Adicionar componente").click();
+    h.run();
+    h.get_by_label_contains("Ações").click();
+    h.run();
+    h.get_by_label("Destruir depois").click();
+    h.run();
+    assert!(h.query_by_label("Some ao sair da tela").is_none());
+    tela(&mut h, "cena-3d-inimigos");
+}

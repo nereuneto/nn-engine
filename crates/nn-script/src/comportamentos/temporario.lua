@@ -3,9 +3,10 @@ local B = {
   title = "Destruir depois",
   description = "Some depois de um tempo ou ao sair da tela (tiros, efeitos).",
   category = "Ações",
+  mode = "both",
   props = {
     { "tempo", 3, label = "Some depois de (segundos)", min = 0, help = "0 = não some pelo tempo." },
-    { "fora_da_tela", true, label = "Some ao sair da tela" },
+    { "fora_da_tela", true, label = "Some ao sair da tela", mode = "2d" },
   },
 }
 
@@ -19,7 +20,7 @@ function B:update(dt)
     self.obj:destroy()
     return
   end
-  if self.fora_da_tela then
+  if self.fora_da_tela and not self.scene._3d then
     local x0, y0, x1, y1 = nn.camera.view()
     local x, y = self.obj:world_transform()
     local m = 200
