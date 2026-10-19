@@ -900,8 +900,252 @@ const LAYOUT_FIELDS: &[F] = &[
     ),
 ];
 
+const MODEL_FIELDS: &[F] = &[
+    help(
+        f("file", "Modelo", W::File(FileKind::Model)),
+        "Um arquivo .glb ou .gltf (exporte do Blender como glTF Binary). Também dá para arrastar o arquivo para a cena.",
+    ),
+    help(
+        f("color", "Cor", W::Color),
+        "Multiplica as cores do modelo (branco = como ele é).",
+    ),
+    help(
+        adv("flat", "Faces retas (low-poly)", W::Bool),
+        "Cada face com um tom só, mesmo que o modelo tenha sombreado suave.",
+    ),
+    f("shadow", "Projeta sombra", W::Bool),
+];
+
+const SHAPE3D_FIELDS: &[F] = &[
+    f(
+        "shape",
+        "Forma",
+        W::Choice(&[
+            ("cube", "Cubo"),
+            ("sphere", "Esfera"),
+            ("cylinder", "Cilindro"),
+            ("cone", "Cone"),
+            ("capsule", "Cápsula"),
+            ("plane", "Plano (chão)"),
+        ]),
+    ),
+    f("color", "Cor", W::Color),
+    f("shadow", "Projeta sombra", W::Bool),
+];
+
+const CAMERA3D_FIELDS: &[F] = &[help(
+    f(
+        "fov",
+        "Campo de visão",
+        W::Num {
+            speed: 0.5,
+            min: 10.0,
+            max: 150.0,
+            suffix: "°",
+        },
+    ),
+    "Quanto ela enxerga de cima a baixo. 60° é o normal; mais = mais aberto.",
+)];
+
+/// O "Ambiente" de uma cena 3D: céu, sol, luz ambiente, névoa e sombras.
+fn environment_ui(ui: &mut egui::Ui, doc: &mut SceneDoc) {
+    use crate::scene_data::Prop;
+    let r = egui::CollapsingHeader::new(RichText::new("☀ Ambiente").strong())
+        .id_salt(("ambiente", &doc.rel))
+        .default_open(true)
+        .show(ui, |ui| {
+            let color = |ui: &mut egui::Ui, doc: &mut SceneDoc, key: &str| {
+                let mut c = hex_to_rgba(doc.data.env(key).str());
+                if ui.color_edit_button_srgba_unmultiplied(&mut c).changed() {
+                    doc.record(Some(&format!("ambiente:{key}")));
+                    doc.data
+                        .set_env(key, Prop::Str(rgba_to_hex([c[0], c[1], c[2], 255])));
+                }
+            };
+            let check = |ui: &mut egui::Ui, doc: &mut SceneDoc, key: &str, text: &str| -> bool {
+                let mut b = doc.data.env(key).num() != 0.0;
+                if ui.checkbox(&mut b, text).changed() {
+                    doc.record(None);
+                    doc.data.set_env(key, Prop::Bool(b));
+                }
+                b
+            };
+            let num = |ui: &mut egui::Ui,
+                       doc: &mut SceneDoc,
+                       key: &str,
+                       range: std::ops::RangeInclusive<f64>,
+                       suffix: &str| {
+                let mut v = doc.data.env(key).num();
+                if ui
+                    .add(egui::DragValue::new(&mut v).range(range).speed(0.5).suffix(suffix))
+                    .changed()
+                {
+                    doc.record(Some(&format!("ambiente:{key}")));
+                    doc.data.set_env(key, Prop::Num(v));
+                }
+            };
+            egui::Grid::new(("grade-ambiente", &doc.rel))
+                .num_columns(2)
+                .spacing([8.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label("Céu:")
+                        .on_hover_text("Degradê atrás de tudo: em cima, no horizonte e embaixo. Sem céu, aparece o fundo.");
+                    ui.horizontal(|ui| {
+                        if check(ui, doc, "sky", "") {
+                            color(ui, doc, "sky_top");
+                            color(ui, doc, "sky_horizon");
+                            color(ui, doc, "sky_bottom");
+                        }
+                    });
+                    ui.end_row();
+
+                    ui.label("Sol:").on_hover_text(
+                        "Altura (90° = meio-dia, perto de 0° = fim de tarde, sombras compridas) e para que lado ele está.",
+                    );
+                    ui.horizontal(|ui| {
+                        num(ui, doc, "sun_height", 1.0..=90.0, "° alto");
+                        num(ui, doc, "sun_turn", -360.0..=360.0, "° lado");
+                    });
+                    ui.end_row();
+
+                    ui.label("Luz do sol:");
+                    ui.horizontal(|ui| {
+                        color(ui, doc, "sun_color");
+                        ui.weak("disco");
+                        num(ui, doc, "sun_size", 0.0..=20.0, "°");
+                    });
+                    ui.end_row();
+
+                    ui.label("Luz ambiente:").on_hover_text(
+                        "A luz que chega onde o sol não bate: a de cima (céu) e a de baixo (chão).",
+                    );
+                    ui.horizontal(|ui| {
+                        color(ui, doc, "ambient_sky");
+                        color(ui, doc, "ambient_ground");
+                    });
+                    ui.end_row();
+
+                    ui.label("Névoa:")
+                        .on_hover_text("O que está longe some na cor do horizonte: começa em uma distância e cobre tudo na outra.");
+                    ui.horizontal(|ui| {
+                        if check(ui, doc, "fog", "") {
+                            num(ui, doc, "fog_near", 0.0..=1000.0, " m");
+                            num(ui, doc, "fog_far", 1.0..=2000.0, " m");
+                        }
+                    });
+                    ui.end_row();
+
+                    ui.label("Sombras:")
+                        .on_hover_text("Sombra do sol até esta distância da câmera. Para um objeto não fazer sombra, desligue \"Sombra\" no componente dele.");
+                    ui.horizontal(|ui| {
+                        if check(ui, doc, "shadows", "") {
+                            num(ui, doc, "shadow_distance", 5.0..=200.0, " m");
+                        }
+                    });
+                    ui.end_row();
+                });
+        });
+    crate::tutorial::anchor_in(ui, "inspetor:ambiente", r.header_response.rect);
+}
+
+/// Posição, rotação e escala de um objeto numa cena 3D.
+fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scene_data::Object) {
+    egui::CollapsingHeader::new(RichText::new("Transformação").strong())
+        .id_salt(("transformacao3", id))
+        .default_open(true)
+        .show(ui, |ui| {
+            egui::Grid::new(("grade-transformacao3", id))
+                .num_columns(2)
+                .spacing([8.0, 4.0])
+                .show(ui, |ui| {
+                    let mut t = [
+                        o.x, o.y, o.z, o.rx, o.ry, o.rz, o.scale_x, o.scale_y, o.scale_z,
+                    ];
+                    let row = |ui: &mut egui::Ui,
+                               label: &str,
+                               tip: &str,
+                               v: &mut [f64],
+                               speed: f64,
+                               suffix: &str| {
+                        ui.label(label).on_hover_text(tip);
+                        ui.horizontal(|ui| {
+                            for (k, axis) in ["x ", "y ", "z "].into_iter().enumerate() {
+                                ui.add(
+                                    egui::DragValue::new(&mut v[k])
+                                        .speed(speed)
+                                        .max_decimals(3)
+                                        .prefix(axis)
+                                        .suffix(suffix),
+                                );
+                            }
+                        });
+                        ui.end_row();
+                    };
+                    row(
+                        ui,
+                        "Posição",
+                        "Em metros. Y é a altura.",
+                        &mut t[0..3],
+                        0.05,
+                        "",
+                    );
+                    row(
+                        ui,
+                        "Rotação",
+                        "Graus em volta de cada eixo: Y vira para os lados, X inclina, Z rola.",
+                        &mut t[3..6],
+                        1.0,
+                        "°",
+                    );
+                    row(
+                        ui,
+                        "Escala",
+                        "1 = o tamanho do modelo.",
+                        &mut t[6..9],
+                        0.01,
+                        "",
+                    );
+                    let now = doc.data.find(id).map(|x| {
+                        [
+                            x.x, x.y, x.z, x.rx, x.ry, x.rz, x.scale_x, x.scale_y, x.scale_z,
+                        ]
+                    });
+                    if Some(t) != now {
+                        doc.record(Some(&format!("{id}:transformacao")));
+                        if let Some(obj) = doc.data.find_mut(id) {
+                            [
+                                obj.x,
+                                obj.y,
+                                obj.z,
+                                obj.rx,
+                                obj.ry,
+                                obj.rz,
+                                obj.scale_x,
+                                obj.scale_y,
+                                obj.scale_z,
+                            ] = t;
+                        }
+                    }
+                });
+        });
+}
+
+/// Componentes que só fazem sentido numa cena 3D.
+pub fn is_3d_kind(kind: &str) -> bool {
+    matches!(kind, "model" | "shape3d" | "camera3d")
+}
+
+/// Componentes de cena 2D que não valem numa cena 3D (física 2D, mapa de
+/// tiles, câmera 2D, partículas 2D).
+pub fn is_2d_only_kind(kind: &str) -> bool {
+    matches!(kind, "body" | "map" | "camera" | "particles")
+}
+
 fn fields(kind: &str) -> &'static [F] {
     match kind {
+        "model" => MODEL_FIELDS,
+        "shape3d" => SHAPE3D_FIELDS,
+        "camera3d" => CAMERA3D_FIELDS,
         "sprite" => SPRITE_FIELDS,
         "text" => TEXT_FIELDS,
         "shape" => SHAPE_FIELDS,
@@ -999,6 +1243,18 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "layout" => (
             "Grupo (arrumar)",
             "Arruma os filhos sozinho, em coluna, em linha ou em grade.",
+        ),
+        "model" => (
+            "Modelo 3D",
+            "Um modelo .glb ou .gltf (do Blender e outros).",
+        ),
+        "shape3d" => (
+            "Forma 3D",
+            "Cubo, esfera, cilindro, cone, cápsula ou plano, de uma cor.",
+        ),
+        "camera3d" => (
+            "Câmera 3D",
+            "A câmera do jogo: ele mostra o que ela vê, de onde ela está.",
         ),
         "behavior" => (
             "Comportamento",
@@ -1466,6 +1722,9 @@ impl Inspector {
                 }
                 ui.end_row();
 
+                if doc.data.three_d {
+                    return;
+                }
                 ui.label("Por cima:");
                 let mut o = doc.data.overlay;
                 let r = ui
@@ -1482,6 +1741,10 @@ impl Inspector {
                 }
                 ui.end_row();
             });
+        if doc.data.three_d {
+            ui.add_space(6.0);
+            environment_ui(ui, doc);
+        }
         if !doc.is_prefab() && events_summary(ui, &doc.data.events, false) {
             self.actions_out.push(InspectorAction::ShowEvents);
         }
@@ -1557,7 +1820,10 @@ impl Inspector {
         });
         ui.add_space(4.0);
 
-        egui::CollapsingHeader::new(RichText::new("Transformação").strong())
+        if doc.data.three_d {
+            transform3_ui(ui, doc, id, &o);
+        } else {
+            egui::CollapsingHeader::new(RichText::new("Transformação").strong())
             .id_salt(("transformacao", id))
             .default_open(true)
             .show(ui, |ui| {
@@ -1687,6 +1953,7 @@ impl Inspector {
                         }
                     });
             });
+        }
 
         if o.component("body").is_some() {
             if doc.data.parent_of(id).flatten().is_some() {
@@ -1904,7 +2171,15 @@ impl Inspector {
                     ui.close();
                 }
             };
-            for kind in order.iter().filter(|k| !is_ui(k)) {
+            let three_d = doc.data.three_d;
+            let fits = |k: &str| {
+                if three_d {
+                    !is_2d_only_kind(k)
+                } else {
+                    !is_3d_kind(k)
+                }
+            };
+            for kind in order.iter().filter(|k| !is_ui(k) && fits(k)) {
                 item(ui, kind);
             }
             ui.menu_button("Interface", |ui| {
@@ -1914,7 +2189,8 @@ impl Inspector {
             });
             ui.separator();
             ui.label(RichText::new("Comportamentos").weak());
-            for cat in behaviors::categories() {
+            // (Os comportamentos prontos são 2D; os do 3D vêm depois.)
+            for cat in behaviors::categories().into_iter().filter(|_| !three_d) {
                 ui.menu_button(cat, |ui| {
                     for b in behaviors::builtins().iter().filter(|b| b.category == cat) {
                         if ui.button(&b.title).on_hover_text(&b.description).clicked() {

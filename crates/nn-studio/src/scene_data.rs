@@ -1745,11 +1745,21 @@ mod tests {
         let p = m.transform_point3(glam::Vec3::ZERO);
         assert!((p - glam::Vec3::new(3.0, 0.0, 0.0)).length() < 1e-4, "{p}");
         // Pondo o filho num lugar do mundo, a posição local é a certa.
-        scene.set_world_matrix3(11, glam::Mat4::from_translation(glam::Vec3::new(5.0, 1.0, 4.0)));
+        scene.set_world_matrix3(
+            11,
+            glam::Mat4::from_translation(glam::Vec3::new(5.0, 1.0, 4.0)),
+        );
         let f = scene.find(11).unwrap();
         // (0, 1, 4) do mundo em volta do pai, desfazendo o giro de 90°: x = -4.
-        assert!((f.x + 4.0).abs() < 1e-3 && (f.y - 1.0).abs() < 1e-3 && f.z.abs() < 1e-3, "{f:?}");
-        assert!((f.ry + 90.0).abs() < 1e-2, "o filho desfaz o giro do pai: {}", f.ry);
+        assert!(
+            (f.x + 4.0).abs() < 1e-3 && (f.y - 1.0).abs() < 1e-3 && f.z.abs() < 1e-3,
+            "{f:?}"
+        );
+        assert!(
+            (f.ry + 90.0).abs() < 1e-2,
+            "o filho desfaz o giro do pai: {}",
+            f.ry
+        );
         // Graus voltam iguais.
         let mut o = Object::new(1, "o");
         (o.rx, o.ry, o.rz) = (20.0, -35.0, 10.0);
