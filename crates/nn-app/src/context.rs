@@ -209,6 +209,14 @@ pub(crate) fn draw<G: Game>(
     target: &nn_render::wgpu::TextureView,
 ) {
     game.render(ctx);
+    // Quem ouve os sons 3D é a câmera 3D.
+    let cam = ctx.renderer.camera3d();
+    let forward = (cam.target - cam.position).normalize_or(glam::Vec3::NEG_Z);
+    let right = forward.cross(cam.up).normalize_or(glam::Vec3::X);
+    ctx.audio.set_listener(nn_audio::Listener {
+        position: cam.position,
+        right,
+    });
     ctx.finish_panel();
     ctx.draw_overlays();
     let clear = ctx.clear_color;

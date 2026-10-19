@@ -428,8 +428,9 @@ impl SceneDoc {
                 // Animações na prévia: a vista se redesenha enquanto houver.
                 let mut animated = false;
                 scene_data::visit(&self.data.objects, &mut |o| {
-                    animated |=
-                        o.component("model").is_some() && scene_render::preview_anim3d(o).is_some();
+                    animated |= (o.component("model").is_some()
+                        && scene_render::preview_anim3d(o).is_some())
+                        || o.component("particles").is_some();
                 });
                 if animated {
                     ui.ctx()
@@ -445,6 +446,7 @@ impl SceneDoc {
                         0.0
                     },
                     time: ui.input(|i| i.time) as f32,
+                    bursts: std::mem::take(&mut self.burst_requests),
                 };
                 let tex = renderer.render3d(&self.rel, env.root, &self.data, &view);
                 painter.image(
@@ -1197,6 +1199,29 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
     {
         out = Some(Object::new(0, "Grupo"));
     }
+    ui.separator();
+    ui.menu_button("Partículas", |ui| {
+        let r = ui
+            .button("Vazias")
+            .on_hover_text("Um emissor para ajustar do zero no Inspetor");
+        if r.clicked() {
+            let mut o = Object::new(0, "particulas");
+            o.components.push(crate::particle_presets::component_3d());
+            out = Some(o);
+            ui.close();
+        }
+        ui.separator();
+        for p in crate::particle_presets::PRESETS_3D {
+            let r = ui.button(p.label).on_hover_text(p.tip);
+            crate::tutorial::anchor(ui.ctx(), &format!("cena.objeto:fx:{}", p.id), r.rect);
+            if r.clicked() {
+                let mut o = Object::new(0, p.id);
+                o.components.push(p.component());
+                out = Some(o);
+                ui.close();
+            }
+        }
+    });
     ui.separator();
     if ui
         .button("Jogador 3D")

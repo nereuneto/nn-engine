@@ -84,6 +84,10 @@ projeto continua aberto.
   bloqueiam, uma caixa que cai, um bicho que anda (Animação 3D), uma estrela,
   uma plataforma que anda, o sol da tarde e um evento de vitória
   ([cenas 3D](#cenas-3d)).
+- **Efeitos no 3D** (uns 10 minutos), a partir do modelo Vazio 3D: uma
+  fogueira com fogo, fumaça e o som estalando (mais alto de perto), poeira
+  nos pés do herói ao pular (um evento com a mensagem *pulou*) e chuva
+  ([som e partículas no 3D](#som-e-partículas-no-3d)).
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -703,6 +707,29 @@ Nos eventos, **Tocar animação** troca a animação de um objeto (com
 **Repetir** no modo Completo) e **Animação terminar** avisa quando uma que
 toca uma vez chega ao fim. No código, `obj:play("acenar")`.
 
+### Som e partículas no 3D
+
+**Som 3D:** arraste um `.wav` (ou `.ogg`, `.mp3`) para a vista 3D, ou adicione
+**Som** a um objeto. Numa cena 3D, o componente tem **Som no espaço 3D**
+(ligado): o som sai do objeto, fica mais baixo longe dele e vai para o lado
+em que ele está, e anda junto se o objeto andar. **Ouvido até** é a
+distância em que ele some (até um quarto dela, o volume é cheio). Quem ouve
+é a câmera do jogo. Desligado, o som é igual em todo lugar (música).
+Fogueiras, cachoeiras, o mar e máquinas ficam bem com **Repetir**.
+
+**Partículas 3D:** **➕ Objeto > Partículas** tem efeitos prontos do 3D, em
+metros: fogo, fumaça, faíscas, explosão, poeira, brilho, chuva e neve. Eles
+animam na vista enquanto você monta. As partículas saem para o **"cima"
+do objeto**: gire o objeto para apontar (a poeira de lado, a água de uma
+fonte). A **Abertura** é um cone em volta dessa direção, e a área (retângulo
+ou círculo) fica deitada no chão: para chuva e neve, suba o objeto uns 10 m.
+Elas aparecem atrás e na frente dos objetos certos e pegam a névoa.
+
+Nos eventos, **Soltar partículas**, **Ligar ou desligar partículas**,
+**Faíscas** e **Partículas terminarem** funcionam no 3D. **Tocar som** ganha
+**saindo de**: o som sai do objeto escolhido (no Herói, o pulo; numa porta,
+o rangido). O **Coletável** solta um brilho 3D ao ser pego.
+
 ### Comportamentos e eventos no 3D
 
 Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
@@ -725,8 +752,8 @@ Os **eventos** funcionam igual, com o que faz sentido no 3D: encostar, estar
 perto (em metros), teclas, variáveis, mensagens, mostrar e esconder, mudar a
 cor de modelos e formas, sons, cenas... **Levar para** e **Velocidade ou
 empurrão** ganham o **Z**, e **Criar prefab** cria no ponto 3D. O que é só do
-2D (tiles, partículas, animações de imagem, tremer a câmera, sair da tela)
-não aparece nos menus de uma cena 3D.
+2D (tiles, animações de imagem, tremer a câmera, sair da tela) não aparece
+nos menus de uma cena 3D.
 
 Com o jogo aberto pelo **▶ Testar daqui**, o que você muda aparece na hora,
 como no 2D: posição, rotação e escala, os componentes e o **☀ Ambiente**

@@ -427,3 +427,99 @@ fn modelos_animados_jogador_anima_sozinho_e_eventos_tocam() {
         .unwrap();
     assert_eq!(anim(&rt, "Bicho"), "andar");
 }
+
+#[test]
+fn som_e_particulas_no_3d() {
+    let dir = projeto(
+        "efeitos",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            (
+                "cenas/mundo.cena",
+                &format!(
+                    r#"return {{ format = 1, mode = "3d", gravity = -20, script = "cenas/obs.lua",
+  environment = {{ fog = false, shadows = false }},
+  events = {{
+    {{ when = {{ {{ cond = "tecla", modo = "apertar", tecla = "p" }} }},
+      actions = {{ {{ act = "soltar_particulas", alvo = "Poeira", quantidade = 12 }} }} }},
+    {{ when = {{ {{ cond = "tecla", modo = "apertar", tecla = "f" }} }},
+      actions = {{ {{ act = "faiscas", alvo = "Fogueira" }} }} }},
+    {{ when = {{ {{ cond = "tecla", modo = "apertar", tecla = "s" }} }},
+      actions = {{ {{ act = "som", som = "sons/pulo.wav", onde = "Fogueira", distancia = 10 }} }} }},
+  }},
+  objects = {{
+    {CHAO},
+    {{ id = 2, name = "Câmera", y = 2, z = 6, components = {{ {{ type = "camera3d" }} }} }},
+    {{ id = 3, name = "Fogueira", x = 20,
+      components = {{
+        {{ type = "particles", rate = 60, lifetime = 1, speed_min = 1, speed_max = 2, spread = 20,
+          size_start = 0.4, size_end = 0.1, blend = "add" }},
+        {{ type = "sound", sound = "sons/pulo.wav", loop = true, spatial = true, distance = 30 }},
+      }} }},
+    {{ id = 4, name = "Poeira", rz = 90,
+      components = {{ {{ type = "particles", mode = "explosao", on_start = false, amount = 10,
+        lifetime = 2, speed_min = 1, speed_max = 1, spread = 0 }} }} }},
+  }} }}"#
+                ),
+            ),
+        ],
+    );
+    std::fs::create_dir_all(dir.join("sons")).unwrap();
+    let wav = Path::new(env!("CARGO_MANIFEST_DIR")).join("../nn-run/modelos/comum/sons/pulo.wav");
+    std::fs::write(dir.join("sons/pulo.wav"), std::fs::read(wav).unwrap()).unwrap();
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    h.run_frames(30);
+    assert_eq!(h.game.0.error(), None);
+    // As partículas da fogueira são 3D e sobem (o "cima" do objeto).
+    assert!(lua::<bool>(&rt, "C.objects.Fogueira.particles.is3d"));
+    let n: i64 = lua(&rt, "C.objects.Fogueira.particles.count");
+    assert!(n > 20, "fogueira acesa: {n}");
+    // O som da fogueira é 3D: a câmera está a ~20 m, mais baixo.
+    let longe: f64 = lua(
+        &rt,
+        "C.objects.Fogueira:component('sound')._playing:distance_volume()",
+    );
+    assert!(longe > 0.0 && longe < 0.6, "longe: {longe}");
+    // A câmera vai para perto: volume cheio.
+    rt.lua()
+        .load("C.objects['Câmera']:move_to(20, 2, 3)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    let perto: f64 = lua(
+        &rt,
+        "C.objects.Fogueira:component('sound')._playing:distance_volume()",
+    );
+    assert_eq!(perto, 1.0);
+    // A fogueira anda para longe: o som vai junto.
+    rt.lua()
+        .load("C.objects.Fogueira:move_to(-40, 0, 0)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    let foi: f64 = lua(
+        &rt,
+        "C.objects.Fogueira:component('sound')._playing:distance_volume()",
+    );
+    assert_eq!(foi, 0.0);
+    // A poeira (girada: sai para o lado) só solta quando um evento manda.
+    assert_eq!(lua::<i64>(&rt, "C.objects.Poeira.particles.count"), 0);
+    super_toque(&mut h, KeyCode::KeyP);
+    h.run_frames(20);
+    let n: i64 = lua(&rt, "C.objects.Poeira.particles.count");
+    assert_eq!(n, 12);
+    // Faíscas e som num evento 3D também funcionam.
+    super_toque(&mut h, KeyCode::KeyF);
+    super_toque(&mut h, KeyCode::KeyS);
+    h.run_frames(5);
+    assert_eq!(h.game.0.error(), None);
+}
+
+fn super_toque(h: &mut Headless<Uma>, k: KeyCode) {
+    h.ctx.input.press_key(k);
+    h.run_frames(1);
+    h.ctx.input.release_key(k);
+    h.run_frames(1);
+}

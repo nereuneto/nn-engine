@@ -2961,3 +2961,157 @@ fn cena_3d_previa_da_animacao_e_inspetor() {
     }
     assert!(diff > 30, "a prévia animou: {diff} pixels");
 }
+
+/// Partículas e som numa cena 3D: os efeitos prontos do 3D, os campos em
+/// metros (sem a direção do 2D), o som no espaço 3D e a prévia animando.
+#[test]
+fn cena_3d_particulas_e_som() {
+    use nn_studio::scene_data::{Component, Prop};
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let dir = temp("cena-3d-efeitos");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    // ➕ Objeto > Partículas > Fogo (o efeito do 3D, em metros).
+    h.get_by_label("➕ Objeto").click();
+    h.run_steps(2);
+    h.get_by(|n| n.label().is_some_and(|l| l.starts_with("Partículas")))
+        .hover();
+    h.run_steps(3);
+    h.get_by(|n| n.role() == Role::Button && n.label().as_deref() == Some("Fogo"))
+        .click();
+    h.run_steps(4);
+    let fogo = objeto(&h, "fogo").clone();
+    let c = fogo.component("particles").unwrap();
+    assert!(
+        c.num("size_start") < 2.0,
+        "em metros: {}",
+        c.num("size_start")
+    );
+    assert_eq!(cena_mut(&mut h).selection, vec![fogo.id]);
+    // O Inspetor: sem a direção do 2D, com o fundo da área.
+    h.get_by_label("Partículas");
+    assert!(h.query_by_label("Direção").is_none());
+    h.get_by_label_contains("Efeito pronto");
+    // Um som no fogo: "no espaço 3D" e a distância.
+    {
+        let doc = cena_mut(&mut h);
+        let o = doc.data.find_mut(fogo.id).unwrap();
+        let mut s = Component::new("sound");
+        s.set("sound", Prop::Str("sons/pulo.wav".into()));
+        o.components.push(s);
+    }
+    h.run_steps(4);
+    h.get_by_label("Som no espaço 3D");
+    h.get_by_label("Ouvido até");
+    tela(&mut h, "cena-3d-efeitos");
+    if !gpu {
+        return;
+    }
+    // A prévia anima: duas imagens seguidas são diferentes.
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let a = h.render().expect("render");
+    std::thread::sleep(std::time::Duration::from_millis(150));
+    h.step();
+    let b = h.render().expect("render");
+    let ppp = a.width() as f32 / 1280.0;
+    let mut diff = 0;
+    for y in (rect.top() as u32)..(rect.bottom() as u32) {
+        for x in (rect.left() as u32)..(rect.right() as u32) {
+            let (px, py) = ((x as f32 * ppp) as u32, (y as f32 * ppp) as u32);
+            if a.get_pixel(px, py) != b.get_pixel(px, py) {
+                diff += 1;
+            }
+        }
+    }
+    assert!(diff > 20, "o fogo anima na vista: {diff} pixels");
+}
+
+#[test]
+fn tutorial_efeitos_3d_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, Object, Prop, Rule};
+    let dir = temp("tutorial-efeitos-3d");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("efeitos-3d");
+    h.run_steps(4);
+    let proj = dir.join("projetos/efeitos-3d");
+    assert!(proj.join("assets/sons/fogueira.wav").is_file());
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    h.run_steps(4);
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/mundo.cena").unwrap()
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    let efeito = |id: u32, name: &str, preset: &str| {
+        let mut o = Object::new(id, name);
+        o.components.push(
+            nn_studio::particle_presets::find_in(preset, true)
+                .unwrap()
+                .component(),
+        );
+        o
+    };
+    espera(&mut h, 1);
+    doc(&mut h).data.objects.push(efeito(10, "fogo", "fogo"));
+    espera(&mut h, 2);
+    let mut fumaca = efeito(11, "fumaca", "fumaca");
+    fumaca.y = 1.5;
+    doc(&mut h).data.objects.push(fumaca);
+    espera(&mut h, 3);
+    let mut som = Object::new(12, "fogueira");
+    let mut c = Component::new("sound");
+    c.set("sound", Prop::Str("assets/sons/fogueira.wav".into()));
+    c.set("loop", Prop::Bool(true));
+    som.components.push(c);
+    doc(&mut h).data.objects.push(som);
+    espera(&mut h, 4);
+    let mut jogador = Object::new(13, "Jogador");
+    jogador
+        .components
+        .push(Component::behavior("nn:jogador3d", &[]));
+    doc(&mut h).data.objects.push(jogador);
+    espera(&mut h, 5);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 6);
+    let n = doc(&mut h).data.objects.len() - 1;
+    doc(&mut h).data.objects[n]
+        .children
+        .push(efeito(14, "poeira", "poeira"));
+    espera(&mut h, 7);
+    let cat = nn_studio::events::catalog();
+    let mut msg = cat.condition("mensagem").unwrap().new_item(true);
+    msg.set("msg", Prop::Str("pulou".into()));
+    let mut soltar = cat.action("soltar_particulas").unwrap().new_item(true);
+    soltar.set("alvo", Prop::Str("poeira".into()));
+    doc(&mut h).data.objects[n].events.push(Rule {
+        when: vec![msg],
+        actions: vec![soltar],
+        ..Default::default()
+    });
+    espera(&mut h, 8);
+    let mut chuva = efeito(15, "chuva", "chuva");
+    chuva.y = 10.0;
+    doc(&mut h).data.objects.push(chuva);
+    espera(&mut h, 9);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 10);
+    let text = std::fs::read_to_string(proj.join("cenas/mundo.cena")).unwrap();
+    assert!(
+        text.contains("spatial = true") && text.contains("soltar_particulas"),
+        "{text}"
+    );
+    tela(&mut h, "tutorial-efeitos-3d-fim");
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}

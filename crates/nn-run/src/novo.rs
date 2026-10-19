@@ -207,6 +207,8 @@ impl Template {
                 ="assets/sons/pulo.wav" "comum/sons/pulo.wav",
                 ="assets/sons/vitoria.wav" "comum/sons/vitoria.wav",
                 ="assets/sons/dano.wav" "comum/sons/dano.wav",
+                ="assets/sons/fogueira.wav" "comum/sons/fogueira.wav",
+                ="assets/sons/mar.wav" "comum/sons/mar.wav",
             ),
             Template::Vazio3D => modelo!("vazio3d":
                 "config.lua",
@@ -224,6 +226,8 @@ impl Template {
                 ="assets/sons/pulo.wav" "comum/sons/pulo.wav",
                 ="assets/sons/vitoria.wav" "comum/sons/vitoria.wav",
                 ="assets/sons/dano.wav" "comum/sons/dano.wav",
+                ="assets/sons/fogueira.wav" "comum/sons/fogueira.wav",
+                ="assets/sons/mar.wav" "comum/sons/mar.wav",
             ),
             Template::Vazio => modelo!("vazio":
                 "config.lua",

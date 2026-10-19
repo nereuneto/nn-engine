@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use bytemuck::{Pod, Zeroable};
-use glam::{Mat4, UVec2, Vec2};
+use glam::{Mat4, UVec2, Vec2, Vec3};
 use nn_core::Color;
 
 use crate::text::{FontId, Text, TextSystem};
@@ -1016,6 +1016,34 @@ impl Renderer {
         let srgb = self.format.is_srgb();
         let texture = texture.unwrap_or(self.white);
         self.d3.draw(mesh, model, color, texture, cast_shadow, srgb);
+    }
+
+    /// Uma partícula 3D: um quadrado de lado `size` (metros) sempre virado
+    /// para a câmera, girado `rotation` radianos. Aparece na frente e atrás
+    /// dos objetos certos, com névoa, sem sombra. Veja
+    /// [`ParticleEmitter3`](crate::d3::ParticleEmitter3).
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_billboard(
+        &mut self,
+        texture: TextureId,
+        center: Vec3,
+        size: f32,
+        rotation: f32,
+        color: Color,
+        region: crate::Rect,
+        blend: crate::Blend,
+    ) {
+        let srgb = self.format.is_srgb();
+        self.d3.billboard(
+            texture,
+            center,
+            size,
+            rotation,
+            color,
+            region,
+            blend == crate::Blend::Add,
+            srgb,
+        );
     }
 
     /// Envia um modelo (lido de um `.glb`) para a GPU.

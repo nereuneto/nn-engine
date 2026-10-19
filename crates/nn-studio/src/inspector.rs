@@ -323,6 +323,23 @@ const SOUND_FIELDS: &[F] = &[
         "Canal",
         W::Choice(&[("effects", "Efeitos"), ("music", "Música")]),
     ),
+    help(
+        f("spatial", "Som no espaço 3D", W::Bool),
+        "O som sai do objeto: mais baixo longe dele e do lado em que ele está (fogueira, cachoeira, rádio). Desligado: igual em todo lugar (música).",
+    ),
+    help(
+        f(
+            "distance",
+            "Ouvido até",
+            W::Num {
+                speed: 0.5,
+                min: 1.0,
+                max: 1000.0,
+                suffix: " m",
+            },
+        ),
+        "Mais longe que isso, não se ouve. Até um quarto dessa distância, o volume é cheio.",
+    ),
 ];
 
 /// Título de um grupo de campos (não é um campo).
@@ -1256,10 +1273,7 @@ pub fn is_3d_kind(kind: &str) -> bool {
 /// Componentes de cena 2D que não valem numa cena 3D (física 2D, mapa de
 /// tiles, câmera 2D, partículas 2D).
 pub fn is_2d_only_kind(kind: &str) -> bool {
-    matches!(
-        kind,
-        "body" | "map" | "camera" | "particles" | "sprite" | "shape"
-    )
+    matches!(kind, "body" | "map" | "camera" | "sprite" | "shape")
 }
 
 fn fields(kind: &str) -> &'static [F] {
@@ -1644,6 +1658,40 @@ impl From<&F> for Spec {
             w,
             help: f.help.to_string(),
         }
+    }
+}
+
+/// As partículas de uma cena 3D: em metros (o arrastar anda devagar) e com
+/// as dicas do 3D.
+fn particles3d_spec(spec: &mut Spec) {
+    if let Wd::Num { speed, suffix, .. } = &mut spec.w
+        && !matches!(
+            spec.key.as_str(),
+            "rate" | "spread" | "spin" | "interval" | "lifetime"
+        )
+    {
+        *speed = 0.02;
+        if matches!(spec.key.as_str(), "speed_min" | "speed_max") {
+            *suffix = " m/s";
+        } else if matches!(
+            spec.key.as_str(),
+            "size_start" | "size_end" | "area_w" | "area_h" | "area_radius"
+        ) {
+            *suffix = " m";
+        }
+    }
+    match spec.key.as_str() {
+        "spread" => {
+            spec.help = "Um cone em volta do \"cima\" do objeto: 0 = um raio só, 360 = todos os lados. Gire o objeto para apontar.".into();
+        }
+        "gravity" => {
+            spec.help = "Em m/s²: negativa = caem; positiva = sobem (fumaça).".into();
+        }
+        "area" => {
+            spec.help = "Deitada no chão: um retângulo (largura × fundo) ou um círculo. Chuva e neve: um retângulo largo no alto.".into();
+        }
+        "area_h" => spec.label = "Fundo da área".into(),
+        _ => {}
     }
 }
 
@@ -2295,7 +2343,11 @@ impl Inspector {
                     .on_hover_text(desc)
                     .clicked()
                 {
-                    let mut c = Component::new(kind);
+                    let mut c = if kind == "particles" && doc.data.three_d {
+                        crate::particle_presets::component_3d()
+                    } else {
+                        Component::new(kind)
+                    };
                     if kind == "text" && doc.data.three_d {
                         // No 3D, texto é do HUD (fica na tela).
                         c.set("hud", Prop::Bool(true));
@@ -2588,7 +2640,7 @@ impl Inspector {
         if comp.kind == "particles" {
             ui.horizontal_wrapped(|ui| {
                 let r = ui.menu_button("✨ Efeito pronto", |ui| {
-                    for p in crate::particle_presets::PRESETS {
+                    for p in crate::particle_presets::presets(doc.data.three_d) {
                         let r = ui.button(p.label).on_hover_text(p.tip);
                         crate::tutorial::anchor_in(ui, &format!("inspetor:fx:{}", p.id), r.rect);
                         if r.clicked() {
@@ -2634,12 +2686,29 @@ impl Inspector {
                     if hidden_ui_field(comp, spec.key) {
                         continue;
                     }
+                    // No 3D, as partículas saem para o "cima" do objeto (sem
+                    // a direção do 2D).
+                    let particles3d = comp.kind == "particles" && doc.data.three_d;
+                    // Som 3D: só numa cena 3D (e a distância, com ele ligado).
+                    if comp.kind == "sound"
+                        && ((spec.key == "spatial" && !doc.data.three_d)
+                            || (spec.key == "distance"
+                                && !(doc.data.three_d && comp.bool("spatial"))))
+                    {
+                        continue;
+                    }
+                    if particles3d && spec.key == "direction" {
+                        continue;
+                    }
                     if spec.key.is_empty() {
                         ui.label(RichText::new(spec.label).small().strong().weak());
                         ui.end_row();
                         continue;
                     }
-                    let spec = Spec::from(spec);
+                    let mut spec = Spec::from(spec);
+                    if particles3d {
+                        particles3d_spec(&mut spec);
+                    }
                     let overridden =
                         is_instance && obj.is_some_and(|x| x.is_overridden(ci, &spec.key));
                     field_row(ui, &spec, overridden, &mut reverts);

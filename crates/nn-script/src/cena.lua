@@ -46,6 +46,8 @@ M.FIELDS = {
   sound = {
     { "sound", "" }, { "autoplay", true }, { "loop", false }, { "volume", 1 },
     { "channel", "effects" },
+    -- 3D: o som sai do objeto (mais baixo longe dele), ouvido até `distance`.
+    { "spatial", true }, { "distance", 30 },
   },
   -- Partículas: contínuas (fogo, chuva) ou de uma vez (explosão).
   particles = {
@@ -449,6 +451,23 @@ end
 --- 3D: onde o objeto está no mundo (x, y, z).
 function Object:position3d(alpha)
   return self:matrix3d(alpha):position()
+end
+
+--- Toca o som do componente Som do objeto (no 3D, saindo do objeto).
+function Object:play_sound(opts)
+  local c = self:component("sound")
+  if not (c and self.sound) then
+    error(("objeto \"%s\" não tem um som"):format(self.name), 2)
+  end
+  local o = { loop = c.loop, volume = c.volume, channel = c.channel }
+  for k, v in pairs(opts or {}) do o[k] = v end
+  if self.scene and self.scene._3d and c.spatial and o.x == nil then
+    o.x, o.y, o.z = self:position3d()
+    o.distance = o.distance or c.distance
+  end
+  local s = nn.audio.play(self.sound, o)
+  if o.x then c._playing = s end
+  return s
 end
 
 --- 3D: quem toca as animações do modelo do objeto (nil sem modelo animado).
@@ -1006,19 +1025,27 @@ function M.targets(scene, who)
   return out
 end
 
---- Faíscas num ponto (moeda pega, inimigo derrotado...).
-function M.burst(scene, x, y, color, count)
+--- Faíscas num ponto (moeda pega, inimigo derrotado...). No 3D, com z.
+function M.burst(scene, x, y, color, count, z)
   color = color or "#FFD166"
   scene._fx = scene._fx or {}
   local fx = scene._fx[color]
   if not fx then
-    fx = nn.particles({
-      emitting = false, lifetime = { 0.25, 0.55 }, speed = { 90, 240 }, drag = 4,
-      size = { 12, 0 }, colors = { "#FFFFFF", color, color:sub(1, 7) .. "00" }, blend = "add",
-    })
+    local colors = { "#FFFFFF", color, color:sub(1, 7) .. "00" }
+    if scene._3d then
+      fx = nn.particles3d({
+        emitting = false, lifetime = { 0.3, 0.6 }, speed = { 1.5, 4 }, drag = 4,
+        size = { 0.25, 0 }, colors = colors, blend = "add",
+      })
+    else
+      fx = nn.particles({
+        emitting = false, lifetime = { 0.25, 0.55 }, speed = { 90, 240 }, drag = 4,
+        size = { 12, 0 }, colors = colors, blend = "add",
+      })
+    end
     scene._fx[color] = fx
   end
-  fx:burst(count or 16, x, y)
+  fx:burst(count or 16, x, y, z)
 end
 
 -- Componentes ---------------------------------------------------------------
@@ -1233,14 +1260,56 @@ function M.particle_options(c)
   return opts
 end
 
+--- 3D: as mesmas opções, em metros. A direção é o "para cima" do objeto
+--- (gire o objeto para apontar), a abertura é um cone em graus e as áreas
+--- ficam deitadas (retângulo no chão, círculo no chão).
+function M.particle_options3d(c)
+  local opts = M.particle_options(c)
+  opts.direction = nil
+  opts.spread = c.spread
+  opts.spin = { -c.spin, c.spin }
+  if c.area == "retangulo" then
+    opts.area = { w = c.area_w, d = c.area_h }
+  elseif c.area == "circulo" then
+    opts.area = { radius = c.area_radius }
+  else
+    opts.area = nil
+  end
+  return opts
+end
+
+-- Para onde o "cima" do objeto aponta no mundo.
+local function up3d(o)
+  local m = o:matrix3d()
+  local x0, y0, z0 = m:position()
+  local x1, y1, z1 = m:transform_point(0, 1, 0)
+  return x1 - x0, y1 - y0, z1 - z0
+end
+
+-- Põe o emissor no objeto (no 3D, com a direção).
+local function place_particles(o, fx)
+  if fx.is3d then
+    fx:set_position(o:position3d())
+    fx:set_direction(up3d(o))
+  else
+    local x, y = o:world_transform()
+    fx:set_position(x, y)
+  end
+end
+
 local function make_particles(o, c, live)
-  local ok, fx = pcall(nn.particles, M.particle_options(c))
+  local three_d = o.scene and o.scene._3d
+  local ok, fx
+  if three_d then
+    ok, fx = pcall(nn.particles3d, M.particle_options3d(c))
+  else
+    ok, fx = pcall(nn.particles, M.particle_options(c))
+  end
   if not ok then error(fx, 0) end
   local old = o.particles
   o.particles = fx
   c._fx = fx
-  local x, y = o:world_transform()
-  fx:set_position(x, y)
+  place_particles(o, fx)
   c._wait = c.interval
   c._active = false
   -- Explosão: solta tudo ao começar (no editor ao vivo, só se ainda não soltou).
@@ -1254,8 +1323,7 @@ end
 function M.burst_particles(o, n)
   local c = o:component("particles")
   if not (c and c._fx) then return end
-  local x, y = o:world_transform()
-  c._fx:set_position(x, y)
+  place_particles(o, c._fx)
   c._fx:burst(math.floor(n or c.amount))
   c._active = true
 end
@@ -1276,8 +1344,7 @@ local function update_particles(scene, dt)
       o:destroy()
     elseif o.alive and o.particles then
       local fx = o.particles
-      local x, y = o:world_transform()
-      fx:set_position(x, y)
+      place_particles(o, fx)
       fx:update(dt)
       local c = o:component("particles")
       if c and c._fx == fx then
@@ -1635,8 +1702,15 @@ function M.prepare(scene, o, c, live)
     if c.sound ~= "" then
       o.sound = nn.assets.sound(c.sound)
       if c.autoplay and not live then
-        local playing = nn.audio.play(o.sound, { loop = c.loop, volume = c.volume, channel = c.channel })
+        local opts = { loop = c.loop, volume = c.volume, channel = c.channel }
+        if scene._3d and c.spatial then
+          opts.x, opts.y, opts.z = o:position3d()
+          opts.distance = c.distance
+        end
+        local playing = nn.audio.play(o.sound, opts)
         table.insert(scene._playing, playing)
+        -- Som 3D que anda com o objeto.
+        if opts.x then c._playing = playing end
       end
     end
   elseif t == "particles" then
@@ -1970,6 +2044,12 @@ function M.update(scene, dt)
   refresh_list(scene)
   update_animations(scene, dt)
   if scene._3d then
+    -- Sons 3D que andam com o objeto.
+    for _, o in ipairs(scene.object_list) do
+      local c = o.alive and o.sound and o:component("sound")
+      local s = c and c._playing
+      if s then s:set_position(o:position3d()) end
+    end
     -- Animações dos modelos 3D; as que tocam uma vez avisam ao terminar.
     for _, o in ipairs(scene.object_list) do
       if o.alive then
@@ -2513,9 +2593,9 @@ function M.new(data, path)
     return M.targets(self, who)
   end
 
-  --- Faíscas num ponto.
-  function scene:burst(x, y, color, count)
-    M.burst(self, x, y, color, count)
+  --- Faíscas num ponto (no 3D: scene:burst(x, y, cor, quantas, z)).
+  function scene:burst(x, y, color, count, z)
+    M.burst(self, x, y, color, count, z)
   end
 
   --- Guarda o ponto de reinício desta cena.

@@ -635,6 +635,49 @@ pub fn particle_config(c: &Component, image: Option<(TextureId, UvRect)>) -> Par
     }
 }
 
+/// As opções de um componente Partículas numa cena 3D, como a engine monta
+/// (`M.particle_options3d`): em metros, saindo para `up`.
+pub fn particle_config3(
+    c: &Component,
+    image: Option<(TextureId, UvRect)>,
+    up: glam::Vec3,
+) -> nn_render::d3::ParticleConfig3 {
+    use nn_render::d3::{EmitArea3, ParticleConfig3};
+    let base = particle_config(c, image);
+    let num = |k: &str| c.num(k) as f32;
+    ParticleConfig3 {
+        texture: base.texture,
+        region: base.region,
+        rate: base.rate,
+        lifetime: base.lifetime,
+        speed: base.speed,
+        direction: up,
+        spread: num("spread"),
+        gravity: glam::Vec3::new(0.0, num("gravity"), 0.0),
+        drag: base.drag,
+        size: base.size,
+        size_variation: base.size_variation,
+        colors: base.colors,
+        spin: (-num("spin"), num("spin")),
+        area: match c.str("area") {
+            "retangulo" => EmitArea3::Box(glam::Vec3::new(num("area_w"), 0.0, num("area_h")) / 2.0),
+            "circulo" => EmitArea3::Disc(num("area_radius")),
+            _ => EmitArea3::Point,
+        },
+        blend: base.blend,
+        max: base.max,
+        follow: base.follow,
+    }
+}
+
+/// Prévia de um emissor 3D na cena do editor.
+struct Preview3 {
+    props: String,
+    emitter: nn_render::d3::ParticleEmitter3,
+    time: f32,
+    next: f32,
+}
+
 /// Prévia de um emissor na cena do editor.
 struct Preview {
     /// Os campos do componente quando o emissor foi feito.
@@ -661,6 +704,8 @@ pub struct SceneRenderer {
     fonts: HashMap<String, Option<FontId>>,
     /// Partículas animando na cena: (aba, objeto, componente) → emissor.
     previews: HashMap<(String, u32, usize), Preview>,
+    /// O mesmo, nas cenas 3D.
+    previews3: HashMap<(String, u32, usize), Preview3>,
     /// 3D: as formas prontas já na GPU.
     meshes3: HashMap<&'static str, nn_render::d3::MeshId>,
     /// 3D: modelos (arquivo, achatado) → modelo na GPU (`None` se não abriu).
@@ -676,8 +721,11 @@ pub struct View3 {
     pub background: Color,
     /// Passo da grade no chão (0 = sem grade).
     pub grid: f32,
-    /// Segundos desde que a vista abriu (para a prévia das animações).
+    /// Segundos desde que a vista abriu (para a prévia das animações e das
+    /// partículas).
     pub time: f32,
+    /// Objetos com partículas para soltar agora (botão 💥 Soltar).
+    pub bursts: Vec<u32>,
 }
 
 /// A animação que a prévia mostra num objeto: a da Animação 3D, ou "parado"
@@ -724,6 +772,7 @@ impl SceneRenderer {
             map_sources: HashMap::new(),
             fonts: HashMap::new(),
             previews: HashMap::new(),
+            previews3: HashMap::new(),
             meshes3: HashMap::new(),
             models3: HashMap::new(),
         }
@@ -809,7 +858,7 @@ impl SceneRenderer {
         self.renderer.set_camera3d(view.camera);
 
         // Os objetos, com a transformação dos pais.
-        type Draw = (Mat4, Component, Option<(String, f32)>);
+        type Draw = (Mat4, Component, Option<(String, f32)>, u32, usize);
         let mut draws: Vec<Draw> = Vec::new();
         fn walk(list: &[Object], parent: Mat4, out: &mut Vec<Draw>) {
             for o in list {
@@ -817,9 +866,12 @@ impl SceneRenderer {
                     continue;
                 }
                 let m = parent * crate::scene_data::local_matrix3(o);
-                for c in &o.components {
-                    if matches!(c.kind.as_str(), "model" | "shape3d" | "camera3d") {
-                        out.push((m, c.clone(), preview_anim3d(o)));
+                for (ci, c) in o.components.iter().enumerate() {
+                    if matches!(
+                        c.kind.as_str(),
+                        "model" | "shape3d" | "camera3d" | "particles"
+                    ) {
+                        out.push((m, c.clone(), preview_anim3d(o), o.id, ci));
                     }
                 }
                 walk(o.prefab_children(), m, out);
@@ -827,8 +879,12 @@ impl SceneRenderer {
             }
         }
         walk(&scene.objects, Mat4::IDENTITY, &mut draws);
-        for (m, c, anim) in draws {
+        let mut seen = Vec::new();
+        for (m, c, anim, id, ci) in draws {
             match c.kind.as_str() {
+                "particles" => {
+                    self.draw_particles3d(key, root, id, ci, &c, m, view, &mut seen);
+                }
                 "model" => {
                     if let Some(model) = self.model3(root, c.str("file"), c.bool("flat")) {
                         // Modelo animado: a prévia toca a animação, em volta.
@@ -898,6 +954,7 @@ impl SceneRenderer {
                 _ => {}
             }
         }
+        self.previews3.retain(|k, _| k.0 != key || seen.contains(k));
 
         // A grade do chão (em volta de onde a câmera olha) e os eixos.
         if view.grid > 0.0 {
@@ -1026,6 +1083,79 @@ impl SceneRenderer {
             p.emitter.update(dt);
         }
         p.emitter.draw(&mut self.renderer);
+    }
+
+    /// Anima e desenha as partículas de um componente numa cena 3D.
+    #[allow(clippy::too_many_arguments)]
+    fn draw_particles3d(
+        &mut self,
+        key: &str,
+        root: &Path,
+        id: u32,
+        ci: usize,
+        c: &Component,
+        m: glam::Mat4,
+        view: &View3,
+        seen: &mut Vec<(String, u32, usize)>,
+    ) {
+        let image = if c.str("image").is_empty() {
+            None
+        } else {
+            self.texture(root, c.str("image"), true).map(|tex| {
+                let (fw, fh) = (c.num("frame_w") as u32, c.num("frame_h") as u32);
+                let size = self.renderer.texture_size(tex);
+                if fw > 0 && fh > 0 && fw <= size.x && fh <= size.y {
+                    let sheet = self.renderer.sprite_sheet(tex, UVec2::new(fw, fh));
+                    let frame = (c.num("frame").max(1.0) as u32).min(sheet.frame_count());
+                    (tex, sheet.region(frame - 1))
+                } else {
+                    (tex, UvRect::FULL)
+                }
+            })
+        };
+        let pos = m.transform_point3(glam::Vec3::ZERO);
+        let up = m.transform_vector3(glam::Vec3::Y);
+        let k = (key.to_string(), id, ci);
+        seen.push(k.clone());
+        let props = format!("{:?}", c.props);
+        let burst = c.str("mode") == "explosao";
+        let amount = c.num("amount").max(0.0) as u32;
+        let time = view.time;
+        let p = self.previews3.entry(k).or_insert_with(|| Preview3 {
+            props: String::new(),
+            emitter: nn_render::d3::ParticleEmitter3::new(Default::default()),
+            time,
+            next: time,
+        });
+        if p.props != props {
+            p.props = props;
+            p.emitter = nn_render::d3::ParticleEmitter3::new(particle_config3(c, image, up));
+            p.emitter.emitting = !burst && c.bool("emitting");
+            p.next = time;
+            if burst && !c.bool("on_start") {
+                p.next = f32::INFINITY;
+            }
+        }
+        p.emitter.position = pos;
+        p.emitter.config.direction = up;
+        let dt = (time - p.time).clamp(0.0, 0.1);
+        p.time = time;
+        if view.bursts.contains(&id) {
+            p.emitter.burst(amount.max(1));
+        }
+        if burst && time >= p.next {
+            p.emitter.burst(amount);
+            let interval = c.num("interval") as f32;
+            let life = c.num("lifetime") as f32;
+            p.next = time + if interval > 0.0 { interval } else { life + 0.8 };
+        }
+        p.emitter.update(dt);
+        p.emitter.draw(&mut self.renderer);
+    }
+
+    /// Há partículas animando na prévia 3D desta aba?
+    pub fn has_particles3d(&self, key: &str) -> bool {
+        self.previews3.keys().any(|k| k.0 == key)
     }
 
     /// A fonte do arquivo (vazio: a do tema, ou a padrão).

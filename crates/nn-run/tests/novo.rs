@@ -543,6 +543,18 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     h.ctx.input.release_key(KeyCode::KeyW);
     let z: f64 = lua(&rt, "return cena.objects['Herói'].z");
     assert!(z < 6.5, "andou para a ilha: {z}");
+    // Pula: poeira nos pés (um evento no Herói solta as partículas).
+    h.ctx.input.press_key(KeyCode::Space);
+    h.run_frames(2);
+    h.ctx.input.release_key(KeyCode::Space);
+    let poeira: i64 = lua(&rt, "return cena.objects.Poeira.particles.count");
+    assert!(poeira > 0, "poeira ao pular");
+    // A fogueira está acesa e o estalar é um som 3D.
+    assert!(lua::<i64>(&rt, "return cena.objects.Fogo.particles.count") > 10);
+    assert!(lua::<bool>(
+        &rt,
+        "return cena.objects.Fogueira:component('sound')._playing ~= nil"
+    ));
     // O elevador sobe e a plataforma anda.
     h.run_frames(120);
     let ey: f64 = lua(&rt, "return cena.objects.Elevador.y");
@@ -576,6 +588,8 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
         h.run_frames(3);
     }
     assert_eq!(lua::<i64>(&rt, "return nn.vars.estrelas"), 5);
+    // Cada estrela pega solta um brilho (partículas 3D).
+    assert!(lua::<bool>(&rt, "return cena._fx['#FFD166'].is3d"));
     assert!(lua::<i64>(&rt, "return #cena:find_all('estrela')") == 0);
     // O placar mostra.
     let placar: String = lua(&rt, "return cena.objects.Placar.text.text");

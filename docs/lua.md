@@ -255,9 +255,9 @@ Os componentes de interface ficam presos à tela (`hud = true`, o padrão deles)
 
 No script, `obj.button`, `obj.bar`, `obj.slider`... são os componentes (`obj.button.enabled = false`, `obj.bar.max = 5`), e `self:open_over(cena)` e `self:close_over()` abrem e fecham cenas por cima.
 | `camera` | `follow` (nome do objeto a seguir), `smooth` (6), `zoom` (1), `limit_to_map` (true) |
-| `sound` | `sound`, `autoplay` (true), `loop`, `volume` (1), `channel` ("effects" ou "music") |
+| `sound` | `sound`, `autoplay` (true), `loop`, `volume` (1), `channel` ("effects" ou "music"), e numa cena 3D `spatial` (true: o som sai do objeto) e `distance` (30 m: mais longe, não se ouve) |
 | `behavior` | `script` (`"nn:plataforma"` para um [pronto](#comportamentos-prontos) ou o caminho de um `.lua`) e as propriedades dele, soltas: `{ type = "behavior", script = "nn:patrulha", velocidade = 60 }` |
-| `particles` | `mode` ("continuo" ou "explosao"), `rate` (20 por segundo), `emitting` (true), `amount` (30, de uma vez), `on_start` (true: solta ao começar), `interval` (0: repetir a explosão a cada N s), `when_done` ("nada" ou "destruir": o objeto some quando as partículas acabam), `lifetime` (1), `lifetime_var` (0 a 1), `speed_min`, `speed_max`, `direction` (90, em graus), `spread` (360), `gravity` (negativa cai), `drag`, `area` ("ponto", "retangulo", "circulo"), `area_w`, `area_h`, `area_radius`, `size_start`, `size_end`, `size_var`, `color_start`, `color_mid` ("" = sem), `color_end`, `image`, `frame`, `frame_w`, `frame_h`, `spin` (graus por segundo), `blend` ("alpha" ou "add"), `follow` (false: as partículas acompanham o objeto), `max` (500) |
+| `particles` | `mode` ("continuo" ou "explosao"), `rate` (20 por segundo), `emitting` (true), `amount` (30, de uma vez), `on_start` (true: solta ao começar), `interval` (0: repetir a explosão a cada N s), `when_done` ("nada" ou "destruir": o objeto some quando as partículas acabam), `lifetime` (1), `lifetime_var` (0 a 1), `speed_min`, `speed_max`, `direction` (90, em graus), `spread` (360), `gravity` (negativa cai), `drag`, `area` ("ponto", "retangulo", "circulo"), `area_w`, `area_h`, `area_radius`, `size_start`, `size_end`, `size_var`, `color_start`, `color_mid` ("" = sem), `color_end`, `image`, `frame`, `frame_w`, `frame_h`, `spin` (graus por segundo), `blend` ("alpha" ou "add"), `follow` (false: as partículas acompanham o objeto), `max` (500). Numa cena 3D, os números são em metros, as partículas saem para o "cima" do objeto (gire o objeto para apontar; `direction` não conta), `spread` é um cone em graus e as áreas ficam deitadas (`area_w` × `area_h` no chão, ou um círculo no chão) |
 
 **O script da cena** é um arquivo `.lua` que devolve uma tabela com os callbacks de sempre (`enter`, `fixed_update`, `update`, `draw`, `exit`, `resume`, `reload`), chamados depois do que a engine faz sozinha. Os objetos já existem quando o `enter` roda:
 
@@ -628,6 +628,16 @@ Cada arquivo é carregado uma vez; pedir de novo devolve o mesmo. Imagens e sons
 
 O som tocando tem `:stop()`, `:fade_out(segundos)`, `:pause()`, `:resume()`, `:set_volume(v)`, `:set_speed(v)`, `:set_pan(v)` e `:playing()`.
 
+**Som 3D:** com `x`, `y` e `z`, o som sai daquele ponto do mundo: fica mais baixo longe da câmera 3D (quem ouve) e vai para o lado esquerdo ou direito conforme onde está. `distance` (padrão 30) é a distância em que ele some; até um quarto dela, o volume é cheio. O volume e o lado acompanham a câmera a cada quadro, e `som:set_position(x, y, z)` leva o som junto com algo que anda:
+
+```lua
+self.fogo = nn.audio.play(nn.assets.sound("sons/fogueira.wav"), { x = 4, y = 0, z = -2, distance = 15, loop = true })
+-- se a fogueira andar:
+self.fogo:set_position(x, y, z)
+```
+
+O som 3D tem também `:position()` e `:distance_volume()` (de 0 a 1: quanto a distância deixa).
+
 `nn.audio.set_volume(v)` e `nn.audio.volume()` controlam o volume geral. Com um canal, controlam só ele, inclusive os sons que já estão tocando: `nn.audio.set_volume(0.5, "music")`. É o que uma tela de opções precisa para separar música e efeitos.
 
 ### Animação
@@ -840,6 +850,27 @@ function cena:draw() brilho:draw(); fumaca:draw() end
 | `follow` | As partículas acompanham o emissor quando ele anda (o jato de uma nave). Padrão `false`: ficam onde nasceram (um rastro). |
 
 O emissor tem `x`, `y`, `emitting` e `rate` (leitura e escrita), `count` e `finished`, e os métodos `:burst(n, x, y)`, `:set_position(x, y)`, `:update(dt)`, `:draw()`, `:draw_screen()` e `:clear()`.
+
+#### Partículas 3D
+
+`nn.particles3d(opts)` faz o mesmo no mundo 3D, em metros: cada partícula é um quadrado sempre virado para a câmera, que aparece na frente e atrás dos objetos certos e pega a névoa (sem sombra).
+
+```lua
+local fogo = nn.particles3d({
+  x = 0, y = 0.2, z = -3,
+  rate = 60, lifetime = { 0.4, 0.8 }, speed = { 0.6, 1.6 },
+  direction = { 0, 1, 0 }, spread = 25,     -- para cima, num cone de 25°
+  gravity = 1.5,                            -- sobe (número = y; ou {x, y, z})
+  area = { radius = 0.25 },                 -- num círculo deitado
+  size = { 0.5, 0.1 },
+  colors = { "#FFE066", "#FF7A1A", "#B0201000" }, blend = "add",
+})
+
+function cena:update(dt) fogo:update(dt) end
+function cena:draw() fogo:draw() end
+```
+
+As opções são as do 2D, com estas diferenças: `direction` é `{x, y, z}` (padrão: para cima), `spread` e `spin` são em **graus** (`spread = 360`: todos os lados), `gravity` é um número (o y) ou `{x, y, z}`, e `area` é `{ radius = }` (um círculo deitado), `{ radius = , sphere = true }` (uma esfera) ou `{ w = , h = , d = }` (uma caixa). O emissor tem também `z`, `:burst(n, x, y, z)`, `:set_position(x, y, z)` e `:set_direction(x, y, z)`.
 
 ### nn.d3 (3D)
 
