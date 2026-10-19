@@ -105,6 +105,29 @@ M.FIELDS = {
   layout = {
     { "arrange", "vertical" }, { "spacing", 16 }, { "columns", 2 }, { "align", "center" },
   },
+  -- 3D: um modelo .glb/.gltf, uma forma pronta e a câmera do jogo.
+  model = {
+    { "file", "" }, { "color", "#FFFFFF" }, { "flat", false }, { "shadow", true },
+  },
+  shape3d = {
+    { "shape", "cube" }, { "color", "#7BC86C" }, { "shadow", true },
+  },
+  camera3d = {
+    { "fov", 60 },
+  },
+}
+
+-- Formas prontas do componente shape3d (a malha de nn.d3 de cada uma).
+M.SHAPES3D = { "cube", "sphere", "cylinder", "cone", "capsule", "plane" }
+
+-- Ambiente de uma cena 3D: céu, sol, luz ambiente, névoa e sombras.
+M.ENVIRONMENT = {
+  { "sky", true }, { "sky_top", "#3F8FD8" }, { "sky_horizon", "#CDEBF5" },
+  { "sky_bottom", "#9AA79A" },
+  { "sun_height", 50 }, { "sun_turn", 30 }, { "sun_color", "#FFF1D6" }, { "sun_size", 4 },
+  { "ambient_sky", "#93AFCF" }, { "ambient_ground", "#6A5D48" },
+  { "fog", true }, { "fog_near", 30 }, { "fog_far", 90 },
+  { "shadows", true }, { "shadow_distance", 30 },
 }
 
 -- Componentes de interface (desenhados como painéis e ficam no HUD).
@@ -156,11 +179,15 @@ M.OBJECT_FIELDS = {
   { "id", 0 }, { "name", "Objeto" }, { "x", 0 }, { "y", 0 }, { "rotation", 0 },
   { "scale_x", 1 }, { "scale_y", 1 }, { "visible", true }, { "locked", false },
   { "layer", 0 }, { "anchor", "" },
+  -- 3D: altura (z é a profundidade), rotação em graus em volta de X, Y e Z
+  -- e a escala em Z.
+  { "z", 0 }, { "rx", 0 }, { "ry", 0 }, { "rz", 0 }, { "scale_z", 1 },
 }
 
 -- Campos da cena.
 M.SCENE_FIELDS = {
   { "script", "" }, { "background", "" }, { "gravity", -1800 }, { "overlay", false },
+  { "mode", "2d" },
 }
 
 -- Comportamento: `script` e as propriedades dele, livres (vêm do script).
@@ -171,7 +198,8 @@ local function defaults(kind)
   if not list then
     error(("componente desconhecido: \"%s\" (use %s)"):format(
       tostring(kind), "sprite, text, shape, body, map, camera, sound, particles, panel, "
-      .. "button, bar, icons, slider, checkbox, textfield, layout ou behavior"), 0)
+      .. "button, bar, icons, slider, checkbox, textfield, layout, model, shape3d, camera3d "
+      .. "ou behavior"), 0)
   end
   return list
 end
