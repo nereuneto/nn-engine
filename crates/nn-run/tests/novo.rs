@@ -536,8 +536,10 @@ fn toque_uma(h: &mut Headless<Uma>, k: KeyCode) {
 fn miniaturas_dos_modelos() {
     let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../nn-studio/assets/modelos");
     std::fs::create_dir_all(&out).unwrap();
+    // NN_MODELO=3d: só a miniatura desse modelo.
+    let so = std::env::var("NN_MODELO").ok();
     for template in Template::ALL {
-        if template == Template::Vazio {
+        if template == Template::Vazio || so.as_deref().is_some_and(|m| m != template.name()) {
             continue;
         }
         let dir = temp(&format!("miniatura-{}", template.name()));
@@ -548,11 +550,15 @@ fn miniaturas_dos_modelos() {
         })
         .unwrap();
         let project = Project::open(&dir).unwrap();
-        let scene = ["cenas/fase.cena", "cenas/mapa.cena", "cenas/jogo.cena"]
-            .into_iter()
-            .map(str::to_string)
-            .find(|r| dir.join(r).is_file())
-            .unwrap_or(project.start.clone());
+        let scene = if template == Template::TresD {
+            "cenas/jogo.lua".to_string()
+        } else {
+            ["cenas/fase.cena", "cenas/mapa.cena", "cenas/jogo.cena"]
+                .into_iter()
+                .map(str::to_string)
+                .find(|r| dir.join(r).is_file())
+                .unwrap_or(project.start.clone())
+        };
         let rt = ScriptRuntime::new(&dir).unwrap();
         // Todos do mesmo jeito: o jogo em 1280×720 reduzido para 320×180.
         let config = project
@@ -570,6 +576,13 @@ fn miniaturas_dos_modelos() {
             return;
         };
         h.run_frames(if template == Template::Nave { 150 } else { 40 });
+        if template == Template::TresD {
+            // Anda um pouco para a frente, para a ilha aparecer melhor.
+            h.ctx.input.press_key(KeyCode::KeyW);
+            h.run_frames(25);
+            h.ctx.input.release_key(KeyCode::KeyW);
+            h.run_frames(40);
+        }
         h.save_png(out.join(format!("{}.png", template.name())))
             .unwrap();
         std::fs::remove_dir_all(&dir).unwrap();

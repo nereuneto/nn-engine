@@ -24,6 +24,7 @@ opções de novo:
                        visual: fase de plataforma montada no NN Studio
                        aventura: aventura vista de cima (NN Studio)
                        nave: jogo de nave (NN Studio)
+                       3d: plataforma 3D em terceira pessoa (código Lua)
                        vazio: cena vazia com imagens e sons
                        minimo: só uma cena com um quadrado que anda
 
@@ -80,7 +81,7 @@ fn novo(args: &[String]) -> ExitCode {
                 Template::from_name(&v)
                     .map(|t| opts.template = t)
                     .ok_or_else(|| {
-                        format!("modelo desconhecido: {v} (use padrao, visual, aventura, nave, vazio ou minimo)")
+                        format!("modelo desconhecido: {v} (use padrao, visual, aventura, nave, 3d, vazio ou minimo)")
                     })
             }),
             other if other.starts_with("--") => Err(format!("opção desconhecida: {other}")),

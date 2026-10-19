@@ -22,14 +22,18 @@ pub enum Template {
     /// Cena visual vazia com um pacote de imagens e sons (o tutorial começa
     /// daqui).
     Vazio,
+    /// Jogo 3D em terceira pessoa (o "Ilha das Estrelas"): câmera, personagem,
+    /// física, plataformas que andam, menu, pausa e recorde.
+    TresD,
 }
 
 impl Template {
-    pub const ALL: [Template; 6] = [
+    pub const ALL: [Template; 7] = [
         Template::Padrao,
         Template::Visual,
         Template::Aventura,
         Template::Nave,
+        Template::TresD,
         Template::Vazio,
         Template::Minimo,
     ];
@@ -42,6 +46,7 @@ impl Template {
             Template::Aventura => "aventura",
             Template::Nave => "nave",
             Template::Vazio => "vazio",
+            Template::TresD => "3d",
         }
     }
 
@@ -53,6 +58,7 @@ impl Template {
             "aventura" => Some(Template::Aventura),
             "nave" => Some(Template::Nave),
             "vazio" => Some(Template::Vazio),
+            "3d" | "3D" => Some(Template::TresD),
             _ => None,
         }
     }
@@ -144,6 +150,31 @@ impl Template {
                 ="assets/imagens/tiro.png" "comum/imagens/tiro.png",
                 ="assets/sons/tiro.wav" "comum/sons/tiro.wav",
                 ="assets/sons/explosao.wav" "comum/sons/explosao.wav",
+            ),
+            // As cenas, os modelos e os sons vêm do jogo de exemplo
+            // (jogos/estrelas3d), para não haver duas cópias.
+            Template::TresD => modelo!("3d":
+                "config.lua",
+                "LEIAME.md",
+                ="cenas/titulo.lua" "../../../jogos/estrelas3d/cenas/titulo.lua",
+                ="cenas/jogo.lua" "../../../jogos/estrelas3d/cenas/jogo.lua",
+                ="cenas/pausa.lua" "../../../jogos/estrelas3d/cenas/pausa.lua",
+                ="cenas/fim.lua" "../../../jogos/estrelas3d/cenas/fim.lua",
+                ="lib/jogo.lua" "../../../jogos/estrelas3d/lib/jogo.lua",
+                ="lib/ilha.lua" "../../../jogos/estrelas3d/lib/ilha.lua",
+                ="modelos/arvore.glb" "../../../jogos/estrelas3d/modelos/arvore.glb",
+                ="modelos/caixote.glb" "../../../jogos/estrelas3d/modelos/caixote.glb",
+                ="modelos/estrela.glb" "../../../jogos/estrelas3d/modelos/estrela.glb",
+                ="modelos/heroi.glb" "../../../jogos/estrelas3d/modelos/heroi.glb",
+                ="modelos/moeda.glb" "../../../jogos/estrelas3d/modelos/moeda.glb",
+                ="modelos/pedra.glb" "../../../jogos/estrelas3d/modelos/pedra.glb",
+                ="modelos/plataforma.glb" "../../../jogos/estrelas3d/modelos/plataforma.glb",
+                ="assets/sons/moeda.wav" "padrao/assets/sons/moeda.wav",
+                ="assets/sons/menu.wav" "padrao/assets/sons/menu.wav",
+                ="assets/sons/confirmar.wav" "padrao/assets/sons/confirmar.wav",
+                ="assets/sons/pulo.wav" "comum/sons/pulo.wav",
+                ="assets/sons/vitoria.wav" "comum/sons/vitoria.wav",
+                ="assets/sons/dano.wav" "comum/sons/dano.wav",
             ),
             Template::Vazio => modelo!("vazio":
                 "config.lua",
