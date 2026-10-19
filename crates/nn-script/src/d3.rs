@@ -27,6 +27,33 @@ impl UserData for LMesh {
     }
 }
 
+/// Uma matriz de transformação 3D (`nn.d3.matrix`): posição, rotação e
+/// escala. Multiplicar junta duas (pai * filho).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LMat4(pub glam::Mat4);
+
+impl UserData for LMat4 {
+    fn add_methods<M: mlua::UserDataMethods<Self>>(m: &mut M) {
+        m.add_meta_method(
+            mlua::MetaMethod::Mul,
+            |_, this, other: mlua::AnyUserData| Ok(LMat4(this.0 * other.borrow::<LMat4>()?.0)),
+        );
+        m.add_method("position", |_, this, ()| {
+            let p = this.0.w_axis;
+            Ok((p.x, p.y, p.z))
+        });
+        // Para onde a frente (-Z) aponta, normalizado.
+        m.add_method("forward", |_, this, ()| {
+            let f = this.0.transform_vector3(Vec3::NEG_Z).normalize_or_zero();
+            Ok((f.x, f.y, f.z))
+        });
+        m.add_method("transform_point", |_, this, (x, y, z): (f32, f32, f32)| {
+            let p = this.0.transform_point3(Vec3::new(x, y, z));
+            Ok((p.x, p.y, p.z))
+        });
+    }
+}
+
 /// Um modelo 3D de arquivo (`nn.assets.model`). Guarda só a chave: ao
 /// desenhar, usa a versão mais nova (recarregada quando o arquivo muda).
 #[derive(Debug, Clone)]
@@ -264,7 +291,16 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             };
             let o = opts.as_ref();
             let model = match opt::<Value>(o, "body")? {
-                None | Some(Value::Nil) => transform(o)?.matrix(),
+                None | Some(Value::Nil) => match opt::<Value>(o, "matrix")? {
+                    Some(Value::UserData(ud)) if ud.is::<LMat4>() => ud.borrow::<LMat4>()?.0,
+                    None | Some(Value::Nil) => transform(o)?.matrix(),
+                    Some(other) => {
+                        return Err(err(format!(
+                            "\"matrix\" deve ser uma nn.d3.matrix, recebeu {}",
+                            other.type_name()
+                        )));
+                    }
+                },
                 Some(Value::UserData(ud)) if ud.is::<crate::physics3d::LBody3>() => {
                     // Posição e rotação do corpo da física; a escala das opções.
                     let (p, q) = ud.borrow::<crate::physics3d::LBody3>()?.pose()?;
@@ -371,6 +407,12 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
     )?;
 
     t.set("third_person", crate::camera3d::constructor(lua)?)?;
+    t.set(
+        "matrix",
+        lua.create_function(|_, opts: Option<Table>| {
+            Ok(LMat4(transform(opts.as_ref())?.matrix()))
+        })?,
+    )?;
     t.set(
         "light",
         lua.create_function(|lua, opts: Option<Table>| {

@@ -183,6 +183,37 @@ Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), 
 
 A cena e cada objeto também podem ter `events`, as regras [Quando... Então...](#eventos-quando-então).
 
+#### Cenas 3D
+
+Com `mode = "3d"`, a cena é um mundo 3D (montado na [vista 3D do NN Studio](studio.md#cenas-3d)). Cada objeto ganha `z`, a rotação `rx`, `ry`, `rz` (em graus: inclinar, virar e rolar, como no [`nn.d3.draw`](#desenhar)) e `scale_z`; X e Z são o chão e Y é a altura. A cena também tem um `environment`, que monta o céu, o sol, a névoa e as sombras (campos que faltam usam o padrão):
+
+```lua
+return {
+  format = 1, mode = "3d",
+  environment = {
+    sky = true, sky_top = "#3F8FD8", sky_horizon = "#CDEBF5", sky_bottom = "#9AA79A",
+    sun_height = 50, sun_turn = 120, sun_color = "#FFF1D6", sun_size = 4,
+    ambient_sky = "#93AFCF", ambient_ground = "#6A5D48",
+    fog = true, fog_near = 30, fog_far = 90,
+    shadows = true, shadow_distance = 30,
+  },
+  objects = {
+    { id = 1, name = "Câmera", y = 5, z = 10, rx = -22, components = { { type = "camera3d", fov = 60 } } },
+    { id = 2, name = "Cubo", y = 0.5, components = { { type = "shape3d", shape = "cube", color = "#FF8C42" } } },
+  },
+}
+```
+
+`sun_height` é a altura do sol em graus (90 = meio-dia) e `sun_turn` o lado de onde ele vem. Os componentes 3D:
+
+| `type` | Campos (padrão) |
+|---|---|
+| `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true) |
+| `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true) |
+| `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
+
+No script, `obj.z`, `obj.rx`, `obj.ry`, `obj.rz` e `obj.scale_z` podem ser lidos e mudados, e `obj:matrix3d()` devolve a [matriz](#desenhar) do objeto no mundo (somando os pais).
+
 #### Interface: menus e HUD
 
 Os componentes de interface ficam presos à tela (`hud = true`, o padrão deles). Cores vazias (`""`) usam o [tema](#configlua) do projeto.
@@ -913,6 +944,9 @@ O modelo tem `triangles`, `width`, `height` e `depth`. Ele é desenhado com `nn.
 | `image` | Uma imagem de `nn.assets.texture` aplicada nas faces (nas formas prontas e nas malhas). |
 | `shadow` | `false`: não projeta sombra (boa para o chão, efeitos e coisas pequenas). Padrão `true`. |
 | `body` | Um corpo de [`nn.physics3d`](#nnphysics3d-física-3d): desenha na posição e rotação dele (a escala continua vindo de `scale`). |
+| `matrix` | Uma matriz de `nn.d3.matrix` (no lugar de posição, rotação e escala). |
+
+`nn.d3.matrix(opts)` guarda posição, rotação e escala (as mesmas opções do `draw`) numa matriz. `pai * filho` junta duas, para coisas presas a outras (uma espada na mão, uma roda no carro): `nn.d3.draw(roda, { matrix = carro * nn.d3.matrix({ x = 1, y = -0.3 }) })`. `m:position()` devolve onde ela está, `m:forward()` para onde aponta (−Z) e `m:transform_point(x, y, z)` leva um ponto para o mundo.
 
 #### Câmera
 
@@ -1006,7 +1040,7 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | `nn.d3.ray(x, y)` | O raio que sai da câmera pelo ponto da tela: origem e direção (seis números). |
 | `nn.d3.count()` | Quantas malhas foram desenhadas no último quadro. |
 
-Em breve: o 3D no NN Studio.
+Para montar o mundo com o mouse, use uma [cena 3D](#cenas-3d) no NN Studio.
 
 ### Seu primeiro jogo 3D
 

@@ -213,6 +213,8 @@ enum Dialog {
         assign: Option<(String, u32, usize)>,
         /// Cena visual que abre por cima de outra (pausa, opções).
         overlay: bool,
+        /// Cena visual 3D.
+        three_d: bool,
     },
     ConfirmDelete(String),
     CloseTab(String),
@@ -1639,6 +1641,7 @@ impl ProjectWorkspace {
                         size: [16, 16, 1],
                         assign: None,
                         overlay: false,
+                        three_d: false,
                     });
                 }
                 Action::NewImageFor {
@@ -1656,6 +1659,7 @@ impl ProjectWorkspace {
                         size: [16, 16, 1],
                         assign: Some((scene, id, ci)),
                         overlay: false,
+                        three_d: false,
                     });
                 }
                 Action::Import { dest } => {
@@ -2068,6 +2072,7 @@ impl ProjectWorkspace {
                 size,
                 assign,
                 overlay,
+                three_d,
             } => {
                 let kind = *kind;
                 let dirs: Vec<String> = std::iter::once(String::new())
@@ -2134,6 +2139,19 @@ impl ProjectWorkspace {
                         ui.weak("A cena já vem com um quadrado que anda com WASD, as setas ou o controle.");
                     }
                     if kind == NewKind::VisualScene {
+                        ui.horizontal(|ui| {
+                            ui.label("Tipo:");
+                            let r2 = ui.radio_value(three_d, false, "2D");
+                            let r3 = ui
+                                .radio_value(three_d, true, "3D")
+                                .on_hover_text("Um mundo 3D: modelos .glb, formas, céu, sol e sombras. Já vem com câmera, chão e um cubo.");
+                            crate::tutorial::anchor_in(ui, "novo:2d", r2.rect);
+                            crate::tutorial::anchor_in(ui, "novo:3d", r3.rect);
+                        });
+                    }
+                    if kind == NewKind::VisualScene && *three_d {
+                        ui.weak("Arraste modelos .glb do painel Arquivos para a cena, ou use ➕ Objeto. Botão direito + WASD voa pela cena.");
+                    } else if kind == NewKind::VisualScene {
                         let r = ui
                             .checkbox(overlay, "Abre por cima de outra cena (pausa, opções)")
                             .on_hover_text("A cena de baixo continua aparecendo e fica parada até esta fechar. Já vem com um menu: Continuar e Sair.");
@@ -2159,7 +2177,9 @@ impl ProjectWorkspace {
                                 NewKind::Folder => files::create_folder(&self.root, parent, name),
                                 NewKind::Scene => files::create_file(&self.root, parent, name, &files::scene_template(&rel)),
                                 NewKind::VisualScene => {
-                                    let text = if *overlay {
+                                    let text = if *three_d {
+                                        files::scene3d_template()
+                                    } else if *overlay {
                                         files::overlay_scene_template()
                                     } else {
                                         files::visual_scene_template()

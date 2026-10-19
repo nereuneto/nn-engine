@@ -2529,3 +2529,227 @@ fn aviso_de_versao_nova_no_gerenciador() {
     h.run();
     assert!(h.query_by_label_contains("Saiu o NN Studio").is_none());
 }
+
+// Cenas 3D ---------------------------------------------------------------
+
+fn com_cena3d(h: &mut Harness<'_, StudioApp>, proj: &Path) {
+    std::fs::write(
+        proj.join("cenas/teste.cena"),
+        nn_studio::files::scene3d_template(),
+    )
+    .unwrap();
+    let ws = h.state_mut().project_mut().unwrap();
+    ws.files.rescan();
+    ws.open_file("cenas/teste.cena", None);
+    h.run();
+}
+
+/// Onde um ponto do mundo 3D aparece na vista 3D do editor.
+fn na_vista3d(h: &Harness<'_, StudioApp>, p: glam::Vec3) -> egui::Pos2 {
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let s = cena(h)
+        .cam3
+        .camera()
+        .screen_point(p, glam::Vec2::new(rect.width(), rect.height()))
+        .expect("na frente da câmera");
+    rect.min + egui::vec2(s.x, s.y)
+}
+
+fn clicar(h: &mut Harness<'_, StudioApp>, p: egui::Pos2) {
+    h.hover_at(p);
+    h.run();
+    h.drag_at(p);
+    h.run();
+    h.drop_at(p);
+    h.run();
+}
+
+#[test]
+fn nova_cena_3d_pelo_dialogo() {
+    let dir = temp("cena-3d-nova");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    atalho(&mut h, Modifiers::COMMAND, Key::N);
+    h.get_by_label("Nova cena visual");
+    selecionar_tudo(&mut h);
+    digitar(&mut h, "mundo");
+    h.get_by_label("3D").click();
+    h.run();
+    h.get_by_label_contains("Botão direito + WASD");
+    tela(&mut h, "cena-3d-dialogo");
+    h.get_by_label("Criar").click();
+    h.run();
+    let text = std::fs::read_to_string(proj.join("cenas/mundo.cena")).unwrap();
+    assert!(text.contains("mode = \"3d\""), "{text}");
+    // A vista é 3D e a cena já vem com câmera, chão e um cubo.
+    h.get_by_label("Vista da cena 3D");
+    h.get_by_label("Câmera");
+    h.get_by_label("Chão");
+    h.get_by_label("Cubo");
+    // O botão na barra da vista e o Ambiente no Inspetor da cena.
+    assert_eq!(h.get_all_by_label("☀ Ambiente").count(), 2);
+    tela(&mut h, "cena-3d-nova");
+}
+
+#[test]
+fn cena_3d_selecionar_apagar_adicionar_e_ambiente() {
+    let dir = temp("cena-3d-editar");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena3d(&mut h, &proj);
+    let cubo = objeto(&h, "Cubo").clone();
+
+    // Clicar no cubo seleciona; o Inspetor mostra a transformação 3D.
+    let p = na_vista3d(
+        &h,
+        glam::Vec3::new(cubo.x as f32, cubo.y as f32, cubo.z as f32),
+    );
+    clicar(&mut h, p);
+    assert_eq!(cena(&h).selection, vec![cubo.id]);
+    h.get_by_label("Forma 3D");
+    h.get_by_label("Posição");
+    h.get_by_label("Rotação");
+    h.get_by_label("Escala");
+    tela(&mut h, "cena-3d-selecionado");
+
+    // Arrastar a seta vermelha (X) leva o cubo só em X; Ctrl+Z desfaz.
+    let c = glam::Vec3::new(cubo.x as f32, cubo.y as f32, cubo.z as f32);
+    let len = (c - cena(&h).cam3.pos).length() * 0.16;
+    let a = na_vista3d(&h, c + glam::Vec3::X * len * 0.75);
+    let b = na_vista3d(&h, c + glam::Vec3::X * len * 2.0);
+    arrastar(&mut h, a, b);
+    let movido = objeto(&h, "Cubo").clone();
+    assert!(movido.x > cubo.x + 0.3, "x {} → {}", cubo.x, movido.x);
+    assert!((movido.y - cubo.y).abs() < 1e-6 && (movido.z - cubo.z).abs() < 1e-6);
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(objeto(&h, "Cubo").x, cubo.x);
+
+    // Delete apaga, Ctrl+Z traz de volta.
+    h.hover_at(p);
+    h.run();
+    h.key_press(Key::Delete);
+    h.run();
+    assert!(cena(&h).data.objects.iter().all(|o| o.name != "Cubo"));
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(objeto(&h, "Cubo").id, cubo.id);
+
+    // ➕ Objeto → Esfera: entra na cena, selecionada.
+    h.get_by_label("➕ Objeto").click();
+    h.run();
+    h.get_by_label("Esfera").click();
+    h.run();
+    let esfera = objeto(&h, "Esfera").clone();
+    assert_eq!(esfera.component("shape3d").unwrap().str("shape"), "sphere");
+    assert_eq!(cena(&h).selection, vec![esfera.id]);
+
+    // ☀ Ambiente: o Inspetor mostra o céu, o sol, a névoa e as sombras.
+    h.get_by_label("☀ Ambiente").click();
+    h.run();
+    assert!(cena(&h).selection.is_empty());
+    h.get_by_label("Céu:");
+    h.get_by_label("Névoa:");
+    h.get_by_label("Sombras:");
+    tela(&mut h, "cena-3d-ambiente");
+
+    // Ctrl+S grava a cena 3D com a esfera.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(
+        text.contains("mode = \"3d\"") && text.contains("Esfera"),
+        "{text}"
+    );
+}
+
+/// Com GPU, a vista 3D mostra o céu e o cubo laranja onde ele está.
+#[test]
+fn cena_3d_desenhada_pela_engine() {
+    if std::env::var_os("NN_REQUIRE_GPU").is_none() {
+        eprintln!("sem NN_REQUIRE_GPU: pulando o teste com GPU");
+        return;
+    }
+    let dir = temp("cena-3d-gpu");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    com_cena3d(&mut h, &proj);
+    h.run();
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let img = h.render().expect("render");
+    if let Some(d) = std::env::var_os("NN_STUDIO_TELAS") {
+        let _ = img.save(PathBuf::from(d).join("cena-3d-gpu.png"));
+    }
+    let ppp = img.width() as f32 / 1280.0;
+    let px = |p: egui::Pos2| *img.get_pixel((p.x * ppp) as u32, (p.y * ppp) as u32);
+    // Lá em cima, o céu: azul.
+    let ceu = px(rect.center_top() + egui::vec2(0.0, 6.0));
+    assert!(ceu[2] > ceu[0] + 30, "céu {ceu:?}");
+    // O cubo (#FF8C42): mais vermelho que azul.
+    let cubo = objeto(&h, "Cubo").clone();
+    let c = px(na_vista3d(
+        &h,
+        glam::Vec3::new(cubo.x as f32, cubo.y as f32, cubo.z as f32),
+    ));
+    assert!(c[0] > c[2] + 60, "cubo {c:?}");
+
+    // Arrastar um .glb do painel Arquivos: vira um objeto com o modelo,
+    // em pé no chão onde o mouse soltou.
+    let modelos = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/estrelas3d/modelos");
+    std::fs::create_dir_all(proj.join("modelos")).unwrap();
+    for m in ["arvore.glb", "pedra.glb"] {
+        std::fs::write(
+            proj.join("modelos").join(m),
+            std::fs::read(modelos.join(m)).unwrap(),
+        )
+        .unwrap();
+    }
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.files.rescan();
+        ws.file_panel.reveal("modelos/arvore.glb");
+    }
+    h.run();
+    for (m, x, z) in [("arvore.glb", -4.0, -2.0), ("pedra.glb", 3.0, 1.5)] {
+        let from = h.get_by_label(m).rect().center();
+        let to = na_vista3d(&h, glam::Vec3::new(x, 0.0, z));
+        arrastar(&mut h, from, to);
+        let name = m.trim_end_matches(".glb");
+        let o = objeto(&h, name).clone();
+        assert_eq!(
+            o.component("model").unwrap().str("file"),
+            format!("modelos/{m}")
+        );
+        assert!(
+            (o.x - x as f64).abs() < 0.3 && (o.z - z as f64).abs() < 0.3,
+            "{m}: {o:?}"
+        );
+        assert!(o.y > -0.01 && o.y < 0.5, "{m} em pé no chão: y = {}", o.y);
+    }
+    // O sol mais baixo e o cubo selecionado (a imagem da documentação).
+    {
+        let doc = cena_mut(&mut h);
+        doc.data
+            .set_env("sun_height", nn_studio::scene_data::Prop::Num(35.0));
+        doc.cam3.look_at(
+            glam::Vec3::new(5.5, 4.0, 7.5),
+            glam::Vec3::new(-0.5, 0.6, 0.0),
+        );
+        doc.cam3_set = true;
+    }
+    h.run();
+    let p = na_vista3d(
+        &h,
+        glam::Vec3::new(cubo.x as f32, cubo.y as f32, cubo.z as f32),
+    );
+    clicar(&mut h, p);
+    h.hover_at(egui::pos2(1100.0, 700.0));
+    h.run();
+    tela(&mut h, "nn-studio-3d");
+}
+
+fn cena_mut<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .scenes
+        .get_mut("cenas/teste.cena")
+        .unwrap()
+}

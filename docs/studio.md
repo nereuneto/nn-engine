@@ -543,6 +543,91 @@ return cena
 
 A referência completa está no [guia do Lua](lua.md#cenas-visuais-cena).
 
+## Cenas 3D
+
+Uma cena visual também pode ser **3D**: o mesmo arquivo `.cena`, com
+`mode = "3d"`, aberto numa vista em perspectiva com céu, sol, névoa e
+sombras, desenhada pela engine do jeito que vai aparecer no jogo.
+
+![Cena 3D aberta no NN Studio](imagens/nn-studio-3d.png)
+
+### Passo a passo: seu primeiro mundo 3D
+
+1. **Ctrl+N** (ou **➕ Novo > Cena visual**), dê um nome (`mundo`) e marque
+   **Tipo: 3D**. Clique em **Criar**. A cena já vem com uma **Câmera**, um
+   **Chão** verde e um **Cubo** laranja.
+2. **Olhe em volta:** segure o **botão direito** do mouse em cima da vista e
+   mova o mouse para virar a cabeça; com o botão segurado, **W A S D** andam
+   e **Q / E** descem e sobem. A rodinha, enquanto voa, muda a velocidade
+   (aparece em "voo 8 m/s"). Perdeu-se? Aperte **F** (⛶ Enquadrar).
+3. **Ponha coisas no mundo:** em **➕ Objeto**, escolha **Esfera**. Ela
+   aparece onde a vista aponta, já selecionada. Ou arraste um modelo `.glb`
+   do painel Arquivos para a vista: ele cai em cima do que estiver embaixo
+   do mouse (o chão, outro objeto).
+4. **Arrume:** com **W** (Mover), arraste a seta vermelha, verde ou azul para
+   mover só em X, Y (altura) ou Z, ou o quadradinho do meio para deslizar no
+   chão. **E** gira (os anéis) e **R** escala (os cubinhos; o do meio escala
+   por igual). Marque **Encaixar** para prender na grade (1 m, ou o tamanho
+   escolhido ao lado); segurar **Ctrl** faz o contrário do que estiver
+   marcado. Os números exatos ficam no Inspetor, em **Transformação**.
+5. **Mude o tempo:** clique em **☀ Ambiente** (ou num espaço vazio da lista
+   da Hierarquia) e, no Inspetor, baixe a **altura do sol** para 15°: fim de
+   tarde, sombras compridas. Troque as cores do céu, ligue ou desligue a
+   névoa e as sombras. A vista muda na hora.
+6. **Jogue:** **▶ Testar daqui (F6)** salva e roda a cena. O jogo mostra o
+   que a **Câmera** vê: posicione ela (mover e girar, como qualquer objeto)
+   para enquadrar o mundo. O cone azul na vista mostra para onde ela olha.
+
+Para um personagem que anda, pula e coleta coisas, veja o modelo **3D** e o
+exemplo **Ilha das Estrelas** no Gerenciador de projetos, e o
+[guia do Lua](lua.md) (`nn.physics3d`, `nn.d3.third_person`).
+
+### Navegar na vista 3D
+
+| Para | Faça |
+|---|---|
+| Olhar em volta | Botão direito segurado + mover o mouse |
+| Voar | Botão direito segurado + **W A S D**, **Q / E** (Shift: mais rápido) |
+| Velocidade do voo | Rodinha, com o botão direito segurado |
+| Aproximar / afastar | Rodinha |
+| Girar em volta do selecionado | **Alt** + arrastar |
+| Arrastar a vista | Botão do meio |
+| Enquadrar o selecionado (ou tudo) | **F** ou ⛶ Enquadrar |
+
+### Objetos 3D
+
+- **Selecionar:** clique no objeto; **Shift** ou **Ctrl** somam à seleção.
+  **Esc** limpa, **Del** apaga, **Ctrl+D** duplica, **Ctrl+Z** desfaz.
+- **Forma 3D:** cubo, esfera, cilindro, cone, cápsula ou plano, com cor e
+  "Projeta sombra".
+- **Modelo 3D:** um arquivo `.glb` (Blender exporta: *Arquivo > Exportar >
+  glTF 2.0*, formato *glb*). **Cor** tinge o modelo; **Faces retas**
+  (no modo Completo) dá a cada face um tom só, o visual low-poly, mesmo que
+  o modelo venha com sombreado suave.
+- **Câmera 3D:** de onde o jogo olha, com o **campo de visão** (60° é o
+  normal; menos é zoom). Sem câmera, o jogo olha do alto, de (0, 5, 10) para o centro.
+- Hierarquia, prefabs e os componentes de **Som** funcionam como no 2D:
+  arraste um objeto para dentro de outro na Hierarquia e ele passa a se mover
+  junto (girar o pai gira os filhos em volta dele).
+- No 3D, **X e Z** são o chão e **Y** é a altura, em metros. A rotação está
+  em graus: **Y** vira para os lados, **X** inclina para a frente e para
+  trás, **Z** rola.
+
+### Ambiente
+
+| Campo | O que faz |
+|---|---|
+| Céu | Degradê atrás de tudo: em cima, no horizonte e embaixo. Desligado, aparece o **Fundo** |
+| Sol | **Altura** (90° = meio-dia; perto de 0° = fim de tarde) e **lado** de onde vem a luz |
+| Luz do sol | A cor da luz e o tamanho do disco do sol no céu |
+| Luz ambiente | A luz onde o sol não bate: a que vem de cima e a que vem de baixo |
+| Névoa | O que está longe some na cor do horizonte, entre as duas distâncias |
+| Sombras | Sombra do sol até esta distância da câmera |
+
+Por enquanto, os comportamentos prontos, os eventos e a física são do 2D; no
+3D, o código da cena (Inspetor > **Script**) faz o resto. Eles chegam ao 3D
+na próxima etapa.
+
 ## Editor de pixel art
 
 Clicar numa imagem (PNG) abre o editor de pixel art. Ele grava PNG comum, que
@@ -757,6 +842,8 @@ mensagem diz onde está o erro.
 | Setas, Shift+setas (na cena) | Mover 1 / 10 unidades |
 | Ctrl+D / Del (na cena) | Duplicar / apagar |
 | Ctrl+clique (na janela do jogo) | Selecionar o objeto no editor |
+| Botão direito + WASD, Q/E (na cena 3D) | Voar pela cena |
+| Alt + arrastar / botão do meio (na cena 3D) | Girar em volta / arrastar a vista |
 | B E G L R O I M (na imagem) | Lápis, borracha, balde, linha, retângulo, círculo, conta-gotas, seleção |
 | X / [ ] / H (na imagem) | Trocar as cores / tamanho do pincel / espelhar |
 | , / . (na imagem) | Quadro anterior / próximo |

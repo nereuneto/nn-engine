@@ -7,6 +7,9 @@ use std::path::Path;
 use eframe::egui::{self, Color32, Key, Modifiers, Pos2, Rect, Sense, Stroke, Vec2};
 
 use crate::scene_data::{self, Component, History, Object, Prop, SceneData, Transform};
+
+#[path = "scene3d.rs"]
+pub mod scene3d;
 use crate::scene_render::{self, LocalRect, SceneRenderer, Sizes, local_bounds};
 
 /// Arquivo do painel Arquivos sendo arrastado.
@@ -71,7 +74,8 @@ pub fn diff(before: &SceneData, after: &SceneData) -> Vec<LiveChange> {
             out.push(events(o.id, &o.events));
         }
         for key in [
-            "name", "x", "y", "rotation", "scale_x", "scale_y", "visible", "layer", "anchor",
+            "name", "x", "y", "rotation", "scale_x", "scale_y", "visible", "layer", "anchor", "z",
+            "rx", "ry", "rz", "scale_z",
         ] {
             let (old, new) = (b.field(key), o.field(key));
             if old != new
@@ -224,6 +228,12 @@ pub struct SceneDoc {
     paint_stroke: Option<crate::paint::Stroke>,
     /// O mapa cresceu desde que o jogo abriu: ele só vê ao salvar.
     pub paint_grew: bool,
+    /// 3D: a câmera do editor, se ela já foi mexida, o arrasto, a grade.
+    pub cam3: scene3d::Cam3,
+    pub cam3_set: bool,
+    drag3: Option<scene3d::Drag3>,
+    pub grid3: f64,
+    pub show_grid3: bool,
 }
 
 /// O que a aba pede ao espaço de trabalho.
@@ -465,6 +475,11 @@ impl SceneDoc {
             burst_requests: Vec::new(),
             paint_stroke: None,
             paint_grew: false,
+            cam3: scene3d::Cam3::default(),
+            cam3_set: false,
+            drag3: None,
+            grid3: 1.0,
+            show_grid3: true,
         }
     }
 
@@ -872,6 +887,10 @@ impl SceneDoc {
                     self.external_change = false;
                 }
             });
+        }
+        if self.data.three_d {
+            actions.extend(self.ui_3d(ui, env));
+            return actions;
         }
         self.toolbar(ui, env, &mut actions);
         // Grupos: os filhos ficam onde o jogo vai pôr.

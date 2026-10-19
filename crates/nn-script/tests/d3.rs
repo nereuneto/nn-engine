@@ -335,3 +335,71 @@ fn modelo_alterado_recarrega() {
     assert!(m.triangles > 12, "recarregou: {} triângulos", m.triangles);
     assert_eq!(h.game.0.error(), None);
 }
+
+#[test]
+fn cena_visual_3d_roda_no_jogo() {
+    // Uma cena 3D como o NN Studio grava: câmera, chão, cubo e um caixote
+    // filho do cubo (vai junto com ele).
+    let dir = projeto("cena3d", "return {}");
+    com_modelos(&dir);
+    std::fs::create_dir_all(dir.join("cenas")).unwrap();
+    std::fs::write(
+        dir.join("cenas/mundo.cena"),
+        r##"return {
+  format = 1,
+  gravity = -20,
+  mode = "3d",
+  environment = { sky = true, sky_top = "#0000FF", sky_horizon = "#0000FF", sky_bottom = "#0000FF",
+    sun_size = 0, sun_height = 90, sun_turn = 0, sun_color = "#000000",
+    ambient_sky = "#FFFFFF", ambient_ground = "#FFFFFF", fog = false, shadows = false },
+  objects = {
+    { id = 1, name = "Câmera", x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 3, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = { { type = "camera3d", fov = 60 } } },
+    { id = 2, name = "Cubo", x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = { { type = "shape3d", shape = "cube", color = "#FF0000", shadow = true } },
+      children = {
+        { id = 3, name = "Caixote", x = 0, y = 5, rotation = 0, scale_x = 1, scale_y = 1,
+          z = 0, rx = 0, ry = 45, rz = 0, scale_z = 1, visible = true, layer = 0,
+          components = { { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true } } },
+      } },
+  },
+}
+"##,
+    )
+    .unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let config = AppConfig::default()
+        .size(64, 64)
+        .assets_dir(&dir)
+        .hot_reload(false)
+        .clear_color(nn_core::Color::BLACK);
+    let Ok(mut h) = Headless::new(config, |ctx| {
+        let mut s = rt.scene("cenas/mundo.cena");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        assert!(!std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1"));
+        return;
+    };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    // A câmera do objeto olha para -Z: o cubo vermelho no meio, o céu azul
+    // em volta.
+    assert_eq!(pixel(&h, 32, 32), [255, 0, 0, 255], "cubo");
+    assert_eq!(pixel(&h, 2, 2), [0, 0, 255, 255], "céu");
+    // O caixote (filho, 5 acima) está fora da vista; a câmera sobe até ele.
+    let lua = rt.lua();
+    lua.globals()
+        .set("cena", h.game.0.table().unwrap())
+        .unwrap();
+    lua.load("cena.objects['Câmera'].y = 5.5").exec().unwrap();
+    h.run_frames(1);
+    let p = pixel(&h, 32, 32);
+    assert!(
+        p[0] > p[1] && p[1] > p[2] && p[0] > 90,
+        "madeira do caixote: {p:?}"
+    );
+}

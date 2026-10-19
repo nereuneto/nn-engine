@@ -267,6 +267,13 @@ pub struct Object {
     pub rotation: f64,
     pub scale_x: f64,
     pub scale_y: f64,
+    /// 3D: profundidade (Y é a altura), rotação em graus em volta de X, Y e Z
+    /// e a escala em Z. Numa cena 2D ficam no padrão.
+    pub z: f64,
+    pub rx: f64,
+    pub ry: f64,
+    pub rz: f64,
+    pub scale_z: f64,
     pub visible: bool,
     /// Travado no editor (não seleciona clicando na cena).
     pub locked: bool,
@@ -293,6 +300,11 @@ impl Object {
             rotation: 0.0,
             scale_x: 1.0,
             scale_y: 1.0,
+            z: 0.0,
+            rx: 0.0,
+            ry: 0.0,
+            rz: 0.0,
+            scale_z: 1.0,
             visible: true,
             locked: false,
             layer: 0,
@@ -393,6 +405,11 @@ impl Object {
             "rotation" => Prop::Num(self.rotation),
             "scale_x" => Prop::Num(self.scale_x),
             "scale_y" => Prop::Num(self.scale_y),
+            "z" => Prop::Num(self.z),
+            "rx" => Prop::Num(self.rx),
+            "ry" => Prop::Num(self.ry),
+            "rz" => Prop::Num(self.rz),
+            "scale_z" => Prop::Num(self.scale_z),
             "visible" => Prop::Bool(self.visible),
             "locked" => Prop::Bool(self.locked),
             "layer" => Prop::Num(self.layer as f64),
@@ -408,6 +425,11 @@ pub struct SceneData {
     pub background: String,
     pub gravity: f64,
     pub overlay: bool,
+    /// Cena 3D (`mode = "3d"` no arquivo).
+    pub three_d: bool,
+    /// Céu, sol, névoa e sombras de uma cena 3D (os campos de
+    /// `M.ENVIRONMENT`, na mesma ordem).
+    pub environment: Vec<(String, Prop)>,
     pub objects: Vec<Object>,
     /// Eventos da cena.
     pub events: Vec<Rule>,
@@ -420,10 +442,131 @@ impl Default for SceneData {
             background: String::new(),
             gravity: -1800.0,
             overlay: false,
+            three_d: false,
+            environment: schema().environment.clone(),
             objects: Vec::new(),
             events: Vec::new(),
         }
     }
+}
+
+impl SceneData {
+    /// Uma cena 3D nova: câmera, chão e o ambiente padrão.
+    pub fn new_3d() -> Self {
+        let mut scene = Self {
+            three_d: true,
+            gravity: -20.0,
+            ..Default::default()
+        };
+        let mut camera = Object::new(1, "Câmera");
+        camera.y = 5.0;
+        camera.z = 10.0;
+        camera.rx = -22.0;
+        camera.components.push(Component::new("camera3d"));
+        let mut chao = Object::new(2, "Chão");
+        chao.scale_x = 20.0;
+        chao.scale_z = 20.0;
+        let mut forma = Component::new("shape3d");
+        forma.set("shape", Prop::Str("plane".into()));
+        chao.components.push(forma);
+        let mut cubo = Object::new(3, "Cubo");
+        cubo.y = 0.5;
+        let mut c = Component::new("shape3d");
+        c.set("color", Prop::Str("#FF8C42".into()));
+        cubo.components.push(c);
+        scene.objects = vec![camera, chao, cubo];
+        scene
+    }
+
+    /// 3D: a matriz do objeto no mundo (com as dos pais).
+    pub fn world_matrix3(&self, id: u32) -> Option<glam::Mat4> {
+        let o = self.find(id)?;
+        let local = local_matrix3(o);
+        match self.parent_of(id)? {
+            None => Some(local),
+            Some(p) => Some(self.world_matrix3(p)? * local),
+        }
+    }
+
+    /// 3D: a matriz do pai no mundo (identidade na raiz).
+    pub fn parent_matrix3(&self, id: u32) -> glam::Mat4 {
+        match self.parent_of(id).flatten() {
+            Some(p) => self.world_matrix3(p).unwrap_or(glam::Mat4::IDENTITY),
+            None => glam::Mat4::IDENTITY,
+        }
+    }
+
+    /// 3D: põe o objeto na posição, rotação e escala do mundo dadas pela
+    /// matriz (convertendo para o espaço do pai).
+    pub fn set_world_matrix3(&mut self, id: u32, world: glam::Mat4) {
+        let local = self.parent_matrix3(id).inverse() * world;
+        if let Some(o) = self.find_mut(id) {
+            set_local_matrix3(o, local);
+        }
+    }
+
+    pub fn env(&self, key: &str) -> Prop {
+        self.environment
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+            .or_else(|| {
+                schema()
+                    .environment
+                    .iter()
+                    .find(|(k, _)| k == key)
+                    .map(|(_, v)| v.clone())
+            })
+            .unwrap_or(Prop::Num(0.0))
+    }
+
+    pub fn set_env(&mut self, key: &str, value: Prop) {
+        match self.environment.iter_mut().find(|(k, _)| k == key) {
+            Some((_, v)) => *v = value,
+            None => self.environment.push((key.to_string(), value)),
+        }
+    }
+}
+
+/// A rotação 3D do objeto (graus em volta de X, Y e Z, aplicados Y, X, Z:
+/// virar, inclinar e rolar, como a engine).
+pub fn rotation3(o: &Object) -> glam::Quat {
+    glam::Quat::from_euler(
+        glam::EulerRot::YXZ,
+        (o.ry as f32).to_radians(),
+        (o.rx as f32).to_radians(),
+        (o.rz as f32).to_radians(),
+    )
+}
+
+/// Graus (x, y, z) de uma rotação, como [`rotation3`] lê.
+pub fn degrees3(q: glam::Quat) -> (f64, f64, f64) {
+    let (y, x, z) = q.normalize().to_euler(glam::EulerRot::YXZ);
+    let r = |a: f32| round_to(f64::from(a.to_degrees()), 1e-3);
+    (r(x), r(y), r(z))
+}
+
+fn round_to(v: f64, step: f64) -> f64 {
+    let r = (v / step).round() * step;
+    if r == 0.0 { 0.0 } else { r }
+}
+
+/// A matriz 3D do objeto em relação ao pai.
+pub fn local_matrix3(o: &Object) -> glam::Mat4 {
+    glam::Mat4::from_scale_rotation_translation(
+        glam::Vec3::new(o.scale_x as f32, o.scale_y as f32, o.scale_z as f32),
+        rotation3(o),
+        glam::Vec3::new(o.x as f32, o.y as f32, o.z as f32),
+    )
+}
+
+/// Põe posição, rotação e escala do objeto a partir de uma matriz local.
+pub fn set_local_matrix3(o: &mut Object, m: glam::Mat4) {
+    let (s, q, t) = m.to_scale_rotation_translation();
+    let r = |v: f32| round_to(f64::from(v), 1e-4);
+    (o.x, o.y, o.z) = (r(t.x), r(t.y), r(t.z));
+    (o.scale_x, o.scale_y, o.scale_z) = (r(s.x), r(s.y), r(s.z));
+    (o.rx, o.ry, o.rz) = degrees3(q);
 }
 
 /// Os componentes que existem e os campos de cada um.
@@ -434,6 +577,10 @@ pub struct Schema {
     pub order: Vec<String>,
     /// Tema padrão da interface (`M.THEME`): (chave, valor).
     pub theme: Vec<(String, String)>,
+    /// Ambiente 3D padrão (`M.ENVIRONMENT`).
+    pub environment: Vec<(String, Prop)>,
+    /// Formas do componente shape3d (`M.SHAPES3D`).
+    pub shapes3d: Vec<String>,
 }
 
 /// Chaves do tema da interface, na ordem do formulário.
@@ -493,6 +640,9 @@ pub fn schema() -> &'static Schema {
             "checkbox",
             "textfield",
             "layout",
+            "model",
+            "shape3d",
+            "camera3d",
         ]
         .into_iter()
         .filter(|k| components.contains_key(*k))
@@ -508,10 +658,27 @@ pub fn schema() -> &'static Schema {
                 )
             })
             .collect();
+        let env_list: Table = module.get("ENVIRONMENT").expect("ENVIRONMENT");
+        let environment = env_list
+            .sequence_values::<Table>()
+            .map(|f| {
+                let f = f.expect("campo do ambiente");
+                let key: String = f.get(1).expect("nome");
+                let value = to_prop(&f.get::<Value>(2).expect("padrão")).expect("valor simples");
+                (key, value)
+            })
+            .collect();
+        let shapes: Table = module.get("SHAPES3D").expect("SHAPES3D");
+        let shapes3d = shapes
+            .sequence_values::<String>()
+            .map(|s| s.expect("forma"))
+            .collect();
         Schema {
             components,
             order,
             theme,
+            environment,
+            shapes3d,
         }
     })
 }
@@ -566,9 +733,21 @@ pub fn read(text: &str, name: &str) -> Result<SceneData, String> {
         background: string(&t, "background"),
         gravity: num(&t, "gravity", -1800.0),
         overlay: boolean(&t, "overlay", false),
+        three_d: string(&t, "mode") == "3d",
+        environment: schema().environment.clone(),
         objects: Vec::new(),
         events: Vec::new(),
     };
+    if let Ok(Value::Table(env)) = t.get::<Value>("environment") {
+        for (key, default) in schema().environment.clone() {
+            let v = env
+                .get::<Value>(key.as_str())
+                .ok()
+                .and_then(|v| to_prop(&v))
+                .unwrap_or(default);
+            scene.set_env(&key, v);
+        }
+    }
     if let Ok(Value::Table(list)) = t.get::<Value>("objects") {
         scene.objects = read_objects(&list, name)?;
     }
@@ -632,6 +811,11 @@ fn read_object(o: &Table, name: &str) -> Result<Object, String> {
     obj.rotation = num(o, "rotation", 0.0);
     obj.scale_x = num(o, "scale_x", 1.0);
     obj.scale_y = num(o, "scale_y", 1.0);
+    obj.z = num(o, "z", 0.0);
+    obj.rx = num(o, "rx", 0.0);
+    obj.ry = num(o, "ry", 0.0);
+    obj.rz = num(o, "rz", 0.0);
+    obj.scale_z = num(o, "scale_z", 1.0);
     obj.visible = boolean(o, "visible", true);
     obj.locked = boolean(o, "locked", false);
     obj.layer = num(o, "layer", 0.0) as i64;
@@ -885,6 +1069,15 @@ pub fn write(scene: &SceneData) -> String {
     if scene.overlay {
         s.push_str("  overlay = true,\n");
     }
+    if scene.three_d {
+        s.push_str("  mode = \"3d\",\n");
+        let fields: Vec<String> = scene
+            .environment
+            .iter()
+            .map(|(k, v)| format!("{k} = {}", v.to_lua()))
+            .collect();
+        s.push_str(&format!("  environment = {{ {} }},\n", fields.join(", ")));
+    }
     write_rules(&mut s, &scene.events, 1);
     s.push_str("  objects = {\n");
     write_objects(&mut s, &scene.objects, 2);
@@ -910,6 +1103,16 @@ fn write_objects(s: &mut String, list: &[Object], depth: usize) {
             format_num(o.scale_x),
             format_num(o.scale_y)
         ));
+        if o.z != 0.0 || o.rx != 0.0 || o.ry != 0.0 || o.rz != 0.0 || o.scale_z != 1.0 {
+            s.push_str(&format!(
+                "{inner}z = {}, rx = {}, ry = {}, rz = {}, scale_z = {},\n",
+                format_num(o.z),
+                format_num(o.rx),
+                format_num(o.ry),
+                format_num(o.rz),
+                format_num(o.scale_z)
+            ));
+        }
         s.push_str(&format!(
             "{inner}visible = {}, layer = {},",
             o.visible, o.layer
@@ -1527,6 +1730,63 @@ impl History {
 mod tests {
     use super::*;
 
+    #[test]
+    fn matrizes_3d_de_pai_e_filho() {
+        let mut scene = SceneData::new_3d();
+        let mut pai = Object::new(10, "pai");
+        pai.x = 5.0;
+        pai.ry = 90.0;
+        let mut filho = Object::new(11, "filho");
+        filho.z = -2.0; // 2 à frente do pai
+        pai.children.push(filho);
+        scene.objects.push(pai);
+        // Virado 90° em Y, a frente do pai (-Z) aponta para -X.
+        let m = scene.world_matrix3(11).unwrap();
+        let p = m.transform_point3(glam::Vec3::ZERO);
+        assert!((p - glam::Vec3::new(3.0, 0.0, 0.0)).length() < 1e-4, "{p}");
+        // Pondo o filho num lugar do mundo, a posição local é a certa.
+        scene.set_world_matrix3(
+            11,
+            glam::Mat4::from_translation(glam::Vec3::new(5.0, 1.0, 4.0)),
+        );
+        let f = scene.find(11).unwrap();
+        // (0, 1, 4) do mundo em volta do pai, desfazendo o giro de 90°: x = -4.
+        assert!(
+            (f.x + 4.0).abs() < 1e-3 && (f.y - 1.0).abs() < 1e-3 && f.z.abs() < 1e-3,
+            "{f:?}"
+        );
+        assert!(
+            (f.ry + 90.0).abs() < 1e-2,
+            "o filho desfaz o giro do pai: {}",
+            f.ry
+        );
+        // Graus voltam iguais.
+        let mut o = Object::new(1, "o");
+        (o.rx, o.ry, o.rz) = (20.0, -35.0, 10.0);
+        assert_eq!(degrees3(rotation3(&o)), (20.0, -35.0, 10.0));
+    }
+
+    #[test]
+    fn cena_3d_ida_e_volta() {
+        let mut scene = SceneData::new_3d();
+        scene.set_env("fog", Prop::Bool(false));
+        scene.set_env("sun_height", Prop::Num(30.0));
+        let text = write(&scene);
+        assert!(text.contains("mode = \"3d\""), "{text}");
+        assert!(text.contains("z = 10, rx = -22"), "{text}");
+        let back = read(&text, "3d.cena").unwrap();
+        assert!(back.three_d);
+        assert_eq!(back, scene);
+        assert_eq!(back.env("fog"), Prop::Bool(false));
+        assert_eq!(back.env("sun_height"), Prop::Num(30.0));
+        assert_eq!(write(&back), text);
+        // Uma cena 2D não grava nada de 3D.
+        let two = SceneData::default();
+        let t2 = write(&two);
+        assert!(!t2.contains("mode") && !t2.contains("environment"), "{t2}");
+        assert!(!read(&t2, "2d").unwrap().three_d);
+    }
+
     fn exemplo() -> SceneData {
         let mut s = SceneData {
             script: "cenas/fase.lua".into(),
@@ -1556,7 +1816,9 @@ mod tests {
     fn esquema_vem_da_engine() {
         let s = schema();
         assert!(s.order.contains(&"sprite".to_string()));
-        assert_eq!(s.order.len(), 16);
+        assert_eq!(s.order.len(), 19);
+        assert_eq!(s.shapes3d.len(), 6);
+        assert_eq!(s.environment[0], ("sky".to_string(), Prop::Bool(true)));
         assert_eq!(s.default_of("body", "gravity_scale"), Some(&Prop::Num(1.0)));
         assert_eq!(s.default_of("sprite", "pixel_art"), Some(&Prop::Bool(true)));
         assert_eq!(Component::new("text").str("anchor"), "center");

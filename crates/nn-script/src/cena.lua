@@ -105,6 +105,29 @@ M.FIELDS = {
   layout = {
     { "arrange", "vertical" }, { "spacing", 16 }, { "columns", 2 }, { "align", "center" },
   },
+  -- 3D: um modelo .glb/.gltf, uma forma pronta e a câmera do jogo.
+  model = {
+    { "file", "" }, { "color", "#FFFFFF" }, { "flat", false }, { "shadow", true },
+  },
+  shape3d = {
+    { "shape", "cube" }, { "color", "#7BC86C" }, { "shadow", true },
+  },
+  camera3d = {
+    { "fov", 60 },
+  },
+}
+
+-- Formas prontas do componente shape3d (a malha de nn.d3 de cada uma).
+M.SHAPES3D = { "cube", "sphere", "cylinder", "cone", "capsule", "plane" }
+
+-- Ambiente de uma cena 3D: céu, sol, luz ambiente, névoa e sombras.
+M.ENVIRONMENT = {
+  { "sky", true }, { "sky_top", "#3F8FD8" }, { "sky_horizon", "#CDEBF5" },
+  { "sky_bottom", "#9AA79A" },
+  { "sun_height", 50 }, { "sun_turn", 120 }, { "sun_color", "#FFF1D6" }, { "sun_size", 4 },
+  { "ambient_sky", "#93AFCF" }, { "ambient_ground", "#6A5D48" },
+  { "fog", true }, { "fog_near", 30 }, { "fog_far", 90 },
+  { "shadows", true }, { "shadow_distance", 30 },
 }
 
 -- Componentes de interface (desenhados como painéis e ficam no HUD).
@@ -156,11 +179,15 @@ M.OBJECT_FIELDS = {
   { "id", 0 }, { "name", "Objeto" }, { "x", 0 }, { "y", 0 }, { "rotation", 0 },
   { "scale_x", 1 }, { "scale_y", 1 }, { "visible", true }, { "locked", false },
   { "layer", 0 }, { "anchor", "" },
+  -- 3D: altura (z é a profundidade), rotação em graus em volta de X, Y e Z
+  -- e a escala em Z.
+  { "z", 0 }, { "rx", 0 }, { "ry", 0 }, { "rz", 0 }, { "scale_z", 1 },
 }
 
 -- Campos da cena.
 M.SCENE_FIELDS = {
   { "script", "" }, { "background", "" }, { "gravity", -1800 }, { "overlay", false },
+  { "mode", "2d" },
 }
 
 -- Comportamento: `script` e as propriedades dele, livres (vêm do script).
@@ -171,7 +198,8 @@ local function defaults(kind)
   if not list then
     error(("componente desconhecido: \"%s\" (use %s)"):format(
       tostring(kind), "sprite, text, shape, body, map, camera, sound, particles, panel, "
-      .. "button, bar, icons, slider, checkbox, textfield, layout ou behavior"), 0)
+      .. "button, bar, icons, slider, checkbox, textfield, layout, model, shape3d, camera3d "
+      .. "ou behavior"), 0)
   end
   return list
 end
@@ -384,6 +412,16 @@ function Object:world_transform()
   local c, s = math.cos(a), math.sin(a)
   return px + lx * c - ly * s, py + lx * s + ly * c, pr + self.rotation,
     psx * self.scale_x, psy * self.scale_y
+end
+
+--- 3D: a matriz do objeto no mundo (com as dos pais).
+function Object:matrix3d()
+  local m = nn.d3.matrix({
+    x = self.x, y = self.y, z = self.z, rx = self.rx, ry = self.ry, rz = self.rz,
+    sx = self.scale_x, sy = self.scale_y, sz = self.scale_z,
+  })
+  if self.parent then return self.parent:matrix3d() * m end
+  return m
 end
 
 --- O objeto e todos os pais estão visíveis?
@@ -696,6 +734,7 @@ local function build_object(scene, data, parent, fresh, depth)
     table.insert(o.components, comp)
     if o[comp.type] == nil and (comp.type == "sprite" or comp.type == "text"
         or comp.type == "shape" or comp.type == "camera" or comp.type == "layout"
+        or comp.type == "model" or comp.type == "shape3d" or comp.type == "camera3d"
         or M.UI_KINDS[comp.type]) then
       o[comp.type] = comp
     end
@@ -1342,6 +1381,59 @@ function M.prepare(scene, o, c, live)
     prepare_ui(scene, o, c)
   elseif t == "camera" then
     scene._camera = scene._camera or o
+  elseif t == "model" then
+    c._model = nil
+    if c.file ~= "" then c._model = nn.assets.model(c.file, { flat = c.flat }) end
+  elseif t == "shape3d" then
+    local make = nn.d3[c.shape]
+    local ok = false
+    for _, s in ipairs(M.SHAPES3D) do if s == c.shape then ok = true end end
+    if not ok then
+      error(("objeto \"%s\": forma 3D desconhecida \"%s\" (use %s)"):format(
+        o.name, tostring(c.shape), table.concat(M.SHAPES3D, ", ")), 0)
+    end
+    c._mesh = make()
+  elseif t == "camera3d" then
+    scene._camera3d = scene._camera3d or o
+  end
+end
+
+--- Aplica o ambiente de uma cena 3D (céu, sol, luz, névoa e sombras) e
+--- devolve os valores usados.
+function M.apply_environment(env)
+  local e = {}
+  for _, f in ipairs(M.ENVIRONMENT) do
+    local v = env and env[f[1]]
+    if v == nil then v = f[2] end
+    e[f[1]] = v
+  end
+  if e.sky then
+    nn.d3.sky({ top = e.sky_top, horizon = e.sky_horizon, bottom = e.sky_bottom, sun_size = e.sun_size })
+  else
+    nn.d3.sky(false)
+  end
+  local h, t = e.sun_height * DEG, e.sun_turn * DEG
+  nn.d3.light({
+    sun = { -math.cos(h) * math.sin(t), -math.sin(h), -math.cos(h) * math.cos(t) },
+    sun_color = e.sun_color, sky = e.ambient_sky, ground = e.ambient_ground,
+    fog = e.fog and { near = e.fog_near, far = e.fog_far } or false,
+  })
+  nn.d3.shadows(e.shadows and { distance = e.shadow_distance } or false)
+  return e
+end
+
+--- 3D: põe a câmera do jogo onde está o objeto com camera3d (olhando para
+--- a frente dele), ou numa vista padrão.
+function M.update_camera3d(scene)
+  local cam = scene._camera3d
+  if cam and cam.alive then
+    local m = cam:matrix3d()
+    local px, py, pz = m:position()
+    local fx, fy, fz = m:forward()
+    nn.d3.camera({ x = px, y = py, z = pz, target = { px + fx, py + fy, pz + fz },
+      fov = cam.camera3d and cam.camera3d.fov or 60 })
+  else
+    nn.d3.look_at(0, 5, 10, 0, 0, 0)
   end
 end
 
@@ -1370,7 +1462,7 @@ end
 
 local PREPARE_ORDER = {
   "map", "sprite", "body", "sound", "particles", "panel", "button", "bar", "icons",
-  "slider", "checkbox", "textfield", "camera",
+  "slider", "checkbox", "textfield", "camera", "model", "shape3d", "camera3d",
 }
 
 -- Mapas antes dos corpos: a câmera e a colisão dependem deles.
@@ -1414,7 +1506,8 @@ function M.setup(scene, data, path)
   scene._data, scene._path = data, path
   scene.objects, scene.object_list = {}, {}
   scene._by_id, scene._by_body = {}, {}
-  scene._camera, scene._first_map = nil, nil
+  scene._camera, scene._first_map, scene._camera3d = nil, nil, nil
+  scene._3d = data.mode == "3d"
   scene._prefabs, scene._defs, scene._fx, scene._next_id = nil, nil, nil, nil
   scene._anims = nil
   scene._gravity = data.gravity or -1800
@@ -1431,6 +1524,7 @@ function M.setup(scene, data, path)
   M.arrange_all(scene)
   sort_objects(scene)
 
+  if scene._3d then scene._environment = M.apply_environment(data.environment) end
   -- Aberta por cima de outra cena: a câmera e o fundo são os da de baixo.
   if not scene.overlay then
     if scene.background then nn.window.set_clear_color(scene.background) end
@@ -1765,6 +1859,14 @@ local function draw_ui(o, c, hud, at, sx, sy)
 end
 
 local function draw_object(o, alpha)
+  -- 3D: modelos e formas, com a posição, a rotação e a escala 3D.
+  local m3
+  for _, c in ipairs(o.components) do
+    if (c.type == "model" and c._model) or (c.type == "shape3d" and c._mesh) then
+      m3 = m3 or o:matrix3d()
+      nn.d3.draw(c._model or c._mesh, { matrix = m3, color = c.color, shadow = c.shadow })
+    end
+  end
   local x, y, rot, sx, sy = o:world_transform()
   if o.body and o._px and not o.parent then
     x = o._px + (o.x - o._px) * alpha
@@ -1843,6 +1945,7 @@ function M.draw(scene)
     local W, H = nn.window.size()
     nn.screen.rect(0, 0, W, H, scene.background)
   end
+  if scene._3d then M.update_camera3d(scene) end
   for _, o in ipairs(scene._draw_list or {}) do
     if o.alive and o:shown() then draw_object(o, alpha) end
   end

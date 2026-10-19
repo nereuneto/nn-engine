@@ -579,6 +579,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Quantas malhas foram desenhadas no último quadro.",
     ),
     d(
+        "nn.d3.matrix",
+        "(opts)",
+        "Matriz de posição, rotação e escala (opts como no draw). pai * filho junta; :position(), :forward(); desenhe com { matrix = m }.",
+    ),
+    d(
         "nn.d3.third_person",
         "(opts)",
         "Câmera em terceira pessoa (mouse preso, analógico direito, não atravessa paredes): :update(dt, x, y, z, { world, ignore }), :direction(ix, iy).",
