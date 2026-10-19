@@ -138,6 +138,21 @@ fn with_image<'a>(ws: &'a ProjectWorkspace, image: &str) -> Vec<&'a Object> {
         .collect()
 }
 
+fn with_model<'a>(ws: &'a ProjectWorkspace, file: &str) -> Vec<&'a Object> {
+    objects(ws)
+        .into_iter()
+        .filter(|o| {
+            o.components
+                .iter()
+                .any(|c| c.kind == "model" && c.str("file").ends_with(file))
+        })
+        .collect()
+}
+
+fn body3d_is(o: &Object, kind: &str) -> bool {
+    o.component("body3d").is_some_and(|b| b.str("body") == kind)
+}
+
 fn has_behavior(o: &Object, script: &str) -> bool {
     o.components
         .iter()
@@ -170,6 +185,7 @@ pub fn all() -> &'static [Tutorial] {
     LIST.get_or_init(|| {
         vec![
             primeiro_jogo(),
+            mundo_3d(),
             eventos(),
             desenhe(),
             tiles(),
@@ -345,6 +361,142 @@ fn primeiro_jogo() -> Tutorial {
             Step {
                 title: "Pronto: um jogo seu!",
                 text: "Você montou uma fase com comportamentos, um prefab, uma variável no placar e um evento. Próximos passos: o tutorial Eventos (Ajuda > Tutoriais), os modelos Aventura e Nave (em Novo projeto) e o guia em Ajuda > Guia do Lua.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+fn mundo_3d() -> Tutorial {
+    Tutorial {
+        id: "primeiro-mundo-3d",
+        title: "Seu primeiro mundo 3D",
+        summary: "Monte um mundo 3D sem código: um herói que anda e pula com a câmera atrás dele, árvores, uma caixa que cai, uma estrela, uma plataforma que anda, o sol da tarde e um evento de vitória.",
+        minutes: 15,
+        template: Template::Vazio3D,
+        project: "Primeiro mundo 3D",
+        steps: vec![
+            Step {
+                title: "Um mundo 3D",
+                text: "Esta é uma cena 3D (cenas/mundo.cena): um chão verde, o céu e uma câmera. A grade do chão mede 1 metro; a linha vermelha é o eixo X e a azul, o Z. Y é a altura.\n\nEste painel acompanha você e avança sozinho quando você faz o que cada passo pede.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Olhe em volta",
+                text: "Segure o botão direito do mouse em cima da cena e mova o mouse para virar a cabeça. Ainda segurando, W, A, S e D andam e Q e E descem e sobem. A rodinha aproxima e afasta. Perdeu-se? Aperte F (⛶ Enquadrar).",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "O herói",
+                text: "No painel Arquivos, abra a pasta modelos e arraste heroi.glb para o meio do chão. Os modelos caem em pé onde o mouse aponta.",
+                target: Some("arquivo:modelos/heroi.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| !with_model(ws, "heroi.glb").is_empty()),
+            },
+            Step {
+                title: "Andar e pular",
+                text: "Com o herói selecionado: ➕ Adicionar componente (no fim do Inspetor) > Jogador > Jogador 3D. Ele anda, pula e leva a câmera atrás dele.",
+                target: Some("inspetor.adicionar"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    with_model(ws, "heroi.glb")
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:jogador3d"))
+                }),
+            },
+            Step {
+                title: "Teste!",
+                text: "Aperte ▶ Testar daqui (F6). WASD anda para onde a câmera olha, espaço pula e o mouse gira a câmera. Esc solta o mouse. Depois feche a janela do jogo.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Árvores que bloqueiam",
+                text: "Arraste arvore.glb para a cena. Para o herói não atravessar a árvore: ➕ Adicionar componente > Corpo 3D. O Tipo padrão é Parado, e a forma automática usa a malha exata do modelo. Ctrl+D duplica a árvore (com o corpo).",
+                target: Some("arquivo:modelos/arvore.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    with_model(ws, "arvore.glb")
+                        .iter()
+                        .any(|o| body3d_is(o, "static"))
+                }),
+            },
+            Step {
+                title: "Uma caixa que cai",
+                text: "Arraste caixote.glb para a cena e, com a seta verde (Y), suba ele uns 3 metros. Adicione um Corpo 3D e, no Tipo, escolha \"Cai e é empurrado\". Teste com F6: ele cai, e o herói empurra.",
+                target: Some("arquivo:modelos/caixote.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    with_model(ws, "caixote.glb")
+                        .iter()
+                        .any(|o| body3d_is(o, "dynamic"))
+                }),
+            },
+            Step {
+                title: "Uma estrela",
+                text: "Arraste estrela.glb para a cena, suba um pouco do chão e adicione Itens > Coletável: ela some quando o herói encosta. Na Variável, escreva estrelas. Para brilhar mais, adicione também Movimento > Girar e flutuar.",
+                target: Some("arquivo:modelos/estrela.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    with_model(ws, "estrela.glb")
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:coletavel"))
+                }),
+            },
+            Step {
+                title: "Uma plataforma que anda",
+                text: "Arraste plataforma.glb para a cena: ela fica em cima do chão, com o topo a 1 m de altura. Escale em X e Z (R, Escalar) para ficar maior e adicione Movimento > Plataforma que anda: ela já ganha um Corpo 3D que se move sozinho e leva o herói junto.",
+                target: Some("arquivo:modelos/plataforma.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    with_model(ws, "plataforma.glb")
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:plataforma3d"))
+                }),
+            },
+            Step {
+                title: "Fim de tarde",
+                text: "Clique em ☀ Ambiente, na barra da cena. No Inspetor, baixe a altura do Sol para uns 15°: a luz fica dourada e as sombras, compridas. Mexa nas cores do céu à vontade.",
+                target: Some("cena.ambiente"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    ws.active_scene
+                        .as_deref()
+                        .and_then(|r| ws.scenes.get(r))
+                        .is_some_and(|d| d.data.env("sun_height").num() <= 30.0)
+                }),
+            },
+            Step {
+                title: "Um evento de vitória",
+                text: "No painel Eventos: ➕ Regra da cena > Objetos > Não sobrar nenhum, e escolha a sua estrela. Em Então, ➕ ação > Som > Tocar som (vitoria.wav) e Cenas > Reiniciar a cena.",
+                target: Some("eventos.regra_cena"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    scene_rules(ws).iter().any(|r| {
+                        r.when
+                            .iter()
+                            .any(|c| c.id == "acabaram" && !c.str("nome").is_empty())
+                            && !r.actions.is_empty()
+                    })
+                }),
+            },
+            Step {
+                title: "Pegue a estrela!",
+                text: "F6 de novo: suba na plataforma, pegue a estrela e veja o seu evento acontecer.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: um mundo seu!",
+                text: "Você montou um mundo 3D com um herói, física, uma plataforma que anda, o Ambiente e um evento. Próximos passos: o modelo 3D (Novo projeto), uma ilha inteira sem código, para ver como tudo se junta; e Colisões, na barra da cena, para ver os corpos.",
                 target: None,
                 show: None,
                 done: None,

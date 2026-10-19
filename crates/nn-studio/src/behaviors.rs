@@ -84,6 +84,34 @@ pub struct PropSpec {
     pub show_if: Option<(String, Vec<String>)>,
     /// Pode ficar vazio; o texto é o que mostrar nesse caso ("todas").
     pub allow_empty: Option<String>,
+    /// Só numa cena "2d" ou "3d" (vazio = nas duas).
+    pub mode: String,
+    /// Padrão numa cena 3D, quando é outro (metros em vez de pixels).
+    pub default3d: Option<Prop>,
+}
+
+impl PropSpec {
+    /// A propriedade vale numa cena 3D (`true`) ou 2D?
+    pub fn fits(&self, three_d: bool) -> bool {
+        mode_fits(&self.mode, three_d)
+    }
+
+    pub fn default_for(&self, three_d: bool) -> Prop {
+        match (&self.default3d, three_d) {
+            (Some(d), true) => d.clone(),
+            _ => self.default.clone(),
+        }
+    }
+}
+
+/// `mode` de um comportamento, evento ou propriedade: "2d", "3d" ou nas
+/// duas ("both" ou vazio).
+pub fn mode_fits(mode: &str, three_d: bool) -> bool {
+    match mode {
+        "2d" => !three_d,
+        "3d" => three_d,
+        _ => true,
+    }
 }
 
 /// Um comportamento: o script e o que ele declara.
@@ -98,6 +126,11 @@ pub struct BehaviorInfo {
     pub requires: Vec<String>,
     /// É um comportamento de jogador (os outros procuram por ele).
     pub player: bool,
+    /// Cena em que funciona: "2d", "3d" ou "both". Os prontos sem `mode`
+    /// são do 2D; os do jogo valem nas duas.
+    pub mode: String,
+    /// Tipo do Corpo 3D que ganha ao ser adicionado (se precisar de um).
+    pub body: String,
     pub props: Vec<PropSpec>,
     /// Erro ao ler o script.
     pub error: Option<String>,
@@ -113,6 +146,11 @@ impl BehaviorInfo {
     }
 
     /// Valores padrão de todas as propriedades.
+    /// Funciona numa cena 3D (`true`) ou 2D?
+    pub fn fits(&self, three_d: bool) -> bool {
+        mode_fits(&self.mode, three_d)
+    }
+
     pub fn defaults(&self) -> Vec<(String, Prop)> {
         self.props
             .iter()
@@ -189,7 +227,10 @@ pub fn read_props(props: &Table) -> Vec<PropSpec> {
             Ok(Value::String(s)) => Some(s.to_string_lossy()),
             _ => None,
         };
+        let default3d = p.get::<Value>("default3d").ok().and_then(|v| to_prop(&v));
         out.push(PropSpec {
+            mode: opt_str(&p, "mode"),
+            default3d,
             label: if label.is_empty() { key.clone() } else { label },
             kind: PropType::parse(&opt_str(&p, "type")),
             help: opt_str(&p, "help"),
@@ -232,6 +273,11 @@ fn describe_with(describe: &mlua::Function, src: &str, script: &str) -> Behavior
         .ok()
         .flatten()
         .unwrap_or(false);
+    info.mode = opt_str(&t, "mode");
+    if info.mode.is_empty() && script.starts_with("nn:") {
+        info.mode = "2d".into();
+    }
+    info.body = opt_str(&t, "body");
     if let Ok(Some(req)) = t.get::<Option<Table>>("requires") {
         info.requires = req
             .sequence_values::<String>()

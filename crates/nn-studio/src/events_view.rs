@@ -164,6 +164,7 @@ impl EventsPanel {
             return actions;
         }
         crate::tutorial::anchor(ui.ctx(), "eventos", ui.max_rect());
+        events::set_three_d(doc.data.three_d);
         let cat = events::catalog();
         let is_prefab = doc.is_prefab();
         let mut names: Vec<String> = Vec::new();
@@ -681,16 +682,17 @@ fn add_menu<'a>(
             ui.separator();
             let q = crate::commands::fold(search.trim());
             let hover = |d: &EventDef| {
-                if d.help.is_empty() {
+                if d.help_text().is_empty() {
                     d.menu_text()
                 } else {
-                    format!("{}\n{}", d.menu_text(), d.help)
+                    format!("{}\n{}", d.menu_text(), d.help_text())
                 }
             };
             if q.is_empty() {
-                for c in Catalog::categories(list) {
+                let fitting: Vec<EventDef> = list.iter().filter(|d| d.fits()).cloned().collect();
+                for c in Catalog::categories(&fitting) {
                     ui.menu_button(c, |ui| {
-                        for d in list.iter().filter(|d| d.category == c) {
+                        for d in list.iter().filter(|d| d.category == c && d.fits()) {
                             if ui.button(&d.name).on_hover_text(hover(d)).clicked() {
                                 chosen = Some(d);
                                 ui.close();
@@ -701,6 +703,7 @@ fn add_menu<'a>(
             } else {
                 let found: Vec<&EventDef> = list
                     .iter()
+                    .filter(|d| d.fits())
                     .filter(|d| {
                         crate::commands::fold(&format!(
                             "{} {} {}",
@@ -762,7 +765,7 @@ fn item_line(
         return remove;
     };
     let adv_id = id.with("avancado");
-    let has_advanced = def.props.iter().any(|p| p.advanced);
+    let has_advanced = def.props_now().any(|p| p.advanced);
     let mut show_adv = ui.data(|d| d.get_temp::<bool>(adv_id).unwrap_or(false));
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
@@ -788,8 +791,8 @@ fn item_line(
                 }
             }
         }
-        if !def.help.is_empty() {
-            ui.weak("(?)").on_hover_text(&def.help);
+        if !def.help_text().is_empty() {
+            ui.weak("(?)").on_hover_text(def.help_text());
         }
         if has_advanced
             && ui
@@ -824,7 +827,7 @@ fn item_line(
     if has_advanced && show_adv {
         ui.horizontal_wrapped(|ui| {
             ui.add_space(34.0);
-            for spec in def.props.iter().filter(|p| p.advanced) {
+            for spec in def.props_now().filter(|p| p.advanced) {
                 ui.weak(format!("{}:", spec.label));
                 field(ui, item, spec, condition, index, ctx, id, edit);
             }

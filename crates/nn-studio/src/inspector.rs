@@ -947,6 +947,100 @@ const CAMERA3D_FIELDS: &[F] = &[help(
     "Quanto ela enxerga de cima a baixo. 60° é o normal; mais = mais aberto.",
 )];
 
+const BODY3D_FIELDS: &[F] = &[
+    help(
+        f(
+            "body",
+            "Tipo",
+            W::Choice(&[
+                ("static", "Parado"),
+                ("dynamic", "Cai e é empurrado"),
+                ("kinematic", "Se move sozinho"),
+            ]),
+        ),
+        "Parado nunca sai do lugar (chão, paredes, cenário). \"Cai e é empurrado\" segue a física (caixas, bolas). \"Se move sozinho\" é movido pelo jogo (Plataforma que anda, portas) e leva junto quem está em cima.",
+    ),
+    help(
+        f(
+            "shape",
+            "Forma",
+            W::Choice(&[
+                ("auto", "Automática"),
+                ("box", "Caixa"),
+                ("sphere", "Esfera"),
+                ("capsule", "Cápsula"),
+                ("cylinder", "Cilindro"),
+                ("mesh", "Malha exata do modelo"),
+            ]),
+        ),
+        "Automática: parado com um modelo usa a malha exata (dá para subir no telhado); o resto, uma caixa, esfera, cápsula ou cilindro do tamanho do objeto. A malha exata não serve para \"cai e é empurrado\".",
+    ),
+    help(
+        f("sensor", "Só detecta (sensor)", W::Bool),
+        "Não bloqueia: só avisa quando algo entra (moedas, portas, zonas).",
+    ),
+    help(
+        f(
+            "bounce",
+            "Quique",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 1.0,
+                suffix: "",
+            },
+        ),
+        "0 = para ao bater, 1 = quica sem perder velocidade.",
+    ),
+    help(
+        adv(
+            "friction",
+            "Atrito",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 2.0,
+                suffix: "",
+            },
+        ),
+        "0 = gelo; 0,5 = o normal.",
+    ),
+    help(
+        adv(
+            "mass",
+            "Massa",
+            W::Num {
+                speed: 0.1,
+                min: 0.0,
+                max: 10000.0,
+                suffix: " kg",
+            },
+        ),
+        "0 = pelo tamanho. Mais pesado empurra mais e é menos empurrado.",
+    ),
+    help(
+        adv("lock_rotation", "Não gira (fica em pé)", W::Bool),
+        "Para coisas que caem mas não devem tombar.",
+    ),
+    help(
+        adv(
+            "gravity_scale",
+            "Gravidade",
+            W::Num {
+                speed: 0.05,
+                min: -10.0,
+                max: 10.0,
+                suffix: "×",
+            },
+        ),
+        "Multiplica a gravidade da cena (0 = flutua).",
+    ),
+    help(
+        adv("tag", "Rótulo", W::Text),
+        "Para achar o corpo no código (padrão: o nome do objeto).",
+    ),
+];
+
 /// O "Ambiente" de uma cena 3D: céu, sol, luz ambiente, névoa e sombras.
 fn environment_ui(ui: &mut egui::Ui, doc: &mut SceneDoc) {
     use crate::scene_data::Prop;
@@ -1132,13 +1226,16 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
 
 /// Componentes que só fazem sentido numa cena 3D.
 pub fn is_3d_kind(kind: &str) -> bool {
-    matches!(kind, "model" | "shape3d" | "camera3d")
+    matches!(kind, "model" | "shape3d" | "camera3d" | "body3d")
 }
 
 /// Componentes de cena 2D que não valem numa cena 3D (física 2D, mapa de
 /// tiles, câmera 2D, partículas 2D).
 pub fn is_2d_only_kind(kind: &str) -> bool {
-    matches!(kind, "body" | "map" | "camera" | "particles")
+    matches!(
+        kind,
+        "body" | "map" | "camera" | "particles" | "sprite" | "shape"
+    )
 }
 
 fn fields(kind: &str) -> &'static [F] {
@@ -1146,6 +1243,7 @@ fn fields(kind: &str) -> &'static [F] {
         "model" => MODEL_FIELDS,
         "shape3d" => SHAPE3D_FIELDS,
         "camera3d" => CAMERA3D_FIELDS,
+        "body3d" => BODY3D_FIELDS,
         "sprite" => SPRITE_FIELDS,
         "text" => TEXT_FIELDS,
         "shape" => SHAPE_FIELDS,
@@ -1255,6 +1353,10 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "camera3d" => (
             "Câmera 3D",
             "A câmera do jogo: ele mostra o que ela vê, de onde ela está.",
+        ),
+        "body3d" => (
+            "Corpo 3D",
+            "Física 3D: chão e paredes que bloqueiam, caixas que caem, plataformas que andam.",
         ),
         "behavior" => (
             "Comportamento",
@@ -1640,6 +1742,7 @@ impl Inspector {
         files: &FileTree,
         actions: &mut Vec<InspectorAction>,
     ) {
+        crate::events::set_three_d(doc.data.three_d);
         ui.label(RichText::new("Cena").size(17.0).strong());
         ui.weak(format!("{} · {} objetos", doc.rel, doc.data.ids().len()));
         ui.add_space(6.0);
@@ -1780,6 +1883,7 @@ impl Inspector {
         sizes: &mut crate::scene_render::Sizes,
         mode: Mode,
     ) {
+        crate::events::set_three_d(doc.data.three_d);
         let full = mode.is_full();
         let o = doc.data.find(id).cloned().expect("objeto selecionado");
         // Nome, visível, travado.
@@ -2153,13 +2257,17 @@ impl Inspector {
             let mut item = |ui: &mut egui::Ui, kind: &str| {
                 let (title, desc) = component_info(kind);
                 let exists = o.component(kind).is_some();
-                let unique = matches!(kind, "body" | "camera" | "map" | "layout");
+                let unique = matches!(kind, "body" | "camera" | "map" | "layout" | "body3d");
                 if ui
                     .add_enabled(!(exists && unique), egui::Button::new(title))
                     .on_hover_text(desc)
                     .clicked()
                 {
                     let mut c = Component::new(kind);
+                    if kind == "text" && doc.data.three_d {
+                        // No 3D, texto é do HUD (fica na tela).
+                        c.set("hud", Prop::Bool(true));
+                    }
                     if kind == "body" {
                         // O corpo já vem do tamanho do que aparece.
                         if let Some((w, h)) = visible_size(&o, sizes, files) {
@@ -2189,11 +2297,33 @@ impl Inspector {
             });
             ui.separator();
             ui.label(RichText::new("Comportamentos").weak());
-            // (Os comportamentos prontos são 2D; os do 3D vêm depois.)
-            for cat in behaviors::categories().into_iter().filter(|_| !three_d) {
+            // Só os prontos que funcionam nesta cena (2D ou 3D).
+            let cats: Vec<&str> = behaviors::categories()
+                .into_iter()
+                .filter(|c| {
+                    behaviors::builtins()
+                        .iter()
+                        .any(|b| b.category == *c && b.fits(three_d))
+                })
+                .collect();
+            for cat in cats {
                 ui.menu_button(cat, |ui| {
-                    for b in behaviors::builtins().iter().filter(|b| b.category == cat) {
+                    for b in behaviors::builtins()
+                        .iter()
+                        .filter(|b| b.category == cat && b.fits(three_d))
+                    {
                         if ui.button(&b.title).on_hover_text(&b.description).clicked() {
+                            // Quem precisa de corpo 3D já ganha um, do tipo
+                            // que o comportamento pede.
+                            if b.requires.iter().any(|r| r == "body3d")
+                                && o.component("body3d").is_none()
+                            {
+                                let mut body = Component::new("body3d");
+                                if !b.body.is_empty() {
+                                    body.set("body", Prop::Str(b.body.clone()));
+                                }
+                                chosen.push(body);
+                            }
                             // Quem precisa de corpo físico já ganha um.
                             if b.requires.iter().any(|r| r == "body")
                                 && o.component("body").is_none()

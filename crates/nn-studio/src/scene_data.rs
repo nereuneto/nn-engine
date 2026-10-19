@@ -469,6 +469,7 @@ impl SceneData {
         let mut forma = Component::new("shape3d");
         forma.set("shape", Prop::Str("plane".into()));
         chao.components.push(forma);
+        chao.components.push(Component::new("body3d"));
         let mut cubo = Object::new(3, "Cubo");
         cubo.y = 0.5;
         let mut c = Component::new("shape3d");
@@ -643,6 +644,7 @@ pub fn schema() -> &'static Schema {
             "model",
             "shape3d",
             "camera3d",
+            "body3d",
         ]
         .into_iter()
         .filter(|k| components.contains_key(*k))
@@ -1816,7 +1818,7 @@ mod tests {
     fn esquema_vem_da_engine() {
         let s = schema();
         assert!(s.order.contains(&"sprite".to_string()));
-        assert_eq!(s.order.len(), 19);
+        assert_eq!(s.order.len(), 20);
         assert_eq!(s.shapes3d.len(), 6);
         assert_eq!(s.environment[0], ("sky".to_string(), Prop::Bool(true)));
         assert_eq!(s.default_of("body", "gravity_scale"), Some(&Prop::Num(1.0)));

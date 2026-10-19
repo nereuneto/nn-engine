@@ -2753,3 +2753,143 @@ fn cena_mut<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_v
         .get_mut("cenas/teste.cena")
         .unwrap()
 }
+
+#[test]
+fn cena_3d_oferece_so_componentes_e_comportamentos_do_3d() {
+    let dir = temp("cena-3d-componentes");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena3d(&mut h, &proj);
+    let cubo = objeto(&h, "Cubo").id;
+    cena_mut(&mut h).selection = vec![cubo];
+    h.run();
+    h.get_by_label("➕ Adicionar componente").click();
+    h.run();
+    h.get_by_label("Corpo 3D");
+    assert!(
+        h.query_by_label("Corpo físico").is_none(),
+        "o corpo 2D não vale no 3D"
+    );
+    assert!(h.query_by_label("Imagem (sprite)").is_none());
+    h.get_by_label_contains("Jogador").click();
+    h.run();
+    h.get_by_label("Jogador 3D");
+    assert!(h.query_by_label("Jogador de plataforma").is_none());
+    tela(&mut h, "cena-3d-componentes");
+    // Plataforma que anda já ganha um Corpo 3D que se move sozinho.
+    h.get_by_label_contains("Movimento").click();
+    h.run();
+    h.get_by_label("Plataforma que anda").click();
+    h.run();
+    let o = objeto(&h, "Cubo").clone();
+    assert_eq!(o.component("body3d").unwrap().str("body"), "kinematic");
+    assert!(
+        o.components
+            .iter()
+            .any(|c| c.str("script") == "nn:plataforma3d")
+    );
+    h.get_by_label("Corpo 3D");
+    tela(&mut h, "cena-3d-corpo");
+}
+
+#[test]
+fn tutorial_mundo_3d_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, Object, Prop, Rule};
+    let dir = temp("tutorial-3d");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("primeiro-mundo-3d");
+    h.run_steps(4);
+    let proj = dir.join("projetos/primeiro-mundo-3d");
+    assert!(proj.join("cenas/mundo.cena").is_file());
+    assert!(proj.join("modelos/heroi.glb").is_file());
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    // A cena aberta é 3D.
+    h.get_by_label("Vista da cena 3D");
+    tela(&mut h, "tutorial-3d-1");
+    for passo in 1..=2 {
+        h.get_by_label("Próximo").click();
+        h.run_steps(4);
+        assert_eq!(h.state().tutorial.as_ref().map(|t| t.step), Some(passo));
+    }
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/mundo.cena").unwrap()
+    }
+    fn modelo(id: u32, name: &str, file: &str) -> Object {
+        let mut o = Object::new(id, name);
+        let mut c = Component::new("model");
+        c.set("file", Prop::Str(file.into()));
+        o.components.push(c);
+        o
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    let corpo = |kind: &str| {
+        let mut c = Component::new("body3d");
+        c.set("body", Prop::Str(kind.into()));
+        c
+    };
+    doc(&mut h)
+        .data
+        .objects
+        .push(modelo(10, "heroi", "modelos/heroi.glb"));
+    espera(&mut h, 3);
+    let n = doc(&mut h).data.objects.len() - 1;
+    doc(&mut h).data.objects[n]
+        .components
+        .push(Component::behavior("nn:jogador3d", &[]));
+    espera(&mut h, 4);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 5);
+    let mut arvore = modelo(11, "arvore", "modelos/arvore.glb");
+    arvore.components.push(corpo("static"));
+    doc(&mut h).data.objects.push(arvore);
+    espera(&mut h, 6);
+    let mut caixote = modelo(12, "caixote", "modelos/caixote.glb");
+    caixote.components.push(corpo("dynamic"));
+    doc(&mut h).data.objects.push(caixote);
+    espera(&mut h, 7);
+    let mut estrela = modelo(13, "estrela", "modelos/estrela.glb");
+    estrela
+        .components
+        .push(Component::behavior("nn:coletavel", &[]));
+    doc(&mut h).data.objects.push(estrela);
+    espera(&mut h, 8);
+    let mut plat = modelo(14, "plataforma", "modelos/plataforma.glb");
+    plat.components.push(corpo("kinematic"));
+    plat.components
+        .push(Component::behavior("nn:plataforma3d", &[]));
+    doc(&mut h).data.objects.push(plat);
+    espera(&mut h, 9);
+    // O passo do Ambiente: o sol mais baixo.
+    doc(&mut h).data.set_env("sun_height", Prop::Num(15.0));
+    espera(&mut h, 10);
+    assert!(tabs(&h).contains(&Tab::Events));
+    let cat = nn_studio::events::catalog();
+    let mut acabou = cat.condition("acabaram").unwrap().new_item(false);
+    acabou.set("nome", Prop::Str("estrela".into()));
+    doc(&mut h).data.events.push(Rule {
+        when: vec![acabou],
+        actions: vec![cat.action("reiniciar").unwrap().new_item(false)],
+        ..Default::default()
+    });
+    espera(&mut h, 11);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 12);
+    let text = std::fs::read_to_string(proj.join("cenas/mundo.cena")).unwrap();
+    assert!(
+        text.contains("nn:jogador3d") && text.contains("sun_height = 15"),
+        "{text}"
+    );
+    tela(&mut h, "tutorial-3d-fim");
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}
