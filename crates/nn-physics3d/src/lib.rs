@@ -297,6 +297,9 @@ pub struct World3 {
     infos: HashMap<RigidBodyHandle, Info>,
     characters: HashMap<RigidBodyHandle, Character>,
     controller: KinematicCharacterController,
+    /// Lista de corpos vazia, para o controle do personagem (veja
+    /// `move_characters`).
+    no_bodies: RigidBodySet,
     events: Vec<Event3>,
     collision_rx: std::sync::mpsc::Receiver<CollisionEvent>,
     collision_tx: std::sync::mpsc::Sender<CollisionEvent>,
@@ -337,6 +340,7 @@ impl World3 {
             infos: HashMap::new(),
             characters: HashMap::new(),
             controller: KinematicCharacterController::default(),
+            no_bodies: RigidBodySet::new(),
             events: Vec::new(),
             collision_rx,
             collision_tx,
@@ -645,6 +649,37 @@ impl World3 {
         self.characters.get(&id.0).is_some_and(|c| c.hit_wall)
     }
 
+    /// Velocidade do que está embaixo dos pés do personagem (zero se for
+    /// parado ou nada).
+    fn ground_velocity(&self, handle: RigidBodyHandle, center: Vec3, desc: &CharacterDesc) -> Vec3 {
+        let feet = center - Vec3::Y * (desc.height / 2.0 - desc.radius);
+        let filter = QueryFilter::default()
+            .exclude_rigid_body(handle)
+            .exclude_sensors();
+        let ray = Ray::new(rv(feet), rv(Vec3::NEG_Y));
+        let Some((h, _)) = self.world.query_pipeline_with_filter(filter).cast_ray(
+            &ray,
+            desc.radius + desc.step.max(0.05) + 0.1,
+            true,
+        ) else {
+            return Vec3::ZERO;
+        };
+        let Some(body) = self
+            .world
+            .colliders
+            .get(h)
+            .and_then(|c| c.parent())
+            .and_then(|b| self.world.bodies.get(b))
+        else {
+            return Vec3::ZERO;
+        };
+        if body.is_fixed() {
+            Vec3::ZERO
+        } else {
+            gv(body.linvel())
+        }
+    }
+
     fn move_characters(&mut self, dt: f32) {
         let gravity = self.world.gravity.y;
         let handles: Vec<RigidBodyHandle> = self.characters.keys().copied().collect();
@@ -664,7 +699,17 @@ impl World3 {
             } else {
                 c.vy += gravity * dt;
             }
+            // (Em cima de uma plataforma que se move, o controle do rapier já
+            // leva o personagem junto.)
             let desired = Vec3::new(c.walk.x * dt, c.vy * dt, c.walk.z * dt);
+            // Em cima de algo que se move (plataforma): vai junto. (O controle
+            // do rapier também tentaria, mas só em alguns quadros; por isso
+            // ele recebe a lista de corpos vazia e não vê a velocidade.)
+            let carried = if c.vy <= 0.0 {
+                self.ground_velocity(handle, gv(pos.translation), &c.desc)
+            } else {
+                Vec3::ZERO
+            };
             let controller = KinematicCharacterController {
                 autostep: Some(CharacterAutostep {
                     max_height: CharacterLength::Absolute(c.desc.step.max(0.0)),
@@ -687,7 +732,12 @@ impl World3 {
                 .exclude_rigid_body(handle)
                 .exclude_sensors();
             let movement = {
-                let queries = self.world.query_pipeline_with_filter(filter);
+                let queries = self.world.broad_phase.as_query_pipeline(
+                    self.world.narrow_phase.query_dispatcher(),
+                    &self.no_bodies,
+                    &self.world.colliders,
+                    filter,
+                );
                 controller.move_shape(dt, &queries, shape.as_ref(), &pos, rv(desired), |hit| {
                     collisions.push(hit)
                 })
@@ -723,7 +773,7 @@ impl World3 {
                 );
             }
             if let Some(body) = self.world.bodies.get_mut(handle) {
-                body.set_next_kinematic_translation(pos.translation + rv(moved));
+                body.set_next_kinematic_translation(pos.translation + rv(moved + carried * dt));
             }
             self.characters.insert(handle, c);
         }

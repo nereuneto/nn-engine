@@ -28,6 +28,7 @@
 
 mod api;
 pub mod api_docs;
+mod camera3d;
 mod convert;
 mod d3;
 mod errors;

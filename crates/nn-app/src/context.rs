@@ -35,6 +35,8 @@ pub struct Context {
     pub(crate) effects: crate::effects::Effects,
     pub(crate) fullscreen: bool,
     pub(crate) fullscreen_request: Option<bool>,
+    /// O jogo quer o mouse preso (cursor escondido, para girar a câmera).
+    pub(crate) mouse_captured: bool,
     pub(crate) timestep: FixedTimestep,
     /// Tamanho do jogo (o da janela, ou o fixo do config).
     pub(crate) viewport: UVec2,
@@ -43,6 +45,8 @@ pub struct Context {
     /// Tamanho fixo do jogo e como ajustar.
     pub(crate) fixed: Option<(UVec2, nn_render::ScaleMode)>,
     pub(crate) exit_requested: bool,
+    /// O título do jogo (do config).
+    pub(crate) title: String,
 }
 
 impl Context {
@@ -69,6 +73,7 @@ impl Context {
             effects: Default::default(),
             fullscreen: config.fullscreen,
             fullscreen_request: None,
+            mouse_captured: false,
             timestep: FixedTimestep::from_hz(config.fixed_hz),
             viewport,
             window: viewport,
@@ -76,6 +81,7 @@ impl Context {
                 .resolution
                 .map(|(w, h)| (UVec2::new(w, h), config.scale_mode)),
             exit_requested: false,
+            title: config.title.clone(),
         };
         ctx.set_window_size(viewport);
         ctx
@@ -149,6 +155,22 @@ impl Context {
     /// A janela está (ou vai ficar, se acabou de pedir) em tela cheia?
     pub fn is_fullscreen(&self) -> bool {
         self.fullscreen_request.unwrap_or(self.fullscreen)
+    }
+    /// Prende o mouse na janela e esconde o cursor (`true`), para girar a
+    /// câmera com [`nn_input::Input::mouse_delta`], ou solta (`false`). Ao
+    /// sair da janela (Alt+Tab), o mouse é solto e volta a ser preso quando
+    /// ela recebe o foco de novo.
+    pub fn set_mouse_captured(&mut self, captured: bool) {
+        self.mouse_captured = captured;
+    }
+
+    /// O título do jogo (o `title` do config.lua).
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn mouse_captured(&self) -> bool {
+        self.mouse_captured
     }
 }
 

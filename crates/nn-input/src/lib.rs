@@ -104,6 +104,8 @@ pub struct Input {
     cursor: Option<Vec2>,
     cursor_transform: Option<(Vec2, Vec2)>,
     scroll: Vec2,
+    /// Quanto o mouse andou neste frame (vale mesmo com o cursor preso).
+    mouse_delta: Vec2,
     pads: Vec<Gamepad>,
     deadzone: f32,
     actions: HashMap<String, Action>,
@@ -120,6 +122,7 @@ impl Default for Input {
             cursor: None,
             cursor_transform: None,
             scroll: Vec2::ZERO,
+            mouse_delta: Vec2::ZERO,
             pads: Vec::new(),
             deadzone: DEFAULT_DEADZONE,
             actions: HashMap::new(),
@@ -181,6 +184,21 @@ impl Input {
     /// Rolagem acumulada neste frame, em "linhas" (aprox.).
     pub fn scroll(&self) -> Vec2 {
         self.scroll
+    }
+
+    /// Quanto o mouse andou neste frame, em pixels (X para a direita, Y para
+    /// baixo). Funciona mesmo com o cursor preso e escondido (câmera em
+    /// terceira pessoa).
+    pub fn mouse_delta(&self) -> Vec2 {
+        self.mouse_delta
+    }
+
+    /// Soma um movimento do mouse (pixels). Normalmente chamado pela engine.
+    pub fn add_mouse_motion(&mut self, delta: Vec2) {
+        if delta.length_squared() > 0.0 {
+            self.mouse_delta += delta;
+            self.last_device = Device::Mouse;
+        }
     }
 
     /// Eixo de -1.0 a 1.0 a partir de duas teclas.
@@ -621,12 +639,24 @@ impl Input {
             pad.buttons.end_frame();
         }
         self.scroll = Vec2::ZERO;
+        self.mouse_delta = Vec2::ZERO;
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn movimento_do_mouse_soma_no_frame_e_zera_depois() {
+        let mut input = Input::new();
+        input.add_mouse_motion(Vec2::new(3.0, -1.0));
+        input.add_mouse_motion(Vec2::new(2.0, 4.0));
+        assert_eq!(input.mouse_delta(), Vec2::new(5.0, 3.0));
+        assert_eq!(input.last_device(), Device::Mouse);
+        input.end_frame();
+        assert_eq!(input.mouse_delta(), Vec2::ZERO);
+    }
 
     #[test]
     fn aperto_dura_um_frame_e_segurar_continua() {

@@ -8,6 +8,7 @@ use include_dir::{Dir, include_dir};
 static PLATAFORMA: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../jogos/plataforma");
 static DEMO: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../jogos/demo");
 static CUBOS3D: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../jogos/cubos3d");
+static ESTRELAS3D: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../jogos/estrelas3d");
 
 #[derive(Debug, Clone, Copy)]
 pub struct Example {
@@ -39,6 +40,13 @@ pub const EXAMPLES: &[Example] = &[
         description: "Um campo low-poly em 3D, todo em código Lua: modelos .glb, \
                       física, sombras, céu, um herói que pula e empurra caixotes.",
         dir: &CUBOS3D,
+    },
+    Example {
+        folder: "ilha-das-estrelas",
+        title: "Ilha das Estrelas",
+        description: "Plataforma 3D em terceira pessoa: ache as 5 estrelas da ilha. \
+                      Câmera com o mouse, pulo, plataformas que andam e recorde.",
+        dir: &ESTRELAS3D,
     },
 ];
 

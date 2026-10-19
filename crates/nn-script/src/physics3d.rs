@@ -469,6 +469,47 @@ impl UserData for LWorld3 {
     }
 }
 
+/// Distância até o primeiro corpo sólido no raio (para a câmera não
+/// atravessar paredes), ignorando `ignore` e os personagens.
+pub(crate) fn ray_distance(
+    world: &AnyUserData,
+    origin: Vec3,
+    dir: Vec3,
+    max: f32,
+    ignore: Option<&AnyUserData>,
+) -> Result<Option<f32>> {
+    let w = world
+        .borrow::<LWorld3>()
+        .map_err(|_| err("o mundo deve ser um nn.physics3d.world"))?;
+    let ignore = match ignore {
+        Some(ud) => Some(
+            ud.borrow::<LBody3>()
+                .map_err(|_| err("\"ignore\" deve ser um corpo de nn.physics3d"))?
+                .id,
+        ),
+        None => None,
+    };
+    let s = w.0.borrow();
+    // Personagens (o herói, inimigos) não empurram a câmera.
+    let mut from = origin;
+    let mut left = max;
+    for _ in 0..8 {
+        let Some(hit) = s.world.raycast(from, dir, left, ignore) else {
+            return Ok(None);
+        };
+        if !s.world.is_character(hit.body) {
+            return Ok(Some(max - left + hit.distance));
+        }
+        let step = hit.distance + 0.05;
+        from += dir * step;
+        left -= step;
+        if left <= 0.0 {
+            return Ok(None);
+        }
+    }
+    Ok(None)
+}
+
 /// Mostra as formas de colisão por cima do mundo (meio transparentes).
 fn debug_draw(lua: &Lua, world: &SharedWorld3) -> Result<()> {
     use crate::d3::shape;

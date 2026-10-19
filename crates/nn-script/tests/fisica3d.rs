@@ -246,3 +246,69 @@ fn erros_explicam_o_que_faltou() {
         assert!(erro.contains(esperado), "{code}: {erro}");
     }
 }
+
+#[test]
+fn camera_em_terceira_pessoa() {
+    let dir = projeto(
+        "camera",
+        r##"
+        local c = {}
+        function c:enter()
+          self.mundo = nn.physics3d.world()
+          self.heroi = self.mundo:character({ x = 0, z = 0 })
+          self.cam = nn.d3.third_person({ distance = 6, pitch = 0, height = 1, follow = 0 })
+          self.fx, self.fz = self.cam:forward()
+          self.vx, self.vz = self.cam:direction(1, 0)  -- para a direita
+          self.t = 0
+        end
+        function c:update(dt)
+          self.t = self.t + 1
+          if self.t == 2 then
+            -- Sem o mouse preso, o mouse não gira a câmera.
+            self.yaw_solto = self.cam.yaw
+          end
+          if self.t == 3 then nn.window.capture_mouse(true) end
+          if self.t == 6 then
+            -- Uma parede entre a câmera e o herói.
+            self.mundo:body({ type = "static", w = 10, h = 10, d = 0.5, z = 3 })
+            self.mundo:step(dt)
+          end
+          self.cam:update(dt, self.heroi.x, self.heroi.y, self.heroi.z,
+            { world = self.mundo, ignore = self.heroi })
+          self.yaw, self.cz = self.cam.yaw, self.cam.z
+          self.preso = nn.window.mouse_captured()
+        end
+        return c
+        "##,
+    );
+    let Some(mut h) = cena(&dir) else { return };
+    h.run_frames(1);
+    h.ctx.input.add_mouse_motion(glam::Vec2::new(100.0, 0.0));
+    h.run_frames(1);
+    let f = |h: &Headless<Uma>, k: &str| h.game.0.field::<f64>(k).unwrap();
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(f(&h, "yaw_solto"), 0.0, "o mouse solto não gira");
+    // Para a frente é -Z; a direita é +X.
+    assert!((f(&h, "fz") + 1.0).abs() < 1e-5 && f(&h, "fx").abs() < 1e-5);
+    assert!((f(&h, "vx") - 1.0).abs() < 1e-5 && f(&h, "vz").abs() < 1e-5);
+    h.run_frames(1);
+    assert_eq!(h.game.0.field::<bool>("preso"), Some(true));
+    h.ctx.input.add_mouse_motion(glam::Vec2::new(100.0, 0.0));
+    h.run_frames(1);
+    // 100 px × 0,15 = 15° para a direita (yaw diminui).
+    assert!((f(&h, "yaw") - 345.0).abs() < 0.01, "yaw {}", f(&h, "yaw"));
+    assert!(
+        f(&h, "cz") > 5.0,
+        "sem parede, a câmera fica longe: {}",
+        f(&h, "cz")
+    );
+    // Volta o yaw para 0 e põe a parede.
+    h.ctx.input.add_mouse_motion(glam::Vec2::new(-100.0, 0.0));
+    h.run_frames(3);
+    assert!(
+        f(&h, "cz") < 2.8,
+        "a parede em z = 3 empurra a câmera: {}",
+        f(&h, "cz")
+    );
+    assert!(h.ctx.mouse_captured());
+}

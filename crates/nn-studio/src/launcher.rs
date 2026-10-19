@@ -148,6 +148,7 @@ fn thumb_png(t: Template) -> &'static [u8] {
         Template::Nave => include_bytes!("../assets/modelos/nave.png"),
         Template::Vazio => include_bytes!("../assets/modelos/vazio.png"),
         Template::Minimo => include_bytes!("../assets/modelos/minimo.png"),
+        Template::TresD => include_bytes!("../assets/modelos/3d.png"),
     }
 }
 
@@ -177,6 +178,10 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
         Template::Minimo => (
             "Mínimo",
             "Só uma cena com um quadrado que anda. Para quem quer começar do zero.",
+        ),
+        Template::TresD => (
+            "3D",
+            "Plataforma 3D em terceira pessoa, em código Lua: ache as 5 estrelas da ilha. Câmera com o mouse, pulo, física, plataformas que andam, menu, pausa e recorde.",
         ),
     }
 }

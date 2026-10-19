@@ -152,6 +152,15 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
         })?,
     )?;
     input.set(
+        "mouse_delta",
+        lua.create_function(|lua, ()| {
+            with_ctx(lua, |c| {
+                let d = c.input.mouse_delta();
+                Ok((d.x, d.y))
+            })
+        })?,
+    )?;
+    input.set(
         "scroll",
         lua.create_function(|lua, ()| {
             with_ctx(lua, |c| {

@@ -574,6 +574,23 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         })?,
     )?;
     window.set(
+        "title",
+        lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.title().to_string())))?,
+    )?;
+    window.set(
+        "capture_mouse",
+        lua.create_function(|lua, on: Option<bool>| {
+            with_ctx(lua, |c| {
+                c.set_mouse_captured(on.unwrap_or(true));
+                Ok(())
+            })
+        })?,
+    )?;
+    window.set(
+        "mouse_captured",
+        lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.mouse_captured())))?,
+    )?;
+    window.set(
         "fullscreen",
         lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.is_fullscreen())))?,
     )?;

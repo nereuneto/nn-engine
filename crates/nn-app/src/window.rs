@@ -78,6 +78,8 @@ struct State {
     ctx: Context,
     last_frame: Instant,
     focused: bool,
+    /// O mouse está preso de verdade (pela janela) agora.
+    grabbed: bool,
     #[cfg(feature = "gamepad")]
     gamepads: crate::gamepad::Gamepads,
 }
@@ -145,6 +147,7 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
             ctx,
             last_frame: Instant::now(),
             focused: true,
+            grabbed: false,
             #[cfg(feature = "gamepad")]
             gamepads,
         });
@@ -153,6 +156,30 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
 }
 
 impl State {
+    /// Prende ou solta o mouse conforme o jogo pediu (e se a janela tem foco).
+    fn apply_mouse_capture(&mut self) {
+        use winit::window::CursorGrabMode;
+        let want = self.ctx.mouse_captured && self.focused;
+        if want == self.grabbed {
+            return;
+        }
+        if want {
+            // Preso no lugar; onde não dá (alguns sistemas), preso na janela.
+            let ok = self
+                .window
+                .set_cursor_grab(CursorGrabMode::Locked)
+                .or_else(|_| self.window.set_cursor_grab(CursorGrabMode::Confined));
+            if let Err(e) = ok {
+                log::warn!("não foi possível prender o mouse: {e}");
+            }
+            self.window.set_cursor_visible(false);
+        } else {
+            let _ = self.window.set_cursor_grab(CursorGrabMode::None);
+            self.window.set_cursor_visible(true);
+        }
+        self.grabbed = want;
+    }
+
     fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             // Janela minimizada: mantém a última configuração.
@@ -206,6 +233,7 @@ impl State {
                 .set_fullscreen(fullscreen.then_some(Fullscreen::Borderless(None)));
         }
         self.ctx.fullscreen = self.window.fullscreen().is_some();
+        self.apply_mouse_capture();
         self.ctx.save.auto_flush();
         self.ctx.input.end_frame();
     }
@@ -235,7 +263,11 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> ApplicationHandler for App<G, F> {
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
-            WindowEvent::Focused(focused) => state.focused = focused,
+            WindowEvent::Focused(focused) => {
+                state.focused = focused;
+                // Fora da janela o mouse fica solto; de volta, preso de novo.
+                state.apply_mouse_capture();
+            }
             WindowEvent::RedrawRequested => {
                 state.frame(game);
                 if state.ctx.exit_requested {
@@ -244,6 +276,23 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> ApplicationHandler for App<G, F> {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn device_event(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+        _id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        if let (Some(state), winit::event::DeviceEvent::MouseMotion { delta }) =
+            (self.state.as_mut(), event)
+            && state.focused
+        {
+            state
+                .ctx
+                .input
+                .add_mouse_motion(glam::Vec2::new(delta.0 as f32, delta.1 as f32));
         }
     }
 
