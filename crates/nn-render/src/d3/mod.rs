@@ -27,7 +27,7 @@ use nn_core::Color;
 
 pub(crate) use gpu::Renderer3D;
 pub use mesh::{Mesh, Vertex3};
-pub use model::{Model, ModelData, ModelError, ModelImage, ModelPart};
+pub use model::{CollisionMesh, Model, ModelData, ModelError, ModelImage, ModelPart};
 
 /// Câmera em perspectiva: de onde olha, para onde e o campo de visão.
 #[derive(Debug, Clone, Copy, PartialEq)]

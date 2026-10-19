@@ -388,6 +388,16 @@ pub const API_DOCS: &[ApiDoc] = &[
     // Física
     d("nn.physics", "", "Física arcade (corpos não giram)."),
     d(
+        "nn.physics3d",
+        "",
+        "Física 3D: coisas que caem, rolam e empilham, e personagens que andam e pulam.",
+    ),
+    d(
+        "nn.physics3d.world",
+        "(opts)",
+        "Cria um mundo 3D ({ gravity = -9.81 }): :body(opts), :character(opts), :step(dt), :raycast(...), :debug_draw().",
+    ),
+    d(
         "nn.physics.world",
         "(opts)",
         "Cria um mundo físico ({ gravity = -1800 }): :body(opts), :step(dt), :raycast(...).",

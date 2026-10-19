@@ -15,6 +15,9 @@ fn projeto(name: &str, main: &str) -> PathBuf {
 
 struct Uma(LuaScene);
 impl Game for Uma {
+    fn fixed_update(&mut self, ctx: &mut Context) {
+        self.0.fixed_update(ctx);
+    }
     fn update(&mut self, ctx: &mut Context) {
         let _ = self.0.update(ctx);
     }
@@ -211,11 +214,19 @@ fn exemplo_cubos3d_roda() {
     h.run_frames(40);
     assert_eq!(h.game.0.error(), None);
     let t = h.game.0.table().unwrap();
-    let jogador: mlua::Table = t.get("jogador").unwrap();
-    let z: f64 = jogador.get("z").unwrap();
+    let heroi: mlua::AnyUserData = t.get("heroi_corpo").unwrap();
+    let lua = rt.lua();
+    lua.globals().set("heroi", heroi).unwrap();
+    let z: f64 = lua.load("return heroi.z").eval().unwrap();
     assert!(z < -1.0, "W anda para a frente da câmera: z = {z}");
+    let no_chao: bool = lua.load("return heroi.on_ground").eval().unwrap();
+    assert!(no_chao);
     let cubos: mlua::Table = t.get("cubos").unwrap();
-    assert_eq!(cubos.raw_len(), 1, "o clique soltou um cubo");
+    assert_eq!(
+        cubos.raw_len(),
+        7,
+        "a pilha de 6 caixotes e o cubo do clique"
+    );
     if let Ok(out) = std::env::var("NN_CAPTURA") {
         h.save_png(out).unwrap();
     }

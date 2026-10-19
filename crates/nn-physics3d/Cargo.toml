@@ -1,0 +1,15 @@
+[package]
+name = "nn-physics3d"
+description = "Física 3D da nn-engine (sobre o rapier): corpos que caem e empilham, personagem que anda e pula, sensores e raios."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+glam.workspace = true
+rapier3d.workspace = true
+
+[lints]
+workspace = true

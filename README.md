@@ -29,7 +29,7 @@ O código da nn-engine e do NN Studio pode ser usado sob a licença [MIT](LICENS
 
 ## Começando pelo código
 
-Para compilar a engine e o editor (ou fazer jogos em Rust), o pré-requisito é o Rust instalado pelo [rustup](https://rustup.rs). A engine pede o Rust 1.88 ou mais novo; o editor (NN Studio), o 1.95. Com o rustup, `rustup update` deixa tudo em dia.
+Para compilar a engine e o editor (ou fazer jogos em Rust), o pré-requisito é o Rust instalado pelo [rustup](https://rustup.rs). A engine pede o Rust 1.89 ou mais novo; o editor (NN Studio), o 1.95. Com o rustup, `rustup update` deixa tudo em dia.
 
 **Windows:** baixe e rode o `rustup-init.exe` do site acima. Se o instalador avisar que faltam as ferramentas de build do Visual Studio (o compilador C++ da Microsoft), escolha a opção de instalação rápida que ele oferece. Depois **abra um terminal novo** para o `cargo` aparecer no PATH e confira com `cargo --version`.
 
@@ -67,7 +67,7 @@ O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado 
 ```sh
 cargo nn jogos/plataforma   # plataforma: 2 fases do Tiled, inimigos, fundo em camadas, menus, recordes
 cargo nn jogos/demo         # menu, coletar moedas e pausa
-cargo nn jogos/cubos3d      # 3D: modelos .glb, sombras, céu e câmera que gira com o mouse
+cargo nn jogos/cubos3d      # 3D: modelos .glb, física, sombras, céu e câmera que gira com o mouse
 ```
 
 Os três são feitos inteiramente em Lua. O de plataforma tem duas fases (a segunda é liberada ao completar a primeira), inimigos que patrulham e perseguem (pise em cima para derrotar), funciona com teclado, mouse (nos menus) e **controle** (Xbox, PlayStation, Switch Pro e genéricos), e guarda as opções, as fases liberadas e os recordes de cada fase.
@@ -163,6 +163,7 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-audio` | Efeitos sonoros e música (sobre o [kira](https://github.com/tesselode/kira)) com volume por canal, sintetizador simples |
 | `nn-app` | Janela, loop principal, trait `Game`, cenas, assets, interface (menus), dados salvos, leitura dos controles ([gilrs](https://gitlab.com/gilrs-project/gilrs)) e modo sem janela (`Headless`) para testes |
 | `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, camadas, raycast |
+| `nn-physics3d` | Física 3D sobre o [rapier](https://rapier.rs): corpos que caem e empilham, personagem que anda e pula, sensores, raios |
 | `nn-tilemap` | Tilemaps com camadas, tilesets e objetos; importação do editor Tiled (JSON) |
 | `nn-script` | Scripting em Lua: API `nn.*` (com a documentação de cada função em `api_docs`), cenas em Lua e cenas visuais (`.cena`), comportamentos prontos, eventos "Quando... Então...", prefabs, variáveis do jogo, recarga ao salvar, canal ao vivo com o editor, tela de erro |
 | `nn-run` | Ferramenta `nn` (cria, roda e exporta projetos Lua, com os modelos de `nn novo`) e `nn-jogo`, o executável dos jogos exportados |
