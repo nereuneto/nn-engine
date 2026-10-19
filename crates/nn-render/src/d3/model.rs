@@ -75,8 +75,8 @@ impl ModelData {
     pub fn flatten(&mut self) {
         for part in &mut self.parts {
             let old = std::mem::take(&mut part.mesh);
-            for tri in old.indices.chunks_exact(3) {
-                let v = [tri[0], tri[1], tri[2]].map(|i| old.vertices[i as usize]);
+            for tri in old.indices.as_chunks::<3>().0 {
+                let v = tri.map(|i| old.vertices[i as usize]);
                 let p = v.map(|v| Vec3::from_array(v.position));
                 let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
                 let base = part.mesh.vertices.len() as u32;
@@ -239,8 +239,8 @@ fn add_primitive(
     let flat = normals.is_none();
     if flat {
         // Sem normais no arquivo: uma por face.
-        for tri in indices.chunks_exact(3) {
-            let mut t = [tri[0], tri[1], tri[2]];
+        for tri in indices.as_chunks::<3>().0 {
+            let mut t = *tri;
             if flip {
                 t.swap(1, 2);
             }
@@ -264,7 +264,7 @@ fn add_primitive(
             .vertices
             .push(vertex(p, n, i, factor, &colors, &uvs));
     }
-    for tri in indices.chunks_exact(3) {
+    for tri in indices.as_chunks::<3>().0 {
         if flip {
             part.mesh
                 .indices
