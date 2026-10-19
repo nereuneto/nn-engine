@@ -2,25 +2,27 @@
 -- comentários escritos aqui se perdem.
 return {
   format = 1,
-  mode = "3d",
   gravity = -20,
+  mode = "3d",
   environment = { sky = true, sky_top = "#3F8FD8", sky_horizon = "#CDEBF5", sky_bottom = "#2E6F9E", sun_height = 53, sun_turn = 48, sun_color = "#FFF1D6", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 35, fog_far = 90, shadows = true, shadow_distance = 25 },
   objects = {
     {
       id = 1, name = "Câmera",
-      x = 0, y = 5, z = 10, rx = -22, ry = 0, rz = 0,
-      scale_x = 1, scale_y = 1, scale_z = 1, visible = true, layer = 0,
+      x = 0, y = 5, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 10, rx = -22, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
       components = {
         { type = "camera3d", fov = 60 },
       },
     },
     {
       id = 2, name = "Chão",
-      x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0,
-      scale_x = 30, scale_y = 1, scale_z = 30, visible = true, layer = 0,
+      x = 0, y = 0, rotation = 0, scale_x = 30, scale_y = 1,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 30,
+      visible = true, layer = 0,
       components = {
         { type = "shape3d", shape = "plane", color = "#7BC86C", shadow = true },
-        { type = "body3d", body = "static" },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
   },

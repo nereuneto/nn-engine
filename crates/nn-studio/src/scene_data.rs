@@ -2042,15 +2042,21 @@ mod tests {
             // (No Windows, o git pode trazer o arquivo com CRLF.)
             let text = std::fs::read_to_string(&p).unwrap().replace("\r\n", "\n");
             let name = p.to_string_lossy().to_string();
-            if name.ends_with(".prefab") {
-                let obj = read_prefab(&text, &name).unwrap();
-                assert_eq!(write_prefab(&obj), text, "{name}");
+            let written = if name.ends_with(".prefab") {
+                write_prefab(&read_prefab(&text, &name).unwrap())
             } else {
                 let mut scene = read(&text, &name).unwrap();
                 let dir = p.parent().and_then(|d| d.parent()).unwrap();
                 crate::scene_render::arrange_all(&mut scene, dir, &mut Default::default());
-                assert_eq!(write(&scene), text, "{name}");
+                write(&scene)
+            };
+            // NN_REESCREVER=1: grava no formato do editor (para modelos
+            // gerados por script).
+            if std::env::var_os("NN_REESCREVER").is_some() && written != text {
+                std::fs::write(&p, &written).unwrap();
+                continue;
             }
+            assert_eq!(written, text, "{name}");
         }
         let template = crate::files::visual_scene_template();
         assert_eq!(write(&read(&template, "novo").unwrap()), template);

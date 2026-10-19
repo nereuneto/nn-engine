@@ -4,12 +4,12 @@ return {
   format = 1,
   object = {
     id = 1, name = "estrela",
-    x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0,
-    scale_x = 1, scale_y = 1, scale_z = 1, visible = true, layer = 0,
+    x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+    visible = true, layer = 0,
     components = {
       { type = "model", file = "modelos/estrela.glb", color = "#FFFFFF", flat = false, shadow = true },
-      { type = "behavior", script = "nn:coletavel", quem = "", variavel = "estrelas", valor = 1, som = "assets/sons/vitoria.wav", brilho = true, cor_brilho = "#FFD166" },
-      { type = "behavior", script = "nn:girar3d", velocidade = 90, eixo = "y", altura = 0.15, duracao = 3 },
+      { type = "behavior", script = "nn:coletavel", brilho = true, cor_brilho = "#FFD166", quem = "", som = "assets/sons/vitoria.wav", valor = 1, variavel = "estrelas" },
+      { type = "behavior", script = "nn:girar3d", altura = 0.15, duracao = 3, eixo = "y", velocidade = 90 },
     },
   },
 }
