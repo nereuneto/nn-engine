@@ -3,7 +3,8 @@
 
 Só usa a biblioteca padrão do Python. Os modelos são nossos (sem licença de
 terceiros) e servem também de exemplo de arquivo glTF como os do Blender:
-várias partes com materiais, nós com posição/rotação/escala e uma textura.
+várias partes com materiais, nós com posição/rotação/escala, uma textura e,
+no herói e no bicho, um esqueleto com animações (parado, andar...).
 
     python3 ferramentas/gerar_modelos.py
 
@@ -36,6 +37,10 @@ class Parte:
         self.cor = cor
         self.textura = textura
         self.pos, self.nor, self.uv, self.idx = [], [], [], []
+        # Modelos com esqueleto: o osso de cada vértice (o atual vale para o
+        # que for acrescentado depois).
+        self.osso = 0
+        self.ossos = []
 
     def tri(self, a, b, c, uvs=((0, 0), (1, 0), (0, 1))):
         n = norm(cross(sub(b, a), sub(c, a)))
@@ -44,6 +49,7 @@ class Parte:
             self.pos.append(p)
             self.nor.append(n)
             self.uv.append(uv)
+            self.ossos.append(self.osso)
         self.idx += [base, base + 1, base + 2]
 
     def quad(self, a, b, c, d):
@@ -62,21 +68,23 @@ class Parte:
         self.quad((x0, y1, z1), (x1, y1, z1), (x1, y1, z0), (x0, y1, z0))  # cima
         self.quad((x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1))  # baixo
 
-    def prisma(self, lados, raio, y0, y1, raio_topo=None, giro=0.0):
+    def prisma(self, lados, raio, y0, y1, raio_topo=None, giro=0.0, centro=(0, 0)):
         """Cilindro facetado (ou cone/tronco com raio_topo)."""
         rt = raio if raio_topo is None else raio_topo
+        cx, cz = centro
         def ponto(i, r, y):
             a = giro + 2 * math.pi * i / lados
-            return (math.cos(a) * r, y, -math.sin(a) * r)
+            px, pz = math.cos(a) * r, -math.sin(a) * r
+            return (px + cx if cx else px, y, pz + cz if cz else pz)
         for i in range(lados):
             a0, a1 = ponto(i, raio, y0), ponto(i + 1, raio, y0)
             b0, b1 = ponto(i, rt, y1), ponto(i + 1, rt, y1)
             if rt > 1e-6:
                 self.quad(a0, a1, b1, b0)
-                self.tri((0, y1, 0), b0, b1)
+                self.tri((cx, y1, cz), b0, b1)
             else:
-                self.tri(a0, a1, (0, y1, 0))
-            self.tri((0, y0, 0), a1, a0)
+                self.tri(a0, a1, (cx, y1, cz))
+            self.tri((cx, y0, cz), a1, a0)
 
     def pedra(self, semente):
         """Icosaedro amassado."""
@@ -142,6 +150,7 @@ class Modelo:
                      "scene": 0, "scenes": [{"nodes": []}], "nodes": [], "meshes": [],
                      "materials": [], "accessors": [], "bufferViews": []}
         self.textura = None
+        self.esqueleto = False
 
     def _view(self, data, target=None):
         while len(self.bin) % 4:
@@ -153,13 +162,13 @@ class Modelo:
         self.json["bufferViews"].append(v)
         return len(self.json["bufferViews"]) - 1
 
-    def _acc(self, valores, tipo, n):
+    def _acc(self, valores, tipo, n, alvo=34962):
         flat = [c for v in valores for c in v]
-        view = self._view(struct.pack('<%df' % len(flat), *flat), 34962)
+        view = self._view(struct.pack('<%df' % len(flat), *flat), alvo)
         a = {"bufferView": view, "componentType": 5126, "count": len(valores), "type": tipo}
-        if tipo == "VEC3":
-            a["min"] = [min(v[i] for v in valores) for i in range(3)]
-            a["max"] = [max(v[i] for v in valores) for i in range(3)]
+        if tipo in ("VEC3", "SCALAR"):
+            a["min"] = [min(v[i] for v in valores) for i in range(n)]
+            a["max"] = [max(v[i] for v in valores) for i in range(n)]
         self.json["accessors"].append(a)
         return len(self.json["accessors"]) - 1
 
@@ -194,6 +203,15 @@ class Modelo:
             attrs = {"POSITION": self._acc(p.pos, "VEC3", 3), "NORMAL": self._acc(p.nor, "VEC3", 3)}
             if p.textura:
                 attrs["TEXCOORD_0"] = self._acc(p.uv, "VEC2", 2)
+            if self.esqueleto:
+                # Cada vértice preso inteiro a um osso (peças rígidas, o
+                # visual low-poly).
+                juntas = [j for o in p.ossos for j in (o, 0, 0, 0)]
+                view = self._view(struct.pack('<%dH' % len(juntas), *juntas), 34962)
+                self.json["accessors"].append({"bufferView": view, "componentType": 5123,
+                                               "count": len(p.ossos), "type": "VEC4"})
+                attrs["JOINTS_0"] = len(self.json["accessors"]) - 1
+                attrs["WEIGHTS_0"] = self._acc([(1.0, 0.0, 0.0, 0.0)] * len(p.ossos), "VEC4", 4)
             prims.append({"attributes": attrs, "indices": indices,
                           "material": len(self.json["materials"]) - 1})
         self.json["meshes"].append({"name": nome, "primitives": prims})
@@ -211,6 +229,44 @@ class Modelo:
         if raiz:
             self.json["scenes"][0]["nodes"].append(i)
         return i
+
+    def ossos(self, lista):
+        """Esqueleto: lista de (nome, pai, posição no mundo) com o pai antes
+        do filho. Devolve os índices dos nós; a malha da skin vem depois."""
+        self.esqueleto = True
+        nos, mundo = [], []
+        for nome, pai, pos in lista:
+            local = pos if pai is None else sub(pos, mundo[pai])
+            no = {"name": nome, "translation": list(local)}
+            self.json["nodes"].append(no)
+            i = len(self.json["nodes"]) - 1
+            if pai is None:
+                self.json["scenes"][0]["nodes"].append(i)
+            else:
+                self.json["nodes"][nos[pai]].setdefault("children", []).append(i)
+            nos.append(i)
+            mundo.append(pos)
+        # Matrizes inversas da pose de descanso (só translação), por coluna.
+        ibm = [(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -p[0], -p[1], -p[2], 1) for p in mundo]
+        acc = self._acc(ibm, "MAT4", 16, alvo=None)
+        self.json["skins"] = [{"joints": nos, "inverseBindMatrices": acc, "skeleton": nos[0]}]
+        self._nos_ossos = nos
+        return nos
+
+    def animacao(self, nome, tempos, canais):
+        """canais: { (osso, "rotation"|"translation"): [valor por tempo] }."""
+        tempo = self._acc([(t,) for t in tempos], "SCALAR", 1, alvo=None)
+        samplers, channels = [], []
+        for (osso, prop), valores in canais.items():
+            tipo = "VEC4" if prop == "rotation" else "VEC3"
+            n = 4 if prop == "rotation" else 3
+            assert len(valores) == len(tempos), (nome, osso, prop)
+            saida = self._acc(valores, tipo, n, alvo=None)
+            samplers.append({"input": tempo, "output": saida, "interpolation": "LINEAR"})
+            channels.append({"sampler": len(samplers) - 1,
+                             "target": {"node": self._nos_ossos[osso], "path": prop}})
+        self.json.setdefault("animations", []).append(
+            {"name": nome, "samplers": samplers, "channels": channels})
 
     def glb(self):
         while len(self.bin) % 4:
@@ -232,6 +288,24 @@ class Modelo:
 def quat_y(graus):
     a = math.radians(graus) / 2
     return [0.0, math.sin(a), 0.0, math.cos(a)]
+
+
+def quat(eixo, graus):
+    """Rotação em volta de "x", "y" ou "z" (x, y, z, w)."""
+    a = math.radians(graus) / 2
+    q = [0.0, 0.0, 0.0, math.cos(a)]
+    q["xyz".index(eixo)] = math.sin(a)
+    return tuple(q)
+
+
+def quat_xz(gx, gz):
+    """Primeiro em volta de Z, depois de X (balançar e abrir um braço)."""
+    x, z = quat("x", gx), quat("z", gz)
+    # x * z
+    return (x[3] * z[0] + x[0] * z[3] + x[1] * z[2] - x[2] * z[1],
+            x[3] * z[1] - x[0] * z[2] + x[1] * z[3] + x[2] * z[0],
+            x[3] * z[2] + x[0] * z[1] - x[1] * z[0] + x[2] * z[3],
+            x[3] * z[3] - x[0] * z[0] - x[1] * z[1] - x[2] * z[2])
 
 
 # --- Os modelos ---------------------------------------------------------------
@@ -285,22 +359,173 @@ def pedra():
 
 
 def heroi():
-    """Virado para +Z (a frente no glTF)."""
+    """Virado para +Z (a frente no glTF), 1,8 m, com esqueleto e as animações
+    parado, andar, correr, pular, cair e acenar. A esquerda dele é o +X."""
     m = Modelo()
+    # Ossos (posição no mundo, na pose de descanso).
+    RAIZ, QUADRIL, TRONCO, CABECA, BRACO_E, BRACO_D, PERNA_E, CANELA_E, PERNA_D, CANELA_D = range(10)
+    m.ossos([
+        ("raiz", None, (0, 0, 0)),
+        ("quadril", RAIZ, (0, 0.5, 0)),
+        ("tronco", QUADRIL, (0, 0.55, 0)),
+        ("cabeca", TRONCO, (0, 1.1, 0)),
+        ("braco_e", TRONCO, (0.36, 1.0, 0)),
+        ("braco_d", TRONCO, (-0.36, 1.0, 0)),
+        ("perna_e", QUADRIL, (0.13, 0.5, 0)),
+        ("canela_e", PERNA_E, (0.13, 0.26, 0)),
+        ("perna_d", QUADRIL, (-0.13, 0.5, 0)),
+        ("canela_d", PERNA_D, (-0.13, 0.26, 0)),
+    ])
     corpo = Parte("#FF8C42")
-    corpo.prisma(8, 0.32, 0.25, 1.1, raio_topo=0.28)
-    pernas = Parte("#3D5A80")
-    pernas.caixa(-0.13, 0.15, 0, 0.18, 0.3, 0.22)
-    pernas.caixa(0.13, 0.15, 0, 0.18, 0.3, 0.22)
-    cabeca = Parte("#FFD6A5")
-    cabeca.caixa(0, 1.35, 0, 0.5, 0.45, 0.45)
+    corpo.osso = TRONCO
+    corpo.prisma(8, 0.32, 0.45, 1.1, raio_topo=0.28)
+    calca = Parte("#3D5A80")
+    for lado, perna, canela in ((1, PERNA_E, CANELA_E), (-1, PERNA_D, CANELA_D)):
+        calca.osso = perna
+        calca.caixa(0.13 * lado, 0.38, 0, 0.18, 0.26, 0.22)
+        calca.osso = canela
+        calca.caixa(0.13 * lado, 0.13, 0.02, 0.17, 0.26, 0.24)
+    pele = Parte("#FFD6A5")
+    pele.osso = CABECA
+    pele.caixa(0, 1.35, 0, 0.5, 0.45, 0.45)
+    mangas = Parte("#F07A35")
+    for lado, braco in ((1, BRACO_E), (-1, BRACO_D)):
+        mangas.osso = braco
+        mangas.caixa(0.41 * lado, 0.8, 0, 0.14, 0.42, 0.15)
+        pele.osso = braco
+        pele.caixa(0.41 * lado, 0.53, 0, 0.12, 0.12, 0.12)
     olhos = Parte("#2B2D42")
+    olhos.osso = CABECA
     olhos.caixa(-0.11, 1.38, 0.23, 0.08, 0.1, 0.02)
     olhos.caixa(0.11, 1.38, 0.23, 0.08, 0.1, 0.02)
     chapeu = Parte("#E63946")
+    chapeu.osso = CABECA
     chapeu.prisma(8, 0.3, 1.57, 1.67)
     chapeu.prisma(8, 0.2, 1.67, 1.8, raio_topo=0.16)
-    m.no("heroi", m.malha("heroi", [corpo, pernas, cabeca, olhos, chapeu]), raiz=True)
+    malha = m.malha("heroi", [corpo, calca, pele, mangas, olhos, chapeu])
+    m.json["nodes"].append({"name": "heroi", "mesh": malha, "skin": 0})
+    m.json["scenes"][0]["nodes"].append(len(m.json["nodes"]) - 1)
+
+    q0 = quat("x", 0)
+    def x(*graus):
+        return [quat("x", g) for g in graus]
+    def quadril(*alturas):
+        return [(0, a, 0) for a in alturas]
+
+    # Parado: respira (o tronco e os braços mexem um pouco).
+    t = [0, 1, 2]
+    m.animacao("parado", t, {
+        (QUADRIL, "translation"): quadril(0.5, 0.49, 0.5),
+        (TRONCO, "rotation"): x(0, 2, 0),
+        (CABECA, "rotation"): x(0, -2, 0),
+        (BRACO_E, "rotation"): [quat("z", g) for g in (4, 7, 4)],
+        (BRACO_D, "rotation"): [quat("z", -g) for g in (4, 7, 4)],
+    })
+    # Andar: pernas e braços balançam ao contrário (a frente é -X na rotação).
+    t = [0, 0.2, 0.4, 0.6, 0.8]
+    m.animacao("andar", t, {
+        (QUADRIL, "translation"): quadril(0.5, 0.52, 0.5, 0.52, 0.5),
+        (PERNA_E, "rotation"): x(-25, 0, 25, 0, -25),
+        (PERNA_D, "rotation"): x(25, 0, -25, 0, 25),
+        (CANELA_E, "rotation"): x(5, 5, 30, 15, 5),
+        (CANELA_D, "rotation"): x(30, 15, 5, 5, 30),
+        (BRACO_E, "rotation"): [quat_xz(g, 5) for g in (20, 0, -20, 0, 20)],
+        (BRACO_D, "rotation"): [quat_xz(g, -5) for g in (-20, 0, 20, 0, -20)],
+        (TRONCO, "rotation"): x(3, 3, 3, 3, 3),
+    })
+    # Correr: mais rápido, mais aberto e inclinado para a frente.
+    t = [0, 0.125, 0.25, 0.375, 0.5]
+    m.animacao("correr", t, {
+        (QUADRIL, "translation"): quadril(0.47, 0.53, 0.47, 0.53, 0.47),
+        (PERNA_E, "rotation"): x(-45, 0, 40, 0, -45),
+        (PERNA_D, "rotation"): x(40, 0, -45, 0, 40),
+        (CANELA_E, "rotation"): x(15, 20, 70, 40, 15),
+        (CANELA_D, "rotation"): x(70, 40, 15, 20, 70),
+        (BRACO_E, "rotation"): [quat_xz(g, 8) for g in (45, 0, -45, 0, 45)],
+        (BRACO_D, "rotation"): [quat_xz(g, -8) for g in (-45, 0, 45, 0, -45)],
+        (TRONCO, "rotation"): x(12, 10, 12, 10, 12),
+    })
+    # Pular: encolhe uma perna e abre os braços para cima (toca uma vez).
+    t = [0, 0.15, 0.3]
+    m.animacao("pular", t, {
+        (PERNA_E, "rotation"): x(0, -40, -35),
+        (CANELA_E, "rotation"): x(0, 60, 55),
+        (PERNA_D, "rotation"): x(0, 15, 10),
+        (CANELA_D, "rotation"): x(0, 25, 20),
+        (BRACO_E, "rotation"): [quat("z", g) for g in (5, 120, 130)],
+        (BRACO_D, "rotation"): [quat("z", -g) for g in (5, 120, 130)],
+    })
+    # Cair: braços para cima, balançando.
+    t = [0, 0.3, 0.6]
+    m.animacao("cair", t, {
+        (BRACO_E, "rotation"): [quat("z", g) for g in (140, 155, 140)],
+        (BRACO_D, "rotation"): [quat("z", -g) for g in (140, 125, 140)],
+        (PERNA_E, "rotation"): [quat_xz(g, 8) for g in (-10, 5, -10)],
+        (PERNA_D, "rotation"): [quat_xz(g, -8) for g in (5, -10, 5)],
+        (CANELA_E, "rotation"): x(20, 10, 20),
+        (CANELA_D, "rotation"): x(10, 20, 10),
+    })
+    # Acenar: o braço direito no alto, de um lado para o outro.
+    t = [0, 0.3, 0.6, 0.9, 1.2]
+    m.animacao("acenar", t, {
+        (BRACO_D, "rotation"): [quat("z", -g) for g in (145, 165, 145, 165, 145)],
+        (BRACO_E, "rotation"): [quat("z", 5)] * 5,
+        (CABECA, "rotation"): [quat("z", g) for g in (0, 4, 0, 4, 0)],
+        (QUADRIL, "translation"): quadril(0.5, 0.5, 0.5, 0.5, 0.5),
+    })
+    del q0
+    return m
+
+
+def bicho():
+    """Um besouro de 4 patas (inimigo), virado para +Z, com parado e andar."""
+    m = Modelo()
+    RAIZ, CORPO, CABECA, P1, P2, P3, P4 = range(7)
+    m.ossos([
+        ("raiz", None, (0, 0, 0)),
+        ("corpo", RAIZ, (0, 0.3, 0)),
+        ("cabeca", CORPO, (0, 0.32, 0.32)),
+        ("pata_fe", CORPO, (0.25, 0.25, 0.18)),
+        ("pata_fd", CORPO, (-0.25, 0.25, 0.18)),
+        ("pata_te", CORPO, (0.25, 0.25, -0.2)),
+        ("pata_td", CORPO, (-0.25, 0.25, -0.2)),
+    ])
+    casco = Parte("#8E44AD")
+    casco.osso = CORPO
+    casco.caixa(0, 0.35, -0.02, 0.5, 0.26, 0.6)
+    casco.prisma(6, 0.25, 0.48, 0.58, raio_topo=0.12, centro=(0, -0.02))
+    pintas = Parte("#F1C40F")
+    pintas.osso = CORPO
+    pintas.caixa(0.13, 0.49, 0.08, 0.1, 0.03, 0.1)
+    pintas.caixa(-0.13, 0.49, -0.12, 0.1, 0.03, 0.1)
+    escuro = Parte("#2B2D42")
+    escuro.osso = CABECA
+    escuro.caixa(0, 0.33, 0.38, 0.3, 0.2, 0.2)
+    for i, (x, z) in enumerate(((0.25, 0.18), (-0.25, 0.18), (0.25, -0.2), (-0.25, -0.2))):
+        escuro.osso = P1 + i
+        escuro.caixa(x + (0.04 if x > 0 else -0.04), 0.12, z, 0.07, 0.25, 0.07)
+    olhos = Parte("#FFFFFF")
+    olhos.osso = CABECA
+    olhos.caixa(0.07, 0.36, 0.48, 0.07, 0.07, 0.02)
+    olhos.caixa(-0.07, 0.36, 0.48, 0.07, 0.07, 0.02)
+    malha = m.malha("bicho", [casco, pintas, escuro, olhos])
+    m.json["nodes"].append({"name": "bicho", "mesh": malha, "skin": 0})
+    m.json["scenes"][0]["nodes"].append(len(m.json["nodes"]) - 1)
+    def x(*graus):
+        return [quat("x", g) for g in graus]
+    t = [0, 0.75, 1.5]
+    m.animacao("parado", t, {
+        (CORPO, "translation"): [(0, 0.3, 0), (0, 0.28, 0), (0, 0.3, 0)],
+        (CABECA, "rotation"): [quat("y", g) for g in (-8, 8, -8)],
+    })
+    t = [0, 0.15, 0.3, 0.45, 0.6]
+    m.animacao("andar", t, {
+        (CORPO, "translation"): [(0, 0.3, 0), (0, 0.32, 0), (0, 0.3, 0), (0, 0.32, 0), (0, 0.3, 0)],
+        (P1, "rotation"): x(-30, 0, 30, 0, -30),
+        (P4, "rotation"): x(-30, 0, 30, 0, -30),
+        (P2, "rotation"): x(30, 0, -30, 0, 30),
+        (P3, "rotation"): x(30, 0, -30, 0, 30),
+    })
     return m
 
 
@@ -362,6 +587,18 @@ def caixote(uri=None):
     return m
 
 
+def roda():
+    """Teste: uma parte sem ossos com animação no nó dela (gira em Y, 1 s)."""
+    m = Modelo()
+    p = Parte("#FF0000")
+    p.caixa(0.5, 0, 0, 1, 0.2, 0.2)
+    malha = m.malha("barra", [p])
+    eixo = m.no("eixo", malha, raiz=True, translation=[0, 1, 0])
+    m._nos_ossos = [eixo]
+    m.animacao("girar", [0, 0.5, 1], {(0, "rotation"): [quat("y", 0), quat("y", 90), quat("y", 180)]})
+    return m
+
+
 def main():
     destino = os.path.join(RAIZ, "jogos", "cubos3d", "modelos")
     testes = os.path.join(RAIZ, "crates", "nn-render", "tests", "modelos")
@@ -376,9 +613,11 @@ def main():
     os.makedirs(estrelas, exist_ok=True)
     for nome, fazer in [("arvore", arvore), ("pedra", pedra), ("heroi", heroi),
                         ("caixote", caixote), ("estrela", estrela), ("moeda", moeda),
-                        ("plataforma", plataforma)]:
+                        ("plataforma", plataforma), ("bicho", bicho)]:
         with open(os.path.join(estrelas, nome + ".glb"), "wb") as f:
             f.write(fazer().glb())
+    with open(os.path.join(testes, "roda.glb"), "wb") as f:
+        f.write(roda().glb())
     # Um .gltf com o .bin e a imagem em arquivos separados (para os testes).
     j, b = caixote("madeira.png").gltf("caixote.bin")
     with open(os.path.join(testes, "caixote.gltf"), "wb") as f:

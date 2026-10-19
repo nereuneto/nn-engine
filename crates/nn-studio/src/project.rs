@@ -3018,7 +3018,26 @@ impl TabViewer for Viewer<'_> {
                     .files_of(FileKind::Anim)
                     .map(|e| e.rel.clone())
                     .collect();
-                let anims = self.sizes.anims.all_names(self.root, &anim_files);
+                let mut anims = self.sizes.anims.all_names(self.root, &anim_files);
+                // Numa cena 3D: as animações dos modelos dela.
+                if let Some(d) = doc.as_ref().filter(|d| d.data.three_d) {
+                    let mut files: Vec<String> = Vec::new();
+                    crate::scene_data::visit(&d.data.objects, &mut |o| {
+                        if let Some(m) = o.component("model")
+                            && !files.contains(&m.str("file").to_string())
+                        {
+                            files.push(m.str("file").to_string());
+                        }
+                    });
+                    anims.clear();
+                    for f in files {
+                        for a in self.sizes.model_anims(self.root, &f) {
+                            if !anims.contains(&a) {
+                                anims.push(a);
+                            }
+                        }
+                    }
+                }
                 // Os tiles dos mapas da cena (para as regras de tiles).
                 let maps = doc
                     .as_ref()

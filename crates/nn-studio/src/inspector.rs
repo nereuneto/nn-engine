@@ -947,6 +947,30 @@ const CAMERA3D_FIELDS: &[F] = &[help(
     "Quanto ela enxerga de cima a baixo. 60° é o normal; mais = mais aberto.",
 )];
 
+const ANIM3D_FIELDS: &[F] = &[
+    help(
+        f("animation", "Animação", W::Anim),
+        "A animação que o modelo toca desde o começo (as do arquivo .glb). Vazia: parado na pose do modelo. Um Jogador 3D escolhe sozinho.",
+    ),
+    help(
+        f(
+            "speed",
+            "Velocidade",
+            W::Num {
+                speed: 0.05,
+                min: -10.0,
+                max: 10.0,
+                suffix: "×",
+            },
+        ),
+        "1 = normal; 2 = o dobro; negativo toca ao contrário.",
+    ),
+    help(
+        f("loop", "Repetir", W::Bool),
+        "Desligado: toca uma vez e para no fim (a condição \"Animação terminar\" avisa).",
+    ),
+];
+
 const BODY3D_FIELDS: &[F] = &[
     help(
         f(
@@ -1226,7 +1250,7 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
 
 /// Componentes que só fazem sentido numa cena 3D.
 pub fn is_3d_kind(kind: &str) -> bool {
-    matches!(kind, "model" | "shape3d" | "camera3d" | "body3d")
+    matches!(kind, "model" | "shape3d" | "camera3d" | "body3d" | "anim3d")
 }
 
 /// Componentes de cena 2D que não valem numa cena 3D (física 2D, mapa de
@@ -1244,6 +1268,7 @@ fn fields(kind: &str) -> &'static [F] {
         "shape3d" => SHAPE3D_FIELDS,
         "camera3d" => CAMERA3D_FIELDS,
         "body3d" => BODY3D_FIELDS,
+        "anim3d" => ANIM3D_FIELDS,
         "sprite" => SPRITE_FIELDS,
         "text" => TEXT_FIELDS,
         "shape" => SHAPE_FIELDS,
@@ -1353,6 +1378,10 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "camera3d" => (
             "Câmera 3D",
             "A câmera do jogo: ele mostra o que ela vê, de onde ela está.",
+        ),
+        "anim3d" => (
+            "Animação 3D",
+            "Toca uma animação do modelo 3D (andar, acenar...), com velocidade e repetir.",
         ),
         "body3d" => (
             "Corpo 3D",
@@ -2257,7 +2286,10 @@ impl Inspector {
             let mut item = |ui: &mut egui::Ui, kind: &str| {
                 let (title, desc) = component_info(kind);
                 let exists = o.component(kind).is_some();
-                let unique = matches!(kind, "body" | "camera" | "map" | "layout" | "body3d");
+                let unique = matches!(
+                    kind,
+                    "body" | "camera" | "map" | "layout" | "body3d" | "anim3d"
+                );
                 if ui
                     .add_enabled(!(exists && unique), egui::Button::new(title))
                     .on_hover_text(desc)
@@ -2397,12 +2429,19 @@ impl Inspector {
         add: &mut Vec<Component>,
     ) {
         let id = o.id;
-        // Para campos de animação: as animações da imagem do objeto.
+        // Para campos de animação: as animações da imagem do objeto (ou, no
+        // 3D, as do modelo).
         let anims = o
             .components
             .iter()
             .find(|c| c.kind == "sprite")
             .map(|c| sizes.anims.names(files.root(), c.str("image")))
+            .or_else(|| {
+                o.components
+                    .iter()
+                    .find(|c| c.kind == "model")
+                    .map(|c| sizes.model_anims(files.root(), c.str("file")))
+            })
             .unwrap_or_default();
         let mut changes: Vec<(String, Prop)> = Vec::new();
         let mut reverts: Vec<String> = Vec::new();
@@ -2538,6 +2577,10 @@ impl Inspector {
         let circle = comp.str("shape") == "circle";
         let anims = if comp.kind == "sprite" {
             sizes.anims.names(files.root(), comp.str("image"))
+        } else if comp.kind == "anim3d" {
+            obj.and_then(|x| x.component("model"))
+                .map(|m| sizes.model_anims(files.root(), m.str("file")))
+                .unwrap_or_default()
         } else {
             Vec::new()
         };

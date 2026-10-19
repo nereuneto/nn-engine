@@ -117,6 +117,46 @@ fn vs_shadow(v: VertexIn) -> @builtin(position) vec4<f32> {
     return view.light_view_proj * model * vec4<f32>(v.position, 1.0);
 }
 
+// --- Malhas com ossos (modelos animados) ----------------------------------
+
+struct Joints {
+    m: array<mat4x4<f32>, 128>,
+};
+@group(3) @binding(0) var<uniform> joints: Joints;
+
+struct SkinIn {
+    @location(12) joint: vec4<u32>,
+    @location(13) weight: vec4<f32>,
+};
+
+// A matriz do vértice: a média dos ossos dele, pelo peso de cada um.
+fn skin_matrix(s: SkinIn) -> mat4x4<f32> {
+    return joints.m[s.joint.x] * s.weight.x + joints.m[s.joint.y] * s.weight.y
+        + joints.m[s.joint.z] * s.weight.z + joints.m[s.joint.w] * s.weight.w;
+}
+
+@vertex
+fn vs_skinned(v: VertexIn, s: SkinIn) -> VertexOut {
+    let skin = skin_matrix(s);
+    let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
+    let normal_m = mat3x3<f32>(v.n0.xyz, v.n1.xyz, v.n2.xyz);
+    let skin_n = mat3x3<f32>(skin[0].xyz, skin[1].xyz, skin[2].xyz);
+    let world = model * skin * vec4<f32>(v.position, 1.0);
+    var out: VertexOut;
+    out.clip = view.view_proj * world;
+    out.normal = normalize(normal_m * (skin_n * v.normal));
+    out.color = v.color * v.tint;
+    out.world = world.xyz;
+    out.uv = v.uv;
+    return out;
+}
+
+@vertex
+fn vs_shadow_skinned(v: VertexIn, s: SkinIn) -> @builtin(position) vec4<f32> {
+    let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
+    return view.light_view_proj * model * skin_matrix(s) * vec4<f32>(v.position, 1.0);
+}
+
 // --- Céu: um triângulo que cobre a tela -----------------------------------
 
 struct SkyOut {

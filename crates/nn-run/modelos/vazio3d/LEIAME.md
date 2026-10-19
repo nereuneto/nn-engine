@@ -6,12 +6,13 @@ Este projeto começa com um mundo 3D vazio: uma cena (`cenas/mundo.cena`) com c�
 
 ## Por onde começar
 
-No NN Studio, **Ajuda > Tutoriais > Seu primeiro mundo 3D** mostra, passo a passo, como montar um mundo aqui mesmo: um herói que anda e pula, árvores, uma caixa que cai, uma estrela para pegar, uma plataforma que anda e um evento de vitória.
+No NN Studio, **Ajuda > Tutoriais > Seu primeiro mundo 3D** mostra, passo a passo, como montar um mundo aqui mesmo: um herói animado que anda e pula, árvores, uma caixa que cai, um bicho que anda, uma estrela para pegar, uma plataforma que anda e um evento de vitória.
 
 ## O que tem aqui
 
 - `modelos/` (modelos 3D `.glb`):
-  - `heroi.glb`: o herói (1,8 m, com a origem nos pés);
+  - `heroi.glb`: o herói (1,8 m, com a origem nos pés), animado: parado, andar, correr, pular, cair e acenar;
+  - `bicho.glb`: um besouro animado (parado e andar);
   - `arvore.glb` e `pedra.glb`: enfeites;
   - `caixote.glb`: um caixote de 1 m;
   - `plataforma.glb`: plataforma de 1 × 1 m, com o topo na origem (escale em X e Z);

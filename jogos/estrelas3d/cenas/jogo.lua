@@ -13,6 +13,9 @@ function cena:enter()
   jogo.preparar()
   self.ilha = ilha.nova()
   self.heroi_modelo = nn.assets.model("modelos/heroi.glb")
+  -- As animações do herói: parado, andar, correr, pular, cair e acenar.
+  self.anim = self.heroi_modelo:animator()
+  self.anim:play("parado")
   self.heroi = self.ilha.mundo:character({ x = INICIO[1], y = INICIO[2], z = INICIO[3], tag = "heroi" })
   self.direcao = 180 -- de costas para a câmera
   self.seguro = { table.unpack(INICIO) }
@@ -95,6 +98,19 @@ function cena:update(dt)
     nn.audio.play(self.sons.pulo, { volume = 0.5 })
   end
 
+  -- A animação conforme o movimento (a troca é suave). Venceu: acena.
+  local hh = self.heroi
+  if self.venceu then
+    self.anim:play("acenar")
+  elseif not hh.on_ground then
+    self.anim:play(hh.vy > 0 and "pular" or "cair", { loop = hh.vy <= 0 })
+  elseif vx ~= 0 or vz ~= 0 then
+    self.anim:play(math.sqrt(vx * vx + vz * vz) > 0.7 and "correr" or "andar")
+  else
+    self.anim:play("parado")
+  end
+  self.anim:update(dt)
+
   -- Último lugar seguro: no chão da ilha.
   local h = self.heroi
   if h.on_ground and h.y > -0.1 and h.y < 0.1 and h.x * h.x + h.z * h.z < 12 * 12 then
@@ -114,10 +130,8 @@ end
 function cena:draw()
   self.ilha:desenhar()
   local h = self.heroi
-  local t = self.ilha.tempo
-  local andando = (h.vx ~= 0 or h.vz ~= 0) and h.on_ground
-  local balanco = andando and math.abs(math.sin(t * 12)) * 0.08 or 0
-  nn.d3.draw(self.heroi_modelo, { x = h.x, y = h.y + balanco, z = h.z, ry = self.direcao, scale = 1.1 })
+  nn.d3.draw(self.heroi_modelo, { x = h.x, y = h.y, z = h.z, ry = self.direcao, scale = 1.1,
+    animator = self.anim })
 
   -- HUD
   local w, hh = nn.window.size()

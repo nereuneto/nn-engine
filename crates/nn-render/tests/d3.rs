@@ -499,3 +499,178 @@ fn ceu_em_degrade_com_sol() {
         "o resto do céu é mais escuro"
     );
 }
+
+// --- Malhas com ossos (Sprint 26) -------------------------------------------
+
+#[test]
+fn malha_com_ossos_segue_as_matrizes_dos_ossos() {
+    use nn_render::d3::SkinVertex;
+    let Some(mut h) = Harness::new() else { return };
+    // Dois cubos: o da esquerda preso ao osso 0, o da direita ao osso 1.
+    let mut mesh = nn_render::d3::Mesh::new();
+    let mut skin = Vec::new();
+    for (x, joint, color) in [(-1.0f32, 0u32, Color::RED), (1.0, 1, Color::BLUE)] {
+        let mut c = shapes::cube();
+        for v in &mut c.vertices {
+            v.position[0] += x;
+            v.color = [color.r, color.g, color.b, 1.0];
+        }
+        skin.extend(std::iter::repeat_n(
+            SkinVertex::rigid(joint),
+            c.vertices.len(),
+        ));
+        mesh.append(&c);
+    }
+    let id = h.renderer.create_mesh_skinned(&mesh, &skin);
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.0, 6.0), Vec3::ZERO));
+    // Parado: vermelho à esquerda, azul à direita.
+    let parado = [Mat4::IDENTITY, Mat4::IDENTITY];
+    h.renderer
+        .draw_mesh_skinned(id, Mat4::IDENTITY, Color::WHITE, None, true, &parado);
+    let img = h.render(Color::BLACK);
+    assert_color(pixel(&img, 20, 32), [255, 0, 0, 255], "vermelho à esquerda");
+    assert_color(pixel(&img, 44, 32), [0, 0, 255, 255], "azul à direita");
+    // O osso 1 sobe 2: o azul sai do meio; o vermelho fica.
+    let subiu = [
+        Mat4::IDENTITY,
+        Mat4::from_translation(Vec3::new(0.0, 2.0, 0.0)),
+    ];
+    h.renderer
+        .draw_mesh_skinned(id, Mat4::IDENTITY, Color::WHITE, None, true, &subiu);
+    let img = h.render(Color::BLACK);
+    assert_color(pixel(&img, 20, 32), [255, 0, 0, 255], "vermelho parado");
+    assert_color(pixel(&img, 44, 32), [0, 0, 0, 255], "o azul subiu");
+    assert!(pixel(&img, 44, 12)[2] > 200, "azul lá em cima");
+    // Vários desenhos com poses diferentes no mesmo frame (e a matriz do
+    // modelo vale junto).
+    for k in 0..6 {
+        let x = Mat4::from_translation(Vec3::new(0.0, -0.3 * k as f32, 0.0));
+        h.renderer
+            .draw_mesh_skinned(id, x, Color::WHITE, None, true, &[Mat4::IDENTITY, x]);
+    }
+    let img = h.render(Color::BLACK);
+    assert_eq!(h.renderer.last_mesh_count(), 6);
+    assert!(brightness(pixel(&img, 44, 40)) > 0);
+}
+
+fn modelo_ilha(nome: &str) -> ModelData {
+    let dir =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/estrelas3d/modelos");
+    let bytes = std::fs::read(dir.join(nome)).unwrap();
+    ModelData::from_gltf(&bytes, &mut |_| None).unwrap()
+}
+
+#[test]
+fn heroi_gerado_tem_esqueleto_e_animacoes() {
+    let h = modelo_ilha("heroi.glb");
+    let s = h.skeleton.as_ref().expect("esqueleto");
+    let nomes: Vec<&str> = s.animations.iter().map(|a| a.name.as_str()).collect();
+    assert_eq!(
+        nomes,
+        ["parado", "andar", "correr", "pular", "cair", "acenar"]
+    );
+    assert_eq!(s.joints.len(), 10);
+    assert!(
+        h.parts
+            .iter()
+            .all(|p| p.skin.len() == p.mesh.vertices.len())
+    );
+    // Mesmo tamanho de antes: 1,8 m, os pés no chão.
+    let (min, max) = h.bounds();
+    assert!(
+        min.y.abs() < 1e-4 && (max.y - 1.8).abs() < 1e-3,
+        "{min} {max}"
+    );
+    // Em descanso, os ossos não mexem nos vértices.
+    for m in s.joint_matrices(&s.rest_pose()) {
+        assert!(m.abs_diff_eq(Mat4::IDENTITY, 1e-4), "{m}");
+    }
+    // Andando, no primeiro quarto do passo, o pé esquerdo vai para a frente
+    // (+Z) e o direito para trás.
+    let andar = s.animation("andar").unwrap();
+    assert!((s.animations[andar].duration - 0.8).abs() < 1e-4);
+    let pose = s.pose(andar, 0.0);
+    let pe_e = s
+        .node_matrix(&pose, "canela_e")
+        .unwrap()
+        .transform_point3(Vec3::new(0.0, -0.2, 0.0));
+    let pe_d = s
+        .node_matrix(&pose, "canela_d")
+        .unwrap()
+        .transform_point3(Vec3::new(0.0, -0.2, 0.0));
+    assert!(pe_e.z > 0.1 && pe_d.z < -0.1, "pés {pe_e} {pe_d}");
+    // O bicho também.
+    let b = modelo_ilha("bicho.glb");
+    let names: Vec<String> = b
+        .skeleton
+        .unwrap()
+        .animations
+        .into_iter()
+        .map(|a| a.name)
+        .collect();
+    assert_eq!(names, ["parado", "andar"]);
+}
+
+#[test]
+fn heroi_animado_mexe_os_pixels_e_faz_sombra() {
+    let Some(mut h) = Harness::new() else { return };
+    let data = modelo_ilha("heroi.glb");
+    let model = h.renderer.create_model(&data);
+    let s = model.skeleton.clone().unwrap();
+    h.renderer.set_camera3d(Camera3D::looking_at(
+        Vec3::new(0.0, 1.0, 3.0),
+        Vec3::new(0.0, 0.9, 0.0),
+    ));
+    // De frente: parado, os braços ficam juntos do corpo; acenando, o braço
+    // direito sobe para o lado.
+    h.renderer
+        .draw_model(&model, Mat4::IDENTITY, Color::WHITE, true);
+    let parado = h.render(Color::BLACK);
+    let acenar = s.animation("acenar").unwrap();
+    let joints = s.joint_matrices(&s.pose(acenar, 0.3));
+    h.renderer
+        .draw_model_posed(&model, Mat4::IDENTITY, Color::WHITE, true, &joints);
+    let acenando = h.render(Color::BLACK);
+    if let Some(d) = std::env::var_os("NN_TELAS") {
+        for (nome, img) in [("heroi-parado", &parado), ("heroi-acenando", &acenando)] {
+            image::RgbaImage::from_raw(64, 64, img.clone())
+                .unwrap()
+                .save(std::path::Path::new(&d).join(format!("{nome}.png")))
+                .unwrap();
+        }
+    }
+    let acesos = |img: &[u8], y0: u32, y1: u32| {
+        (y0..y1)
+            .flat_map(|y| (0..64).map(move |x| (x, y)))
+            .filter(|&(x, y)| brightness(pixel(img, x, y)) > 0)
+            .count()
+    };
+    // O herói inteiro aparece nas duas, e o braço levantado muda a imagem.
+    assert!(acesos(&parado, 0, 64) > 200);
+    let diferentes = (0..64 * 64)
+        .filter(|i| {
+            let (x, y) = (i % 64, i / 64);
+            pixel(&parado, x, y) != pixel(&acenando, x, y)
+        })
+        .count();
+    assert!(diferentes > 20, "o braço mexeu: {diferentes} pixels");
+}
+
+#[test]
+fn parte_sem_ossos_anima_pelo_no() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/modelos");
+    let bytes = std::fs::read(dir.join("roda.glb")).unwrap();
+    let m = ModelData::from_gltf(&bytes, &mut |_| None).unwrap();
+    let s = m.skeleton.as_ref().expect("animado");
+    assert_eq!(s.joints.len(), 1, "o nó da parte vira um osso");
+    // A ponta da barra (x = 1, na altura do eixo) gira 90° em Y na metade.
+    let ponta = Vec3::new(1.0, 1.0, 0.0);
+    let i = s.animation("girar").unwrap();
+    let j = s.joint_matrices(&s.pose(i, 0.5));
+    let p = j[0].transform_point3(ponta);
+    assert!(p.abs_diff_eq(Vec3::new(0.0, 1.0, -1.0), 1e-4), "{p}");
+    // Em descanso, parada.
+    let j = s.joint_matrices(&s.rest_pose());
+    assert!(j[0].transform_point3(ponta).abs_diff_eq(ponta, 1e-4));
+}

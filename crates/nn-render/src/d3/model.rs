@@ -4,11 +4,15 @@
 //! O modelo é lido para a memória ([`ModelData`]) e depois enviado à GPU com
 //! [`Renderer::create_model`](crate::Renderer::create_model). As
 //! transformações dos nós do arquivo já vêm aplicadas: o modelo é desenhado
-//! inteiro de uma vez, como uma malha só.
+//! inteiro de uma vez, como uma malha só. Modelos com ossos (*skins*) ou
+//! animações também trazem o esqueleto ([`Skeleton`]).
 
-use glam::{Mat3, Mat4, UVec2, Vec2, Vec3};
+use std::sync::Arc;
+
+use glam::{Mat3, Mat4, Quat, UVec2, Vec2, Vec3, Vec4};
 use nn_core::Color;
 
+use super::skin::{Animation, Channel, MAX_JOINTS, Property, SkelNode, Skeleton, SkinVertex, Trs};
 use super::{Mesh, MeshId, Vertex3};
 use crate::TextureId;
 
@@ -31,6 +35,8 @@ pub struct ModelPart {
     pub mesh: Mesh,
     /// Índice em [`ModelData::images`], se a parte tiver textura.
     pub image: Option<usize>,
+    /// Os ossos de cada vértice (vazio num modelo sem esqueleto).
+    pub skin: Vec<SkinVertex>,
 }
 
 /// Imagem de um modelo, já decodificada (RGBA 8 bits).
@@ -47,6 +53,8 @@ pub struct ModelImage {
 pub struct ModelData {
     pub parts: Vec<ModelPart>,
     pub images: Vec<ModelImage>,
+    /// Esqueleto e animações (modelos com ossos ou animações).
+    pub skeleton: Option<Skeleton>,
 }
 
 impl ModelData {
@@ -75,6 +83,7 @@ impl ModelData {
     pub fn flatten(&mut self) {
         for part in &mut self.parts {
             let old = std::mem::take(&mut part.mesh);
+            let old_skin = std::mem::take(&mut part.skin);
             for tri in old.indices.as_chunks::<3>().0 {
                 let v = tri.map(|i| old.vertices[i as usize]);
                 let p = v.map(|v| Vec3::from_array(v.position));
@@ -83,6 +92,10 @@ impl ModelData {
                 for mut vert in v {
                     vert.normal = n.to_array();
                     part.mesh.vertices.push(vert);
+                }
+                if !old_skin.is_empty() {
+                    part.skin
+                        .extend(tri.map(|i| old_skin.get(i as usize).copied().unwrap_or_default()));
                 }
                 part.mesh.indices.extend([base, base + 1, base + 2]);
             }
@@ -149,36 +162,244 @@ impl ModelData {
             });
         }
 
-        // As malhas, com as transformações dos nós aplicadas.
-        let mut parts: Vec<ModelPart> = Vec::new();
+        // Os nós da cena, cada pai antes dos filhos.
         let scene = doc.default_scene().or_else(|| doc.scenes().next());
         let roots: Vec<gltf::Node> = match scene {
             Some(s) => s.nodes().collect(),
             None => doc.nodes().collect(),
         };
-        let mut stack: Vec<(gltf::Node, Mat4)> =
-            roots.into_iter().map(|n| (n, Mat4::IDENTITY)).collect();
+        let mut order: Vec<(gltf::Node, Option<usize>)> = Vec::new();
+        let mut stack: Vec<(gltf::Node, Option<usize>)> =
+            roots.into_iter().rev().map(|n| (n, None)).collect();
         while let Some((node, parent)) = stack.pop() {
-            let world = parent * Mat4::from_cols_array_2d(&node.transform().matrix());
-            if let Some(mesh) = node.mesh() {
-                for prim in mesh.primitives() {
-                    if prim.mode() != gltf::mesh::Mode::Triangles {
-                        log::warn!("modelo: parte que não é de triângulos ignorada");
-                        continue;
-                    }
-                    add_primitive(&prim, &buffers, world, &image_of_texture, &mut parts)?;
-                }
+            let me = order.len();
+            for child in node.children().collect::<Vec<_>>().into_iter().rev() {
+                stack.push((child, Some(me)));
             }
-            for child in node.children() {
-                stack.push((child, world));
+            order.push((node, parent));
+        }
+        let mut index_of = std::collections::HashMap::new();
+        for (i, (node, _)) in order.iter().enumerate() {
+            index_of.insert(node.index(), i);
+        }
+
+        // Esqueleto: só em modelos com ossos ou animações.
+        let animated = doc.skins().next().is_some() || doc.animations().next().is_some();
+        let mut skeleton = animated.then(|| Skeleton {
+            nodes: order
+                .iter()
+                .map(|(node, parent)| {
+                    let (t, r, s) = node.transform().decomposed();
+                    SkelNode {
+                        name: node.name().unwrap_or("").to_string(),
+                        parent: *parent,
+                        rest: Trs {
+                            translation: Vec3::from_array(t),
+                            rotation: Quat::from_array(r).normalize(),
+                            scale: Vec3::from_array(s),
+                        },
+                    }
+                })
+                .collect(),
+            ..Default::default()
+        });
+        let rest_globals = skeleton
+            .as_ref()
+            .map(|s| s.globals(&s.rest_pose()))
+            .unwrap_or_default();
+        // Ossos das skins: os índices de cada skin viram índices da lista
+        // geral de ossos.
+        let mut skin_joints: Vec<Vec<u32>> = Vec::new();
+        if let Some(sk) = skeleton.as_mut() {
+            for skin in doc.skins() {
+                if let Some(a) = skin.inverse_bind_matrices()
+                    && !(a.dimensions() == gltf::accessor::Dimensions::Mat4
+                        && a.data_type() == gltf::accessor::DataType::F32)
+                {
+                    return Err(ModelError::Invalid(
+                        "tipo de dado inválido nas matrizes dos ossos".into(),
+                    ));
+                }
+                let reader = skin.reader(|b| buffers.get(b.index()).map(|d| d.as_slice()));
+                let ibms: Vec<Mat4> = reader
+                    .read_inverse_bind_matrices()
+                    .map(|m| m.map(|c| Mat4::from_cols_array_2d(&c)).collect())
+                    .unwrap_or_default();
+                let mut map = Vec::new();
+                for (k, joint) in skin.joints().enumerate() {
+                    let node = *index_of
+                        .get(&joint.index())
+                        .ok_or_else(|| ModelError::Invalid("osso fora da cena do modelo".into()))?;
+                    map.push(sk.joints.len() as u32);
+                    sk.joints
+                        .push((node, ibms.get(k).copied().unwrap_or(Mat4::IDENTITY)));
+                }
+                skin_joints.push(map);
+            }
+        }
+
+        // As malhas, com as transformações dos nós aplicadas.
+        let mut parts: Vec<ModelPart> = Vec::new();
+        let mut world_of: Vec<Mat4> = Vec::with_capacity(order.len());
+        for (i, (node, parent)) in order.iter().enumerate() {
+            let local = Mat4::from_cols_array_2d(&node.transform().matrix());
+            let world = match parent {
+                Some(p) => world_of[*p] * local,
+                None => local,
+            };
+            world_of.push(world);
+            let Some(mesh) = node.mesh() else {
+                continue;
+            };
+            // Num modelo animado, a parte segue os ossos da skin ou o nó dela.
+            let skin = match (&mut skeleton, node.skin()) {
+                (Some(_), Some(s)) => SkinSource::Skinned(&skin_joints[s.index()]),
+                (Some(sk), None) => {
+                    let inverse = rest_globals[i].inverse();
+                    let joint = match sk.joints.iter().position(|(n, _)| *n == i) {
+                        Some(j) if sk.joints[j].1.abs_diff_eq(inverse, 1e-5) => j,
+                        _ => {
+                            sk.joints.push((i, inverse));
+                            sk.joints.len() - 1
+                        }
+                    };
+                    SkinSource::Rigid(joint as u32)
+                }
+                _ => SkinSource::None,
+            };
+            for prim in mesh.primitives() {
+                if prim.mode() != gltf::mesh::Mode::Triangles {
+                    log::warn!("modelo: parte que não é de triângulos ignorada");
+                    continue;
+                }
+                // Malha com skin: os vértices já estão na pose dos ossos (o
+                // nó dela não conta).
+                let w = if matches!(skin, SkinSource::Skinned(_)) {
+                    Mat4::IDENTITY
+                } else {
+                    world
+                };
+                add_primitive(&prim, &buffers, w, &image_of_texture, skin, &mut parts)?;
             }
         }
         parts.retain(|p| !p.mesh.indices.is_empty());
         if parts.is_empty() {
             return Err(ModelError::Empty);
         }
-        Ok(Self { parts, images })
+
+        if let Some(sk) = skeleton.as_mut() {
+            sk.animations = read_animations(doc, &buffers, &index_of)?;
+        }
+        if skeleton
+            .as_ref()
+            .is_some_and(|s| s.joints.len() > MAX_JOINTS)
+        {
+            log::warn!("modelo com mais de {MAX_JOINTS} ossos: desenhado parado, sem animação");
+            skeleton = None;
+            for p in &mut parts {
+                p.skin.clear();
+            }
+        }
+        Ok(Self {
+            parts,
+            images,
+            skeleton,
+        })
     }
+}
+
+/// De onde vêm os ossos dos vértices de uma parte.
+#[derive(Clone, Copy)]
+enum SkinSource<'a> {
+    /// Modelo sem esqueleto.
+    None,
+    /// Preso inteiro a um osso (o nó da parte).
+    Rigid(u32),
+    /// Os ossos do arquivo (JOINTS_0 e WEIGHTS_0), com os índices da skin
+    /// levados para a lista geral.
+    Skinned(&'a [u32]),
+}
+
+fn read_animations(
+    doc: &gltf::Document,
+    buffers: &[Vec<u8>],
+    index_of: &std::collections::HashMap<usize, usize>,
+) -> Result<Vec<Animation>, ModelError> {
+    use gltf::accessor::{DataType as T, Dimensions as D};
+    use gltf::animation::util::ReadOutputs;
+    let mut out = Vec::new();
+    for (n, anim) in doc.animations().enumerate() {
+        let mut channels = Vec::new();
+        let mut duration = 0.0f32;
+        for ch in anim.channels() {
+            let target = ch.target();
+            let Some(&node) = index_of.get(&target.node().index()) else {
+                continue;
+            };
+            let property = match target.property() {
+                gltf::animation::Property::Translation => Property::Translation,
+                gltf::animation::Property::Rotation => Property::Rotation,
+                gltf::animation::Property::Scale => Property::Scale,
+                gltf::animation::Property::MorphTargetWeights => continue,
+            };
+            let sampler = ch.sampler();
+            let (input, output) = (sampler.input(), sampler.output());
+            let ok_out = match property {
+                Property::Rotation => {
+                    output.dimensions() == D::Vec4
+                        && matches!(output.data_type(), T::F32 | T::I8 | T::U8 | T::I16 | T::U16)
+                }
+                _ => output.dimensions() == D::Vec3 && output.data_type() == T::F32,
+            };
+            if input.dimensions() != D::Scalar
+                || input.data_type() != T::F32
+                || !ok_out
+                || input.sparse().is_some()
+                || output.sparse().is_some()
+            {
+                return Err(ModelError::Invalid(
+                    "tipo de dado inválido numa animação".into(),
+                ));
+            }
+            let reader = ch.reader(|b| buffers.get(b.index()).map(|d| d.as_slice()));
+            let times: Vec<f32> = match reader.read_inputs() {
+                Some(t) => t.collect(),
+                None => continue,
+            };
+            let mut values: Vec<Vec4> = match reader.read_outputs() {
+                Some(ReadOutputs::Translations(v)) | Some(ReadOutputs::Scales(v)) => {
+                    v.map(|v| Vec3::from_array(v).extend(0.0)).collect()
+                }
+                Some(ReadOutputs::Rotations(r)) => r.into_f32().map(Vec4::from_array).collect(),
+                _ => continue,
+            };
+            let interpolation = sampler.interpolation();
+            if interpolation == gltf::animation::Interpolation::CubicSpline {
+                // Cada quadro tem (tangente de entrada, valor, de saída): fica
+                // só o valor, com transição linear.
+                values = values.chunks(3).filter_map(|c| c.get(1).copied()).collect();
+            }
+            if let Some(&last) = times.last() {
+                duration = duration.max(last);
+            }
+            channels.push(Channel {
+                node,
+                property,
+                step: interpolation == gltf::animation::Interpolation::Step,
+                times,
+                values,
+            });
+        }
+        out.push(Animation {
+            name: anim
+                .name()
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("animacao{}", n + 1)),
+            duration,
+            channels,
+        });
+    }
+    Ok(out)
 }
 
 fn add_primitive(
@@ -186,6 +407,7 @@ fn add_primitive(
     buffers: &[Vec<u8>],
     world: Mat4,
     image_of_texture: &std::collections::HashMap<usize, usize>,
+    skin: SkinSource,
     parts: &mut Vec<ModelPart>,
 ) -> Result<(), ModelError> {
     check_accessors(prim)?;
@@ -211,6 +433,49 @@ fn add_primitive(
             "índice de vértice fora da malha".into(),
         ));
     }
+    // Os ossos de cada vértice.
+    let skins: Option<Vec<SkinVertex>> = match skin {
+        SkinSource::None => None,
+        SkinSource::Rigid(j) => Some(vec![SkinVertex::rigid(j); count]),
+        SkinSource::Skinned(map) => {
+            let joints: Vec<[u16; 4]> = reader
+                .read_joints(0)
+                .map(|j| j.into_u16().collect())
+                .unwrap_or_default();
+            let weights: Vec<[f32; 4]> = reader
+                .read_weights(0)
+                .map(|w| w.into_f32().collect())
+                .unwrap_or_default();
+            let mut out = Vec::with_capacity(count);
+            for i in 0..count {
+                let j = joints.get(i).copied().unwrap_or([0; 4]);
+                let mut w = weights.get(i).copied().unwrap_or([1.0, 0.0, 0.0, 0.0]);
+                let sum: f32 = w.iter().sum();
+                if sum > 1e-6 {
+                    w = w.map(|x| x / sum);
+                } else {
+                    w = [1.0, 0.0, 0.0, 0.0];
+                }
+                let mut v = SkinVertex {
+                    joints: [0; 4],
+                    weights: w,
+                };
+                for k in 0..4 {
+                    match map.get(j[k] as usize) {
+                        Some(&g) => v.joints[k] = g,
+                        None if w[k] > 0.0 => {
+                            return Err(ModelError::Invalid(
+                                "vértice preso a um osso que não existe".into(),
+                            ));
+                        }
+                        None => {}
+                    }
+                }
+                out.push(v);
+            }
+            Some(out)
+        }
+    };
 
     let material = prim.material();
     let pbr = material.pbr_metallic_roughness();
@@ -231,6 +496,7 @@ fn add_primitive(
             parts.push(ModelPart {
                 mesh: Mesh::new(),
                 image,
+                skin: Vec::new(),
             });
             parts.last_mut().expect("parte criada")
         }
@@ -251,6 +517,9 @@ fn add_primitive(
                 part.mesh
                     .vertices
                     .push(vertex(p[k], n, i as usize, factor, &colors, &uvs));
+                if let Some(s) = &skins {
+                    part.skin.push(s[i as usize]);
+                }
             }
             part.mesh.indices.extend([start, start + 1, start + 2]);
         }
@@ -263,6 +532,9 @@ fn add_primitive(
         part.mesh
             .vertices
             .push(vertex(p, n, i, factor, &colors, &uvs));
+        if let Some(s) = &skins {
+            part.skin.push(s[i]);
+        }
     }
     for tri in indices.as_chunks::<3>().0 {
         if flip {
@@ -304,6 +576,12 @@ fn check_accessors(prim: &gltf::Primitive) -> Result<(), ModelError> {
             }
             Semantic::TexCoords(_) => {
                 a.dimensions() == D::Vec2 && matches!(a.data_type(), T::U8 | T::U16 | T::F32)
+            }
+            Semantic::Joints(_) => {
+                a.dimensions() == D::Vec4 && matches!(a.data_type(), T::U8 | T::U16)
+            }
+            Semantic::Weights(_) => {
+                a.dimensions() == D::Vec4 && matches!(a.data_type(), T::U8 | T::U16 | T::F32)
             }
             _ => true,
         };
@@ -452,13 +730,25 @@ pub struct Model {
     pub bounds: (Vec3, Vec3),
     pub triangles: usize,
     /// Os triângulos, para a colisão exata da física.
-    pub collision: std::sync::Arc<CollisionMesh>,
+    pub collision: Arc<CollisionMesh>,
+    /// Esqueleto e animações (modelos animados).
+    pub skeleton: Option<Arc<Skeleton>>,
+    /// As matrizes dos ossos na pose de descanso (desenho sem animação).
+    pub(crate) rest_joints: Arc<Vec<Mat4>>,
 }
 
 impl Model {
     /// Tamanho do modelo (largura, altura, profundidade).
     pub fn size(&self) -> Vec3 {
         self.bounds.1 - self.bounds.0
+    }
+
+    /// Os nomes das animações (vazio num modelo sem animação).
+    pub fn animation_names(&self) -> Vec<String> {
+        self.skeleton
+            .as_ref()
+            .map(|s| s.animations.iter().map(|a| a.name.clone()).collect())
+            .unwrap_or_default()
     }
 }
 

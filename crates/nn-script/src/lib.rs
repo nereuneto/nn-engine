@@ -26,6 +26,7 @@
 //! estado (`self`). Erros aparecem na própria janela e somem quando o arquivo
 //! corrigido é salvo.
 
+mod anim3d;
 mod api;
 pub mod api_docs;
 mod camera3d;

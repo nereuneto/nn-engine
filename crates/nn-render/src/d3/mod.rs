@@ -21,6 +21,7 @@ mod gpu;
 mod mesh;
 mod model;
 pub mod shapes;
+mod skin;
 
 use glam::{Mat4, Quat, Vec2, Vec3};
 use nn_core::Color;
@@ -28,6 +29,7 @@ use nn_core::Color;
 pub(crate) use gpu::Renderer3D;
 pub use mesh::{Mesh, Vertex3};
 pub use model::{CollisionMesh, Model, ModelData, ModelError, ModelImage, ModelPart};
+pub use skin::{Animation, MAX_JOINTS, Pose, SkelNode, Skeleton, SkinVertex, Trs};
 
 /// Câmera em perspectiva: de onde olha, para onde e o campo de visão.
 #[derive(Debug, Clone, Copy, PartialEq)]

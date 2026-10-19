@@ -219,6 +219,26 @@ impl Context {
         }
     }
 
+    /// Como [`Context::draw_model_key`], numa pose: as matrizes dos ossos de
+    /// [`Skeleton::joint_matrices`](nn_render::d3::Skeleton::joint_matrices).
+    pub fn draw_model_key_posed(
+        &mut self,
+        key: &str,
+        matrix: glam::Mat4,
+        color: nn_core::Color,
+        cast_shadow: bool,
+        joints: &[glam::Mat4],
+    ) -> bool {
+        match self.assets.models.get(key) {
+            Some((model, _)) => {
+                self.renderer
+                    .draw_model_posed(model, matrix, color, cast_shadow, joints);
+                true
+            }
+            None => false,
+        }
+    }
+
     fn read_model(&mut self, file: &str, flat: bool) -> Result<nn_render::d3::Model, AssetError> {
         let bytes = self.assets.read(file)?;
         let dir = Path::new(file)

@@ -425,6 +425,16 @@ impl SceneDoc {
                     (rect.width() * ppp).round().max(1.0) as u32,
                     (rect.height() * ppp).round().max(1.0) as u32,
                 );
+                // Animações na prévia: a vista se redesenha enquanto houver.
+                let mut animated = false;
+                scene_data::visit(&self.data.objects, &mut |o| {
+                    animated |=
+                        o.component("model").is_some() && scene_render::preview_anim3d(o).is_some();
+                });
+                if animated {
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(33));
+                }
                 let view = scene_render::View3 {
                     camera: self.cam3.camera(),
                     size,
@@ -434,6 +444,7 @@ impl SceneDoc {
                     } else {
                         0.0
                     },
+                    time: ui.input(|i| i.time) as f32,
                 };
                 let tex = renderer.render3d(&self.rel, env.root, &self.data, &view);
                 painter.image(
