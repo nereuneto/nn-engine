@@ -270,7 +270,8 @@ fn kind_from(o: Option<&Table>) -> Result<BodyKind3> {
 fn body_from_opts(opts: &Table) -> Result<BodyDesc> {
     let o = Some(opts);
     let n = |k: &str, d: f32| -> Result<f32> { Ok(opt::<f32>(o, k)?.unwrap_or(d)) };
-    let scale = n("scale", 1.0)?;
+    // Escala por eixo (sx, sy, sz) vezes a escala geral.
+    let scale = (Vec3::new(n("sx", 1.0)?, n("sy", 1.0)?, n("sz", 1.0)?) * n("scale", 1.0)?).abs();
     let model = match opt::<Value>(o, "model")? {
         None | Some(Value::Nil) => None,
         Some(Value::UserData(ud)) if ud.is::<LModel>() => Some(ud.borrow::<LModel>()?.clone()),
@@ -301,22 +302,22 @@ fn body_from_opts(opts: &Table) -> Result<BodyDesc> {
             // A caixa em volta do modelo (que pode não estar centrado).
             let (min, max) = m.bounds;
             offset += (min + max) / 2.0 * scale;
-            Shape3::Box((max - min).max(Vec3::splat(0.01)) * scale)
+            Shape3::Box(((max - min) * scale).max(Vec3::splat(0.01)))
         }
         (None | Some("box"), _) => {
             let size = n("size", 1.0)?;
             Shape3::Box(Vec3::new(n("w", size)?, n("h", size)?, n("d", size)?) * scale)
         }
         (Some("sphere"), _) => Shape3::Sphere {
-            radius: n("radius", 0.5)? * scale,
+            radius: n("radius", 0.5)? * scale.max_element(),
         },
         (Some("capsule"), _) => Shape3::Capsule {
-            radius: n("radius", 0.25)? * scale,
-            height: n("height", 1.0)? * scale,
+            radius: n("radius", 0.25)? * scale.x.max(scale.z),
+            height: n("height", 1.0)? * scale.y,
         },
         (Some("cylinder"), _) => Shape3::Cylinder {
-            radius: n("radius", 0.5)? * scale,
-            height: n("height", 1.0)? * scale,
+            radius: n("radius", 0.5)? * scale.x.max(scale.z),
+            height: n("height", 1.0)? * scale.y,
         },
         (Some(other), _) => {
             return Err(err(format!(

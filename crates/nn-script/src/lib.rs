@@ -106,6 +106,12 @@ pub const BEHAVIORS: &[(&str, &str)] = &[
         include_str!("comportamentos/mostrar_valor.lua"),
     ),
     ("botao", include_str!("comportamentos/botao.lua")),
+    ("jogador3d", include_str!("comportamentos/jogador3d.lua")),
+    ("girar3d", include_str!("comportamentos/girar3d.lua")),
+    (
+        "plataforma3d",
+        include_str!("comportamentos/plataforma3d.lua"),
+    ),
 ];
 
 /// Variáveis do jogo (`nn.vars`): começam com o `vars` do config.lua e valem

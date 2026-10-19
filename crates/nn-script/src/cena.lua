@@ -115,7 +115,18 @@ M.FIELDS = {
   camera3d = {
     { "fov", 60 },
   },
+  -- Corpo da física 3D. Forma "auto": parado (ou kinematic) com modelo usa a
+  -- malha exata; o resto, uma caixa, esfera, cápsula ou cilindro do tamanho
+  -- do modelo ou da forma.
+  body3d = {
+    { "body", "static" }, { "shape", "auto" }, { "sensor", false }, { "bounce", 0 },
+    { "friction", 0.5 }, { "mass", 0 }, { "lock_rotation", false }, { "gravity_scale", 1 },
+    { "tag", "" },
+  },
 }
+
+-- Formas do componente body3d.
+M.SHAPES_BODY3D = { "auto", "box", "sphere", "capsule", "cylinder", "mesh" }
 
 -- Formas prontas do componente shape3d (a malha de nn.d3 de cada uma).
 M.SHAPES3D = { "cube", "sphere", "cylinder", "cone", "capsule", "plane" }
@@ -414,14 +425,62 @@ function Object:world_transform()
     psx * self.scale_x, psy * self.scale_y
 end
 
---- 3D: a matriz do objeto no mundo (com as dos pais).
-function Object:matrix3d()
+--- 3D: a matriz do objeto no mundo (com as dos pais). Com `alpha` (de
+--- nn.time.alpha()), quem anda pela física fica entre o passo anterior e o
+--- atual, para o movimento ficar liso.
+function Object:matrix3d(alpha)
+  local x, y, z = self.x, self.y, self.z
+  local p = self._p3
+  if alpha and p then
+    x, y, z = p[1] + (x - p[1]) * alpha, p[2] + (y - p[2]) * alpha, p[3] + (z - p[3]) * alpha
+  end
   local m = nn.d3.matrix({
-    x = self.x, y = self.y, z = self.z, rx = self.rx, ry = self.ry, rz = self.rz,
+    x = x, y = y, z = z, rx = self.rx, ry = self.ry, rz = self.rz,
     sx = self.scale_x, sy = self.scale_y, sz = self.scale_z,
   })
-  if self.parent then return self.parent:matrix3d() * m end
+  if self.parent then return self.parent:matrix3d(alpha) * m end
   return m
+end
+
+--- 3D: onde o objeto está no mundo (x, y, z).
+function Object:position3d(alpha)
+  return self:matrix3d(alpha):position()
+end
+
+--- 3D: a caixa do objeto no espaço dele (min e max), sem escala: do
+--- modelo, da forma 3D ou um cubinho.
+function Object:local_bounds3d()
+  for _, c in ipairs(self.components) do
+    if c.type == "model" and c._model then return c._model:bounds() end
+    if c.type == "shape3d" and c._mesh then
+      if c.shape == "plane" then return -0.5, -0.01, -0.5, 0.5, 0.01, 0.5 end
+      if c.shape == "capsule" then return -0.25, -0.5, -0.25, 0.25, 0.5, 0.25 end
+      return -0.5, -0.5, -0.5, 0.5, 0.5, 0.5
+    end
+  end
+  return -0.25, -0.25, -0.25, 0.25, 0.25, 0.25
+end
+
+--- 3D: a caixa do objeto no mundo: min x, y, z e max x, y, z.
+function Object:bounds3d()
+  local b, ch = self.body, self._char3
+  if ch and b and b.alive then
+    local r, h = ch.radius, ch.height
+    return b.x - r, b.y, b.z - r, b.x + r, b.y + h, b.z + r
+  end
+  local x0, y0, z0, x1, y1, z1 = self:local_bounds3d()
+  local m = self:matrix3d()
+  local inf = math.huge
+  local ax, ay, az, bx, by, bz = inf, inf, inf, -inf, -inf, -inf
+  for i = 0, 7 do
+    local px = (i % 2 == 0) and x0 or x1
+    local py = (i % 4 < 2) and y0 or y1
+    local pz = (i < 4) and z0 or z1
+    local wx, wy, wz = m:transform_point(px, py, pz)
+    ax, ay, az = math.min(ax, wx), math.min(ay, wy), math.min(az, wz)
+    bx, by, bz = math.max(bx, wx), math.max(by, wy), math.max(bz, wz)
+  end
+  return ax, ay, az, bx, by, bz
 end
 
 --- O objeto e todos os pais estão visíveis?
@@ -446,7 +505,12 @@ function Object:destroy()
     M.events.signal(self.scene, { kind = "destruido", obj = self })
   end
   self.alive = false
-  if self.body and self.body.alive then self.body:remove() end
+  if self.body and self.body.alive then
+    if self._s3 and self.scene and self.scene._by_body3 then
+      self.scene._by_body3[self.body.id] = nil
+    end
+    self.body:remove()
+  end
   for _, ch in ipairs(self.children) do ch:destroy() end
   local scene = self.scene
   if scene then
@@ -555,6 +619,14 @@ end
 --- Os dois objetos estão encostando (ou um dentro do outro)?
 function Object:touching(other, margin)
   if not (other and other.alive and self.alive) or other == self then return false end
+  if self.scene and self.scene._3d then
+    -- 3D: as caixas (em metros) se cruzam?
+    margin = margin or 0.05
+    local a0, a1, a2, a3, a4, a5 = self:bounds3d()
+    local b0, b1, b2, b3, b4, b5 = other:bounds3d()
+    return a0 <= b3 + margin and b0 <= a3 + margin and a1 <= b4 + margin
+      and b1 <= a4 + margin and a2 <= b5 + margin and b2 <= a5 + margin
+  end
   margin = margin or 2
   local ax, ay = self:world_transform()
   local bx, by = other:world_transform()
@@ -590,8 +662,20 @@ function Object:tiles_touching(margin)
   return out
 end
 
---- Leva o objeto (e o corpo físico) para x, y.
-function Object:move_to(x, y)
+--- Leva o objeto (e o corpo físico) para x, y (e z, no 3D).
+function Object:move_to(x, y, z)
+  if self.scene and self.scene._3d then
+    self.x, self.y, self.z = x, y, z or self.z
+    self._p3 = nil
+    local b = self.body
+    if b and b.alive then
+      local wx, wy, wz = self:position3d()
+      b:set_position(wx, wy + (self._char3 and self._char3.feet or 0), wz)
+      b:set_velocity(0, 0, 0)
+      self._s3 = { self.x, self.y, self.z, self.rx, self.ry, self.rz }
+    end
+    return
+  end
   self.x, self.y = x, y
   if self.body and self.body.alive then
     local wx, wy = self:world_transform()
@@ -875,6 +959,7 @@ function M.describe(src, name)
   return {
     title = def.title, description = def.description, category = def.category,
     requires = def.requires, player = def.player, props = props,
+    mode = def.mode, body = def.body,
   }
 end
 
@@ -934,6 +1019,160 @@ local function make_body(scene, o, c)
   o.body = scene.world:body(opts)
   scene._by_body[o.body.id] = o
   o._sx, o._sy, o._px, o._py = o.x, o.y, o.x, o.y
+end
+
+-- Física 3D -----------------------------------------------------------------
+
+--- O mundo da física 3D da cena (criado na primeira vez).
+function M.world3(scene)
+  if not scene._world3 then
+    scene._world3 = nn.physics3d.world({ gravity = scene._gravity })
+    scene._by_body3 = scene._by_body3 or {}
+  end
+  return scene._world3
+end
+
+--- Registra um corpo 3D (ou personagem) como o corpo do objeto.
+function M.attach_body3(scene, o, body)
+  if o.body and o.body.alive and o.body ~= body then
+    scene._by_body3[o.body.id] = nil
+    o.body:remove()
+  end
+  o.body = body
+  scene._by_body3[body.id] = o
+  o._s3 = { o.x, o.y, o.z, o.rx, o.ry, o.rz }
+  o._p3 = nil
+end
+
+-- A forma do corpo: "auto" escolhe pelo tipo do corpo e pelo que o objeto
+-- mostra (modelo ou forma 3D).
+local function body3_shape(o, c, opts)
+  local model, shape3
+  for _, k in ipairs(o.components) do
+    if k.type == "model" and k._model then model = model or k._model end
+    if k.type == "shape3d" then shape3 = shape3 or k.shape end
+  end
+  local s = c.shape
+  if s == "auto" then
+    if model then
+      s = (c.body == "dynamic") and "box" or "mesh"
+    elseif shape3 == "sphere" or shape3 == "capsule" then
+      s = shape3
+    elseif shape3 == "cylinder" or shape3 == "cone" then
+      s = "cylinder"
+    else
+      s = "box"
+    end
+  end
+  if s == "mesh" then
+    if not model then
+      error(("objeto \"%s\": a forma \"mesh\" do Corpo 3D usa os triângulos de um Modelo 3D"):format(o.name), 0)
+    end
+    if c.body == "dynamic" then
+      error(("objeto \"%s\": a forma \"mesh\" é só para corpo parado (static) ou kinematic; use caixa (box)"):format(o.name), 0)
+    end
+  end
+  opts.shape = s
+  if model then
+    local x0, y0, z0, x1, y1, z1 = model:bounds()
+    local w, h, d = x1 - x0, y1 - y0, z1 - z0
+    opts.model = model
+    if s ~= "box" and s ~= "mesh" then
+      -- Centrada na caixa do modelo (que pode ter a origem nos pés).
+      opts.offset_x = (x0 + x1) / 2 * math.abs(opts.sx)
+      opts.offset_y = (y0 + y1) / 2 * math.abs(opts.sy)
+      opts.offset_z = (z0 + z1) / 2 * math.abs(opts.sz)
+      if s == "sphere" then
+        opts.radius = math.max(w, h, d) / 2
+      else
+        opts.radius, opts.height = math.max(w, d) / 2, h
+      end
+    end
+  elseif s == "box" then
+    if shape3 == "plane" then
+      opts.w, opts.h, opts.d = 1, 0.02, 1
+      opts.offset_y = -0.01
+    else
+      opts.size = 1
+    end
+  elseif s == "capsule" then
+    opts.radius, opts.height = 0.25, 1
+  elseif s == "sphere" or s == "cylinder" then
+    opts.radius, opts.height = 0.5, 1
+  end
+end
+
+local function make_body3(scene, o, c)
+  local world = M.world3(scene)
+  local x, y, z, rx, ry, rz, sx, sy, sz = o:matrix3d():decompose()
+  local opts = {
+    type = c.body, x = x, y = y, z = z, rx = rx, ry = ry, rz = rz, sx = sx, sy = sy, sz = sz,
+    sensor = c.sensor, bounce = c.bounce, friction = c.friction,
+    mass = (c.mass and c.mass > 0) and c.mass or nil, lock_rotation = c.lock_rotation,
+    gravity_scale = c.gravity_scale, tag = (c.tag ~= "" and c.tag) or o.name,
+  }
+  body3_shape(o, c, opts)
+  M.attach_body3(scene, o, world:body(opts))
+end
+
+-- Antes do passo: o que o jogo mudou à mão (x, y, z, rotação) vai para o corpo.
+local function sync_bodies3_before(scene)
+  for _, o in ipairs(scene.object_list) do
+    local b, s = o.body, o._s3
+    if o.alive and s and b and b.alive then
+      if o.x ~= s[1] or o.y ~= s[2] or o.z ~= s[3] or o.rx ~= s[4] or o.ry ~= s[5] or o.rz ~= s[6] then
+        local x, y, z, rx, ry, rz = o:matrix3d():decompose()
+        if o._char3 then
+          b:set_position(x, y + o._char3.feet, z)
+        else
+          b:set_position(x, y, z)
+          b:set_rotation(rx, ry, rz)
+        end
+      end
+    end
+  end
+end
+
+-- Depois do passo: quem se move pela física leva o objeto junto.
+local function sync_bodies3_after(scene)
+  for _, o in ipairs(scene.object_list) do
+    local b = o.body
+    if o.alive and o._s3 and b and b.alive then
+      o._p3 = { o.x, o.y, o.z }
+      if o._char3 or b.type ~= "static" then
+        local x, y, z = b.x, b.y, b.z
+        local rx, ry, rz
+        if o._char3 then
+          y = y - o._char3.feet
+        else
+          rx, ry, rz = b.rx, b.ry, b.rz
+        end
+        if o.parent then
+          local inv = o.parent:matrix3d():inverse()
+          if rx then
+            x, y, z, rx, ry, rz = (inv * nn.d3.matrix({ x = x, y = y, z = z, rx = rx, ry = ry, rz = rz })):decompose()
+          else
+            x, y, z = inv:transform_point(x, y, z)
+          end
+        end
+        o.x, o.y, o.z = x, y, z
+        if rx then o.rx, o.ry, o.rz = rx, ry, rz end
+      end
+      o._s3 = { o.x, o.y, o.z, o.rx, o.ry, o.rz }
+    end
+  end
+end
+
+local function step3(scene, dt)
+  if not scene._world3 then return {} end
+  sync_bodies3_before(scene)
+  local events = scene._world3:step(dt)
+  sync_bodies3_after(scene)
+  for _, e in ipairs(events) do
+    e.object_a = e.a and scene._by_body3[e.a.id] or nil
+    e.object_b = e.b and scene._by_body3[e.b.id] or nil
+  end
+  return events
 end
 
 --- As opções do nn.particles de um componente de partículas.
@@ -1395,6 +1634,8 @@ function M.prepare(scene, o, c, live)
     c._mesh = make()
   elseif t == "camera3d" then
     scene._camera3d = scene._camera3d or o
+  elseif t == "body3d" then
+    if scene._3d then make_body3(scene, o, c) end
   end
 end
 
@@ -1425,6 +1666,8 @@ end
 --- 3D: põe a câmera do jogo onde está o objeto com camera3d (olhando para
 --- a frente dele), ou numa vista padrão.
 function M.update_camera3d(scene)
+  -- O Jogador 3D com a câmera atrás dele cuida dela.
+  if scene._player_cam then return end
   local cam = scene._camera3d
   if cam and cam.alive then
     local m = cam:matrix3d()
@@ -1458,11 +1701,16 @@ function M.teardown(scene)
     if s.stop then s:stop() end
   end
   scene._playing = {}
+  -- O Jogador 3D prendeu o mouse: solta ao sair da cena.
+  if scene._captured then
+    scene._captured = false
+    nn.window.capture_mouse(false)
+  end
 end
 
 local PREPARE_ORDER = {
   "map", "sprite", "body", "sound", "particles", "panel", "button", "bar", "icons",
-  "slider", "checkbox", "textfield", "camera", "model", "shape3d", "camera3d",
+  "slider", "checkbox", "textfield", "camera", "model", "shape3d", "camera3d", "body3d",
 }
 
 -- Mapas antes dos corpos: a câmera e a colisão dependem deles.
@@ -1510,7 +1758,8 @@ function M.setup(scene, data, path)
   scene._3d = data.mode == "3d"
   scene._prefabs, scene._defs, scene._fx, scene._next_id = nil, nil, nil, nil
   scene._anims = nil
-  scene._gravity = data.gravity or -1800
+  scene._gravity = data.gravity or (scene._3d and -20 or -1800)
+  scene._world3, scene._by_body3, scene._player_cam = nil, {}, nil
   apply_options()
   if M.ui then M.ui.setup(scene) end
   M.events.setup(scene, data, path)
@@ -1614,10 +1863,25 @@ function M.fixed_update(scene, dt)
   each_behavior(scene, "fixed_update", dt)
   -- Objetos sem corpo físico com velocidade (vx, vy) andam sozinhos.
   for _, o in ipairs(scene.object_list) do
-    if o.alive and not o.body and (o.vx or o.vy) then
+    if o.alive and not o.body and (o.vx or o.vy or o.vz) then
       o.x = o.x + (o.vx or 0) * dt
       o.y = o.y + (o.vy or 0) * dt
+      if o.vz then o.z = o.z + o.vz * dt end
     end
+  end
+  if scene._3d then
+    local events = step3(scene, dt)
+    for _, e in ipairs(events) do
+      for _, pair in ipairs({ { e.object_a, e.object_b }, { e.object_b, e.object_a } }) do
+        local o, other = pair[1], pair[2]
+        if o and o.alive then
+          for _, b in ipairs(o.behaviors) do
+            if b.enabled and type(b.contact) == "function" then b:contact(other, e) end
+          end
+        end
+      end
+    end
+    return events
   end
   if not scene.world then return {} end
   sync_bodies_before(scene)
@@ -1863,7 +2127,7 @@ local function draw_object(o, alpha)
   local m3
   for _, c in ipairs(o.components) do
     if (c.type == "model" and c._model) or (c.type == "shape3d" and c._mesh) then
-      m3 = m3 or o:matrix3d()
+      m3 = m3 or o:matrix3d(alpha)
       nn.d3.draw(c._model or c._mesh, { matrix = m3, color = c.color, shadow = c.shadow })
     end
   end
@@ -1955,6 +2219,14 @@ end
 
 --- Ajuste ao vivo vindo do editor: muda um campo de um objeto ou componente.
 function M.live(scene, msg)
+  if msg.field == "environment" then
+    -- O Ambiente de uma cena 3D (a tabela inteira).
+    if scene._3d then
+      scene._data.environment = msg.value
+      scene._environment = M.apply_environment(msg.value)
+    end
+    return
+  end
   if msg.field == "events" then
     -- Regras da cena (id 0) ou de um objeto.
     local owner = nil
@@ -2006,6 +2278,12 @@ function M.live(scene, msg)
     scene.objects[o.name] = o
   elseif field == "layer" then
     sort_objects(scene)
+  elseif scene._3d then
+    -- 3D: o corpo acompanha no próximo passo; a escala refaz o corpo.
+    if field == "scale_x" or field == "scale_y" or field == "scale_z" then
+      local b = o:component("body3d")
+      if b then make_body3(scene, o, b) end
+    end
   elseif (field == "x" or field == "y") and o.body and o.body.alive then
     local x, y = o:world_transform()
     o.body:set_position(x, y)
@@ -2111,7 +2389,7 @@ function M.new(data, path)
     M.setup(self, data, path)
     local cp = M.checkpoints[path]
     if args and args.checkpoint and cp then
-      for _, p in ipairs(M.targets(self, "")) do p:move_to(cp.x, cp.y) end
+      for _, p in ipairs(M.targets(self, "")) do p:move_to(cp.x, cp.y, cp.z) end
     else
       M.checkpoints[path] = nil
     end
@@ -2183,14 +2461,23 @@ function M.new(data, path)
   end
 
   --- Guarda o ponto de reinício desta cena.
-  function scene:set_checkpoint(x, y)
-    M.checkpoints[path] = { x = x, y = y }
+  function scene:set_checkpoint(x, y, z)
+    M.checkpoints[path] = { x = x, y = y, z = z }
   end
 
-  --- Último ponto de reinício (x, y), ou nada.
+  --- Último ponto de reinício (x, y, e z no 3D), ou nada.
   function scene:checkpoint()
     local c = M.checkpoints[path]
-    if c then return c.x, c.y end
+    if c then return c.x, c.y, c.z end
+  end
+
+  --- O mundo da física 3D da cena (nn.physics3d), criado na primeira vez.
+  function scene:world3()
+    return M.world3(self)
+  end
+
+  function scene:_nn_attach_body3(o, body)
+    M.attach_body3(self, o, body)
   end
 
   --- Reinicia a cena (com `checkpoint = true`, o jogador volta ao último

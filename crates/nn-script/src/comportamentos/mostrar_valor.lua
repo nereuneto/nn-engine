@@ -3,6 +3,7 @@ local B = {
   title = "Mostrar valor",
   description = "Mostra variáveis do jogo no texto do objeto: \"Moedas: {moedas}\".",
   category = "Aparência",
+  mode = "both",
   requires = { "text" },
   props = {
     { "texto", "Moedas: {moedas}", label = "Texto",
