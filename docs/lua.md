@@ -910,6 +910,7 @@ O modelo tem `triangles`, `width`, `height` e `depth`. Ele é desenhado com `nn.
 | `color` | Cor (multiplica a da malha; padrão branco). |
 | `image` | Uma imagem de `nn.assets.texture` aplicada nas faces (nas formas prontas e nas malhas). |
 | `shadow` | `false`: não projeta sombra (boa para o chão, efeitos e coisas pequenas). Padrão `true`. |
+| `body` | Um corpo de [`nn.physics3d`](#nnphysics3d-física-3d): desenha na posição e rotação dele (a escala continua vindo de `scale`). |
 
 #### Câmera
 
@@ -959,7 +960,137 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | `nn.d3.ray(x, y)` | O raio que sai da câmera pelo ponto da tela: origem e direção (seis números). |
 | `nn.d3.count()` | Quantas malhas foram desenhadas no último quadro. |
 
-Em breve: física 3D, câmera em terceira pessoa e o 3D no NN Studio.
+Em breve: câmera em terceira pessoa e o 3D no NN Studio.
+
+### nn.physics3d (física 3D)
+
+Física de verdade em 3D: as coisas caem, quicam, rolam, empilham e são empurradas; o personagem anda, pula, sobe degraus e rampas e não atravessa paredes. É separada da [física 2D](#nnphysics) e mede em "metros" (a gravidade da Terra é -9,81; jogos costumam usar mais, como -20, para pulos menos flutuantes).
+
+#### Física 3D, passo a passo
+
+**1. Um mundo e um chão.** O mundo avança no `fixed_update`; o chão é um corpo `static` (não se move):
+
+```lua
+function cena:enter()
+  self.mundo = nn.physics3d.world({ gravity = -20 })
+  self.mundo:body({ type = "static", w = 40, h = 1, d = 40, y = -0.5 })   -- chão com o topo em y = 0
+end
+
+function cena:fixed_update(dt)
+  self.mundo:step(dt)
+end
+```
+
+**2. Uma caixa que cai.** Sem `type`, o corpo é `dynamic`: cai, rola e empurra. Para desenhar, passe o corpo em `body` e o desenho segue a posição e a rotação dele:
+
+```lua
+self.caixa = self.mundo:body({ size = 1, x = 0, y = 5, z = 0 })
+self.cubo = nn.d3.cube()
+-- no draw:
+nn.d3.draw(self.cubo, { body = self.caixa, color = "#FF6B6B" })
+```
+
+**3. Um herói que anda e pula.** `mundo:character` cria um personagem; a posição dele é a dos **pés**. Diga a velocidade com `:walk(vx, vz)` e pule com `:jump(velocidade)` (só pula se estiver no chão):
+
+```lua
+self.heroi = self.mundo:character({ x = 0, z = 0 })
+-- no update:
+local ix, iy = nn.input.wasd()
+self.heroi:walk(ix * 5, -iy * 5)
+if nn.input.pressed("space") then self.heroi:jump(8) end
+-- no draw:
+nn.d3.draw(self.modelo_heroi, { x = self.heroi.x, y = self.heroi.y, z = self.heroi.z })
+```
+
+**4. Cenário com modelos.** Um modelo vira corpo com `model`: por padrão, uma caixa em volta dele. Para cenário parado, `shape = "mesh"` usa os triângulos exatos (dá para subir no telhado):
+
+```lua
+local casa = nn.assets.model("modelos/casa.glb")
+self.mundo:body({ type = "static", model = casa, shape = "mesh", x = 7, z = 5, ry = -30 })
+```
+
+**5. Moedas e portas: sensores.** Um corpo com `sensor = true` não bloqueia, só avisa quem entra e sai. Os avisos vêm de `mundo:step`:
+
+```lua
+self.moeda = self.mundo:body({ type = "static", sensor = true, shape = "sphere", radius = 0.5, x = 4, y = 1 })
+-- no fixed_update:
+for _, e in ipairs(self.mundo:step(dt)) do
+  if e.type == "enter" and e.a == self.moeda and e.b == self.heroi then
+    self.moeda:remove()
+  end
+end
+```
+
+**6. Ver as colisões.** `mundo:debug_draw()` (no `draw`) mostra as formas de colisão por cima de tudo, meio transparentes. Ajuda muito a ajustar tamanhos. No `jogos/cubos3d`, a tecla C liga e desliga.
+
+#### Corpos
+
+`mundo:body(opts)`:
+
+| Opção | Descrição |
+|---|---|
+| `type` | `"dynamic"` (padrão: cai e rola), `"static"` (chão, paredes, cenário) ou `"kinematic"` (movido pelo jogo pela velocidade: plataformas, portas; empurra os dinâmicos). |
+| `shape` | `"box"` (padrão), `"sphere"`, `"capsule"`, `"cylinder"` ou `"mesh"` (os triângulos de um `model`, só para `static` e `kinematic`). |
+| `w`, `h`, `d` ou `size` | Caixa: largura, altura e profundidade (ou as três iguais). |
+| `radius`, `height` | Esfera, cápsula e cilindro (em pé). |
+| `model` | Um modelo de `nn.assets.model`: a caixa em volta dele, ou os triângulos com `shape = "mesh"`. |
+| `scale` | Multiplica o tamanho (use o mesmo `scale` do desenho). |
+| `x`, `y`, `z`, `rx`, `ry`, `rz` | Posição e rotação inicial (graus). |
+| `vx`, `vy`, `vz` | Velocidade inicial. |
+| `mass` ou `density` | Massa (ou massa por volume; padrão 1). Mais pesado empurra mais e é menos empurrado. |
+| `friction` | Atrito (0 = gelo; padrão 0,5). |
+| `bounce` | Quique (0 a 1). |
+| `sensor` | Não colide: só avisa quem entra e sai. |
+| `lock_rotation` | Não gira (fica sempre em pé). |
+| `gravity_scale` | Multiplicador da gravidade (0 = flutua). |
+| `damping`, `angular_damping` | Freio do movimento e do giro (resistência do ar). |
+| `ccd` | Para coisas muito rápidas (tiros) não atravessarem paredes finas. |
+| `offset_x`, `offset_y`, `offset_z` | Desloca a forma em relação à posição do corpo. |
+| `tag` | Rótulo livre. |
+
+O corpo tem os campos `x`, `y`, `z`, `vx`, `vy`, `vz`, `rx`, `ry`, `rz`, `gravity_scale` e `tag` (leitura e escrita), e `id`, `type`, `alive`, `mass`, `sensor`, `sleeping` (parado, sem gastar tempo da física) e `is_character`.
+
+Métodos do corpo:
+- `:set_position(x, y, z)`, `:set_velocity(x, y, z)` e `:set_rotation(rx, ry, rz)`;
+- `:set_spin(x, y, z)`: giro em graus por segundo;
+- `:impulse(x, y, z)`: um empurrão;
+- `:impulse_at(x, y, z, px, py, pz)`: um empurrão num ponto, que faz girar;
+- `:torque(x, y, z)`;
+- `:touching()`: os corpos encostando agora;
+- `:remove()`.
+
+Dá para comparar corpos com `==`.
+
+#### Personagem
+
+`mundo:character(opts)` cria uma cápsula em pé, controlada pelo jogo:
+
+| Opção | Descrição |
+|---|---|
+| `x`, `y`, `z` | Posição dos pés. |
+| `radius`, `height` | Tamanho da cápsula (padrão 0,35 e 1,8). |
+| `step` | Altura de degrau que ele sobe sozinho (padrão 0,35). |
+| `slope` | Rampa mais inclinada que ele sobe, em graus (padrão 45). |
+| `mass` | Força para empurrar as coisas (padrão 70). |
+
+Além do que todo corpo tem, o personagem tem:
+- `:walk(vx, vz)`: a velocidade de andar, que vale até mudar;
+- `:jump(velocidade)`: devolve se pulou;
+- os campos `on_ground`, `hit_wall` e `hit_ceiling`.
+
+A gravidade do mundo cuida da queda. Ele empurra os corpos dinâmicos e entra nos sensores.
+
+#### O mundo
+
+`mundo:step(dt)` avança a física. Chame no `fixed_update`. Ele devolve os eventos do passo: tabelas `{ type = "enter" | "exit", a = corpo, b = corpo }`, para corpos que começaram ou pararam de se tocar, ou que entraram ou saíram de um sensor. Se um dos dois for sensor, ele vem em `a`.
+
+Outros métodos do mundo:
+- `:raycast(x, y, z, dx, dy, dz, distancia, ignorar)`: devolve `{ x, y, z, nx, ny, nz, distance, body }` ou `nil`. Ignora os sensores e o corpo `ignorar` (quem atira). Com `nn.d3.ray(mx, my)`, diz o que está embaixo do mouse.
+- `:query_sphere(x, y, z, raio)`: os corpos dentro da esfera.
+- `:bodies(tag)`: os corpos com esse rótulo, ou todos.
+- `:debug_draw()`.
+
+Campos do mundo: `gravity` (o Y da gravidade) e `count`.
 
 ### nn.ui
 

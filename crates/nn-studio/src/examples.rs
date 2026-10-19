@@ -37,7 +37,7 @@ pub const EXAMPLES: &[Example] = &[
         folder: "cubos3d",
         title: "Cubos 3D",
         description: "Um campo low-poly em 3D, todo em código Lua: modelos .glb, \
-                      sombras, céu, um herói que anda e câmera que gira com o mouse.",
+                      física, sombras, céu, um herói que pula e empurra caixotes.",
         dir: &CUBOS3D,
     },
 ];

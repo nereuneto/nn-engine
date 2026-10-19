@@ -43,7 +43,12 @@ fn degrees(q: Quat) -> (f32, f32, f32) {
 }
 
 fn from_degrees(x: f32, y: f32, z: f32) -> Quat {
-    Quat::from_euler(EulerRot::YXZ, y.to_radians(), x.to_radians(), z.to_radians())
+    Quat::from_euler(
+        EulerRot::YXZ,
+        y.to_radians(),
+        x.to_radians(),
+        z.to_radians(),
+    )
 }
 
 impl LBody3 {
@@ -198,9 +203,7 @@ impl UserData for LBody3 {
         m.add_method(
             "impulse_at",
             |_, this, (x, y, z, px, py, pz): (f32, f32, f32, f32, f32, f32)| {
-                this.set(|w| {
-                    w.apply_impulse_at(this.id, Vec3::new(x, y, z), Vec3::new(px, py, pz))
-                })
+                this.set(|w| w.apply_impulse_at(this.id, Vec3::new(x, y, z), Vec3::new(px, py, pz)))
             },
         );
         m.add_method("torque", |_, this, (x, y, z): (f32, f32, f32)| {
@@ -279,7 +282,11 @@ fn body_from_opts(opts: &Table) -> Result<BodyDesc> {
         }
     };
     let shape_name = opt::<String>(o, "shape")?;
-    let mut offset = Vec3::new(n("offset_x", 0.0)?, n("offset_y", 0.0)?, n("offset_z", 0.0)?);
+    let mut offset = Vec3::new(
+        n("offset_x", 0.0)?,
+        n("offset_y", 0.0)?,
+        n("offset_z", 0.0)?,
+    );
     let shape = match (shape_name.as_deref(), &model) {
         (Some("mesh"), Some(m)) => Shape3::Mesh {
             vertices: m.collision.vertices.iter().map(|v| *v * scale).collect(),
@@ -342,7 +349,10 @@ impl UserData for LWorld3 {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
         f.add_field_method_get("gravity", |_, this| Ok(this.0.borrow().world.gravity().y));
         f.add_field_method_set("gravity", |_, this, v: f32| {
-            this.0.borrow_mut().world.set_gravity(Vec3::new(0.0, v, 0.0));
+            this.0
+                .borrow_mut()
+                .world
+                .set_gravity(Vec3::new(0.0, v, 0.0));
             Ok(())
         });
         f.add_field_method_get("count", |_, this| Ok(this.0.borrow().world.len()));
@@ -401,7 +411,18 @@ impl UserData for LWorld3 {
         });
         m.add_method(
             "raycast",
-            |lua, this, (x, y, z, dx, dy, dz, max, ignore): (f32, f32, f32, f32, f32, f32, Option<f32>, Option<AnyUserData>)| {
+            |lua,
+             this,
+             (x, y, z, dx, dy, dz, max, ignore): (
+                f32,
+                f32,
+                f32,
+                f32,
+                f32,
+                f32,
+                Option<f32>,
+                Option<AnyUserData>,
+            )| {
                 let ignore = match ignore {
                     Some(ud) => Some(ud.borrow::<LBody3>()?.id),
                     None => None,
@@ -425,13 +446,16 @@ impl UserData for LWorld3 {
                 Ok(Some(t))
             },
         );
-        m.add_method("query_sphere", |_, this, (x, y, z, r): (f32, f32, f32, f32)| {
-            let ids = this.0.borrow().world.query_sphere(Vec3::new(x, y, z), r);
-            Ok(ids
-                .into_iter()
-                .map(|id| LBody3::new(&this.0, id))
-                .collect::<Vec<_>>())
-        });
+        m.add_method(
+            "query_sphere",
+            |_, this, (x, y, z, r): (f32, f32, f32, f32)| {
+                let ids = this.0.borrow().world.query_sphere(Vec3::new(x, y, z), r);
+                Ok(ids
+                    .into_iter()
+                    .map(|id| LBody3::new(&this.0, id))
+                    .collect::<Vec<_>>())
+            },
+        );
         m.add_method("bodies", |_, this, tag: Option<String>| {
             let s = this.0.borrow();
             Ok(s.world

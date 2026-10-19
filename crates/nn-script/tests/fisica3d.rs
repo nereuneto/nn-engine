@@ -103,7 +103,10 @@ fn corpos_caem_e_eventos_chegam() {
     assert_eq!(h.game.0.field::<bool>("tocou_chao"), Some(true));
     assert_eq!(f("n_caixas"), 1.0);
     assert_eq!(f("contagem"), 4.0);
-    assert!((f("raio_y") - 1.0).abs() < 0.05, "o raio para em cima da caixa");
+    assert!(
+        (f("raio_y") - 1.0).abs() < 0.05,
+        "o raio para em cima da caixa"
+    );
     assert_eq!(h.game.0.field::<bool>("raio_e_caixa"), Some(true));
     assert!((f("raio_ny") - 1.0).abs() < 1e-3);
     assert_eq!(f("tocando"), 1.0);
@@ -188,10 +191,17 @@ fn modelo_com_forma_exata_e_desenho_pelo_corpo() {
     assert_eq!(h.game.0.error(), None);
     let f = |k: &str| h.game.0.field::<f64>(k).unwrap();
     // A cumeeira do telhado fica em 2 × 1,5 = 3 (a chaminé é mais alta, mas fica de lado).
-    assert!(f("bola_y") > 2.5 && f("bola_y") < 3.5, "bola em {}", f("bola_y"));
+    assert!(
+        f("bola_y") > 2.5 && f("bola_y") < 3.5,
+        "bola em {}",
+        f("bola_y")
+    );
     assert!((f("ry") - 45.0).abs() < 0.1);
     let p = pixel(&h, 32, 32);
-    assert!(p[0] > 200 && p[1] < 120, "o cubo vermelho (com o debug por cima): {p:?}");
+    assert!(
+        p[0] > 200 && p[1] < 120,
+        "o cubo vermelho (com o debug por cima): {p:?}"
+    );
 }
 
 #[test]

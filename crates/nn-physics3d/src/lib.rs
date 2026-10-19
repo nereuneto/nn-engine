@@ -60,7 +60,10 @@ impl BodyId3 {
     }
 
     pub fn from_bits(bits: u64) -> Self {
-        Self(RigidBodyHandle::from_raw_parts(bits as u32, (bits >> 32) as u32))
+        Self(RigidBodyHandle::from_raw_parts(
+            bits as u32,
+            (bits >> 32) as u32,
+        ))
     }
 }
 
@@ -322,8 +325,10 @@ impl Default for World3 {
 
 impl World3 {
     pub fn new(gravity: Vec3) -> Self {
-        let mut world = PhysicsWorld::default();
-        world.gravity = rv(gravity);
+        let world = PhysicsWorld {
+            gravity: rv(gravity),
+            ..Default::default()
+        };
         let (collision_tx, collision_rx) = std::sync::mpsc::channel();
         let (force_tx, force_rx) = std::sync::mpsc::channel();
         let (tear_tx, tear_rx) = std::sync::mpsc::channel();
@@ -381,7 +386,10 @@ impl World3 {
             BodyKind3::Kinematic => RigidBodyBuilder::kinematic_velocity_based(),
         };
         let mut builder = builder
-            .pose(RPose::from_parts(rv(desc.position), rq(desc.rotation.normalize())))
+            .pose(RPose::from_parts(
+                rv(desc.position),
+                rq(desc.rotation.normalize()),
+            ))
             .linvel(rv(desc.velocity))
             .gravity_scale(desc.gravity_scale)
             .linear_damping(desc.linear_damping.max(0.0))
@@ -680,14 +688,9 @@ impl World3 {
                 .exclude_sensors();
             let movement = {
                 let queries = self.world.query_pipeline_with_filter(filter);
-                controller.move_shape(
-                    dt,
-                    &queries,
-                    shape.as_ref(),
-                    &pos,
-                    rv(desired),
-                    |hit| collisions.push(hit),
-                )
+                controller.move_shape(dt, &queries, shape.as_ref(), &pos, rv(desired), |hit| {
+                    collisions.push(hit)
+                })
             };
             let moved = gv(movement.translation);
             c.on_ground = movement.grounded;

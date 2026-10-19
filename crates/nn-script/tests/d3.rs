@@ -222,7 +222,11 @@ fn exemplo_cubos3d_roda() {
     let no_chao: bool = lua.load("return heroi.on_ground").eval().unwrap();
     assert!(no_chao);
     let cubos: mlua::Table = t.get("cubos").unwrap();
-    assert_eq!(cubos.raw_len(), 7, "a pilha de 6 caixotes e o cubo do clique");
+    assert_eq!(
+        cubos.raw_len(),
+        7,
+        "a pilha de 6 caixotes e o cubo do clique"
+    );
     if let Ok(out) = std::env::var("NN_CAPTURA") {
         h.save_png(out).unwrap();
     }

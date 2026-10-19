@@ -14,6 +14,7 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - **Sombras do sol**, ligadas por padrão, com qualidade, distância e `shadow = false` para quem não deve projetar.
 - **Céu em degradê** com o disco do sol; a névoa usa a cor do horizonte.
 - **Exemplo `cubos3d`** com árvores, casas, pedras, caixotes e herói em `.glb` (modelos nossos, gerados por `ferramentas/gerar_modelos.py`). Também entre os exemplos do NN Studio.
+- No `cubos3d`, o herói pula e empurra caixotes, os cubos caem e empilham onde você clica (até no telhado) e as casas e árvores bloqueiam.
 - No NN Studio, modelos 3D aparecem com ícone próprio e "Copiar nn.assets.model".
 
 ## 0.1.0

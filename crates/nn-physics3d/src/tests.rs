@@ -48,7 +48,10 @@ fn caixas_empilham() {
     for (i, c) in pilha.iter().enumerate() {
         let p = w.position(*c).unwrap();
         assert!((p.y - (0.5 + i as f32)).abs() < 0.1, "caixa {i}: {p}");
-        assert!(p.x.abs() < 0.1 && p.z.abs() < 0.1, "caixa {i} escorregou: {p}");
+        assert!(
+            p.x.abs() < 0.1 && p.z.abs() < 0.1,
+            "caixa {i} escorregou: {p}"
+        );
     }
 }
 
@@ -133,7 +136,10 @@ fn raio_acerta_o_chao_e_ignora_quem_atira() {
     assert_eq!(hit.body, g);
     assert!((hit.point.y).abs() < 0.01 && (hit.distance - 10.0).abs() < 0.01);
     assert!((hit.normal - Vec3::Y).length() < 1e-3);
-    assert!(w.raycast(Vec3::new(0.0, 10.0, 0.0), Vec3::Y, 100.0, None).is_none());
+    assert!(
+        w.raycast(Vec3::new(0.0, 10.0, 0.0), Vec3::Y, 100.0, None)
+            .is_none()
+    );
     assert!(w.query_sphere(Vec3::new(0.0, 3.0, 0.0), 0.2).contains(&c));
 }
 
@@ -317,4 +323,3 @@ fn personagem_entra_no_sensor() {
     // O sensor não barra.
     assert!(w.position(p).unwrap().x > 2.5);
 }
-
