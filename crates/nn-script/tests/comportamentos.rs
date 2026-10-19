@@ -556,7 +556,7 @@ fn propriedade_do_comportamento_muda_ao_vivo() {
   update = function(self, dt) self.obj.rotation = self.obj.rotation + self.velocidade * dt end }"#,
             ),
             (
-                "cenas/fase.cena",
+                "cenas/roda-ao-vivo.cena",
                 r##"return { objects = {
   { id = 7, name = "roda", components = {
     { type = "shape" },
@@ -566,9 +566,11 @@ fn propriedade_do_comportamento_muda_ao_vivo() {
             ),
         ],
     );
-    let Some((mut h, rt)) = cena(&dir, "cenas/fase.cena") else {
+    let Some((mut h, rt)) = cena(&dir, "cenas/roda-ao-vivo.cena") else {
         return;
     };
+    // (Cena com nome só deste teste: os outros, rodando junto, não pegam a
+    // mensagem ao vivo.)
     rt.lua()
         .globals()
         .set("cena", h.game.0.table().unwrap())
@@ -576,7 +578,7 @@ fn propriedade_do_comportamento_muda_ao_vivo() {
     h.run_frames(5);
     assert_eq!(lua::<f64>(&rt, "cena.objects.roda.rotation"), 0.0);
     assert!(nn_script::live::push(
-        r#"{"scene":"cenas/fase.cena","id":7,"component":2,"field":"velocidade","value":120}"#
+        r#"{"scene":"cenas/roda-ao-vivo.cena","id":7,"component":2,"field":"velocidade","value":120}"#
     ));
     h.run_frames(30);
     let r: f64 = lua(&rt, "cena.objects.roda.rotation");
