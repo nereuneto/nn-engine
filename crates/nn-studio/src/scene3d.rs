@@ -226,6 +226,75 @@ impl SceneDoc {
             .unwrap_or(self.cam3.pos + self.cam3.forward() * 10.0)
     }
 
+    /// O terreno selecionado: id, índice do componente e onde ele está no
+    /// mundo (o terreno só usa a posição).
+    pub fn selected_terrain(&self) -> Option<(u32, usize, Vec3)> {
+        let [id] = self.selection[..] else {
+            return None;
+        };
+        let o = self.data.find(id)?;
+        let ci = o.components.iter().position(|c| c.kind == "terrain")?;
+        Some((id, ci, self.matrix3(id)?.transform_point3(Vec3::ZERO)))
+    }
+
+    /// Onde o raio (no mundo) bate no terreno selecionado.
+    fn terrain_hit(&self, o: Vec3, d: Vec3) -> Option<(nn_render::d3::TerrainData, Vec3, Vec3)> {
+        let (id, ci, origin) = self.selected_terrain()?;
+        let c = self.data.find(id)?.components.get(ci)?;
+        let t = crate::terrain_tool::terrain_of(c);
+        let hit = t.raycast(o - origin, d, 2000.0)? + origin;
+        Some((t, origin, hit))
+    }
+
+    /// Um quadro do pincel do terreno em `p` (botão segurado).
+    fn terrain_stroke(&mut self, rect: Rect, p: Pos2, dt: f32, invert: bool) {
+        use crate::terrain_tool::{BrushResult, apply};
+        let (ro, rd) = ray(&self.cam3, rect, p);
+        let Some((t, origin, hit)) = self.terrain_hit(ro, rd) else {
+            return;
+        };
+        let Some((id, ci, _)) = self.selected_terrain() else {
+            return;
+        };
+        // Os já espalhados com o mesmo arquivo (para não amontoar).
+        let file = self.terrain_tool.scatter.clone();
+        let mut placed = Vec::new();
+        scene_data::visit(&self.data.objects, &mut |o| {
+            let same = o.prefab.as_ref().is_some_and(|l| l.path == file)
+                || o.component("model").is_some_and(|m| m.str("file") == file);
+            if same && !file.is_empty() {
+                placed.push((o.id, Vec3::new(o.x as f32, o.y as f32, o.z as f32)));
+            }
+        });
+        let key = format!("terreno:{}", self.terrain_tool.stroke);
+        match apply(&mut self.terrain_tool, &t, origin, hit, dt, invert, &placed) {
+            BrushResult::Nothing => {}
+            BrushResult::Terrain(new) => {
+                self.record(Some(&key));
+                if let Some(c) = self
+                    .data
+                    .find_mut(id)
+                    .and_then(|o| o.components.get_mut(ci))
+                {
+                    c.set("data", Prop::Str(new.encode()));
+                }
+            }
+            BrushResult::Scatter { add, remove } => {
+                if add.is_empty() && remove.is_empty() {
+                    return;
+                }
+                self.record(Some(&key));
+                for r in remove {
+                    self.data.remove(r);
+                }
+                for mut o in add {
+                    o.id = self.data.next_id();
+                    self.data.objects.push(o);
+                }
+            }
+        }
+    }
+
     /// O objeto (selecionável) que o raio acerta primeiro.
     fn pick3(&self, root: &Path, sizes: &mut Sizes, o: Vec3, d: Vec3) -> Option<(u32, f32)> {
         let mut best: Option<(u32, f32)> = None;
@@ -398,6 +467,7 @@ impl SceneDoc {
     pub(super) fn ui_3d(&mut self, ui: &mut egui::Ui, env: &mut SceneEnv) -> Vec<SceneAction> {
         let mut actions = Vec::new();
         self.toolbar3d(ui, env, &mut actions);
+        self.terrain_bar(ui, env);
 
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         response.widget_info(|| {
@@ -489,6 +559,95 @@ impl SceneDoc {
         actions
     }
 
+    /// A linha dos pincéis do terreno (com o ✏ ligado).
+    fn terrain_bar(&mut self, ui: &mut egui::Ui, env: &mut SceneEnv) {
+        use crate::terrain_tool::TerrainBrush;
+        if !(self.terrain_tool.active && self.selected_terrain().is_some()) {
+            return;
+        }
+        let colors = self
+            .selected_terrain()
+            .and_then(|(id, ci, _)| self.data.find(id)?.components.get(ci).cloned())
+            .map(|c| crate::terrain_tool::colors_of(&c));
+        ui.horizontal_wrapped(|ui| {
+            for b in TerrainBrush::ALL {
+                let r = ui
+                    .selectable_label(self.terrain_tool.brush == b, b.label())
+                    .on_hover_text(b.tip());
+                crate::tutorial::anchor(ui.ctx(), &format!("terreno:{b:?}"), r.rect);
+                if r.clicked() {
+                    self.terrain_tool.brush = b;
+                }
+            }
+            ui.separator();
+            ui.label("Tamanho");
+            ui.add(
+                egui::DragValue::new(&mut self.terrain_tool.radius)
+                    .range(0.5..=60.0)
+                    .speed(0.1)
+                    .suffix(" m"),
+            )
+            .on_hover_text("O raio do pincel");
+            ui.label("Força");
+            ui.add(
+                egui::DragValue::new(&mut self.terrain_tool.strength)
+                    .range(0.1..=30.0)
+                    .speed(0.05),
+            )
+            .on_hover_text("Quanto muda por segundo (Ctrl faz o contrário)");
+            match self.terrain_tool.brush {
+                TerrainBrush::Paint => {
+                    ui.separator();
+                    let names = ["Grama", "Terra", "Pedra", "Areia"];
+                    for (k, name) in names.iter().enumerate() {
+                        let color = colors.map(|c| c[k]).unwrap_or(nn_core::Color::WHITE);
+                        let c32 = Color32::from_rgb(
+                            (color.r * 255.0) as u8,
+                            (color.g * 255.0) as u8,
+                            (color.b * 255.0) as u8,
+                        );
+                        let text = egui::RichText::new(format!("■ {} {name}", k + 1)).color(c32);
+                        let r = ui
+                            .selectable_label(self.terrain_tool.layer == k, text)
+                            .on_hover_text("A cor fica no Inspetor (Cor 1 a 4)");
+                        crate::tutorial::anchor(ui.ctx(), &format!("terreno:cor{}", k + 1), r.rect);
+                        if r.clicked() {
+                            self.terrain_tool.layer = k;
+                        }
+                    }
+                }
+                TerrainBrush::Scatter => {
+                    ui.separator();
+                    let root = env.root.to_path_buf();
+                    let shown = if self.terrain_tool.scatter.is_empty() {
+                        "(escolha)".to_string()
+                    } else {
+                        stem_of(&self.terrain_tool.scatter)
+                    };
+                    let r = egui::ComboBox::from_id_salt(("espalhar", &self.rel))
+                        .selected_text(shown)
+                        .show_ui(ui, |ui| {
+                            let list = scatter_files(&root);
+                            if list.is_empty() {
+                                ui.weak("Nenhum modelo (.glb) ou prefab no projeto");
+                            }
+                            for f in &list {
+                                ui.selectable_value(&mut self.terrain_tool.scatter, f.clone(), f);
+                            }
+                        });
+                    crate::tutorial::anchor(ui.ctx(), "terreno:espalhar", r.response.rect);
+                    ui.label("Por segundo");
+                    ui.add(
+                        egui::DragValue::new(&mut self.terrain_tool.density)
+                            .range(0.5..=60.0)
+                            .speed(0.1),
+                    );
+                }
+                _ => {}
+            }
+        });
+    }
+
     fn toolbar3d(&mut self, ui: &mut egui::Ui, env: &mut SceneEnv, actions: &mut Vec<SceneAction>) {
         ui.horizontal_wrapped(|ui| {
             let r = ui
@@ -567,6 +726,15 @@ impl SceneDoc {
             }
             if ui.button("⛶ Enquadrar").on_hover_text("F").clicked() {
                 self.frame3(env.root, env.sizes);
+            }
+            if self.selected_terrain().is_some() {
+                let r = ui
+                    .selectable_label(self.terrain_tool.active, "✏ Pintar terreno")
+                    .on_hover_text("O botão esquerdo pinta o terreno selecionado (Esc para)");
+                crate::tutorial::anchor(ui.ctx(), "cena.terreno", r.rect);
+                if r.clicked() {
+                    self.terrain_tool.active = !self.terrain_tool.active;
+                }
             }
             ui.label(format!("voo {:.0} m/s", self.cam3.speed)).on_hover_text(
                 "Segure o botão direito e use WASD para voar (Q/E desce e sobe, Shift corre). A rodinha com o botão direito muda a velocidade. Alt + arrastar gira em volta da seleção; o botão do meio arrasta a vista.",
@@ -745,7 +913,42 @@ impl SceneDoc {
                 recorded: false,
             });
         }
-        if response.drag_started_by(egui::PointerButton::Primary)
+        // Pincel do terreno: o botão esquerdo pinta (e não seleciona).
+        let painting_terrain = self.terrain_tool.active && self.selected_terrain().is_some();
+        if !painting_terrain {
+            self.terrain_tool.active = false;
+            self.terrain_tool.cursor = None;
+        }
+        if painting_terrain {
+            let hover = response.hover_pos();
+            self.terrain_tool.cursor = hover.and_then(|p| {
+                let (o, d) = ray(&self.cam3, rect, p);
+                self.terrain_hit(o, d).map(|(_, _, hit)| hit)
+            });
+            let down = ui.input(|i| i.pointer.primary_down());
+            if down
+                && !mods.alt
+                && (response.is_pointer_button_down_on() || self.terrain_tool.painting)
+            {
+                if !self.terrain_tool.painting {
+                    self.terrain_tool.painting = true;
+                    self.terrain_tool.stroke += 1;
+                    self.terrain_tool.flatten_to = None;
+                    self.terrain_tool.carry = 1.0;
+                }
+                if let Some(p) = ui.input(|i| i.pointer.latest_pos()) {
+                    self.terrain_stroke(rect, p, dt.max(1.0 / 120.0), mods.command);
+                }
+                ui.ctx().request_repaint();
+            } else {
+                self.terrain_tool.painting = false;
+            }
+            if self.terrain_tool.cursor.is_some() {
+                ui.ctx().request_repaint();
+            }
+        }
+        if !painting_terrain
+            && response.drag_started_by(egui::PointerButton::Primary)
             && let Some(p) = response.interact_pointer_pos()
         {
             if mods.alt {
@@ -785,6 +988,7 @@ impl SceneDoc {
 
         // Clique: seleciona (Shift ou Ctrl junta / tira).
         if response.clicked()
+            && !painting_terrain
             && !mods.alt
             && let Some(p) = response.interact_pointer_pos()
         {
@@ -1060,6 +1264,25 @@ impl SceneDoc {
             }
         }
 
+        // O círculo do pincel do terreno.
+        if self.terrain_tool.active
+            && let Some(hit) = self.terrain_tool.cursor
+            && let Some((id, ci, origin)) = self.selected_terrain()
+            && let Some(c) = self.data.find(id).and_then(|o| o.components.get(ci))
+        {
+            let t = crate::terrain_tool::terrain_of(c);
+            let pts: Vec<Pos2> =
+                crate::terrain_tool::ring(&t, origin, hit, self.terrain_tool.radius)
+                    .into_iter()
+                    .filter_map(|p| to_screen(&self.cam3, rect, p))
+                    .collect();
+            painter.add(egui::Shape::line(pts, Stroke::new(2.0, Color32::WHITE)));
+            if let Some(c) = to_screen(&self.cam3, rect, hit) {
+                painter.circle_filled(c, 3.0, Color32::WHITE);
+            }
+            return;
+        }
+
         // As alças da ferramenta.
         let Some(center) = self.selection_center3() else {
             return;
@@ -1200,6 +1423,17 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
         out = Some(Object::new(0, "Grupo"));
     }
     ui.separator();
+    if ui
+        .button("Terreno")
+        .on_hover_text(
+            "Um chão de 64 × 64 m para pintar morros, vales, cores e água (✏ Pintar terreno)",
+        )
+        .clicked()
+    {
+        let mut o = Object::new(0, "Terreno");
+        o.components.push(Component::new("terrain"));
+        out = Some(o);
+    }
     ui.menu_button("Partículas", |ui| {
         let r = ui
             .button("Vazias")
@@ -1238,6 +1472,44 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
         }
         out = Some(o);
     }
+    out
+}
+
+fn stem_of(path: &str) -> String {
+    Path::new(path)
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+/// Os modelos (.glb, .gltf) e prefabs do projeto, para o 🌲 Espalhar.
+fn scatter_files(root: &Path) -> Vec<String> {
+    fn walk(root: &Path, dir: &Path, depth: u32, out: &mut Vec<String>) {
+        let Ok(list) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in list.flatten() {
+            let p = e.path();
+            let name = e.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || name == "target" || name == "exportado" {
+                continue;
+            }
+            if p.is_dir() {
+                if depth < 4 {
+                    walk(root, &p, depth + 1, out);
+                }
+            } else if matches!(
+                p.extension().and_then(|x| x.to_str()),
+                Some("glb" | "gltf" | "prefab")
+            ) && let Ok(rel) = p.strip_prefix(root)
+            {
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(root, root, 0, &mut out);
+    out.sort();
     out
 }
 

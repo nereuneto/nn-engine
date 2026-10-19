@@ -37,6 +37,8 @@ local B = {
       show_if = { "animar", true } },
     { "anim_cair", "cair", type = "anim", label = "Animação: cair", advanced = true,
       show_if = { "animar", true } },
+    { "agua", "voltar", label = "Na água", options = { { "voltar", "volta ao chão firme" }, { "nada", "anda no fundo" } },
+      help = "A água de um Terreno. Entrou nela: recebe a mensagem \"agua\" (e, com \"volta\", volta ao último chão firme)." },
     { "queda", -10, label = "Volta se cair abaixo de", advanced = true,
       help = "Altura (Y). Caiu abaixo dela: volta ao último chão firme e recebe a mensagem \"caiu\"." },
     { "raio", 0, label = "Raio do corpo", min = 0, advanced = true,
@@ -184,6 +186,24 @@ function B:fixed_update(dt)
     self.firme, self.ultimo = 0, nil
     o:send("caiu")
     return
+  end
+  -- Na água de um terreno.
+  local agua = self.scene:water_level(c.x, c.z)
+  if agua and c.y < agua - 0.5 then
+    if not self.molhado then
+      self.molhado = true
+      o:send("agua")
+    end
+    if self.agua == "voltar" then
+      local s = self.seguro
+      c:set_position(s[1], s[2] + 0.2, s[3])
+      c:set_velocity(0, 0, 0)
+      o._p3 = nil
+      self.firme, self.ultimo = 0, nil
+      return
+    end
+  else
+    self.molhado = false
   end
   -- Pulou de lugar (levado pelo jogo): o chão de antes não vale.
   local u = self.ultimo

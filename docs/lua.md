@@ -11,7 +11,7 @@ cargo nn novo ../meu-jogo     # cria a pasta com um jogo pequeno e completo
 cargo nn ../meu-jogo          # joga
 ```
 
-O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"` e `--modelo`, que escolhe o modelo: `visual` (fase de plataforma montada no [NN Studio](studio.md), sem código, com [comportamentos](#comportamentos), [eventos](#eventos-quando-então) e um [prefab](#prefabs)), `aventura` (visto de cima: chave, porta e tesouro), `nave` (tiros, asteroides e recorde salvo), `3d` (plataforma 3D em terceira pessoa em código, veja [Seu primeiro jogo 3D](#seu-primeiro-jogo-3d)), `visual3d` (a mesma ilha montada no NN Studio, sem código: [cenas 3D](#cenas-3d)), `vazio` (cena vazia com um pacote de imagens e sons), `vazio3d` (mundo 3D com chão e um pacote de modelos e sons) ou `minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
+O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"` e `--modelo`, que escolhe o modelo: `visual` (fase de plataforma montada no [NN Studio](studio.md), sem código, com [comportamentos](#comportamentos), [eventos](#eventos-quando-então) e um [prefab](#prefabs)), `aventura` (visto de cima: chave, porta e tesouro), `nave` (tiros, asteroides e recorde salvo), `3d` (plataforma 3D em terceira pessoa em código, veja [Seu primeiro jogo 3D](#seu-primeiro-jogo-3d)), `visual3d` (a mesma ilha montada no NN Studio, sem código: [cenas 3D](#cenas-3d)), `vazio` (cena vazia com um pacote de imagens e sons), `vazio3d` (mundo 3D com chão e um pacote de modelos e sons), `vale3d` (um vale pintado num Terreno, sem código) ou `minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
 
 Para ver jogos prontos:
 
@@ -363,7 +363,7 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:atirar` | Cria um prefab andando. | `prefab`, `tecla` ("x"; vazio = sozinho), `intervalo` (0.3), `velocidade` (700), `direcao` ("frente", "jogador", "direita", "cima"), `som`, `distancia` (24) |
 | `nn:gerador` | Cria um prefab de tempos em tempos. | `prefab`, `intervalo` (2), `maximo` (10), `espalhar_x`, `espalhar_y` (0), `comecar_ja` (false) |
 | `nn:temporario` | Some depois de um tempo ou fora da tela. | `tempo` (3), `fora_da_tela` (true) |
-| `nn:jogador3d` | (3D) Jogador 3D: anda para onde a câmera olha (WASD, setas, analógico), pula (espaço, A) e leva a câmera em 3ª pessoa. Cria o próprio corpo (uma cápsula do tamanho do modelo). Manda `pulou` e `caiu`. | `velocidade` (6), `pulo` (8), `pulos_no_ar` (0), `camera` ("atras" ou "cena"), `distancia` (7), `prender_mouse` (true), `sensibilidade` (0.15), `inverter_y` (false), `virar` (true), `animar` (true: parado, andar, correr, pular e cair num modelo animado), `anim_parado`, `anim_andar`, `anim_correr`, `anim_pular`, `anim_cair` (os nomes das animações), `queda` (-10), `raio`, `altura` (0 = pelo modelo) |
+| `nn:jogador3d` | (3D) Jogador 3D: anda para onde a câmera olha (WASD, setas, analógico), pula (espaço, A) e leva a câmera em 3ª pessoa. Cria o próprio corpo (uma cápsula do tamanho do modelo). Manda `pulou` e `caiu`. | `velocidade` (6), `pulo` (8), `pulos_no_ar` (0), `camera` ("atras" ou "cena"), `distancia` (7), `prender_mouse` (true), `sensibilidade` (0.15), `inverter_y` (false), `virar` (true), `agua` ("voltar": na água de um Terreno, volta ao último chão firme; "nada": anda no fundo; nos dois, recebe a mensagem `agua`), `animar` (true: parado, andar, correr, pular e cair num modelo animado), `anim_parado`, `anim_andar`, `anim_correr`, `anim_pular`, `anim_cair` (os nomes das animações), `queda` (-10), `raio`, `altura` (0 = pelo modelo) |
 | `nn:girar3d` | (3D) Gira em volta de um eixo e flutua. | `velocidade` (90 graus/s), `eixo` ("y", "x", "z"), `altura` (0.2 m), `duracao` (2 s) |
 | `nn:plataforma3d` | (3D) Vai e volta a partir de onde está; com um `body3d` kinematic, leva quem está em cima. | `x` (4), `y` (0), `z` (0), `duracao` (3 s), `espera` (0.5 s) |
 | `nn:botao` | Botão de menu: destaca com o mouse ou as setas (teclado e controle); clique, Enter ou A apertam. Manda a mensagem `clicou` e faz a ação. | `acao` ("nada", "cena", "reiniciar", "sair"), `cena`, `foco` (false: começa selecionado), `cor` ("#FFD166": cor ao destacar), `aumentar` (1.1), `som` |
@@ -850,6 +850,39 @@ function cena:draw() brilho:draw(); fumaca:draw() end
 | `follow` | As partículas acompanham o emissor quando ele anda (o jato de uma nave). Padrão `false`: ficam onde nasceram (um rastro). |
 
 O emissor tem `x`, `y`, `emitting` e `rate` (leitura e escrita), `count` e `finished`, e os métodos `:burst(n, x, y)`, `:set_position(x, y)`, `:update(dt)`, `:draw()`, `:draw_screen()` e `:clear()`.
+
+#### Terreno
+
+`nn.d3.terrain(opts)` cria um terreno: uma grade de alturas com quatro cores pintadas por cima (o componente `terrain` das cenas usa o mesmo). Ele fica centrado na posição em que é desenhado: vai de `-width/2` a `width/2` em X e de `-depth/2` a `depth/2` em Z.
+
+```lua
+local chao = nn.d3.terrain({ width = 64, depth = 64, cells = 64, height = 20 })
+for i = 1, 20 do chao:brush("subir", 10, -5, 8, 0.5) end   -- um morro
+chao:paint(3, 10, -5, 3)                                    -- pedra no topo
+local mundo = nn.physics3d.world()
+mundo:body({ terrain = chao })                              -- o chão da física
+
+function cena:draw() nn.d3.draw(chao) end
+```
+
+| Opção | Descrição |
+|---|---|
+| `width`, `depth` | Tamanho em metros (padrão 64). |
+| `cells` | Quadrados de cada lado (padrão 64; até 256). |
+| `height` | As alturas vão de `-height` a `height` (padrão 20). |
+| `data` | As alturas e as cores guardadas por `:encode()` (o NN Studio grava assim). Vazio: plano. |
+| `colors` | As quatro cores: `{ grama, terra, pedra, areia }`. |
+
+| No terreno | O que faz |
+|---|---|
+| `t:height_at(x, z)` | A altura do chão (nil fora). |
+| `t:brush(pincel, x, z, raio, força, altura)` | `"subir"`, `"descer"`, `"alisar"`, `"aplainar"` (até `altura`; sem ela, a do ponto) ou `"ruido"`. A força é em metros no meio do pincel (alisar e aplainar: 0 a 1). |
+| `t:paint(camada, x, z, raio, força)` | Pinta a camada 1 a 4 (força 0 a 1, padrão 1). |
+| `t:raycast(ox, oy, oz, dx, dy, dz, max)` | Onde um raio bate no chão: `x, y, z`. |
+| `t:set_colors({...})`, `t:encode()` | Troca as cores / guarda tudo num texto. |
+| `t.width`, `t.depth`, `t.cells`, `t.max_height`, `t.version` | `version` conta as mudanças. |
+
+`nn.d3.draw(t, opts)` desenha (low-poly: cada triângulo com a sua cor) e `world:body({ terrain = t, x, y, z })` cria o chão exato da física (parado). Nas cenas, o componente `terrain` tem `data`, `cells`, `width`, `depth`, `height`, `color1` a `color4`, `water` (false), `water_level` (-1, em relação ao terreno) e `water_color` ("#3FA7D6B4", meio transparente); o terreno usa só a posição do objeto, `obj.terrain` é o terreno (mudar ele pelo script refaz o chão da física) e `self:water_level(x, z)` diz a altura da água ali (ou nil). Malhas com cor meio transparente (como a água) são desenhadas depois das outras, de trás para a frente.
 
 #### Partículas 3D
 

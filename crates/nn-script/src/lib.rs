@@ -39,6 +39,7 @@ mod particles;
 mod physics;
 mod physics3d;
 mod save;
+mod terrain3d;
 mod tilemap;
 mod types;
 mod ui;

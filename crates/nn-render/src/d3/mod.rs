@@ -23,6 +23,7 @@ mod model;
 mod particles;
 pub mod shapes;
 mod skin;
+mod terrain;
 
 use glam::{Mat4, Quat, Vec2, Vec3};
 use nn_core::Color;
@@ -32,6 +33,7 @@ pub use mesh::{Mesh, Vertex3};
 pub use model::{CollisionMesh, Model, ModelData, ModelError, ModelImage, ModelPart};
 pub use particles::{EmitArea3, ParticleConfig3, ParticleEmitter3};
 pub use skin::{Animation, MAX_JOINTS, Pose, SkelNode, Skeleton, SkinVertex, Trs};
+pub use terrain::{BrushOp, DEFAULT_LAYER_COLORS, TerrainData};
 
 /// Câmera em perspectiva: de onde olha, para onde e o campo de visão.
 #[derive(Debug, Clone, Copy, PartialEq)]

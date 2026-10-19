@@ -75,7 +75,7 @@ fn template_card(
     thumb: Option<&egui::TextureHandle>,
     selected: bool,
 ) -> egui::Response {
-    let size = egui::vec2(176.0, 99.0);
+    let size = egui::vec2(150.0, 84.0);
     let (rect, r) = ui.allocate_exact_size(size + egui::vec2(0.0, 24.0), egui::Sense::click());
     let painter = ui.painter_at(rect.expand(3.0));
     let img = egui::Rect::from_min_size(rect.min, size);
@@ -151,6 +151,7 @@ fn thumb_png(t: Template) -> &'static [u8] {
         Template::TresD => include_bytes!("../assets/modelos/3d.png"),
         Template::Visual3D => include_bytes!("../assets/modelos/visual3d.png"),
         Template::Vazio3D => include_bytes!("../assets/modelos/vazio3d.png"),
+        Template::Vale3D => include_bytes!("../assets/modelos/vale3d.png"),
     }
 }
 
@@ -188,6 +189,10 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
         Template::Visual3D => (
             "3D",
             "A ilha das estrelas montada no editor, sem código: herói em terceira pessoa, caixotes que caem, plataformas e elevador que andam, moedas, estrelas e um evento de vitória.",
+        ),
+        Template::Vale3D => (
+            "Vale 3D",
+            "Um vale pintado num Terreno, sem código: morros, lago, trilha, árvores espalhadas, estrelas nos morros e uma fogueira. Mude o terreno com o ✏ Pintar terreno.",
         ),
         Template::Vazio3D => (
             "Vazio 3D",
@@ -287,7 +292,7 @@ impl Launcher {
                             }
                             ui.vertical(|ui| {
                                 ui.label(RichText::new("NN Studio").size(30.0).strong());
-                                ui.weak("Crie jogos 2D com a nn-engine");
+                                ui.weak("Crie jogos 2D e 3D com a nn-engine");
                             });
                         });
                         ui.add_space(28.0);
@@ -543,7 +548,7 @@ impl Launcher {
             }
             // Cartões: miniatura, nome e (embaixo) o que o escolhido traz.
             egui::Grid::new("modelos")
-                .num_columns(3)
+                .num_columns(4)
                 .spacing([8.0, 8.0])
                 .show(ui, |ui| {
                     for (i, t) in Template::ALL.into_iter().enumerate() {
@@ -558,7 +563,7 @@ impl Launcher {
                             form.template = t;
                             form.submit = true;
                         }
-                        if i % 3 == 2 {
+                        if i % 4 == 3 {
                             ui.end_row();
                         }
                     }

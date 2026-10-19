@@ -31,15 +31,18 @@ pub enum Template {
     /// Mundo 3D vazio (câmera e chão) com modelos e sons (o tutorial 3D
     /// começa daqui).
     Vazio3D,
+    /// Um vale num Terreno pintado (morros, lago, trilha), sem código.
+    Vale3D,
 }
 
 impl Template {
-    pub const ALL: [Template; 9] = [
+    pub const ALL: [Template; 10] = [
         Template::Padrao,
         Template::Visual,
         Template::Aventura,
         Template::Nave,
         Template::Visual3D,
+        Template::Vale3D,
         Template::TresD,
         Template::Vazio,
         Template::Vazio3D,
@@ -57,6 +60,7 @@ impl Template {
             Template::TresD => "3d",
             Template::Visual3D => "visual3d",
             Template::Vazio3D => "vazio3d",
+            Template::Vale3D => "vale3d",
         }
     }
 
@@ -71,6 +75,7 @@ impl Template {
             "3d" | "3D" => Some(Template::TresD),
             "visual3d" | "3d-visual" => Some(Template::Visual3D),
             "vazio3d" | "3d-vazio" => Some(Template::Vazio3D),
+            "vale3d" | "vale" => Some(Template::Vale3D),
             _ => None,
         }
     }
@@ -214,6 +219,28 @@ impl Template {
                 "config.lua",
                 "LEIAME.md",
                 "cenas/mundo.cena",
+                ="modelos/arvore.glb" "../../../jogos/estrelas3d/modelos/arvore.glb",
+                ="modelos/caixote.glb" "../../../jogos/estrelas3d/modelos/caixote.glb",
+                ="modelos/estrela.glb" "../../../jogos/estrelas3d/modelos/estrela.glb",
+                ="modelos/heroi.glb" "../../../jogos/estrelas3d/modelos/heroi.glb",
+                ="modelos/moeda.glb" "../../../jogos/estrelas3d/modelos/moeda.glb",
+                ="modelos/pedra.glb" "../../../jogos/estrelas3d/modelos/pedra.glb",
+                ="modelos/plataforma.glb" "../../../jogos/estrelas3d/modelos/plataforma.glb",
+                ="modelos/bicho.glb" "../../../jogos/estrelas3d/modelos/bicho.glb",
+                ="assets/sons/moeda.wav" "padrao/assets/sons/moeda.wav",
+                ="assets/sons/pulo.wav" "comum/sons/pulo.wav",
+                ="assets/sons/vitoria.wav" "comum/sons/vitoria.wav",
+                ="assets/sons/dano.wav" "comum/sons/dano.wav",
+                ="assets/sons/fogueira.wav" "comum/sons/fogueira.wav",
+                ="assets/sons/mar.wav" "comum/sons/mar.wav",
+            ),
+            Template::Vale3D => modelo!("vale3d":
+                "config.lua",
+                "LEIAME.md",
+                "cenas/vale.cena",
+                "cenas/fim.cena",
+                ="prefabs/moeda.prefab" "visual3d/prefabs/moeda.prefab",
+                ="prefabs/estrela.prefab" "visual3d/prefabs/estrela.prefab",
                 ="modelos/arvore.glb" "../../../jogos/estrelas3d/modelos/arvore.glb",
                 ="modelos/caixote.glb" "../../../jogos/estrelas3d/modelos/caixote.glb",
                 ="modelos/estrela.glb" "../../../jogos/estrelas3d/modelos/estrela.glb",

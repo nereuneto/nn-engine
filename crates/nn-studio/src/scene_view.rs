@@ -240,6 +240,8 @@ pub struct SceneDoc {
     pub particles_paused: bool,
     /// Objetos com partículas para soltar no próximo desenho (💥 Soltar).
     pub burst_requests: Vec<u32>,
+    /// 3D: os pincéis do terreno.
+    pub terrain_tool: crate::terrain_tool::TerrainTool,
     paint_stroke: Option<crate::paint::Stroke>,
     /// O mapa cresceu desde que o jogo abriu: ele só vê ao salvar.
     pub paint_grew: bool,
@@ -488,6 +490,7 @@ impl SceneDoc {
             painting: None,
             particles_paused: false,
             burst_requests: Vec::new(),
+            terrain_tool: Default::default(),
             paint_stroke: None,
             paint_grew: false,
             cam3: scene3d::Cam3::default(),

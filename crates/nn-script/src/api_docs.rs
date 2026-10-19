@@ -529,6 +529,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Malha sua: { points = {{x,y,z}, ...}, triangles = {{1,2,3}, ...}, color, colors (uma por triângulo) }.",
     ),
     d(
+        "nn.d3.terrain",
+        "(opts)",
+        "Terreno com morros e cores: cells, width, depth, height, data, colors. :height_at(x, z), :brush(\"subir\", x, z, raio, força), :paint(camada, x, z, raio), :raycast(...). Desenhe com nn.d3.draw; pise com world:body({ terrain = t }).",
+    ),
+    d(
         "nn.d3.draw",
         "(malha, opts)",
         "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator()).",

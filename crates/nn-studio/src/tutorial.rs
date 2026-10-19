@@ -169,6 +169,18 @@ fn all_rules(ws: &ProjectWorkspace) -> Vec<&scene_data::Rule> {
     out
 }
 
+/// O terreno da cena aberta (o primeiro).
+fn terrain(ws: &ProjectWorkspace) -> Option<nn_render::d3::TerrainData> {
+    objects(ws)
+        .into_iter()
+        .find_map(|o| o.component("terrain"))
+        .map(crate::terrain_tool::terrain_of)
+}
+
+fn doc_of(ws: &ProjectWorkspace) -> Option<&crate::scene_view::SceneDoc> {
+    ws.active_scene.as_deref().and_then(|r| ws.scenes.get(r))
+}
+
 fn body3d_is(o: &Object, kind: &str) -> bool {
     o.component("body3d").is_some_and(|b| b.str("body") == kind)
 }
@@ -207,6 +219,7 @@ pub fn all() -> &'static [Tutorial] {
             primeiro_jogo(),
             mundo_3d(),
             efeitos_3d(),
+            terreno(),
             eventos(),
             desenhe(),
             tiles(),
@@ -652,6 +665,121 @@ fn efeitos_3d() -> Tutorial {
             Step {
                 title: "Pronto: um mundo com vida!",
                 text: "Você usou partículas 3D, som no espaço 3D e um evento com mensagem. O mar.wav (em assets/sons) fica bom na beira de um lago, com Repetir, e o modelo 3D (Novo projeto) tem uma ilha inteira com fogueira, ondas e poeira.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+fn terreno() -> Tutorial {
+    use crate::terrain_tool::TerrainBrush;
+    Tutorial {
+        id: "pinte-um-terreno",
+        title: "Pinte um terreno",
+        summary: "Um chão de verdade para o seu mundo 3D: morros, um lago com água, cores de grama, pedra e areia, árvores espalhadas com o pincel e um herói para passear.",
+        minutes: 12,
+        template: Template::Vazio3D,
+        project: "Meu terreno",
+        steps: vec![
+            Step {
+                title: "Um terreno",
+                text: "Um Terreno é um chão grande que se pinta com o mouse: você sobe morros, cava vales, pinta cores e põe água, como num programa de desenho.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Crie o terreno",
+                text: "➕ Objeto > Terreno. Ele vem plano, com 64 × 64 m. O chão verde do modelo pode ficar (ou apague: Del).",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| terrain(ws).is_some()),
+            },
+            Step {
+                title: "O pincel",
+                text: "Com o Terreno selecionado, clique em ✏ Pintar terreno, na barra da vista. Agora o botão esquerdo pinta em vez de selecionar, e um círculo mostra o pincel. O botão direito continua voando.",
+                target: Some("cena.terreno"),
+                show: None,
+                done: Some(|ws, _| doc_of(ws).is_some_and(|d| d.terrain_tool.active)),
+            },
+            Step {
+                title: "Um morro",
+                text: "Escolha ⬆ Subir e segure o botão esquerdo em cima do terreno: o chão sobe enquanto você segura. Faça um morro de uns 3 m. Tamanho e Força mudam o pincel; Ctrl+Z desfaz.",
+                target: Some("terreno:Raise"),
+                show: None,
+                done: Some(|ws, _| {
+                    terrain(ws).is_some_and(|t| t.heights.iter().any(|&h| h >= 2.5))
+                }),
+            },
+            Step {
+                title: "Um buraco para o lago",
+                text: "Agora ⬇ Descer, num lugar plano: cave um buraco de uns 2 m. (Segurar Ctrl faz o contrário do pincel.)",
+                target: Some("terreno:Lower"),
+                show: None,
+                done: Some(|ws, _| {
+                    terrain(ws).is_some_and(|t| t.heights.iter().any(|&h| h <= -1.5))
+                }),
+            },
+            Step {
+                title: "Suave",
+                text: "Alisar tira os bicos e os degraus. Passe em volta do morro e do buraco. Aplainar puxa para a altura de onde você começou: bom para uma estrada.",
+                target: Some("terreno:Smooth"),
+                show: None,
+                done: Some(|ws, _| {
+                    doc_of(ws).is_some_and(|d| {
+                        matches!(
+                            d.terrain_tool.brush,
+                            TerrainBrush::Smooth | TerrainBrush::Flatten
+                        ) && d.terrain_tool.stroke >= 3
+                    })
+                }),
+            },
+            Step {
+                title: "Cores",
+                text: "Pintar cor, escolha 3 Pedra e pinte o alto do morro; depois 4 Areia em volta do buraco. As cores mudam no Inspetor (Cor 1 a 4).",
+                target: Some("terreno:Paint"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    terrain(ws).is_some_and(|t| t.layers.iter().any(|l| l[2] >= 128))
+                }),
+            },
+            Step {
+                title: "Água",
+                text: "No Inspetor, no Terreno, marque Água. Ajuste o Nível da água (uns -0,5 m) para encher o buraco: virou um lago.",
+                target: Some("inspetor"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws)
+                        .iter()
+                        .any(|o| o.component("terrain").is_some_and(|c| c.bool("water")))
+                }),
+            },
+            Step {
+                title: "Árvores",
+                text: "Espalhar, escolha modelos/arvore.glb e passe o pincel pela grama: as árvores nascem no chão, com tamanho e giro sorteados, já com Corpo 3D. Ctrl apaga. Ponha umas 5.",
+                target: Some("terreno:Scatter"),
+                show: None,
+                done: Some(|ws, _| with_model(ws, "arvore.glb").len() >= 5),
+            },
+            Step {
+                title: "Alguém para passear",
+                text: "Clique de novo em ✏ Pintar terreno para desligar o pincel. ➕ Objeto > Jogador 3D, e com a seta verde (Y) deixe ele um pouco acima do chão.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| objects(ws).iter().any(|o| has_behavior(o, "nn:jogador3d"))),
+            },
+            Step {
+                title: "Teste!",
+                text: "F6: suba o morro, ande entre as árvores e entre no lago (o Jogador 3D volta para a margem e recebe a mensagem \"agua\").",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: um lugar seu!",
+                text: "Você pintou morros, um lago, cores e árvores. O modelo Vale 3D (Novo projeto) é um vale inteiro feito assim, com trilha, estrelas e uma fogueira.",
                 target: None,
                 show: None,
                 done: None,

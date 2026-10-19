@@ -935,6 +935,26 @@ impl Renderer {
             .create_mesh(&self.device, &self.queue, &vertices, &mesh.indices, None)
     }
 
+    /// Troca o conteúdo de uma malha já criada (o mesmo id continua valendo).
+    pub fn update_mesh(&mut self, id: crate::d3::MeshId, mesh: &crate::d3::Mesh) {
+        let srgb = self.format.is_srgb();
+        let vertices: Vec<crate::d3::Vertex3> = mesh
+            .vertices
+            .iter()
+            .map(|v| {
+                let mut v = *v;
+                if srgb {
+                    let [r, g, b, a] = v.color;
+                    let c = Color::rgba(r, g, b, a).to_linear();
+                    v.color = [c.r, c.g, c.b, c.a];
+                }
+                v
+            })
+            .collect();
+        self.d3
+            .replace_mesh(&self.device, &self.queue, id, &vertices, &mesh.indices);
+    }
+
     /// Como [`Renderer::create_mesh`], com os ossos de cada vértice (para
     /// desenhar com [`Renderer::draw_mesh_skinned`]).
     pub fn create_mesh_skinned(

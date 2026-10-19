@@ -37,6 +37,7 @@ pub mod scene_data;
 pub mod scene_render;
 pub mod scene_view;
 pub mod settings;
+pub mod terrain_tool;
 pub mod theme;
 pub mod tiles_view;
 pub mod tileset;

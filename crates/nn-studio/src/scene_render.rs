@@ -48,6 +48,13 @@ pub fn bounds3(o: &Object, root: &Path, sizes: &mut Sizes) -> (glam::Vec3, glam:
                 }
             }
             "shape3d" => add(shape3_bounds(c.str("shape"))),
+            "terrain" => {
+                let (w, d) = (c.num("width") as f32 / 2.0, c.num("depth") as f32 / 2.0);
+                let t = crate::terrain_tool::terrain_of(c);
+                let lo = t.heights.iter().copied().fold(0.0f32, f32::min);
+                let hi = t.heights.iter().copied().fold(0.0f32, f32::max);
+                add((Vec3::new(-w, lo - 0.01, -d), Vec3::new(w, hi + 0.01, d)));
+            }
             _ => {}
         }
     }
@@ -706,6 +713,8 @@ pub struct SceneRenderer {
     previews: HashMap<(String, u32, usize), Preview>,
     /// O mesmo, nas cenas 3D.
     previews3: HashMap<(String, u32, usize), Preview3>,
+    /// Terrenos na GPU: (aba, objeto, componente) → (os campos, a malha).
+    terrains: HashMap<(String, u32, usize), (String, nn_render::d3::MeshId)>,
     /// 3D: as formas prontas já na GPU.
     meshes3: HashMap<&'static str, nn_render::d3::MeshId>,
     /// 3D: modelos (arquivo, achatado) → modelo na GPU (`None` se não abriu).
@@ -773,6 +782,7 @@ impl SceneRenderer {
             fonts: HashMap::new(),
             previews: HashMap::new(),
             previews3: HashMap::new(),
+            terrains: HashMap::new(),
             meshes3: HashMap::new(),
             models3: HashMap::new(),
         }
@@ -869,7 +879,7 @@ impl SceneRenderer {
                 for (ci, c) in o.components.iter().enumerate() {
                     if matches!(
                         c.kind.as_str(),
-                        "model" | "shape3d" | "camera3d" | "particles"
+                        "model" | "shape3d" | "camera3d" | "particles" | "terrain"
                     ) {
                         out.push((m, c.clone(), preview_anim3d(o), o.id, ci));
                     }
@@ -884,6 +894,45 @@ impl SceneRenderer {
             match c.kind.as_str() {
                 "particles" => {
                     self.draw_particles3d(key, root, id, ci, &c, m, view, &mut seen);
+                }
+                "terrain" => {
+                    // Só a posição do objeto conta (sem giro nem escala).
+                    let pos = m.transform_point3(Vec3::ZERO);
+                    let k = (key.to_string(), id, ci);
+                    let sig = format!("{:?}", c.props);
+                    let mesh = match self.terrains.get(&k) {
+                        Some((old, mesh)) if *old == sig => *mesh,
+                        found => {
+                            let found = found.map(|f| f.1);
+                            let t = crate::terrain_tool::terrain_of(&c);
+                            let data = t.mesh(&crate::terrain_tool::colors_of(&c));
+                            let mesh = match found {
+                                Some(mesh) => {
+                                    self.renderer.update_mesh(mesh, &data);
+                                    mesh
+                                }
+                                None => self.renderer.create_mesh(&data),
+                            };
+                            self.terrains.insert(k, (sig, mesh));
+                            mesh
+                        }
+                    };
+                    self.renderer
+                        .draw_mesh(mesh, Mat4::from_translation(pos), Color::WHITE);
+                    if c.bool("water") {
+                        let plane = self.mesh3("plane");
+                        self.renderer.draw_mesh_with(
+                            plane,
+                            Mat4::from_scale_rotation_translation(
+                                Vec3::new(c.num("width") as f32, 1.0, c.num("depth") as f32),
+                                Quat::IDENTITY,
+                                pos + Vec3::Y * c.num("water_level") as f32,
+                            ),
+                            parse_color(c.str("water_color")),
+                            None,
+                            false,
+                        );
+                    }
                 }
                 "model" => {
                     if let Some(model) = self.model3(root, c.str("file"), c.bool("flat")) {

@@ -758,3 +758,45 @@ fn particulas_3d_viram_para_a_camera_e_respeitam_a_profundidade() {
     let img = h.render(Color::BLACK);
     assert!(brightness(pixel(&img, 32, 32)) > 600);
 }
+
+// --- Terreno e água (Sprint 28) -----------------------------------------------
+
+#[test]
+fn terreno_desenha_morro_e_agua_transparente() {
+    use nn_render::d3::{BrushOp, DEFAULT_LAYER_COLORS, TerrainData};
+    let Some(mut h) = Harness::new() else { return };
+    let mut t = TerrainData::flat(32, Vec2::new(20.0, 20.0), 10.0);
+    for _ in 0..8 {
+        t.brush(BrushOp::Raise, Vec2::ZERO, 5.0, 0.5);
+    }
+    t.paint(2, Vec2::ZERO, 2.0, 1.0);
+    let mesh = h.renderer.create_mesh(&t.mesh(&DEFAULT_LAYER_COLORS));
+    // De lado, na altura do chão: o morro aparece no meio, o chão plano não.
+    h.renderer.set_camera3d(Camera3D::looking_at(
+        Vec3::new(0.0, 0.5, 15.0),
+        Vec3::new(0.0, 0.5, 0.0),
+    ));
+    h.renderer.draw_mesh(mesh, Mat4::IDENTITY, Color::WHITE);
+    let img = h.render(Color::BLACK);
+    assert!(brightness(pixel(&img, 32, 26)) > 0, "o morro sobe no meio");
+    assert_eq!(brightness(pixel(&img, 32, 4)), 0, "céu vazio em cima");
+    // Água meio transparente por cima de um chão vermelho: mistura as duas.
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 8.0, 0.01), Vec3::ZERO));
+    // A água vem antes na fila: mesmo assim o chão aparece por baixo.
+    h.renderer.draw_mesh(
+        plane,
+        Mat4::from_scale_rotation_translation(
+            Vec3::splat(20.0),
+            glam::Quat::IDENTITY,
+            Vec3::new(0.0, 1.0, 0.0),
+        ),
+        Color::rgba(0.0, 0.0, 1.0, 0.5),
+    );
+    h.renderer
+        .draw_mesh(plane, Mat4::from_scale(Vec3::splat(20.0)), Color::RED);
+    let img = h.render(Color::BLACK);
+    let p = pixel(&img, 32, 32);
+    assert!(p[0] > 90 && p[2] > 90, "vermelho e azul misturados: {p:?}");
+}

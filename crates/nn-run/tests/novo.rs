@@ -599,6 +599,67 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn modelo_vale3d_terreno_pisa_lago_volta_e_estrelas() {
+    let dir = temp("vale3d");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: None,
+        template: Template::Vale3D,
+    })
+    .unwrap();
+    let Some((mut h, rt)) = cena_do_modelo(&dir, "cenas/vale.cena") else {
+        return;
+    };
+    h.run_frames(30);
+    assert_eq!(h.game.0.error(), None);
+    // Em pé no terreno, na altura do chão.
+    let (y, chao): (f64, f64) = (
+        lua(&rt, "return cena.objects['Herói'].y"),
+        lua(&rt, "return cena.objects.Terreno.terrain:height_at(0, 36)"),
+    );
+    assert!((y - chao).abs() < 0.2, "no chão: {y} ({chao})");
+    // Anda pela trilha.
+    h.ctx.input.press_key(KeyCode::KeyW);
+    h.run_frames(40);
+    h.ctx.input.release_key(KeyCode::KeyW);
+    let z: f64 = lua(&rt, "return cena.objects['Herói'].z");
+    assert!(z < 33.0, "andou: {z}");
+    // No lago: volta para a margem.
+    rt.lua()
+        .load("cena.objects['Herói']:move_to(-14, -0.5, 12)")
+        .exec()
+        .unwrap();
+    h.run_frames(40);
+    let (x, z): (f64, f64) = (
+        lua(&rt, "return cena.objects['Herói'].x"),
+        lua(&rt, "return cena.objects['Herói'].z"),
+    );
+    assert!(
+        ((x + 14.0).powi(2) + (z - 12.0).powi(2)).sqrt() > 5.0,
+        "saiu do lago: {x} {z}"
+    );
+    // As 5 estrelas ficam em cima dos morros, e dá para pegar.
+    let n: i64 = lua(&rt, "return #cena:find_all('estrela')");
+    assert_eq!(n, 5);
+    for k in 1..=5 {
+        rt.lua()
+            .load(format!(
+                "local e = cena:find_all('estrela')[1]
+                 local x, y, z = e:position3d()
+                 assert(y > cena.objects.Terreno.terrain:height_at(x, z), 'estrela {k} acima do chão')
+                 cena.objects['Herói']:move_to(x, y - 0.5, z)"
+            ))
+            .exec()
+            .unwrap();
+        h.run_frames(3);
+    }
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.estrelas"), 5);
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 fn toque_uma(h: &mut Headless<Uma>, k: KeyCode) {
     h.ctx.input.press_key(k);
     h.run_frames(1);
@@ -654,11 +715,14 @@ fn miniaturas_dos_modelos() {
             return;
         };
         h.run_frames(if template == Template::Nave { 150 } else { 40 });
-        if template == Template::Visual3D {
+        if template == Template::Visual3D || template == Template::Vale3D {
             // A dica do começo some depois de 4 segundos.
             h.run_frames(220);
         }
-        if template == Template::TresD || template == Template::Visual3D {
+        if template == Template::TresD
+            || template == Template::Visual3D
+            || template == Template::Vale3D
+        {
             // Anda um pouco para a frente, para a ilha aparecer melhor.
             h.ctx.input.press_key(KeyCode::KeyW);
             h.run_frames(25);

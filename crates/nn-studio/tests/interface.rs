@@ -3115,3 +3115,229 @@ fn tutorial_efeitos_3d_avanca_sozinho_ate_o_fim() {
     h.run_steps(4);
     assert!(h.state().tutorial.is_none());
 }
+
+/// Terreno: ➕ Objeto > Terreno, ✏ Pintar terreno, subir com o mouse,
+/// desfazer, pintar uma cor, espalhar árvores e a água.
+#[test]
+fn cena_3d_terreno_pintado_com_o_mouse() {
+    use nn_studio::scene_data::Prop;
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let dir = temp("cena-3d-terreno");
+    let proj = plataforma(&dir);
+    let modelos = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/estrelas3d/modelos");
+    std::fs::create_dir_all(proj.join("modelos")).unwrap();
+    std::fs::write(
+        proj.join("modelos/arvore.glb"),
+        std::fs::read(modelos.join("arvore.glb")).unwrap(),
+    )
+    .unwrap();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    // Tira o chão e o cubo do modelo: só o terreno.
+    cena_mut(&mut h)
+        .data
+        .objects
+        .retain(|o| o.component("camera3d").is_some());
+    h.get_by_label("➕ Objeto").click();
+    h.run_steps(2);
+    h.get_by_label("Terreno").click();
+    h.run_steps(3);
+    let id = objeto(&h, "Terreno").id;
+    {
+        let doc = cena_mut(&mut h);
+        doc.selection = vec![id];
+        // De cima, olhando o meio do terreno.
+        doc.cam3
+            .look_at(glam::Vec3::new(0.0, 40.0, 25.0), glam::Vec3::ZERO);
+        doc.cam3_set = true;
+    }
+    h.run_steps(3);
+    // O Inspetor mostra o terreno; a barra, o 🖌.
+    h.get_by_label("Nível da água");
+    h.get_by_label("✏ Pintar terreno").click();
+    h.run_steps(3);
+    h.get_by_label("⬆ Subir");
+    let altura = |h: &Harness<'_, StudioApp>| -> f32 {
+        let o = objeto(h, "Terreno");
+        let t = nn_studio::terrain_tool::terrain_of(o.component("terrain").unwrap());
+        t.height_at(0.0, 0.0).unwrap()
+    };
+    assert_eq!(altura(&h), 0.0);
+    // Segura o botão no meio da vista: o chão sobe.
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let meio = rect.center();
+    h.hover_at(meio);
+    h.run_steps(2);
+    h.drag_at(meio);
+    for _ in 0..20 {
+        h.hover_at(meio);
+        h.step();
+    }
+    h.drop_at(meio);
+    h.run_steps(3);
+    let subiu = altura(&h);
+    assert!(subiu > 0.3, "subiu: {subiu}");
+    // A seleção não mudou (o clique pintou, não selecionou).
+    assert_eq!(cena_mut(&mut h).selection, vec![id]);
+    tela(&mut h, "cena-3d-terreno");
+    // Ctrl+Z desfaz o arrasto inteiro.
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    h.run_steps(2);
+    assert_eq!(altura(&h), 0.0);
+    // Pintar a cor 4 (areia).
+    h.get_by_label("Pintar cor").click();
+    h.run_steps(2);
+    h.get_by_label_contains("4 Areia").click();
+    h.run_steps(2);
+    h.drag_at(meio);
+    for _ in 0..10 {
+        h.hover_at(meio);
+        h.step();
+    }
+    h.drop_at(meio);
+    h.run_steps(3);
+    {
+        let o = objeto(&h, "Terreno");
+        let t = nn_studio::terrain_tool::terrain_of(o.component("terrain").unwrap());
+        let k = (t.side() / 2 * t.side() + t.side() / 2) as usize;
+        assert!(t.layers[k][3] > 200, "areia: {:?}", t.layers[k]);
+    }
+    // Espalhar árvores.
+    {
+        let doc = cena_mut(&mut h);
+        doc.terrain_tool.brush = nn_studio::terrain_tool::TerrainBrush::Scatter;
+        doc.terrain_tool.scatter = "modelos/arvore.glb".into();
+        doc.terrain_tool.radius = 8.0;
+    }
+    h.drag_at(meio);
+    for _ in 0..30 {
+        h.hover_at(meio);
+        h.step();
+    }
+    h.drop_at(meio);
+    h.run_steps(3);
+    let arvores = cena_mut(&mut h)
+        .data
+        .objects
+        .iter()
+        .filter(|o| o.name == "arvore")
+        .count();
+    assert!(arvores >= 2, "espalhou: {arvores}");
+    // Água ligada.
+    {
+        let doc = cena_mut(&mut h);
+        let o = doc.data.find_mut(id).unwrap();
+        o.components[0].set("water", Prop::Bool(true));
+        o.components[0].set("water_level", Prop::Num(0.5));
+    }
+    h.run_steps(3);
+    tela(&mut h, "cena-3d-terreno-agua");
+    // Salva: a cena tem o terreno com os dados.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    h.run_steps(2);
+    let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
+    assert!(
+        text.contains("type = \"terrain\"") && text.contains("data = \"t1:"),
+        "salvou"
+    );
+}
+
+#[test]
+fn tutorial_pinte_um_terreno_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    use nn_studio::terrain_tool::{TerrainBrush, terrain_of};
+    let dir = temp("tutorial-terreno");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("pinte-um-terreno");
+    h.run_steps(4);
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    h.run_steps(4);
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/mundo.cena").unwrap()
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    // Mexe no terreno como os pincéis fazem.
+    fn terreno(h: &mut Harness<'_, StudioApp>, f: impl FnOnce(&mut nn_render::d3::TerrainData)) {
+        let d = doc(h);
+        let o = d
+            .data
+            .objects
+            .iter_mut()
+            .find(|o| o.name == "Terreno")
+            .unwrap();
+        let c = o
+            .components
+            .iter_mut()
+            .find(|c| c.kind == "terrain")
+            .unwrap();
+        let mut t = terrain_of(c);
+        f(&mut t);
+        c.set("data", Prop::Str(t.encode()));
+    }
+    espera(&mut h, 1);
+    let mut t = Object::new(20, "Terreno");
+    t.components.push(Component::new("terrain"));
+    doc(&mut h).data.objects.push(t);
+    espera(&mut h, 2);
+    doc(&mut h).selection = vec![20];
+    doc(&mut h).terrain_tool.active = true;
+    espera(&mut h, 3);
+    use glam::Vec2;
+    use nn_render::d3::BrushOp;
+    terreno(&mut h, |t| {
+        for _ in 0..10 {
+            t.brush(BrushOp::Raise, Vec2::ZERO, 6.0, 0.5);
+        }
+    });
+    espera(&mut h, 4);
+    terreno(&mut h, |t| {
+        for _ in 0..8 {
+            t.brush(BrushOp::Lower, Vec2::new(15.0, 15.0), 4.0, 0.5);
+        }
+    });
+    espera(&mut h, 5);
+    {
+        let d = doc(&mut h);
+        d.terrain_tool.brush = TerrainBrush::Smooth;
+        d.terrain_tool.stroke = 3;
+    }
+    espera(&mut h, 6);
+    terreno(&mut h, |t| {
+        t.paint(2, Vec2::ZERO, 3.0, 1.0);
+    });
+    espera(&mut h, 7);
+    {
+        let d = doc(&mut h);
+        let o = d.data.find_mut(20).unwrap();
+        o.components[0].set("water", Prop::Bool(true));
+    }
+    espera(&mut h, 8);
+    for i in 0..5 {
+        let mut a = Object::new(30 + i, "arvore");
+        let mut m = Component::new("model");
+        m.set("file", Prop::Str("modelos/arvore.glb".into()));
+        a.components.push(m);
+        doc(&mut h).data.objects.push(a);
+    }
+    espera(&mut h, 9);
+    let mut j = Object::new(40, "Jogador");
+    j.components.push(Component::behavior("nn:jogador3d", &[]));
+    doc(&mut h).data.objects.push(j);
+    espera(&mut h, 10);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 11);
+    tela(&mut h, "tutorial-terreno-fim");
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}
