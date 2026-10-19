@@ -11,7 +11,7 @@ cargo nn novo ../meu-jogo     # cria a pasta com um jogo pequeno e completo
 cargo nn ../meu-jogo          # joga
 ```
 
-O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"` e `--modelo`, que escolhe o modelo: `visual` (fase de plataforma montada no [NN Studio](studio.md), sem código, com [comportamentos](#comportamentos), [eventos](#eventos-quando-então) e um [prefab](#prefabs)), `aventura` (visto de cima: chave, porta e tesouro), `nave` (tiros, asteroides e recorde salvo), `3d` (plataforma 3D em terceira pessoa, veja [Seu primeiro jogo 3D](#seu-primeiro-jogo-3d)), `vazio` (cena vazia com um pacote de imagens e sons) ou `minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
+O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"` e `--modelo`, que escolhe o modelo: `visual` (fase de plataforma montada no [NN Studio](studio.md), sem código, com [comportamentos](#comportamentos), [eventos](#eventos-quando-então) e um [prefab](#prefabs)), `aventura` (visto de cima: chave, porta e tesouro), `nave` (tiros, asteroides e recorde salvo), `3d` (plataforma 3D em terceira pessoa em código, veja [Seu primeiro jogo 3D](#seu-primeiro-jogo-3d)), `visual3d` (a mesma ilha montada no NN Studio, sem código: [cenas 3D](#cenas-3d)), `vazio` (cena vazia com um pacote de imagens e sons), `vazio3d` (mundo 3D com chão e um pacote de modelos e sons) ou `minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
 
 Para ver jogos prontos:
 
@@ -211,8 +211,24 @@ return {
 | `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true) |
 | `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true) |
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
+| `body3d` | `body` ("static", "dynamic" ou "kinematic"), `shape` ("auto", "box", "sphere", "capsule", "cylinder", "mesh"), `sensor`, `bounce` (0), `friction` (0.5), `mass` (0 = pelo tamanho), `lock_rotation`, `gravity_scale` (1), `tag` |
 
-No script, `obj.z`, `obj.rx`, `obj.ry`, `obj.rz` e `obj.scale_z` podem ser lidos e mudados, e `obj:matrix3d()` devolve a [matriz](#desenhar) do objeto no mundo (somando os pais).
+O `body3d` é um corpo de [`nn.physics3d`](#nnphysics3d-física-3d) no mundo da cena (com a `gravity` dela; numa cena 3D, -20 por padrão). A forma `"auto"` usa a malha exata de um `model` num corpo `static` ou `kinematic`; nos outros casos, uma caixa (ou esfera, cápsula e cilindro, conforme o `shape3d`) do tamanho do modelo ou da forma, com a escala do objeto. Os comportamentos que funcionam no 3D são `nn:jogador3d`, `nn:girar3d`, `nn:plataforma3d`, `nn:coletavel`, `nn:ir_para_cena`, `nn:checkpoint`, `nn:mostrar_valor` e `nn:botao` (veja os [prontos](#comportamentos-prontos)); um comportamento seu pode dizer `mode = "3d"` (ou `"2d"`, ou `"both"`) para o NN Studio só oferecer ele nesse tipo de cena.
+
+No script:
+
+| No script | O que é |
+|---|---|
+| `obj.z`, `obj.rx`, `obj.ry`, `obj.rz`, `obj.scale_z` | Leitura e escrita. Com corpo, a posição acompanha o corpo; mudar à mão leva o corpo junto. |
+| `obj.body` | O corpo 3D (`body3d`) ou o personagem do Jogador 3D: `vx`, `vy`, `vz`, `:set_velocity`, `:impulse`, `on_ground`... |
+| `obj:matrix3d()` | A [matriz](#desenhar) do objeto no mundo (somando os pais). |
+| `obj:position3d()` | Onde ele está no mundo: `x, y, z`. |
+| `obj:bounds3d()` | A caixa dele no mundo: `x0, y0, z0, x1, y1, z1`. |
+| `obj:touching(outro, margem)` | As caixas se tocam (margem padrão 0,05 m)? |
+| `obj:move_to(x, y, z)` | Leva o objeto (e o corpo) para lá, parado. |
+| `self:world3()` | O mundo da física 3D da cena (`raycast`, `query_sphere`...). |
+
+Os eventos de toque da física 3D chegam ao `contact(e)` da cena e ao `contact(outro, e)` dos comportamentos, com `e.object_a` e `e.object_b`.
 
 #### Interface: menus e HUD
 
@@ -345,6 +361,9 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:atirar` | Cria um prefab andando. | `prefab`, `tecla` ("x"; vazio = sozinho), `intervalo` (0.3), `velocidade` (700), `direcao` ("frente", "jogador", "direita", "cima"), `som`, `distancia` (24) |
 | `nn:gerador` | Cria um prefab de tempos em tempos. | `prefab`, `intervalo` (2), `maximo` (10), `espalhar_x`, `espalhar_y` (0), `comecar_ja` (false) |
 | `nn:temporario` | Some depois de um tempo ou fora da tela. | `tempo` (3), `fora_da_tela` (true) |
+| `nn:jogador3d` | (3D) Jogador 3D: anda para onde a câmera olha (WASD, setas, analógico), pula (espaço, A) e leva a câmera em 3ª pessoa. Cria o próprio corpo (uma cápsula do tamanho do modelo). Manda `pulou` e `caiu`. | `velocidade` (6), `pulo` (8), `pulos_no_ar` (0), `camera` ("atras" ou "cena"), `distancia` (7), `prender_mouse` (true), `sensibilidade` (0.15), `inverter_y` (false), `virar` (true), `queda` (-10), `raio`, `altura` (0 = pelo modelo) |
+| `nn:girar3d` | (3D) Gira em volta de um eixo e flutua. | `velocidade` (90 graus/s), `eixo` ("y", "x", "z"), `altura` (0.2 m), `duracao` (2 s) |
+| `nn:plataforma3d` | (3D) Vai e volta a partir de onde está; com um `body3d` kinematic, leva quem está em cima. | `x` (4), `y` (0), `z` (0), `duracao` (3 s), `espera` (0.5 s) |
 | `nn:botao` | Botão de menu: destaca com o mouse ou as setas (teclado e controle); clique, Enter ou A apertam. Manda a mensagem `clicou` e faz a ação. | `acao` ("nada", "cena", "reiniciar", "sair"), `cena`, `foco` (false: começa selecionado), `cor` ("#FFD166": cor ao destacar), `aumentar` (1.1), `som` |
 
 A **Vida** também tem `ao_acabar = "nada"` (um evento decide o que fazer) e avisa por mensagem: `levou_dano` a cada dano e `vida_acabou` no fim. O **Coletável** manda `coletou` (com o item) para quem pegou. Essas mensagens chegam aos comportamentos (como funções) e aos [eventos](#eventos-quando-então).
@@ -929,6 +948,8 @@ local piramide = nn.d3.mesh({
 |---|---|
 | `flat` | `true`: cada face com um tom só (o visual low-poly), mesmo que o modelo tenha sombreado suave. |
 
+`modelo:bounds()` devolve a caixa em volta do modelo: `x0, y0, z0, x1, y1, z1`.
+
 O modelo tem `triangles`, `width`, `height` e `depth`. Ele é desenhado com `nn.d3.draw`, como as formas. Ainda não entram: animações de esqueleto, luzes e câmeras do arquivo (por enquanto só modelos parados).
 
 #### Desenhar
@@ -946,7 +967,7 @@ O modelo tem `triangles`, `width`, `height` e `depth`. Ele é desenhado com `nn.
 | `body` | Um corpo de [`nn.physics3d`](#nnphysics3d-física-3d): desenha na posição e rotação dele (a escala continua vindo de `scale`). |
 | `matrix` | Uma matriz de `nn.d3.matrix` (no lugar de posição, rotação e escala). |
 
-`nn.d3.matrix(opts)` guarda posição, rotação e escala (as mesmas opções do `draw`) numa matriz. `pai * filho` junta duas, para coisas presas a outras (uma espada na mão, uma roda no carro): `nn.d3.draw(roda, { matrix = carro * nn.d3.matrix({ x = 1, y = -0.3 }) })`. `m:position()` devolve onde ela está, `m:forward()` para onde aponta (−Z) e `m:transform_point(x, y, z)` leva um ponto para o mundo.
+`nn.d3.matrix(opts)` guarda posição, rotação e escala (as mesmas opções do `draw`) numa matriz. `pai * filho` junta duas, para coisas presas a outras (uma espada na mão, uma roda no carro): `nn.d3.draw(roda, { matrix = carro * nn.d3.matrix({ x = 1, y = -0.3 }) })`. `m:position()` devolve onde ela está, `m:forward()` para onde aponta (−Z), `m:transform_point(x, y, z)` leva um ponto para o mundo, `m:inverse()` desfaz a matriz e `m:decompose()` devolve posição, rotação (graus) e escala: `x, y, z, rx, ry, rz, sx, sy, sz`.
 
 #### Câmera
 
@@ -1165,7 +1186,7 @@ end
 | `w`, `h`, `d` ou `size` | Caixa: largura, altura e profundidade (ou as três iguais). |
 | `radius`, `height` | Esfera, cápsula e cilindro (em pé). |
 | `model` | Um modelo de `nn.assets.model`: a caixa em volta dele, ou os triângulos com `shape = "mesh"`. |
-| `scale` | Multiplica o tamanho (use o mesmo `scale` do desenho). |
+| `scale` | Multiplica o tamanho (use o mesmo `scale` do desenho). `sx`, `sy`, `sz` multiplicam um eixo só. |
 | `x`, `y`, `z`, `rx`, `ry`, `rz` | Posição e rotação inicial (graus). |
 | `vx`, `vy`, `vz` | Velocidade inicial. |
 | `mass` ou `density` | Massa (ou massa por volume; padrão 1). Mais pesado empurra mais e é menos empurrado. |

@@ -43,8 +43,15 @@ projetos em Lua da ferramenta `nn`, então dá para alternar entre os dois.
     com eventos.
   - **Nave:** sem código: tiros, asteroides que vêm de um gerador,
     explosões de partículas, pontos, vidas e recorde salvo no computador.
+  - **3D:** a ilha das estrelas montada no editor, sem código: herói em
+    terceira pessoa (Jogador 3D), caixotes que caem, plataformas e um
+    elevador que andam, moedas e estrelas (prefabs), placar e um evento de
+    vitória.
+  - **3D em código:** a mesma ilha escrita em Lua, com menu, pausa e recorde.
   - **Vazio:** uma cena vazia e um pacote de imagens e sons, para montar do
     seu jeito (o tutorial começa daqui).
+  - **Vazio 3D:** um mundo 3D com chão e um pacote de modelos e sons (o
+    tutorial 3D começa daqui).
   - **Mínimo:** só uma cena com um quadrado que anda.
 
   ![Novo projeto: os modelos](imagens/nn-studio-modelos.png)
@@ -72,6 +79,10 @@ projeto continua aberto.
 - **Seu primeiro jogo** (uns 15 minutos), a partir do modelo Vazio: chão com
   corpo físico, herói que anda e pula, animação, moedas (e um prefab delas),
   placar no HUD e um evento para vencer.
+- **Seu primeiro mundo 3D** (uns 15 minutos), a partir do modelo Vazio 3D:
+  um herói que anda e pula com a câmera atrás dele, árvores que bloqueiam,
+  uma caixa que cai, uma estrela, uma plataforma que anda, o sol da tarde e
+  um evento de vitória ([cenas 3D](#cenas-3d)).
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -551,7 +562,12 @@ sombras, desenhada pela engine do jeito que vai aparecer no jogo.
 
 ![Cena 3D aberta no NN Studio](imagens/nn-studio-3d.png)
 
-### Passo a passo: seu primeiro mundo 3D
+Para aprender fazendo, o tutorial guiado **Seu primeiro mundo 3D** (em
+[Tutoriais](#tutoriais)) monta um mundo com herói, árvores, uma caixa que cai,
+uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
+(Novo projeto) é uma ilha inteira montada assim, sem código.
+
+### Passo a passo: uma cena 3D do zero
 
 1. **Ctrl+N** (ou **➕ Novo > Cena visual**), dê um nome (`mundo`) e marque
    **Tipo: 3D**. Clique em **Criar**. A cena já vem com uma **Câmera**, um
@@ -578,9 +594,9 @@ sombras, desenhada pela engine do jeito que vai aparecer no jogo.
    que a **Câmera** vê: posicione ela (mover e girar, como qualquer objeto)
    para enquadrar o mundo. O cone azul na vista mostra para onde ela olha.
 
-Para um personagem que anda, pula e coleta coisas, veja o modelo **3D** e o
-exemplo **Ilha das Estrelas** no Gerenciador de projetos, e o
-[guia do Lua](lua.md) (`nn.physics3d`, `nn.d3.third_person`).
+7. **Um herói:** **➕ Objeto > Jogador 3D** (ou arraste um modelo e adicione
+   **Jogador > Jogador 3D**). No jogo, ele anda, pula e leva a câmera atrás
+   dele. Para o chão segurar, o Chão já vem com um **Corpo 3D**.
 
 ### Navegar na vista 3D
 
@@ -624,9 +640,79 @@ exemplo **Ilha das Estrelas** no Gerenciador de projetos, e o
 | Névoa | O que está longe some na cor do horizonte, entre as duas distâncias |
 | Sombras | Sombra do sol até esta distância da câmera |
 
-Por enquanto, os comportamentos prontos, os eventos e a física são do 2D; no
-3D, o código da cena (Inspetor > **Script**) faz o resto. Eles chegam ao 3D
-na próxima etapa.
+### Física: Corpo 3D
+
+Adicione **Corpo 3D** (➕ Adicionar componente) a tudo o que deve bloquear,
+cair ou empurrar. Sem ele, o objeto é só enfeite: o herói atravessa.
+
+| Tipo | Para quê |
+|---|---|
+| **Parado** | Chão, paredes, árvores, casas: nunca sai do lugar. |
+| **Cai e é empurrado** | Caixas, bolas, barris: cai com a gravidade da cena (a do Inspetor da cena, -20 por padrão), rola e é empurrado pelo herói. |
+| **Se move sozinho** | Plataformas, elevadores, portas: o jogo move (com o comportamento **Plataforma que anda**, por exemplo) e quem está em cima vai junto. |
+
+A **Forma automática** escolhe pelo que o objeto mostra: num corpo parado ou
+que se move sozinho com um **Modelo 3D**, a **malha exata** do modelo (dá
+para subir no telhado da casa); nos outros, uma caixa, esfera, cápsula ou
+cilindro do tamanho do modelo ou da forma, com a escala do objeto. Dá para
+escolher a forma à mão. **Só detecta (sensor)** não bloqueia: só avisa quem
+entra (para zonas e portas com eventos). No modo Completo aparecem o atrito,
+a massa, "não gira" e o multiplicador da gravidade.
+
+**Colisões**, na barra da cena, mostra os corpos em verde e o Jogador 3D em
+azul.
+
+### Jogador 3D
+
+O comportamento **Jogador 3D** (**➕ Adicionar componente > Jogador**) faz o
+objeto andar com **WASD**, as setas ou o analógico, para onde a câmera olha,
+e pular com **espaço** ou **A** do controle. Ele não precisa de Corpo 3D: o
+corpo dele é uma cápsula do tamanho do modelo, com os pés no fundo do
+modelo. A frente do modelo é o **+Z** (vire o objeto em Y para ele começar
+olhando para outro lado).
+
+| Propriedade | O que faz |
+|---|---|
+| Velocidade, Força do pulo, Pulos no ar | Metros por segundo; 1 pulo no ar = pulo duplo. |
+| Câmera | **Atrás do jogador** (3ª pessoa: não atravessa paredes, aproxima com a rodinha) ou **a Câmera 3D da cena** (fixa; o jogador anda em relação a ela). |
+| Distância da câmera | Quão longe ela fica. |
+| O mouse gira a câmera | O cursor some e o mouse gira a câmera. **Esc** solta o mouse; um clique na janela prende de novo. |
+| Virar para onde anda | O modelo vira para a direção do movimento. |
+| Volta se cair abaixo de | (Completo) Caiu do mundo: volta ao último chão firme e recebe a mensagem **caiu** (use num evento para tocar um som ou tirar uma vida). |
+
+Ele também manda a mensagem **pulou** a cada pulo.
+
+### Comportamentos e eventos no 3D
+
+Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
+
+- **Jogador 3D** (Jogador);
+- **Coletável** (Itens): some quando o jogador encosta e soma numa variável;
+- **Girar e flutuar** (Movimento): gira em volta de um eixo e sobe e desce
+  devagar (estrelas, moedas);
+- **Plataforma que anda** (Movimento): vai e volta em X, Y e Z, com espera
+  nas pontas; já ganha um Corpo 3D que se move sozinho;
+- **Ir para cena**, **Checkpoint**, **Mostrar valor** e **Botão**, como no 2D
+  (no 3D, a porta de **Ir para cena** com tecla abre com **E** ou o **Y** do
+  controle).
+
+"Encostar" no 3D é as caixas dos dois objetos se tocarem, com ou sem Corpo 3D.
+
+Os **eventos** funcionam igual, com o que faz sentido no 3D: encostar, estar
+perto (em metros), teclas, variáveis, mensagens, mostrar e esconder, mudar a
+cor de modelos e formas, sons, cenas... **Levar para** e **Velocidade ou
+empurrão** ganham o **Z**, e **Criar prefab** cria no ponto 3D. O que é só do
+2D (tiles, partículas, animações de imagem, tremer a câmera, sair da tela)
+não aparece nos menus de uma cena 3D.
+
+Com o jogo aberto pelo **▶ Testar daqui**, o que você muda aparece na hora,
+como no 2D: posição, rotação e escala, os componentes e o **☀ Ambiente**
+(céu, sol, névoa e sombras).
+
+Para o que os prontos não cobrem, o código da cena (Inspetor > **Script**)
+encontra os objetos em `self.objects`, com `obj.body` (o corpo 3D),
+`obj:position3d()` e `self:world3()` (o mundo da física). Veja o
+[guia do Lua](lua.md#cenas-3d).
 
 ## Editor de pixel art
 
