@@ -19,6 +19,52 @@ use nn_render::{
 
 use crate::scene_data::{Component, Object, SceneData, Transform};
 
+/// Lê um modelo 3D do projeto (com o .bin e as imagens ao lado, se for
+/// .gltf).
+pub fn read_model(root: &Path, rel: &str) -> Result<nn_render::d3::ModelData, String> {
+    let path = root.join(rel);
+    let bytes = std::fs::read(&path).map_err(|e| format!("{rel}: {e}"))?;
+    let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    nn_render::d3::ModelData::from_gltf(&bytes, &mut |uri| std::fs::read(dir.join(uri)).ok())
+        .map_err(|e| format!("{rel}: {e}"))
+}
+
+/// A caixa que envolve um objeto 3D no espaço dele (sem a transformação):
+/// o modelo, a forma ou, para a câmera e objetos vazios, um cubinho.
+pub fn bounds3(o: &Object, root: &Path, sizes: &mut Sizes) -> (glam::Vec3, glam::Vec3) {
+    use glam::Vec3;
+    let mut out: Option<(Vec3, Vec3)> = None;
+    let mut add = |b: (Vec3, Vec3)| {
+        out = Some(match out {
+            Some((a, c)) => (a.min(b.0), c.max(b.1)),
+            None => b,
+        });
+    };
+    for c in &o.components {
+        match c.kind.as_str() {
+            "model" => {
+                if let Some(b) = sizes.model(root, c.str("file")) {
+                    add(b);
+                }
+            }
+            "shape3d" => add(shape3_bounds(c.str("shape"))),
+            _ => {}
+        }
+    }
+    out.unwrap_or((Vec3::splat(-0.25), Vec3::splat(0.25)))
+}
+
+/// A caixa de cada forma pronta (as de `nn_render::d3::shapes`).
+pub fn shape3_bounds(shape: &str) -> (glam::Vec3, glam::Vec3) {
+    use glam::Vec3;
+    match shape {
+        // O plano é fino; um pouco de altura para dar para clicar nele.
+        "plane" => (Vec3::new(-0.5, -0.01, -0.5), Vec3::new(0.5, 0.01, 0.5)),
+        "capsule" => (Vec3::new(-0.25, -0.5, -0.25), Vec3::new(0.25, 0.5, 0.25)),
+        _ => (Vec3::splat(-0.5), Vec3::splat(0.5)),
+    }
+}
+
 /// Cor "#RRGGBB" ou "#RRGGBBAA" (como no Lua). Inválida vira branco.
 pub fn parse_color(s: &str) -> Color {
     let hex = s.trim().trim_start_matches('#');
@@ -70,17 +116,34 @@ pub struct Sizes {
     pub anims: crate::anim_file::AnimCache,
     /// Tamanho (em pixels, sem escala) dos mapas abertos no editor.
     pub map_px: HashMap<String, (f32, f32)>,
+    /// Modelo 3D → caixa que envolve (mínimo, máximo).
+    models: HashMap<String, Option<(glam::Vec3, glam::Vec3)>>,
 }
 
 impl Sizes {
     pub fn invalidate(&mut self, rel: &str) {
         self.images.remove(rel);
+        self.models.remove(rel);
         self.maps.retain(|(r, _), _| r != rel);
     }
 
     pub fn clear(&mut self) {
         self.images.clear();
+        self.models.clear();
         self.maps.clear();
+    }
+
+    /// A caixa que envolve um modelo 3D (lido do disco, sem GPU).
+    pub fn model(&mut self, root: &Path, rel: &str) -> Option<(glam::Vec3, glam::Vec3)> {
+        if rel.is_empty() {
+            return None;
+        }
+        if let Some(b) = self.models.get(rel) {
+            return *b;
+        }
+        let b = read_model(root, rel).ok().map(|m| m.bounds());
+        self.models.insert(rel.to_string(), b);
+        b
     }
 
     pub fn image(&mut self, root: &Path, rel: &str) -> Option<(f32, f32)> {
@@ -574,6 +637,21 @@ pub struct SceneRenderer {
     fonts: HashMap<String, Option<FontId>>,
     /// Partículas animando na cena: (aba, objeto, componente) → emissor.
     previews: HashMap<(String, u32, usize), Preview>,
+    /// 3D: as formas prontas já na GPU.
+    meshes3: HashMap<&'static str, nn_render::d3::MeshId>,
+    /// 3D: modelos (arquivo, achatado) → modelo na GPU (`None` se não abriu).
+    models3: HashMap<(String, bool), Option<nn_render::d3::Model>>,
+}
+
+/// Como desenhar uma cena 3D: a câmera do editor, o tamanho e o fundo.
+#[derive(Debug, Clone)]
+pub struct View3 {
+    pub camera: nn_render::d3::Camera3D,
+    pub size: UVec2,
+    /// Fundo quando a cena não tem céu.
+    pub background: Color,
+    /// Passo da grade no chão (0 = sem grade).
+    pub grid: f32,
 }
 
 impl std::fmt::Debug for SceneRenderer {
@@ -600,7 +678,208 @@ impl SceneRenderer {
             map_sources: HashMap::new(),
             fonts: HashMap::new(),
             previews: HashMap::new(),
+            meshes3: HashMap::new(),
+            models3: HashMap::new(),
         }
+    }
+
+    fn mesh3(&mut self, shape: &str) -> nn_render::d3::MeshId {
+        use nn_render::d3::shapes;
+        let (name, make): (&'static str, fn() -> nn_render::d3::Mesh) = match shape {
+            "sphere" => ("sphere", || shapes::sphere(2)),
+            "cylinder" => ("cylinder", || shapes::cylinder(16)),
+            "cone" => ("cone", || shapes::cone(16)),
+            "capsule" => ("capsule", || shapes::capsule(16)),
+            "plane" => ("plane", shapes::plane),
+            _ => ("cube", shapes::cube),
+        };
+        if let Some(id) = self.meshes3.get(name) {
+            return *id;
+        }
+        let id = self.renderer.create_mesh(&make());
+        self.meshes3.insert(name, id);
+        id
+    }
+
+    fn model3(&mut self, root: &Path, rel: &str, flat: bool) -> Option<nn_render::d3::Model> {
+        if rel.is_empty() {
+            return None;
+        }
+        let key = (rel.to_string(), flat);
+        if let Some(m) = self.models3.get(&key) {
+            return m.clone();
+        }
+        let m = read_model(root, rel).ok().map(|mut data| {
+            if flat {
+                data.flatten();
+            }
+            self.renderer.create_model(&data)
+        });
+        self.models3.insert(key, m.clone());
+        m
+    }
+
+    /// Desenha uma cena 3D: o ambiente (céu, sol, névoa, sombras), os
+    /// modelos e as formas, as câmeras do jogo e a grade do chão.
+    pub fn render3d(
+        &mut self,
+        key: &str,
+        root: &Path,
+        scene: &SceneData,
+        view: &View3,
+    ) -> egui::TextureId {
+        use glam::{Mat4, Quat, Vec3};
+        use nn_render::d3::{Fog, Light3D, Shadows, Sky3D};
+        let size = view.size.max(UVec2::ONE);
+        self.ensure_target(key, size);
+
+        // O ambiente da cena, como o jogo monta (M.apply_environment).
+        let col = |k: &str| parse_color(scene.env(k).str());
+        let num = |k: &str| scene.env(k).num() as f32;
+        let on = |k: &str| scene.env(k).bool();
+        self.renderer.set_sky3d(on("sky").then(|| Sky3D {
+            top: col("sky_top"),
+            horizon: col("sky_horizon"),
+            bottom: col("sky_bottom"),
+            sun_size: num("sun_size"),
+        }));
+        let (h, t) = (num("sun_height").to_radians(), num("sun_turn").to_radians());
+        self.renderer.set_light3d(Light3D {
+            sun_direction: Vec3::new(-h.cos() * t.sin(), -h.sin(), -h.cos() * t.cos()),
+            sun_color: col("sun_color"),
+            sky: col("ambient_sky"),
+            ground: col("ambient_ground"),
+            fog: on("fog").then(|| Fog {
+                color: None,
+                near: num("fog_near"),
+                far: num("fog_far"),
+            }),
+        });
+        self.renderer.set_shadows3d(Shadows {
+            enabled: on("shadows"),
+            distance: num("shadow_distance").max(1.0),
+            ..Shadows::default()
+        });
+        self.renderer.set_camera3d(view.camera);
+
+        // Os objetos, com a transformação dos pais.
+        let mut draws: Vec<(Mat4, Component)> = Vec::new();
+        fn walk(list: &[Object], parent: Mat4, out: &mut Vec<(Mat4, Component)>) {
+            for o in list {
+                if !o.visible {
+                    continue;
+                }
+                let m = parent * crate::scene_data::local_matrix3(o);
+                for c in &o.components {
+                    if matches!(c.kind.as_str(), "model" | "shape3d" | "camera3d") {
+                        out.push((m, c.clone()));
+                    }
+                }
+                walk(o.prefab_children(), m, out);
+                walk(&o.children, m, out);
+            }
+        }
+        walk(&scene.objects, Mat4::IDENTITY, &mut draws);
+        for (m, c) in draws {
+            match c.kind.as_str() {
+                "model" => {
+                    if let Some(model) = self.model3(root, c.str("file"), c.bool("flat")) {
+                        self.renderer.draw_model(
+                            &model,
+                            m,
+                            parse_color(c.str("color")),
+                            c.bool("shadow"),
+                        );
+                    }
+                }
+                "shape3d" => {
+                    let mesh = self.mesh3(c.str("shape"));
+                    self.renderer.draw_mesh_with(
+                        mesh,
+                        m,
+                        parse_color(c.str("color")),
+                        None,
+                        c.bool("shadow"),
+                    );
+                }
+                "camera3d" => {
+                    // A câmera do jogo: uma caixinha com a lente para a frente.
+                    let body = self.mesh3("cube");
+                    let lens = self.mesh3("cone");
+                    let gray = Color::hex(0x4A5560);
+                    let unscaled = {
+                        let (_, q, p) = m.to_scale_rotation_translation();
+                        Mat4::from_rotation_translation(q, p)
+                    };
+                    self.renderer.draw_mesh_with(
+                        body,
+                        unscaled * Mat4::from_scale(Vec3::new(0.35, 0.3, 0.5)),
+                        gray,
+                        None,
+                        false,
+                    );
+                    self.renderer.draw_mesh_with(
+                        lens,
+                        unscaled
+                            * Mat4::from_scale_rotation_translation(
+                                Vec3::splat(0.32),
+                                Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+                                Vec3::new(0.0, 0.0, -0.38),
+                            ),
+                        gray,
+                        None,
+                        false,
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        // A grade do chão (em volta de onde a câmera olha) e os eixos.
+        if view.grid > 0.0 {
+            let step = view.grid;
+            let line = self.mesh3("cube");
+            let c = view.camera.target;
+            let (cx, cz) = ((c.x / step).round() * step, (c.z / step).round() * step);
+            let n = 30;
+            let half = n as f32 * step;
+            let thick = 0.012 * step.max(0.25);
+            for i in -n..=n {
+                let off = i as f32 * step;
+                let (x, z) = (cx + off, cz + off);
+                let color = |axis: bool, c: Color| {
+                    if axis { c } else { Color::rgba(0.0, 0.0, 0.0, 0.18) }
+                };
+                // Linhas paralelas a Z (x fixo) e a X (z fixo).
+                self.renderer.draw_mesh_with(
+                    line,
+                    Mat4::from_scale_rotation_translation(
+                        Vec3::new(thick, 0.002, half * 2.0),
+                        Quat::IDENTITY,
+                        Vec3::new(x, 0.003, cz),
+                    ),
+                    color(x.abs() < step * 0.01, Color::hex(0x4A78FF)),
+                    None,
+                    false,
+                );
+                self.renderer.draw_mesh_with(
+                    line,
+                    Mat4::from_scale_rotation_translation(
+                        Vec3::new(half * 2.0, 0.002, thick),
+                        Quat::IDENTITY,
+                        Vec3::new(cx, 0.003, z),
+                    ),
+                    color(z.abs() < step * 0.01, Color::hex(0xFF5A5A)),
+                    None,
+                    false,
+                );
+            }
+        }
+
+        let target = &self.targets[key];
+        self.renderer
+            .render(&target.view, size, &Camera2D::default(), Some(view.background));
+        target.id
     }
 
     /// Anima e desenha as partículas de um componente.
@@ -1071,6 +1350,14 @@ impl SceneRenderer {
         }
         if crate::files::FileKind::of(Path::new(rel)) == crate::files::FileKind::Anim {
             self.anims.forget(rel);
+        }
+        // Modelos 3D (e o .bin e as imagens deles): lidos de novo.
+        self.models3.retain(|(r, _), _| r != rel);
+        if !rel.to_lowercase().ends_with(".glb") && !rel.to_lowercase().ends_with(".gltf") {
+            // Um .bin ou uma imagem de um .gltf: não dá para saber de qual;
+            // os .gltf são lidos de novo.
+            self.models3
+                .retain(|(r, _), _| !r.to_lowercase().ends_with(".gltf"));
         }
         // Mapas dependem de tilesets e imagens: lidos de novo.
         self.maps.clear();

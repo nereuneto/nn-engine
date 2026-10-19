@@ -478,6 +478,33 @@ impl SceneData {
         scene
     }
 
+    /// 3D: a matriz do objeto no mundo (com as dos pais).
+    pub fn world_matrix3(&self, id: u32) -> Option<glam::Mat4> {
+        let o = self.find(id)?;
+        let local = local_matrix3(o);
+        match self.parent_of(id)? {
+            None => Some(local),
+            Some(p) => Some(self.world_matrix3(p)? * local),
+        }
+    }
+
+    /// 3D: a matriz do pai no mundo (identidade na raiz).
+    pub fn parent_matrix3(&self, id: u32) -> glam::Mat4 {
+        match self.parent_of(id).flatten() {
+            Some(p) => self.world_matrix3(p).unwrap_or(glam::Mat4::IDENTITY),
+            None => glam::Mat4::IDENTITY,
+        }
+    }
+
+    /// 3D: põe o objeto na posição, rotação e escala do mundo dadas pela
+    /// matriz (convertendo para o espaço do pai).
+    pub fn set_world_matrix3(&mut self, id: u32, world: glam::Mat4) {
+        let local = self.parent_matrix3(id).inverse() * world;
+        if let Some(o) = self.find_mut(id) {
+            set_local_matrix3(o, local);
+        }
+    }
+
     pub fn env(&self, key: &str) -> Prop {
         self.environment
             .iter()
@@ -499,6 +526,47 @@ impl SceneData {
             None => self.environment.push((key.to_string(), value)),
         }
     }
+}
+
+/// A rotação 3D do objeto (graus em volta de X, Y e Z, aplicados Y, X, Z:
+/// virar, inclinar e rolar, como a engine).
+pub fn rotation3(o: &Object) -> glam::Quat {
+    glam::Quat::from_euler(
+        glam::EulerRot::YXZ,
+        (o.ry as f32).to_radians(),
+        (o.rx as f32).to_radians(),
+        (o.rz as f32).to_radians(),
+    )
+}
+
+/// Graus (x, y, z) de uma rotação, como [`rotation3`] lê.
+pub fn degrees3(q: glam::Quat) -> (f64, f64, f64) {
+    let (y, x, z) = q.normalize().to_euler(glam::EulerRot::YXZ);
+    let r = |a: f32| round_to(f64::from(a.to_degrees()), 1e-3);
+    (r(x), r(y), r(z))
+}
+
+fn round_to(v: f64, step: f64) -> f64 {
+    let r = (v / step).round() * step;
+    if r == 0.0 { 0.0 } else { r }
+}
+
+/// A matriz 3D do objeto em relação ao pai.
+pub fn local_matrix3(o: &Object) -> glam::Mat4 {
+    glam::Mat4::from_scale_rotation_translation(
+        glam::Vec3::new(o.scale_x as f32, o.scale_y as f32, o.scale_z as f32),
+        rotation3(o),
+        glam::Vec3::new(o.x as f32, o.y as f32, o.z as f32),
+    )
+}
+
+/// Põe posição, rotação e escala do objeto a partir de uma matriz local.
+pub fn set_local_matrix3(o: &mut Object, m: glam::Mat4) {
+    let (s, q, t) = m.to_scale_rotation_translation();
+    let r = |v: f32| round_to(f64::from(v), 1e-4);
+    (o.x, o.y, o.z) = (r(t.x), r(t.y), r(t.z));
+    (o.scale_x, o.scale_y, o.scale_z) = (r(s.x), r(s.y), r(s.z));
+    (o.rx, o.ry, o.rz) = degrees3(q);
 }
 
 /// Os componentes que existem e os campos de cada um.
@@ -1661,6 +1729,32 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn matrizes_3d_de_pai_e_filho() {
+        let mut scene = SceneData::new_3d();
+        let mut pai = Object::new(10, "pai");
+        pai.x = 5.0;
+        pai.ry = 90.0;
+        let mut filho = Object::new(11, "filho");
+        filho.z = -2.0; // 2 à frente do pai
+        pai.children.push(filho);
+        scene.objects.push(pai);
+        // Virado 90° em Y, a frente do pai (-Z) aponta para -X.
+        let m = scene.world_matrix3(11).unwrap();
+        let p = m.transform_point3(glam::Vec3::ZERO);
+        assert!((p - glam::Vec3::new(3.0, 0.0, 0.0)).length() < 1e-4, "{p}");
+        // Pondo o filho num lugar do mundo, a posição local é a certa.
+        scene.set_world_matrix3(11, glam::Mat4::from_translation(glam::Vec3::new(5.0, 1.0, 4.0)));
+        let f = scene.find(11).unwrap();
+        // (0, 1, 4) do mundo em volta do pai, desfazendo o giro de 90°: x = -4.
+        assert!((f.x + 4.0).abs() < 1e-3 && (f.y - 1.0).abs() < 1e-3 && f.z.abs() < 1e-3, "{f:?}");
+        assert!((f.ry + 90.0).abs() < 1e-2, "o filho desfaz o giro do pai: {}", f.ry);
+        // Graus voltam iguais.
+        let mut o = Object::new(1, "o");
+        (o.rx, o.ry, o.rz) = (20.0, -35.0, 10.0);
+        assert_eq!(degrees3(rotation3(&o)), (20.0, -35.0, 10.0));
+    }
 
     #[test]
     fn cena_3d_ida_e_volta() {
