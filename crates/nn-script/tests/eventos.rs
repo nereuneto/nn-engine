@@ -116,11 +116,18 @@ fn catalogo_se_descreve_sem_a_engine_e_as_frases_tem_os_campos() {
                 .map(Result::unwrap)
                 .collect();
             // Cada {campo} da frase é uma propriedade; propriedades fora da
-            // frase só podem ser avançadas.
+            // frase só podem ser avançadas. As só do 3D ficam na frase do 3D.
+            let text3d: Option<String> = item.get("text3d").unwrap();
             for p in &props {
                 let key: String = p.get("key").unwrap();
                 let advanced: bool = p.get::<Option<bool>>("advanced").unwrap().unwrap_or(false);
-                let in_text = text.contains(&format!("{{{key}}}"));
+                let mode: Option<String> = p.get("mode").unwrap();
+                let field = format!("{{{key}}}");
+                let in_text = if mode.as_deref() == Some("3d") {
+                    text3d.as_deref().is_some_and(|t| t.contains(&field))
+                } else {
+                    text.contains(&field)
+                };
                 assert!(in_text || advanced, "{list} {id}: {key} fora da frase");
             }
             let mut rest = text.as_str();
