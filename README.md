@@ -29,7 +29,7 @@ O código da nn-engine e do NN Studio pode ser usado sob a licença [MIT](LICENS
 
 ## Começando pelo código
 
-Para compilar a engine e o editor (ou fazer jogos em Rust), o pré-requisito é o Rust instalado pelo [rustup](https://rustup.rs). A engine pede o Rust 1.88 ou mais novo; o editor (NN Studio), o 1.95. Com o rustup, `rustup update` deixa tudo em dia.
+Para compilar a engine e o editor (ou fazer jogos em Rust), o pré-requisito é o Rust instalado pelo [rustup](https://rustup.rs). A engine pede o Rust 1.89 ou mais novo; o editor (NN Studio), o 1.95. Com o rustup, `rustup update` deixa tudo em dia.
 
 **Windows:** baixe e rode o `rustup-init.exe` do site acima. Se o instalador avisar que faltam as ferramentas de build do Visual Studio (o compilador C++ da Microsoft), escolha a opção de instalação rápida que ele oferece. Depois **abra um terminal novo** para o `cargo` aparecer no PATH e confira com `cargo --version`.
 

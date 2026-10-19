@@ -66,14 +66,14 @@ jobs:
           RUSTDOCFLAGS: -D warnings
 
   msrv:
-    name: Versão mínima do Rust (1.88)
+    name: Versão mínima do Rust (1.89)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.88
+      - uses: dtolnay/rust-toolchain@1.89
       - uses: Swatinem/rust-cache@v2
       - name: ALSA
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
-      # A engine e a ferramenta `nn` seguem no Rust 1.88. O NN Studio (editor)
+      # A engine e a ferramenta `nn` seguem no Rust 1.89 (a física 3D, pelo nalgebra, pede o 1.89). O NN Studio (editor)
       # usa a interface egui, que pede o Rust 1.95; ele é testado nos outros jobs.
       - run: cargo check --workspace --all-targets --exclude nn-studio

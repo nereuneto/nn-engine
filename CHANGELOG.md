@@ -4,6 +4,8 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+- **A engine passa a pedir o Rust 1.89** (antes 1.88): a física 3D usa o `nalgebra` 0.35, que precisa dele. O NN Studio continua pedindo o 1.95.
+
 ### 3D pelo código
 
 - **Mundo 3D na engine**, desenhado antes do 2D: o HUD, os sprites e os menus ficam por cima.
