@@ -53,6 +53,37 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Volta as variáveis do jogo (nn.vars) aos valores do config.lua.",
     ),
     d(
+        "nn.inventory",
+        "",
+        "Inventário: os itens que o jogador carrega (chaves, poções...). Fica em nn.vars._itens: vale entre as cenas e volta ao começo com nn.reset_vars.",
+    ),
+    d(
+        "nn.inventory.add",
+        "(item, n, icone)",
+        "Guarda n (1) do item (um nome, \"chave\"); icone é a imagem que o inventário mostra. Devolve quantos tem agora.",
+    ),
+    d(
+        "nn.inventory.remove",
+        "(item, n)",
+        "Tira n (1) do item se tiver tudo isso; devolve true se tirou.",
+    ),
+    d(
+        "nn.inventory.count",
+        "(item)",
+        "Quantos do item tem (0 se nenhum).",
+    ),
+    d(
+        "nn.inventory.has",
+        "(item, n)",
+        "Tem pelo menos n (1) do item?",
+    ),
+    d(
+        "nn.inventory.items",
+        "()",
+        "Os itens, na ordem em que foram pegos: { {item =, count =, icon =}, ... }.",
+    ),
+    d("nn.inventory.clear", "()", "Esvazia o inventário."),
+    d(
         "nn.quit",
         "(opts)",
         "Fecha o jogo. Com { fade = segundos }, escurece antes.",
@@ -537,6 +568,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "nn.d3.draw",
         "(malha, opts)",
         "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator()).",
+    ),
+    d(
+        "nn.d3.text",
+        "(texto, opts)",
+        "Escreve no mundo 3D, virado para a câmera (opts: x, y, z, size em metros = 0.5, color, font, anchor = \"center\", align, background, outline). Com matrix = nn.d3.matrix{...}, fica preso como uma placa (face_camera = true: só a posição e a escala).",
     ),
     d(
         "nn.d3.camera",

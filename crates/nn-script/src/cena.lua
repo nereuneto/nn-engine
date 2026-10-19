@@ -117,6 +117,12 @@ M.FIELDS = {
   camera3d = {
     { "fov", 60 },
   },
+  -- Texto no mundo 3D (placas, nomes, avisos): tamanho das letras em metros,
+  -- virado para a câmera ou preso como uma placa (lido de frente pelo +Z).
+  text3d = {
+    { "text", "Texto" }, { "size", 0.5 }, { "color", "#FFFFFF" }, { "facing", "camera" },
+    { "outline", "#000000B0" }, { "background", "" }, { "font", "" },
+  },
   -- Terreno: alturas e cores (`data`, feito pelo NN Studio), o tamanho, as
   -- cores das quatro camadas e a água.
   terrain = {
@@ -870,7 +876,7 @@ local function build_object(scene, data, parent, fresh, depth)
     if o[comp.type] == nil and (comp.type == "sprite" or comp.type == "text"
         or comp.type == "shape" or comp.type == "camera" or comp.type == "layout"
         or comp.type == "model" or comp.type == "shape3d" or comp.type == "camera3d"
-        or M.UI_KINDS[comp.type]) then
+        or comp.type == "text3d" or M.UI_KINDS[comp.type]) then
       o[comp.type] = comp
     end
   end
@@ -1033,6 +1039,111 @@ function M.targets(scene, who)
     end
   end
   return out
+end
+
+-- Interações ("E para abrir") ------------------------------------------------
+--
+-- Quem pode ser usado (Interagir, Porta 3D) se candidata a cada quadro com a
+-- distância até o jogador. Só o mais perto mostra o aviso e responde à tecla
+-- (E, ou o Y do controle).
+
+--- Distância entre as caixas de dois objetos (0 se encostam): metros no 3D,
+--- pixels no 2D.
+function M.gap(a, b)
+  if a.scene and a.scene._3d then
+    local a0, a1, a2, a3, a4, a5 = a:bounds3d()
+    local b0, b1, b2, b3, b4, b5 = b:bounds3d()
+    local dx = math.max(0, b0 - a3, a0 - b3)
+    local dy = math.max(0, b1 - a4, a1 - b4)
+    local dz = math.max(0, b2 - a5, a2 - b5)
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+  end
+  local ax, ay = a:world_transform()
+  local bx, by = b:world_transform()
+  local aw, ah = a:bounds()
+  local bw, bh = b:bounds()
+  local dx = math.max(0, math.abs(ax - bx) - aw - bw)
+  local dy = math.max(0, math.abs(ay - by) - ah - bh)
+  return math.sqrt(dx * dx + dy * dy)
+end
+
+--- A tecla de interagir foi apertada neste quadro?
+function M.interact_pressed()
+  return nn.input.pressed("e") or nn.input.pad_pressed("y")
+end
+
+--- O nome da tecla de interagir (a do controle, se ele foi o último usado).
+function M.interact_key()
+  local ok, dev = pcall(nn.input.last_device)
+  return (ok and dev == "gamepad") and "Y" or "E"
+end
+
+-- Candidata `owner` (um comportamento) a ser usado por quem está a até
+-- `dist` dele. Devolve quem apertou a tecla, se ele foi o escolhido.
+function M.interact(scene, owner, who, dist, text, locked)
+  local o = owner.obj
+  local best, near
+  for _, p in ipairs(M.targets(scene, who)) do
+    if p ~= o then
+      local d = M.gap(o, p)
+      if d <= dist and (not near or d < near) then best, near = p, d end
+    end
+  end
+  if not best then return nil end
+  local cur = scene._ia
+  if not cur or near < cur.d then
+    scene._ia = { owner = owner, obj = o, d = near, text = text, locked = locked }
+  end
+  local last = scene._ia_last
+  if last and last.owner == owner and M.interact_pressed() then
+    scene._ia_used = true
+    return best
+  end
+  return nil
+end
+
+-- O aviso do escolhido: a tecla e o que ela faz, em cima do objeto.
+local function draw_prompt(scene)
+  local ia = scene._ia
+  if not (ia and ia.obj.alive) or ia.text == nil or ia.text == "" then return end
+  local o = ia.obj
+  local key = M.interact_key()
+  local font = M.font("")
+  local size = 20
+  local tw = nn.text_size(ia.text, { size = size, font = font })
+  local cap = 28
+  local pad = 10
+  local showkey = not ia.locked
+  local w = pad * 2 + tw + (showkey and (cap + 8) or 0)
+  local h = 40
+  local panel = { color = M.theme("panel"), radius = 10, border = 1, border_color = M.theme("border") }
+  local tcolor = ia.locked and "#FF9A9A" or M.theme("text")
+  if scene._3d then
+    local x0, _, z0, x1, y1, z1 = o:bounds3d()
+    local sx, sy = nn.d3.to_screen((x0 + x1) / 2, y1 + 0.3, (z0 + z1) / 2)
+    if not sx then return end
+    local left, top = sx - w / 2, sy - h
+    nn.screen.panel(left, top, w, h, panel)
+    local x = left + pad
+    if showkey then
+      nn.screen.panel(x, top + (h - cap) / 2, cap, cap, { color = M.theme("accent"), radius = 6 })
+      nn.screen.text(key, x + cap / 2, top + h / 2, { size = size, color = "#1E2A3A", anchor = "center", font = font })
+      x = x + cap + 8
+    end
+    nn.screen.text(ia.text, x, top + h / 2, { size = size, color = tcolor, anchor = "left", font = font })
+  else
+    local x, y = o:world_transform()
+    local _, hh = o:bounds()
+    local cy = y + hh + 12 + h / 2
+    nn.draw.panel(x, cy, w, h, panel)
+    local left = x - w / 2 + pad
+    if showkey then
+      nn.draw.panel(left + cap / 2, cy, cap, cap, { color = M.theme("accent"), radius = 6 })
+      nn.draw.text(key, left + cap / 2, cy, { size = size, color = "#1E2A3A", anchor = "center", font = font })
+      left = left + cap + 8
+    end
+    nn.draw.text(ia.text, left, cy, { size = size, color = tcolor, anchor = "left", font = font })
+  end
 end
 
 --- Faíscas num ponto (moeda pega, inimigo derrotado...). No 3D, com z.
@@ -1875,7 +1986,7 @@ end
 local PREPARE_ORDER = {
   "map", "sprite", "body", "sound", "particles", "panel", "button", "bar", "icons",
   "slider", "checkbox", "textfield", "camera", "model", "anim3d", "shape3d", "camera3d", "body3d",
-  "terrain",
+  "terrain", "text3d",
 }
 
 -- Mapas antes dos corpos: a câmera e a colisão dependem deles.
@@ -2091,6 +2202,8 @@ end
 function M.update(scene, dt)
   refresh_list(scene)
   if M.ui then M.ui.update(scene, dt) end
+  -- Interações: o escolhido no quadro anterior responde à tecla neste.
+  scene._ia_last, scene._ia, scene._ia_used = scene._ia, nil, false
   each_behavior(scene, "update", dt)
   refresh_list(scene)
   M.events.step(scene, dt)
@@ -2325,6 +2438,14 @@ local function draw_object(o, alpha)
     if (c.type == "model" and c._model) or (c.type == "shape3d" and c._mesh) then
       m3 = m3 or o:matrix3d(alpha)
       nn.d3.draw(c._model or c._mesh, { matrix = m3, color = c.color, shadow = c.shadow, animator = c._anim })
+    elseif c.type == "text3d" and o.scene and o.scene._3d then
+      m3 = m3 or o:matrix3d(alpha)
+      nn.d3.text(c.text, {
+        matrix = m3, face_camera = c.facing ~= "placa", size = c.size, color = c.color,
+        outline = c.outline ~= "" and c.outline or nil,
+        background = c.background ~= "" and c.background or nil,
+        font = M.font(c.font), align = "center",
+      })
     elseif c.type == "terrain" and c._terrain then
       local x, y, z = o:position3d()
       nn.d3.draw(c._terrain, { x = x, y = y, z = z })
@@ -2419,6 +2540,7 @@ function M.draw(scene)
   end
   for _, fx in pairs(scene._fx or {}) do fx:draw() end
   each_behavior(scene, "draw")
+  draw_prompt(scene)
 end
 
 --- Ajuste ao vivo vindo do editor: muda um campo de um objeto ou componente.
@@ -2687,6 +2809,18 @@ function M.new(data, path)
 
   function scene:_nn_attach_body3(o, body)
     M.attach_body3(self, o, body)
+  end
+
+  --- Para Interagir e Porta 3D: candidata o comportamento `b` a ser usado
+  --- por quem (`who`, vazio = o jogador) está a até `dist` dele, mostrando
+  --- "E  <text>". Devolve quem apertou a tecla, se ele foi o escolhido.
+  function scene:interaction(b, who, dist, text, locked)
+    return M.interact(self, b, who, dist, text, locked)
+  end
+
+  --- Distância entre as caixas de dois objetos (0 se encostam).
+  function scene:gap(a, b)
+    return M.gap(a, b)
   end
 
   --- Reinicia a cena (com `checkpoint = true`, o jogador volta ao último

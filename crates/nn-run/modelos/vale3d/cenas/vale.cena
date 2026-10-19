@@ -709,7 +709,37 @@ return {
       },
     },
     {
-      id = 74, name = "Placar",
+      id = 76, name = "Placa",
+      x = 2.6, y = 1.74, rotation = 0, scale_x = 2.6, scale_y = 0.75,
+      z = 31, rx = 0, ry = 0, rz = 0, scale_z = 0.1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#9C6B43", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+      children = {
+        {
+          id = 74, name = "Poste",
+          x = 0, y = -1.25, rotation = 0, scale_x = 0.06, scale_y = 2.1,
+          z = 0, rx = 0, ry = 0, rz = 0, scale_z = 1.2,
+          visible = true, layer = 0,
+          components = {
+            { type = "shape3d", shape = "cylinder", color = "#7A5232", shadow = true },
+          },
+        },
+        {
+          id = 75, name = "Letreiro",
+          x = 0, y = 0, rotation = 0, scale_x = 0.385, scale_y = 1.333,
+          z = 0.6, rx = 0, ry = 0, rz = 0, scale_z = 10,
+          visible = true, layer = 0,
+          components = {
+            { type = "text3d", text = "Vale das Estrelas", size = 0.26, color = "#FFF1D6", facing = "placa", outline = "#3A2E1FC0", background = "", font = "" },
+          },
+        },
+      },
+    },
+    {
+      id = 77, name = "Placar",
       x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -718,7 +748,7 @@ return {
       },
     },
     {
-      id = 75, name = "Dica",
+      id = 78, name = "Dica",
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top",
       components = {
@@ -726,7 +756,7 @@ return {
       },
     },
     {
-      id = 76, name = "Corações",
+      id = 79, name = "Corações",
       x = 40, y = -90, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -734,7 +764,7 @@ return {
       },
     },
     {
-      id = 77, name = "Besouro",
+      id = 80, name = "Besouro",
       x = 8, y = 0.8, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
@@ -744,7 +774,7 @@ return {
       },
     },
     {
-      id = 78, name = "Besouro",
+      id = 81, name = "Besouro",
       x = -8, y = 1.97, rotation = 0, scale_x = 1, scale_y = 1,
       z = -26, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -755,7 +785,7 @@ return {
       },
     },
     {
-      id = 79, name = "Besouro",
+      id = 82, name = "Besouro",
       x = 14, y = 2.94, rotation = 0, scale_x = 1, scale_y = 1,
       z = -30, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,

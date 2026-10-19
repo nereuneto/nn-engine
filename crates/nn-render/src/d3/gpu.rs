@@ -35,16 +35,35 @@ struct ViewUniform3 {
     cam_up: [f32; 4],
 }
 
-/// Uma partícula 3D (um quadrado virado para a câmera).
+/// Uma partícula 3D (um quadrado virado para a câmera) ou um pedaço de
+/// texto 3D (um retângulo deslocado do centro, virado para a câmera ou com
+/// os eixos dados).
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub(crate) struct Billboard3 {
     center: [f32; 3],
+    /// Altura (metros).
     size: f32,
     color: [f32; 4],
     region: [f32; 4],
     rotation: f32,
-    _pad: [f32; 3],
+    /// Largura (metros).
+    width: f32,
+    /// Deslocamento do centro, nos eixos do retângulo (metros).
+    offset: [f32; 2],
+    /// Eixos do retângulo (w = 1); w = 0 usa os da câmera.
+    right: [f32; 4],
+    up: [f32; 4],
+}
+
+/// Um retângulo 3D desenhado como as partículas (os pedaços do
+/// [`Renderer::draw_text3d`](crate::Renderer::draw_text3d)).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Quad3 {
+    pub center: Vec3,
+    pub size: glam::Vec2,
+    pub offset: glam::Vec2,
+    pub axes: Option<(Vec3, Vec3)>,
 }
 
 struct BillboardDraw {
@@ -437,7 +456,8 @@ impl Renderer3D {
         // Partículas: quadrados virados para a câmera, sem escrever a
         // profundidade (as de trás aparecem pelas da frente).
         let billboard_attrs = wgpu::vertex_attr_array![
-            0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4
+            0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4,
+            4 => Float32x4, 5 => Float32x4
         ];
         let billboard_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nn 3d particles"),
@@ -675,17 +695,45 @@ impl Renderer3D {
         additive: bool,
         srgb: bool,
     ) {
+        let quad = Quad3 {
+            center,
+            size: glam::Vec2::splat(size),
+            offset: glam::Vec2::ZERO,
+            axes: None,
+        };
+        self.quad(texture, quad, rotation, color, region, additive, srgb);
+    }
+
+    /// Um retângulo 3D (partícula ou pedaço de texto) para este frame.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn quad(
+        &mut self,
+        texture: TextureId,
+        quad: Quad3,
+        rotation: f32,
+        color: Color,
+        region: crate::Rect,
+        additive: bool,
+        srgb: bool,
+    ) {
         let color = if srgb { color.to_linear() } else { color };
+        let (right, up) = match quad.axes {
+            Some((r, u)) => (r.extend(1.0), u.extend(1.0)),
+            None => (glam::Vec4::ZERO, glam::Vec4::ZERO),
+        };
         self.billboards.push(BillboardDraw {
             texture,
             additive,
             data: Billboard3 {
-                center: center.to_array(),
-                size,
+                center: quad.center.to_array(),
+                size: quad.size.y,
                 color: [color.r, color.g, color.b, color.a],
                 region: [region.x, region.y, region.w, region.h],
                 rotation,
-                _pad: [0.0; 3],
+                width: quad.size.x,
+                offset: quad.offset.to_array(),
+                right: right.to_array(),
+                up: up.to_array(),
             },
         });
     }

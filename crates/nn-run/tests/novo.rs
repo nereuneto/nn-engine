@@ -562,6 +562,31 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     h.run_frames(120);
     let ey: f64 = lua(&rt, "return cena.objects.Elevador.y");
     assert!(ey > 1.0, "elevador subiu: {ey}");
+    // O cofre: a porta está trancada; a chave (numa plataforma) vai para o
+    // inventário e, com ela, E abre a porta.
+    rt.lua()
+        .load(
+            "local c = cena.objects.Chave
+             local x, y, z = c:position3d()
+             cena.objects['Herói']:move_to(x, y, z)",
+        )
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert_eq!(lua::<i64>(&rt, "return nn.inventory.count('chave')"), 1);
+    rt.lua()
+        .load("cena.objects['Herói']:move_to(4.6, 0.1, 7.5)")
+        .exec()
+        .unwrap();
+    h.run_frames(5);
+    assert_eq!(lua::<String>(&rt, "return cena._ia.text"), "abrir");
+    h.ctx.input.press_key(KeyCode::KeyE);
+    h.run_frames(2);
+    h.ctx.input.release_key(KeyCode::KeyE);
+    h.run_frames(50);
+    let ry: f64 = lua(&rt, "return cena.objects['Porta do cofre'].ry");
+    assert!((ry + 90.0).abs() > 80.0, "a porta abriu: {ry}");
+    assert_eq!(lua::<i64>(&rt, "return nn.inventory.count('chave')"), 0);
     // Leva o herói até cada estrela: pega as 5 e o evento de vitória
     // dispara (o som e a espera vêm antes de ir para o fim).
     let estrelas: Vec<(f64, f64, f64)> = rt

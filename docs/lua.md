@@ -213,8 +213,9 @@ return {
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
 | `anim3d` | `animation` ("": nenhuma), `speed` (1), `loop` (true): a animação que o `model` do objeto toca desde o começo |
 | `body3d` | `body` ("static", "dynamic" ou "kinematic"), `shape` ("auto", "box", "sphere", "capsule", "cylinder", "mesh"), `sensor`, `bounce` (0), `friction` (0.5), `mass` (0 = pelo tamanho), `lock_rotation`, `gravity_scale` (1), `tag` |
+| `text3d` | `text` ("Texto"), `size` (0.5: a altura das letras em metros, vezes a escala do objeto), `color`, `facing` ("camera": sempre de frente; "placa": preso como uma placa, lido de frente pelo +Z do objeto e espelhado quando visto de trás), `outline` ("#000000B0": contorno; "" = sem), `background` ("": um retângulo atrás), `font`. Aparece atrás das paredes e com névoa; `obj.text3d.text` muda o texto (o `nn:mostrar_valor` também). |
 
-O `body3d` é um corpo de [`nn.physics3d`](#nnphysics3d-física-3d) no mundo da cena (com a `gravity` dela; numa cena 3D, -20 por padrão). A forma `"auto"` usa a malha exata de um `model` num corpo `static` ou `kinematic`; nos outros casos, uma caixa (ou esfera, cápsula e cilindro, conforme o `shape3d`) do tamanho do modelo ou da forma, com a escala do objeto. Os comportamentos que funcionam no 3D são `nn:jogador3d`, `nn:girar3d`, `nn:plataforma3d`, `nn:coletavel`, `nn:ir_para_cena`, `nn:checkpoint`, `nn:mostrar_valor` e `nn:botao` (veja os [prontos](#comportamentos-prontos)); um comportamento seu pode dizer `mode = "3d"` (ou `"2d"`, ou `"both"`) para o NN Studio só oferecer ele nesse tipo de cena. Uma propriedade também pode ter `mode = "2d"` ou `"3d"` (só aparece nesse tipo de cena) e `default3d` (o padrão numa cena 3D, como metros em vez de pixels).
+O `body3d` é um corpo de [`nn.physics3d`](#nnphysics3d-física-3d) no mundo da cena (com a `gravity` dela; numa cena 3D, -20 por padrão). A forma `"auto"` usa a malha exata de um `model` num corpo `static` ou `kinematic`; nos outros casos, uma caixa (ou esfera, cápsula e cilindro, conforme o `shape3d`) do tamanho do modelo ou da forma, com a escala do objeto. Os comportamentos que funcionam no 3D são `nn:jogador3d`, `nn:inimigo3d`, `nn:porta3d`, `nn:girar3d`, `nn:plataforma3d`, `nn:vida`, `nn:perigo`, `nn:atirar`, `nn:temporario`, `nn:coletavel`, `nn:gatilho`, `nn:interagir`, `nn:inventario`, `nn:ir_para_cena`, `nn:checkpoint`, `nn:mostrar_valor` e `nn:botao` (veja os [prontos](#comportamentos-prontos)); um comportamento seu pode dizer `mode = "3d"` (ou `"2d"`, ou `"both"`) para o NN Studio só oferecer ele nesse tipo de cena. Uma propriedade também pode ter `mode = "2d"` ou `"3d"` (só aparece nesse tipo de cena) e `default3d` (o padrão numa cena 3D, como metros em vez de pixels).
 
 No script:
 
@@ -355,12 +356,16 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:perseguir` | Vai atrás do alvo quando ele chega perto. | `alvo` ("" = jogador), `velocidade` (150), `visao` (320), `voar` (false), `espelhar` (true) |
 | `nn:perigo` | (2D e 3D) Machuca quem encosta. | `quem` (""), `acao` ("dano", "checkpoint", "reiniciar"), `dano` (1), `pisar` (false: pular em cima destrói), `some` (false), `empurrao` (520; no 3D, 7 m/s) |
 | `nn:inimigo3d` | (3D) Anda sozinho, persegue o jogador quando ele chega perto e machuca quem encosta. Cria o próprio corpo (como o Jogador 3D) e, num modelo animado, toca parado e andar. Pisado: manda `dano` para a Vida dele (sem Vida, some) e `derrotado`. | `andar` ("patrulha": de onde começa até `x`, `z` e volta; "vagar": sem rumo até `raio` m; "parado"), `x` (6), `z` (0), `raio` (6), `velocidade` (2), `perseguir` (true), `visao` (8 m; desiste a 1,6 × isso), `correr` (3.5), `dano` (1), `empurrao` (7), `pisar` (true), `virar` (true), `animar` (true), `anim_parado`, `anim_andar` |
-| `nn:coletavel` | Some ao ser tocado e soma numa variável. | `quem` (""), `variavel` ("moedas"), `valor` (1), `som`, `brilho` (true), `cor_brilho` |
+| `nn:coletavel` | Some ao ser tocado e soma numa variável; pode guardar um item no [inventário](#inventário-nninventory). | `quem` (""), `variavel` ("moedas"; "" = não soma), `valor` (1), `item` ("": o nome do item que vai para o inventário, como "chave"), `icone` (a imagem do item; vazio = a do objeto, no 2D), `som`, `brilho` (true), `cor_brilho` |
+| `nn:gatilho` | (2D e 3D) Zona de gatilho: avisa quando alguém entra ou sai dela (pela caixa do objeto) e some no jogo. Manda `entrou` e `saiu` (com quem) para a própria zona e a mensagem escolhida para os objetos `alvo`. | `quem` (""), `alvo` (""), `mensagem` ("abrir"), `mensagem_saida` (""), `uma_vez` (false), `som`, `invisivel` (true) |
+| `nn:interagir` | (2D e 3D) Perto do objeto aparece "E  usar"; apertando E (ou o Y do controle) ele manda `interagiu` (com quem) e a `mensagem` para os objetos `alvo`. Pode pedir um item do inventário (sem ele, o aviso diz o que falta e manda `falta_item`). Só o objeto mais perto do jogador mostra o aviso. | `texto` ("usar"), `distancia` (24 px; no 3D, 1.2 m, da borda), `quem` (""), `alvo` (""), `mensagem` ("abrir"), `item` (""), `gastar` (true), `texto_sem_item` ("Precisa de: {item}"), `uma_vez` (false), `som` |
+| `nn:porta3d` | (3D) Porta: abre girando na dobradiça (para longe de quem abre), subindo, descendo ou deslizando. Abre com E perto dela, sozinha quando o jogador chega ou só por mensagem. Pode pedir uma chave do inventário (mensagens abrem mesmo trancada). Precisa de um `body3d` kinematic (que bloqueia a passagem). Recebe `abrir`, `fechar`, `alternar` e `destrancar`; manda `abriu`, `fechou` e `trancada`. | `abre` ("girando", "subindo", "descendo", "deslizando"), `lado` ("esquerda", "direita"), `angulo` (100), `tempo` (0.6 s), `abrir_com` ("tecla", "chegar", "mensagem"), `distancia` (1.2 m), `chave` (""), `gastar_chave` (true), `fechar_depois` (0 s = fica aberta), `texto` ("abrir"), `texto_fechar` ("fechar"; vazio = não fecha com a tecla), `texto_trancada`, `som`, `som_trancada` |
+| `nn:inventario` | (2D e 3D) Mostra os itens do inventário num canto da tela, com quantos tem de cada (sem ícone, a primeira letra). | `canto` ("baixo_esquerda", "baixo_direita", "cima_esquerda", "cima_direita"), `tamanho` (48), `margem` (20), `fundo` (true) |
 | `nn:checkpoint` | Ponto de reinício. | `quem` ("") |
 | `nn:ir_para_cena` | Leva para outra cena. | `cena`, `quem` (""), `tecla` (false: precisa apertar para cima / Enter), `escurecer` (0.5 s) |
 | `nn:movimento` | Gira, flutua ou vai e volta (com corpo cinemático, carrega quem está em cima). | `tipo` ("ir_e_voltar", "flutuar", "girar"), `distancia_x` (200), `distancia_y` (0), `altura` (12), `duracao` (2), `velocidade` (90) |
 | `nn:animacao` | Troca a animação conforme o estado. Precisa de imagem. | `parado` ("1"), `andando`, `pulando`, `caindo` (o nome de uma [animação](#animações-anim) da imagem, como `"andar"`, ou quadros como `"1-4"` e `"5,6"`; vazio usa o anterior), `fps` (10, para quadros), `espelhar` (true) |
-| `nn:mostrar_valor` | Escreve variáveis num texto. Precisa de texto. | `texto` ("Moedas: {moedas}") |
+| `nn:mostrar_valor` | Escreve variáveis num texto (`text` ou `text3d`). | `texto` ("Moedas: {moedas}") |
 | `nn:atirar` | (2D e 3D) Cria um prefab andando. No 3D, sai da frente do objeto (o +Z do modelo), na altura escolhida; com Corpo 3D, sem gravidade. | `prefab`, `tecla` ("x"; vazio = sozinho), `intervalo` (0.3), `velocidade` (700; no 3D, 14 m/s), `direcao` ("frente", "jogador", "camera" no 3D, "direita", "cima"), `som`, `distancia` (24; no 3D, 0.8 m), `altura` (3D: 1 m), `duracao` (3D: o tiro some depois de 3 s) |
 | `nn:gerador` | Cria um prefab de tempos em tempos. | `prefab`, `intervalo` (2), `maximo` (10), `espalhar_x`, `espalhar_y` (0), `comecar_ja` (false) |
 | `nn:temporario` | (2D e 3D) Some depois de um tempo (no 2D, também ao sair da tela). | `tempo` (3), `fora_da_tela` (true, só 2D) |
@@ -416,6 +421,29 @@ if nn.vars.vidas <= 0 then nn.scene.switch("cenas/fim.cena") end
 
 Variáveis novas no `config.lua` aparecem no jogo aberto ao salvar.
 
+### Inventário (nn.inventory)
+
+Os itens que o jogador carrega (chaves, poções, um mapa) ficam no inventário. Ele mora em `nn.vars._itens`: passa de uma cena para outra, volta ao começo com `nn.reset_vars()` e vai junto quando o jogo salva as variáveis. O [Coletável](#comportamentos-prontos) guarda itens (`item = "chave"`), a Porta 3D e o Interagir pedem itens pelo nome, e o `nn:inventario` mostra o que tem na tela.
+
+| Função | O que faz |
+|---|---|
+| `nn.inventory.add(item, n, icone)` | Guarda `n` (1) do item; `icone` é a imagem que o inventário mostra. Devolve quantos tem agora. |
+| `nn.inventory.remove(item, n)` | Tira `n` (1), se tiver tudo isso; devolve `true` se tirou. |
+| `nn.inventory.count(item)` / `nn.inventory.has(item, n)` | Quantos tem (0 se nenhum) / tem pelo menos `n` (1)? |
+| `nn.inventory.items()` | Os itens, na ordem em que foram pegos: `{ {item =, count =, icon =}, ... }`. |
+| `nn.inventory.clear()` | Esvazia. |
+
+```lua
+if nn.inventory.has("chave") then
+  nn.inventory.remove("chave")
+  porta:send("abrir")
+end
+```
+
+### Interações ("E para abrir")
+
+O Interagir e a Porta 3D usam o mesmo aviso: perto do objeto aparece a tecla (E, ou Y se o controle foi o último usado) e o que ela faz. De tudo o que está perto, só o mais perto do jogador mostra o aviso e responde à tecla. Um comportamento seu pode usar o mesmo sistema: chame `self.scene:interaction(self, quem, distancia, texto, trancado)` no `update`; ele devolve o objeto que apertou a tecla (ou `nil`). `self.scene:gap(a, b)` é a distância entre as caixas de dois objetos (0 se encostam).
+
 ### Eventos: "Quando... Então..."
 
 Eventos são regras escritas no `.cena` (no campo `events` da cena) ou num objeto (no campo `events` dele, que vai junto quando o objeto é um prefab). No [NN Studio](studio.md#eventos-quando-então) elas são montadas no painel Eventos, lidas como frases; no arquivo, ficam assim:
@@ -464,6 +492,9 @@ Condições (`cond`):
 | `animacao_terminou` | `quem`, `nome` ("" = qualquer uma; só animações de modo "once") |
 | `particulas_terminaram` | `quem` (uma explosão acabou, ou um emissor desligado ficou sem partículas) |
 | `mensagem` | `quem`, `msg` (de `obj:send("msg")`, de comportamentos ou da ação `mensagem`) |
+| `entrar_zona` / `sair_zona` | `quem` (a zona, com o comportamento Zona de gatilho), `por` (quem entra ou sai; "@outro" nas ações) |
+| `interagir` | `quem` (o objeto com Interagir), `por` (quem apertou E) |
+| `tem_item` | `item`, `qtd` (o jogador tem pelo menos isso no [inventário](#inventário-nninventory)) |
 | `mudou` | `quem` (um deslizador, caixa de marcar ou campo de texto mudou pelo jogador) |
 
 Ações (`act`):
@@ -495,6 +526,7 @@ Ações (`act`):
 | `volume` | `canal` ("musica", "efeitos", "geral"), `valor` (%; fica guardado) |
 | `comportamento` | `acao` ("ligar", "desligar"), `nome` (ex.: "plataforma"), `alvo` |
 | `mensagem` | `msg`, `alvo` |
+| `dar_item` / `tirar_item` | `item`, `qtd`, `icone` (só no `dar_item`): guarda no inventário / gasta (se não tiver tudo, não tira nada) |
 | `esperar` | `segundos` |
 | `console` | `texto` |
 
@@ -1073,6 +1105,13 @@ Os modelos dos exemplos e dos modelos de projeto 3D trazem o `heroi.glb` (as ani
 | `body` | Um corpo de [`nn.physics3d`](#nnphysics3d-física-3d): desenha na posição e rotação dele (a escala continua vindo de `scale`). |
 | `matrix` | Uma matriz de `nn.d3.matrix` (no lugar de posição, rotação e escala). |
 | `animator` | Um modelo animado na pose de `modelo:animator()` ([animações](#animações-personagens-com-esqueleto)). |
+
+`nn.d3.text(texto, opts)` escreve no mundo 3D: nomes em cima dos personagens, placas, avisos. Sempre virado para a câmera, em `x`, `y`, `z`, com `size` (0.5 m: a altura das letras), `color`, `font`, `anchor` ("center"), `align`, `background` (uma cor: um retângulo atrás) e `outline` (uma cor: contorno em volta das letras). Com `matrix = nn.d3.matrix({...})`, fica preso como uma placa (nos eixos X e Y da matriz, com a escala; lido de frente pelo +Z e espelhado quando visto de trás); `face_camera = true` usa só a posição e a escala da matriz. Como as partículas, aparece atrás das paredes e com névoa.
+
+```lua
+nn.d3.text("Ana", { x = heroi.x, y = heroi.y + 2.2, z = heroi.z, size = 0.3 })
+nn.d3.text("Saída", { matrix = nn.d3.matrix({ x = 4, y = 2, ry = 90 }), background = "#F2D49B", color = "#3A2E1F" })
+```
 
 `nn.d3.matrix(opts)` guarda posição, rotação e escala (as mesmas opções do `draw`) numa matriz. `pai * filho` junta duas, para coisas presas a outras (uma espada na mão, uma roda no carro): `nn.d3.draw(roda, { matrix = carro * nn.d3.matrix({ x = 1, y = -0.3 }) })`. `m:position()` devolve onde ela está, `m:forward()` para onde aponta (−Z), `m:transform_point(x, y, z)` leva um ponto para o mundo, `m:inverse()` desfaz a matriz e `m:decompose()` devolve posição, rotação (graus) e escala: `x, y, z, rx, ry, rz, sx, sy, sz`.
 

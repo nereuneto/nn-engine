@@ -647,6 +647,7 @@ pub fn schema() -> &'static Schema {
             "camera3d",
             "body3d",
             "terrain",
+            "text3d",
         ]
         .into_iter()
         .filter(|k| components.contains_key(*k))
@@ -1820,7 +1821,11 @@ mod tests {
     fn esquema_vem_da_engine() {
         let s = schema();
         assert!(s.order.contains(&"sprite".to_string()));
-        assert_eq!(s.order.len(), 22);
+        assert_eq!(s.order.len(), 23);
+        assert_eq!(
+            s.default_of("text3d", "facing"),
+            Some(&Prop::Str("camera".into()))
+        );
         assert_eq!(s.shapes3d.len(), 6);
         assert_eq!(s.environment[0], ("sky".to_string(), Prop::Bool(true)));
         assert_eq!(s.default_of("body", "gravity_scale"), Some(&Prop::Num(1.0)));

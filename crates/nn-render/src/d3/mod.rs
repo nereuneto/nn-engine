@@ -28,12 +28,45 @@ mod terrain;
 use glam::{Mat4, Quat, Vec2, Vec3};
 use nn_core::Color;
 
-pub(crate) use gpu::Renderer3D;
+pub(crate) use gpu::{Quad3, Renderer3D};
 pub use mesh::{Mesh, Vertex3};
 pub use model::{CollisionMesh, Model, ModelData, ModelError, ModelImage, ModelPart};
 pub use particles::{EmitArea3, ParticleConfig3, ParticleEmitter3};
 pub use skin::{Animation, MAX_JOINTS, Pose, SkelNode, Skeleton, SkinVertex, Trs};
 pub use terrain::{BrushOp, DEFAULT_LAYER_COLORS, TerrainData};
+
+/// Como um texto aparece no mundo 3D (veja
+/// [`Renderer::draw_text3d`](crate::Renderer::draw_text3d)): placas, nomes em
+/// cima dos personagens, avisos.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Text3D {
+    /// Onde fica a âncora do texto (o meio, com a âncora padrão).
+    pub position: Vec3,
+    /// Tamanho das letras, em metros (como o tamanho em pixels do 2D: a
+    /// altura de uma linha fica um pouco maior).
+    pub size: f32,
+    /// `None`: sempre virado para a câmera. `Some((direita, cima))`: preso
+    /// nesses eixos (o comprimento deles é a escala), como uma placa; visto
+    /// de trás, aparece espelhado para continuar legível.
+    pub axes: Option<(Vec3, Vec3)>,
+    /// Um retângulo atrás do texto.
+    pub background: Option<Color>,
+    /// Contorno em volta das letras (lê em qualquer fundo).
+    pub outline: Option<Color>,
+}
+
+impl Text3D {
+    /// Texto de `size` metros em `position`, virado para a câmera.
+    pub fn at(position: Vec3, size: f32) -> Self {
+        Self {
+            position,
+            size,
+            axes: None,
+            background: None,
+            outline: None,
+        }
+    }
+}
 
 /// Câmera em perspectiva: de onde olha, para onde e o campo de visão.
 #[derive(Debug, Clone, Copy, PartialEq)]

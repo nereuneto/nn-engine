@@ -12,6 +12,7 @@ Tudo está montado nas cenas visuais:
   - **moeda** e **estrela**: prefabs (`prefabs/`) com **Coletável** e **Girar e flutuar**. Mudar o prefab muda todas.
   - **Fogueira**: partículas de fogo e de fumaça (filhas dela) e um **Som** no espaço 3D que estala mais alto de perto. **Ondas**: o barulho do mar nas praias, do mesmo jeito.
   - **Poeira** (filha do Herói): partículas soltas por um evento do Herói quando ele pula.
+  - **Cofre**: uma casinha de pedra com uma estrela dentro. A **Porta do cofre** (`porta.glb`) tem o comportamento **Porta 3D**, trancada: precisa do item *chave*. A **Chave** (`chave.glb`, numa das plataformas) é um **Coletável** que guarda o item no inventário, e o objeto **Inventário** (**Mostrar inventário**) mostra os itens no canto da tela. A **Placa do cofre** é um **Texto 3D** preso como placa.
   - **Placar**: um texto fixo na tela com **Mostrar valor**.
   - **Eventos** da cena (painel Eventos): zerar as variáveis no começo, esconder a dica e ir para o fim com as 5 estrelas. No Herói, os sons de pulo e de queda.
 - `cenas/fim.cena`: a tela de fim, com botões.

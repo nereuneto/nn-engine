@@ -584,3 +584,171 @@ fn propriedade_do_comportamento_muda_ao_vivo() {
     let r: f64 = lua(&rt, "cena.objects.roda.rotation");
     assert!((r - 60.0).abs() < 6.0, "{r}");
 }
+
+#[test]
+fn interagir_inventario_e_zona_no_2d() {
+    let dir = projeto(
+        "interagir",
+        &[
+            (
+                "cenas/obs.lua",
+                "local c = {} function c:enter() C = self end return c",
+            ),
+            (
+                "cenas/fase.cena",
+                r##"return { script = "cenas/obs.lua", objects = {
+  { id = 1, name = "heroi", x = 0, y = 0, components = {
+    { type = "shape", w = 10, h = 10, color = "#FF0000" },
+    { type = "behavior", script = "nn:topdown", velocidade = 300 },
+  } },
+  { id = 2, name = "pocao", x = 40, y = 0, components = {
+    { type = "shape", w = 10, h = 10, color = "#FF00FF" },
+    { type = "behavior", script = "nn:coletavel", variavel = "", item = "poção" },
+  } },
+  { id = 3, name = "bau", x = 0, y = 60, components = {
+    { type = "shape", w = 20, h = 20, color = "#996633" },
+    { type = "behavior", script = "nn:interagir", texto = "abrir", item = "poção", alvo = "porta", mensagem = "sumir", distancia = 10 },
+  } },
+  { id = 4, name = "porta", x = 300, y = 0, components = {
+    { type = "shape", w = 20, h = 40, color = "#FFFFFF" },
+    { type = "behavior", script = "sumir.lua" },
+  } },
+  { id = 5, name = "zona", x = -60, y = 0, components = {
+    { type = "shape", w = 30, h = 30, color = "#00FFFF40" },
+    { type = "behavior", script = "nn:gatilho", alvo = "porta", mensagem = "piscar", uma_vez = true },
+  } },
+  { id = 6, name = "itens", components = { { type = "behavior", script = "nn:inventario" } } },
+} }"##,
+            ),
+            (
+                "sumir.lua",
+                "local B = {} function B:sumir() self.obj:destroy() end function B:piscar(q) PISCOU = (PISCOU or 0) + 1; QUEM = q.name end return B",
+            ),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/fase.cena") else {
+        return;
+    };
+    h.run_frames(3);
+    assert_eq!(h.game.0.error(), None);
+    // A zona some no jogo.
+    assert!(!lua::<bool>(&rt, "C.objects.zona.visible"));
+    // Entrar na zona avisa a porta (só uma vez).
+    for _ in 0..2 {
+        rt.lua()
+            .load("C.objects.heroi:move_to(-60, 0)")
+            .exec()
+            .unwrap();
+        h.run_frames(3);
+        rt.lua()
+            .load("C.objects.heroi:move_to(0, -100)")
+            .exec()
+            .unwrap();
+        h.run_frames(3);
+    }
+    assert_eq!(lua::<i64>(&rt, "PISCOU or 0"), 1);
+    assert_eq!(lua::<String>(&rt, "QUEM"), "heroi");
+    // Perto do baú sem a poção: o aviso pede o item; E não faz nada.
+    rt.lua()
+        .load("C.objects.heroi:move_to(0, 42)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert_eq!(lua::<String>(&rt, "C._ia.text"), "Precisa de: poção");
+    assert!(lua::<bool>(&rt, "C._ia.locked"));
+    segurar(&mut h, KeyCode::KeyE, 2);
+    assert!(lua::<bool>(&rt, "C.objects.porta ~= nil"));
+    // Pega a poção (vai para o inventário) e volta: E abre e gasta.
+    rt.lua()
+        .load("C.objects.heroi:move_to(40, 0)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert_eq!(lua::<i64>(&rt, "nn.inventory.count('poção')"), 1);
+    rt.lua()
+        .load("C.objects.heroi:move_to(0, 42)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert_eq!(lua::<String>(&rt, "C._ia.text"), "abrir");
+    segurar(&mut h, KeyCode::KeyE, 2);
+    assert!(
+        lua::<bool>(&rt, "C.objects.porta == nil"),
+        "a mensagem chegou"
+    );
+    assert_eq!(lua::<i64>(&rt, "nn.inventory.count('poção')"), 0);
+    // Longe de tudo: nenhum aviso.
+    rt.lua()
+        .load("C.objects.heroi:move_to(0, -200)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert!(lua::<bool>(&rt, "C._ia == nil"));
+    assert_eq!(h.game.0.error(), None);
+}
+
+#[test]
+fn inventario_guarda_tira_e_volta_com_as_variaveis() {
+    let dir = projeto(
+        "inventario",
+        &[("cenas/vazia.cena", "return { objects = {} }")],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/vazia.cena") else {
+        return;
+    };
+    h.run_frames(1);
+    let l = rt.lua();
+    assert_eq!(
+        l.load("return nn.inventory.add('chave', 1, 'chave.png')")
+            .eval::<i64>()
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        l.load("return nn.inventory.add('chave', 2)")
+            .eval::<i64>()
+            .unwrap(),
+        3
+    );
+    l.load("nn.inventory.add('poção')").exec().unwrap();
+    assert!(
+        l.load("return nn.inventory.has('chave', 3)")
+            .eval::<bool>()
+            .unwrap()
+    );
+    assert!(
+        !l.load("return nn.inventory.has('chave', 4)")
+            .eval::<bool>()
+            .unwrap()
+    );
+    // Não tira se não tiver tudo.
+    assert!(
+        !l.load("return nn.inventory.remove('chave', 5)")
+            .eval::<bool>()
+            .unwrap()
+    );
+    assert!(
+        l.load("return nn.inventory.remove('chave', 3)")
+            .eval::<bool>()
+            .unwrap()
+    );
+    let itens: String = l
+        .load("local t = {} for _, i in ipairs(nn.inventory.items()) do t[#t+1] = i.item .. i.count end return table.concat(t, ',')")
+        .eval()
+        .unwrap();
+    assert_eq!(itens, "poção1");
+    // Mora em nn.vars: nn.reset_vars esvazia.
+    l.load("nn.reset_vars()").exec().unwrap();
+    assert_eq!(
+        l.load("return nn.inventory.count('poção')")
+            .eval::<i64>()
+            .unwrap(),
+        0
+    );
+    let e = l
+        .load("nn.inventory.add('')")
+        .exec()
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("o item é um nome"), "{e}");
+}

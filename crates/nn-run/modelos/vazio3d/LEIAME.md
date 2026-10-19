@@ -6,7 +6,7 @@ Este projeto começa com um mundo 3D vazio: uma cena (`cenas/mundo.cena`) com c�
 
 ## Por onde começar
 
-No NN Studio, **Ajuda > Tutoriais > Seu primeiro mundo 3D** mostra, passo a passo, como montar um mundo aqui mesmo: um herói animado que anda e pula, árvores, uma caixa que cai, um bicho que anda, uma estrela para pegar, uma plataforma que anda e um evento de vitória.
+No NN Studio, **Ajuda > Tutoriais > Seu primeiro mundo 3D** mostra, passo a passo, como montar um mundo aqui mesmo: um herói animado que anda e pula, árvores, uma caixa que cai, um bicho que anda, uma estrela para pegar, uma plataforma que anda e um evento de vitória. Depois, **Portas e chaves** mostra uma porta trancada, a chave, o inventário e uma zona de gatilho.
 
 ## O que tem aqui
 
@@ -16,8 +16,10 @@ No NN Studio, **Ajuda > Tutoriais > Seu primeiro mundo 3D** mostra, passo a pass
   - `arvore.glb` e `pedra.glb`: enfeites;
   - `caixote.glb`: um caixote de 1 m;
   - `plataforma.glb`: plataforma de 1 × 1 m, com o topo na origem (escale em X e Z);
-  - `estrela.glb` e `moeda.glb`: itens.
-- `assets/sons/`: moeda, pulo, dano e vitória.
+  - `estrela.glb`, `moeda.glb` e `chave.glb`: itens;
+  - `porta.glb`: uma porta de madeira de 1,2 × 2,2 m, com a base na origem (use com o comportamento **Porta 3D**).
+- `assets/imagens/`: `coracao.png` e `chave.png` (ícones para o HUD e o inventário).
+- `assets/sons/`: moeda, pulo, dano, vitória, chave, porta, fogueira e mar.
 
 Arraste um modelo do painel Arquivos para a cena para criar um objeto com ele.
 

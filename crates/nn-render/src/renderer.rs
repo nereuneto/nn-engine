@@ -1066,6 +1066,97 @@ impl Renderer {
         );
     }
 
+    /// Escreve um texto no mundo 3D: virado para a câmera (nomes, avisos) ou
+    /// preso em dois eixos (placas). Usa o conteúdo, a cor, a fonte, a âncora
+    /// e o alinhamento de `text`; o tamanho vem de `opts.size` (metros).
+    /// Aparece atrás das paredes e com névoa, como as partículas.
+    ///
+    /// ```no_run
+    /// # fn exemplo(r: &mut nn_render::Renderer) {
+    /// use glam::Vec3;
+    /// use nn_render::{Anchor, Text, d3::Text3D};
+    /// let placa = Text::new("Saída").anchor(Anchor::Center);
+    /// r.draw_text3d(&placa, &Text3D::at(Vec3::new(0.0, 2.0, 0.0), 0.5));
+    /// # }
+    /// ```
+    pub fn draw_text3d(&mut self, text: &Text<'_>, opts: &crate::d3::Text3D) {
+        // As letras são rasterizadas sempre neste tamanho (nítidas de perto,
+        // e um tamanho só no atlas) e encolhidas para `size` metros.
+        const PX: f32 = 64.0;
+        let mut raster = *text;
+        raster.size = PX;
+        let layout = self.text.layout(&raster);
+        if opts.size <= 0.0 || (layout.glyphs.is_empty() && opts.background.is_none()) {
+            return;
+        }
+        let k = opts.size / PX;
+        let srgb = self.format.is_srgb();
+        // Visto de trás, a placa espelha (continua dando para ler).
+        let axes = opts.axes.map(|(r, u)| {
+            let eye = self.d3.camera.position;
+            if r.cross(u).dot(eye - opts.position) < 0.0 {
+                (-r, u)
+            } else {
+                (r, u)
+            }
+        });
+        let quad = |center_px: Vec2, size_px: Vec2| crate::d3::Quad3 {
+            center: opts.position,
+            size: size_px * k,
+            offset: Vec2::new(center_px.x, -center_px.y) * k,
+            axes,
+        };
+        // Canto de cima à esquerda da caixa, relativo à âncora (Y para baixo).
+        let box_offset = -text.anchor_fraction() * layout.size;
+        // Tudo do mesmo texto tem o mesmo centro: a ordem de desenho é a de
+        // envio (fundo, contorno, letras).
+        if let Some(bg) = opts.background {
+            let pad = Vec2::new(PX * 0.3, PX * 0.15);
+            let q = quad(box_offset + layout.size / 2.0, layout.size + pad * 2.0);
+            self.d3
+                .quad(self.white, q, 0.0, bg, crate::Rect::FULL, false, srgb);
+        }
+        let mut glyphs = Vec::with_capacity(layout.glyphs.len());
+        for placed in &layout.glyphs {
+            if let Some(g) = self.text.glyph(
+                placed.key,
+                &self.device,
+                &self.queue,
+                &self.texture_layout,
+                &mut self.textures,
+            ) {
+                glyphs.push((
+                    g,
+                    box_offset + placed.top_left + placed.size / 2.0,
+                    placed.size,
+                ));
+            }
+        }
+        if let Some(oc) = opts.outline {
+            let r = PX * 0.06;
+            for (dx, dy) in [
+                (1.0, 0.0),
+                (-1.0, 0.0),
+                (0.0, 1.0),
+                (0.0, -1.0),
+                (0.7, 0.7),
+                (-0.7, 0.7),
+                (0.7, -0.7),
+                (-0.7, -0.7),
+            ] {
+                for (g, c, size) in &glyphs {
+                    let q = quad(*c + Vec2::new(dx, dy) * r, *size);
+                    self.d3.quad(g.texture, q, 0.0, oc, g.region, false, srgb);
+                }
+            }
+        }
+        for (g, c, size) in &glyphs {
+            let q = quad(*c, *size);
+            self.d3
+                .quad(g.texture, q, 0.0, text.color, g.region, false, srgb);
+        }
+    }
+
     /// Envia um modelo (lido de um `.glb`) para a GPU.
     pub fn create_model(&mut self, data: &crate::d3::ModelData) -> crate::d3::Model {
         let textures: Vec<TextureId> = data

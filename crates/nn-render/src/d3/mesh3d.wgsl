@@ -207,7 +207,9 @@ struct ParticleIn {
     @location(0) center_size: vec4<f32>,
     @location(1) color: vec4<f32>,
     @location(2) region: vec4<f32>,  // x, y, largura, altura (uv)
-    @location(3) rot: vec4<f32>,     // x = giro em radianos
+    @location(3) rot: vec4<f32>,     // x = giro em radianos, y = largura, zw = deslocamento
+    @location(4) right: vec4<f32>,   // eixos do retângulo (w = 1); w = 0 usa os da câmera
+    @location(5) up: vec4<f32>,
 };
 
 struct ParticleOut {
@@ -227,8 +229,15 @@ fn vs_particle(@builtin(vertex_index) i: u32, p: ParticleIn) -> ParticleOut {
     let c = corners[i];
     let s = sin(p.rot.x);
     let k = cos(p.rot.x);
-    let r = vec2<f32>(c.x * k - c.y * s, c.x * s + c.y * k) * p.center_size.w;
-    let world = p.center_size.xyz + view.cam_right.xyz * r.x + view.cam_up.xyz * r.y;
+    let q = vec2<f32>(c.x * p.rot.y, c.y * p.center_size.w);
+    let r = vec2<f32>(q.x * k - q.y * s, q.x * s + q.y * k) + p.rot.zw;
+    var right = view.cam_right.xyz;
+    var up = view.cam_up.xyz;
+    if (p.right.w > 0.5) {
+        right = p.right.xyz;
+        up = p.up.xyz;
+    }
+    let world = p.center_size.xyz + right * r.x + up * r.y;
     var out: ParticleOut;
     out.clip = view.view_proj * vec4<f32>(world, 1.0);
     out.color = p.color;

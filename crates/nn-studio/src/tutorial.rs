@@ -221,6 +221,7 @@ pub fn all() -> &'static [Tutorial] {
             efeitos_3d(),
             terreno(),
             inimigos_3d(),
+            portas_e_chaves(),
             eventos(),
             desenhe(),
             tiles(),
@@ -895,6 +896,126 @@ fn inimigos_3d() -> Tutorial {
             Step {
                 title: "Pronto: um desafio!",
                 text: "Você usou Vida, Ícones, Inimigo 3D e Perigo. Ideias: um Checkpoint no meio do caminho (Fases > Checkpoint), mais besouros com Vagar, ou Atirar no herói (com um prefab de bola) para derrubar os inimigos de longe.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// As portas (comportamento Porta 3D) da cena.
+fn doors(ws: &ProjectWorkspace) -> Vec<&Object> {
+    objects(ws)
+        .into_iter()
+        .filter(|o| has_behavior(o, "nn:porta3d"))
+        .collect()
+}
+
+fn portas_e_chaves() -> Tutorial {
+    Tutorial {
+        id: "portas-e-chaves",
+        title: "Portas e chaves",
+        summary: "Uma porta que abre com E, trancada até você achar a chave; o inventário na tela, uma placa de Texto 3D e uma zona que fecha a porta atrás de você.",
+        minutes: 10,
+        template: Template::Vazio3D,
+        project: "Portas e chaves",
+        steps: vec![
+            Step {
+                title: "Portas, chaves e zonas",
+                text: "Neste tutorial: uma porta que abre com a tecla E, trancada até o herói achar a chave, os itens na tela e uma zona que fecha a porta quando você passa. Tudo sem código.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "O herói",
+                text: "➕ Objeto > Jogador 3D (ou arraste modelos/heroi.glb para a cena e adicione Jogador > Jogador 3D).",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| objects(ws).iter().any(|o| has_behavior(o, "nn:jogador3d"))),
+            },
+            Step {
+                title: "Uma porta",
+                text: "➕ Objeto > Portas e itens > Porta. Ela já vem com o comportamento Porta 3D e um Corpo 3D que se move: fechada, ninguém passa. (Troque a forma por modelos/porta.glb no Inspetor, se quiser.)",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| !doors(ws).is_empty()),
+            },
+            Step {
+                title: "Teste a porta",
+                text: "F6. Chegue perto da porta: aparece \"E abrir\". Aperte E: ela gira para longe de você. E de novo fecha.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Tranque",
+                text: "Selecione a porta. No Inspetor, em Porta 3D > Precisa do item, escreva chave. Agora ela só abre para quem tiver uma chave no inventário.",
+                target: Some("inspetor"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    doors(ws).iter().any(|o| {
+                        behavior_of(o, "nn:porta3d").is_some_and(|c| c.str("chave") == "chave")
+                    })
+                }),
+            },
+            Step {
+                title: "A chave",
+                text: "➕ Objeto > Portas e itens > Chave, longe da porta. Ela é um Coletável com Guardar no inventário = chave: some quando o herói encosta e vai para o inventário.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        behavior_of(o, "nn:coletavel").is_some_and(|c| c.str("item") == "chave")
+                    })
+                }),
+            },
+            Step {
+                title: "Os itens na tela",
+                text: "➕ Objeto > Portas e itens > Mostrar inventário: os itens que o herói carrega aparecem num canto da tela. Na chave, em Ícone do item, escolha assets/imagens/chave.png.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| objects(ws).iter().any(|o| has_behavior(o, "nn:inventario"))),
+            },
+            Step {
+                title: "Teste a chave",
+                text: "F6: perto da porta, o aviso diz \"Precisa de: chave\". Pegue a chave (ela aparece no canto) e volte: agora E abre, e a chave é gasta.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Uma placa",
+                text: "➕ Objeto > Portas e itens > Texto 3D. No Inspetor, escreva \"Cuidado!\" e ponha a placa em cima da porta. Em Virado para, \"A frente do objeto\" a prende como uma placa de verdade.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| objects(ws).iter().any(|o| o.component("text3d").is_some())),
+            },
+            Step {
+                title: "Uma armadilha",
+                text: "➕ Objeto > Portas e itens > Zona de gatilho, do outro lado da porta. Em Avisa o objeto, escolha a porta e, em Mensagem ao entrar, escreva fechar: quem passa fica preso! A zona aparece no editor, mas não no jogo.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    let names: Vec<&str> = doors(ws).iter().map(|o| o.name.as_str()).collect();
+                    objects(ws).iter().any(|o| {
+                        behavior_of(o, "nn:gatilho").is_some_and(|c| {
+                            names.contains(&c.str("alvo")) && c.str("mensagem") == "fechar"
+                        })
+                    })
+                }),
+            },
+            Step {
+                title: "Teste de novo",
+                text: "F6: pegue a chave, abra a porta e passe por ela. Quando entrar na zona, a porta fecha atrás de você (e abre com E de novo: ela já está destrancada).",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: uma fase com segredo!",
+                text: "Você usou Porta 3D, Coletável com inventário, Mostrar inventário, Texto 3D e Zona de gatilho. Ideias: Fases > Interagir numa placa (\"E ler\") com um evento que dá um item (Itens > Ganhar item), a regra Itens > Ter um item, ou uma porta que abre sozinha quando o herói chega (Abre com: o jogador chegando perto).",
                 target: None,
                 show: None,
                 done: None,

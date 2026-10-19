@@ -567,6 +567,57 @@ def moeda():
     return m
 
 
+def chave():
+    """Chave dourada em pé (gira em volta de Y no jogo): argola, haste e dentes."""
+    m = Modelo()
+    ouro = Parte("#F4B400")
+    claro = Parte("#FFE066")
+    esp = 0.05
+    # A argola: um anel de 8 lados, deitado de lado (no plano XY).
+    lados, r_fora, r_dentro, cy = 8, 0.17, 0.09, 0.5
+    for i in range(lados):
+        a0 = 2 * math.pi * i / lados
+        a1 = 2 * math.pi * (i + 1) / lados
+        def p(a, r, z):
+            return (math.cos(a) * r, cy + math.sin(a) * r, z)
+        f0, f1 = p(a0, r_fora, esp), p(a1, r_fora, esp)
+        d0, d1 = p(a0, r_dentro, esp), p(a1, r_dentro, esp)
+        t0, t1 = p(a0, r_fora, -esp), p(a1, r_fora, -esp)
+        e0, e1 = p(a0, r_dentro, -esp), p(a1, r_dentro, -esp)
+        ouro.quad(d0, f0, f1, d1)    # frente
+        ouro.quad(f0, d0, e0, t0)    # (lado de fora e de dentro abaixo)
+        ouro.quad(t1, e1, d1, f1)
+        ouro.quad(e0, e1, t1, t0)    # trás
+        ouro.quad(f0, t0, t1, f1)    # borda de fora
+        ouro.quad(d1, e1, e0, d0)    # borda de dentro
+    # A haste e os dentes.
+    claro.caixa(0, 0.17, 0, 0.07, 0.48, esp * 2)
+    claro.caixa(0.07, 0.0, 0, 0.1, 0.06, esp * 2)
+    claro.caixa(0.06, 0.1, 0, 0.08, 0.05, esp * 2)
+    m.no("chave", m.malha("chave", [ouro, claro]), raiz=True, translation=[0, 0.05, 0])
+    return m
+
+
+def porta():
+    """Porta de madeira (1,2 × 2,2 m, 15 cm de espessura), com a base no chão:
+    tábuas, duas faixas de ferro e a maçaneta (dos dois lados)."""
+    m = Modelo()
+    madeira_ = Parte("#9C6B43")
+    escura = Parte("#7A5232")
+    ferro = Parte("#4A4F57")
+    w, h, e = 1.2, 2.2, 0.15
+    tabuas = 4
+    for i in range(tabuas):
+        x = -w / 2 + (i + 0.5) * w / tabuas
+        (madeira_ if i % 2 == 0 else escura).caixa(x, h / 2, 0, w / tabuas - 0.01, h, e)
+    for y in (0.45, 1.75):
+        ferro.caixa(0, y, 0, w + 0.01, 0.1, e + 0.02)
+    for z in (e / 2 + 0.03, -e / 2 - 0.03):
+        ferro.caixa(w / 2 - 0.18, 1.05, z, 0.08, 0.08, 0.06)
+    m.no("porta", m.malha("porta", [madeira_, escura, ferro]), raiz=True)
+    return m
+
+
 def plataforma():
     """Bloco de chão 1 × 1 × 1 com grama em cima (estique com escala)."""
     m = Modelo()
@@ -613,7 +664,8 @@ def main():
     os.makedirs(estrelas, exist_ok=True)
     for nome, fazer in [("arvore", arvore), ("pedra", pedra), ("heroi", heroi),
                         ("caixote", caixote), ("estrela", estrela), ("moeda", moeda),
-                        ("plataforma", plataforma), ("bicho", bicho)]:
+                        ("plataforma", plataforma), ("bicho", bicho), ("chave", chave),
+                        ("porta", porta)]:
         with open(os.path.join(estrelas, nome + ".glb"), "wb") as f:
             f.write(fazer().glb())
     with open(os.path.join(testes, "roda.glb"), "wb") as f:
