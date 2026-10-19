@@ -105,6 +105,10 @@ pub(crate) struct Renderer3D {
     skinned_pipeline: wgpu::RenderPipeline,
     skinned_shadow_pipeline: wgpu::RenderPipeline,
     billboard_pipeline: wgpu::RenderPipeline,
+    /// Malhas meio transparentes (água, vidro): depois das outras, de trás
+    /// para a frente, sem escrever a profundidade.
+    transparent_pipeline: wgpu::RenderPipeline,
+    transparent: Vec<Draw3>,
     billboard_add_pipeline: wgpu::RenderPipeline,
     billboards: Vec<BillboardDraw>,
     billboard_buffer: wgpu::Buffer,
@@ -322,6 +326,40 @@ impl Renderer3D {
             multiview_mask: None,
             cache: None,
         });
+        let transparent_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nn 3d transparent"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &buffers,
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: None,
+                ..primitive
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let skinned_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nn 3d skinned"),
             bind_group_layouts: &[
@@ -517,6 +555,8 @@ impl Renderer3D {
             skinned_shadow_pipeline,
             billboard_pipeline,
             billboard_add_pipeline,
+            transparent_pipeline,
+            transparent: Vec::new(),
             billboards: Vec::new(),
             billboard_buffer,
             billboard_capacity,
@@ -659,6 +699,25 @@ impl Renderer3D {
         })
     }
 
+    /// Troca o conteúdo de uma malha (mesmo id), sem gastar mais memória a
+    /// cada troca (um terreno sendo pintado).
+    pub(crate) fn replace_mesh(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        id: MeshId,
+        vertices: &[Vertex3],
+        indices: &[u32],
+    ) {
+        if (id.0 as usize) >= self.meshes.len() {
+            return;
+        }
+        let new = self.create_mesh(device, queue, vertices, indices, None);
+        let mesh = self.meshes.pop().expect("criada agora");
+        debug_assert_eq!(new.0 as usize, self.meshes.len());
+        self.meshes[id.0 as usize] = mesh;
+    }
+
     pub(crate) fn create_mesh(
         &mut self,
         device: &wgpu::Device,
@@ -714,13 +773,21 @@ impl Renderer3D {
         srgb: bool,
     ) {
         if (mesh.0 as usize) < self.meshes.len() {
-            self.draws.push(Draw3 {
+            let draw = Draw3 {
                 mesh,
                 texture,
                 cast_shadow,
                 instance: Instance3::new(model, color, srgb),
                 joints: None,
-            });
+            };
+            if color.a < 0.999 {
+                self.transparent.push(Draw3 {
+                    cast_shadow: false,
+                    ..draw
+                });
+            } else {
+                self.draws.push(draw);
+            }
         }
     }
 
@@ -759,7 +826,7 @@ impl Renderer3D {
     }
 
     pub(crate) fn has_draws(&self) -> bool {
-        !self.draws.is_empty() || !self.billboards.is_empty()
+        !self.draws.is_empty() || !self.billboards.is_empty() || !self.transparent.is_empty()
     }
 
     /// Matriz do sol: um quadrado de lado `2 × distance` em volta do ponto
@@ -925,11 +992,31 @@ impl Renderer3D {
                 bytemuck::cast_slice(&self.joint_data),
             );
         }
-        if self.draws.len() > self.capacity {
-            self.capacity = self.draws.len().next_power_of_two();
+        // As transparentes vão depois de todas, de trás para a frente.
+        let eye3 = self.camera.position;
+        let center = |d: &Draw3| {
+            Vec3::new(
+                d.instance.model[3][0],
+                d.instance.model[3][1],
+                d.instance.model[3][2],
+            )
+        };
+        self.transparent.sort_by(|a, b| {
+            center(b)
+                .distance_squared(eye3)
+                .total_cmp(&center(a).distance_squared(eye3))
+        });
+        let total = self.draws.len() + self.transparent.len();
+        if total > self.capacity {
+            self.capacity = total.next_power_of_two();
             self.instances = Self::instance_buffer(device, self.capacity);
         }
-        let data: Vec<Instance3> = self.draws.iter().map(|d| d.instance).collect();
+        let data: Vec<Instance3> = self
+            .draws
+            .iter()
+            .chain(&self.transparent)
+            .map(|d| d.instance)
+            .collect();
         queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&data));
         let mut groups = Vec::new();
         let mut i = 0;
@@ -1077,7 +1164,23 @@ impl Renderer3D {
                     }
                 }
             }
-            // 3. As partículas, por cima do que já tem profundidade.
+            // 3. As transparentes (água, vidro).
+            if !self.transparent.is_empty() {
+                pass.set_pipeline(&self.transparent_pipeline);
+                pass.set_vertex_buffer(1, self.instances.slice(..));
+                let base = self.draws.len() as u32;
+                for (k, d) in self.transparent.iter().enumerate() {
+                    let m = &self.meshes[d.mesh.0 as usize];
+                    if m.count > 0 {
+                        let i = base + k as u32;
+                        pass.set_bind_group(1, &textures[d.texture.0 as usize].bind_group, &[]);
+                        pass.set_vertex_buffer(0, m.vertices.slice(..));
+                        pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..m.count, 0, i..i + 1);
+                    }
+                }
+            }
+            // 4. As partículas, por cima do que já tem profundidade.
             let mut i = 0;
             while i < self.billboards.len() {
                 let (tex, add) = (self.billboards[i].texture, self.billboards[i].additive);
@@ -1100,9 +1203,10 @@ impl Renderer3D {
             }
         }
         drop(pass);
-        self.last_count = self.draws.len() as u32;
+        self.last_count = (self.draws.len() + self.transparent.len()) as u32;
         self.draws.clear();
         self.joint_data.clear();
         self.billboards.clear();
+        self.transparent.clear();
     }
 }

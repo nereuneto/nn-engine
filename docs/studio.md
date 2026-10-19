@@ -47,6 +47,9 @@ projetos em Lua da ferramenta `nn`, então dá para alternar entre os dois.
     terceira pessoa (Jogador 3D), caixotes que caem, plataformas e um
     elevador que andam, moedas e estrelas (prefabs), placar e um evento de
     vitória.
+  - **Vale 3D:** um vale pintado num [Terreno](#terreno), sem código:
+    morros, um lago, uma trilha de moedas, árvores espalhadas, estrelas nos
+    morros e uma fogueira.
   - **3D em código:** a mesma ilha escrita em Lua, com menu, pausa e recorde.
   - **Vazio:** uma cena vazia e um pacote de imagens e sons, para montar do
     seu jeito (o tutorial começa daqui).
@@ -88,6 +91,9 @@ projeto continua aberto.
   fogueira com fogo, fumaça e o som estalando (mais alto de perto), poeira
   nos pés do herói ao pular (um evento com a mensagem *pulou*) e chuva
   ([som e partículas no 3D](#som-e-partículas-no-3d)).
+- **Pinte um terreno** (uns 12 minutos), a partir do modelo Vazio 3D: um
+  morro, um buraco que vira lago com água, cores de pedra e areia, árvores
+  espalhadas com o pincel e um herói para passear ([terreno](#terreno)).
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -706,6 +712,37 @@ editor toca a animação na hora, para você ver como fica.
 Nos eventos, **Tocar animação** troca a animação de um objeto (com
 **Repetir** no modo Completo) e **Animação terminar** avisa quando uma que
 toca uma vez chega ao fim. No código, `obj:play("acenar")`.
+
+### Terreno
+
+Um **Terreno** é um chão grande que se pinta com o mouse: morros, vales,
+estradas, cores e água. **➕ Objeto > Terreno** cria um plano de 64 × 64 m;
+com ele selecionado, clique em **✏ Pintar terreno** na barra da vista 3D.
+Enquanto o pincel está ligado, o **botão esquerdo pinta** (em vez de
+selecionar e mover), um círculo branco mostra onde e o tamanho, e o botão
+direito continua voando. Cada arrasto é um passo do **Ctrl+Z**.
+
+| Pincel | O que faz |
+|---|---|
+| **⬆ Subir** / **⬇ Descer** | O chão sobe (ou desce) enquanto você segura o botão. **Ctrl** faz o contrário. |
+| **Alisar** | Tira os bicos e os degraus. |
+| **Aplainar** | Puxa para a altura de onde você começou a arrastar: estradas, lugares para construir. |
+| **Ruído** | Calombos sorteados: o chão fica menos liso. |
+| **Pintar cor** | Pinta uma das quatro cores (1 a 4). As cores ficam no Inspetor: grama, terra, pedra e areia, por padrão. |
+| **Espalhar** | Põe cópias de um modelo (`.glb`) ou prefab no chão, com tamanho e giro sorteados, sem amontoar (**Por segundo** diz quantas). Os modelos já vêm com **Corpo 3D**. **Ctrl** apaga as que estiverem no círculo. |
+
+**Tamanho** é o raio do pincel em metros e **Força**, quanto muda por
+segundo. No Inspetor ficam a **Largura** e o **Fundo** (mudar estica o que
+foi pintado), as quatro **cores** e a **Água**: marque e ajuste o **Nível
+da água**, e o que estiver abaixo vira lago ou mar (a água é meio
+transparente). No modo Completo, **Detalhe** (quadrados por lado: 64 é um bom
+começo) e **Altura máxima**.
+
+O terreno é o chão da física (os mesmos triângulos do desenho): o herói sobe
+os morros e as caixas rolam ladeira abaixo. O **Jogador 3D** que entra na
+água recebe a mensagem **agua** e, com **Na água: volta ao chão firme**
+(o padrão), volta para a margem. O terreno usa só a **posição** do objeto
+(girar e escalar não mudam ele).
 
 ### Som e partículas no 3D
 

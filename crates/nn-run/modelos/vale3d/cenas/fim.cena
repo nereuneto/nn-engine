@@ -1,0 +1,42 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#1F4E79",
+  gravity = -1800,
+  objects = {
+    {
+      id = 1, name = "titulo",
+      x = 0, y = 110, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "Você achou as 5 estrelas do vale!", size = 60, color = "#FFD93D", anchor = "center", font = "", hud = false },
+      },
+    },
+    {
+      id = 2, name = "resultado",
+      x = 0, y = 20, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "text", text = "", size = 34, color = "#FFFFFF", anchor = "center", font = "", hud = false },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "E pegou {moedas} moedas pelo caminho." },
+      },
+    },
+    {
+      id = 3, name = "jogar_de_novo",
+      x = 0, y = -90, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "button", text = "Jogar de novo", size = 28, w = 260, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "cena", scene = "cenas/vale.cena", sound = "", focus = true, enabled = true, hud = true },
+      },
+    },
+    {
+      id = 4, name = "sair",
+      x = 0, y = -170, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "button", text = "Sair", size = 28, w = 260, h = 60, color = "", hover_color = "", press_color = "", text_color = "", radius = 12, border = 0, border_color = "", image = "", slice = 4, slice_scale = 4, icon = "", font = "", action = "sair", scene = "", sound = "", focus = false, enabled = true, hud = true },
+      },
+    },
+  },
+}

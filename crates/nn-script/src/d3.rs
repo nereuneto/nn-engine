@@ -134,7 +134,19 @@ pub(crate) fn load_model(lua: &Lua, path: &str, opts: Option<&Table>) -> Result<
 #[derive(Debug, Default)]
 struct ShapeCache(HashMap<(&'static str, u32), LMesh>);
 
-fn upload(lua: &Lua, mesh: &Mesh) -> Result<LMesh> {
+/// Troca o conteúdo de uma malha já enviada (o mesmo id).
+pub(crate) fn reupload(lua: &Lua, target: &mut LMesh, mesh: &Mesh) -> Result<()> {
+    let (min, max) = mesh.bounds();
+    with_ctx(lua, |c| {
+        c.renderer.update_mesh(target.id, mesh);
+        Ok(())
+    })?;
+    target.triangles = mesh.triangle_count();
+    target.size = max - min;
+    Ok(())
+}
+
+pub(crate) fn upload(lua: &Lua, mesh: &Mesh) -> Result<LMesh> {
     let (min, max) = mesh.bounds();
     with_ctx(lua, |c| {
         Ok(LMesh {
@@ -309,6 +321,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
         "mesh",
         lua.create_function(|lua, opts: Table| upload(lua, &custom_mesh(&opts)?))?,
     )?;
+    t.set("terrain", crate::terrain3d::constructor(lua)?)?;
 
     t.set(
         "draw",
@@ -319,6 +332,9 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             }
             let thing = match &what {
                 Value::UserData(ud) if ud.is::<LMesh>() => Thing::Mesh(*ud.borrow::<LMesh>()?),
+                Value::UserData(ud) if ud.is::<crate::terrain3d::LTerrain>() => {
+                    Thing::Mesh(ud.borrow_mut::<crate::terrain3d::LTerrain>()?.mesh(lua)?)
+                }
                 Value::UserData(ud) if ud.is::<LModel>() => {
                     Thing::Model(ud.borrow::<LModel>()?.key.clone())
                 }

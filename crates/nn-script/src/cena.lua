@@ -117,6 +117,13 @@ M.FIELDS = {
   camera3d = {
     { "fov", 60 },
   },
+  -- Terreno: alturas e cores (`data`, feito pelo NN Studio), o tamanho, as
+  -- cores das quatro camadas e a água.
+  terrain = {
+    { "data", "" }, { "cells", 64 }, { "width", 64 }, { "depth", 64 }, { "height", 20 },
+    { "color1", "#7BC86C" }, { "color2", "#9C7049" }, { "color3", "#9EA3A8" }, { "color4", "#F2D49B" },
+    { "water", false }, { "water_level", -1 }, { "water_color", "#3FA7D6B4" },
+  },
   -- A animação que o modelo 3D do objeto toca (as do arquivo .glb).
   anim3d = {
     { "animation", "" }, { "speed", 1 }, { "loop", true },
@@ -1753,7 +1760,44 @@ function M.prepare(scene, o, c, live)
     scene._camera3d = scene._camera3d or o
   elseif t == "body3d" then
     if scene._3d then make_body3(scene, o, c) end
+  elseif t == "terrain" then
+    local opts = { data = c.data, cells = c.cells, width = c.width, depth = c.depth, height = c.height,
+      colors = { c.color1, c.color2, c.color3, c.color4 } }
+    if c._terrain then
+      c._terrain:replace(opts)
+    else
+      c._terrain = nn.d3.terrain(opts)
+    end
+    o.terrain = c._terrain
+    scene._terrains = scene._terrains or {}
+    local listed = false
+    for _, x in ipairs(scene._terrains) do if x == o then listed = true end end
+    if not listed then table.insert(scene._terrains, o) end
+    if scene._3d then M.terrain_body(scene, o, c) end
   end
+end
+
+--- O chão do terreno: os triângulos dele (só a posição do objeto conta).
+function M.terrain_body(scene, o, c)
+  local x, y, z = o:position3d()
+  M.attach_body3(scene, o, M.world3(scene):body({
+    terrain = c._terrain, x = x, y = y, z = z, tag = o.name,
+  }))
+  c._ver = c._terrain.version
+end
+
+--- 3D: a altura da água dos terrenos em (x, z), ou nil se não houver água.
+function M.water_level(scene, x, z)
+  for _, o in ipairs(scene._terrains or {}) do
+    local c = o.alive and o:component("terrain")
+    if c and c.water then
+      local ox, oy, oz = o:position3d()
+      if math.abs(x - ox) <= c.width / 2 and math.abs(z - oz) <= c.depth / 2 then
+        return oy + c.water_level
+      end
+    end
+  end
+  return nil
 end
 
 --- Aplica o ambiente de uma cena 3D (céu, sol, luz, névoa e sombras) e
@@ -1828,6 +1872,7 @@ end
 local PREPARE_ORDER = {
   "map", "sprite", "body", "sound", "particles", "panel", "button", "bar", "icons",
   "slider", "checkbox", "textfield", "camera", "model", "anim3d", "shape3d", "camera3d", "body3d",
+  "terrain",
 }
 
 -- Mapas antes dos corpos: a câmera e a colisão dependem deles.
@@ -2044,6 +2089,11 @@ function M.update(scene, dt)
   refresh_list(scene)
   update_animations(scene, dt)
   if scene._3d then
+    -- Terreno mudado pelo script: o chão da física acompanha.
+    for _, o in ipairs(scene._terrains or {}) do
+      local c = o.alive and o:component("terrain")
+      if c and c._terrain and c._ver ~= c._terrain.version then M.terrain_body(scene, o, c) end
+    end
     -- Sons 3D que andam com o objeto.
     for _, o in ipairs(scene.object_list) do
       local c = o.alive and o.sound and o:component("sound")
@@ -2267,6 +2317,14 @@ local function draw_object(o, alpha)
     if (c.type == "model" and c._model) or (c.type == "shape3d" and c._mesh) then
       m3 = m3 or o:matrix3d(alpha)
       nn.d3.draw(c._model or c._mesh, { matrix = m3, color = c.color, shadow = c.shadow, animator = c._anim })
+    elseif c.type == "terrain" and c._terrain then
+      local x, y, z = o:position3d()
+      nn.d3.draw(c._terrain, { x = x, y = y, z = z })
+      if c.water then
+        M._water_mesh = M._water_mesh or nn.d3.plane()
+        nn.d3.draw(M._water_mesh, { x = x, y = y + c.water_level, z = z, sx = c.width, sz = c.depth,
+          color = c.water_color, shadow = false })
+      end
     end
   end
   local x, y, rot, sx, sy = o:world_transform()
@@ -2591,6 +2649,11 @@ function M.new(data, path)
   --- Objetos que um comportamento procura ("" = o jogador).
   function scene:targets(who)
     return M.targets(self, who)
+  end
+
+  --- 3D: a altura da água em (x, z), ou nil.
+  function scene:water_level(x, z)
+    return M.water_level(self, x, z)
   end
 
   --- Faíscas num ponto (no 3D: scene:burst(x, y, cor, quantas, z)).

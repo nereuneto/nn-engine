@@ -964,6 +964,83 @@ const CAMERA3D_FIELDS: &[F] = &[help(
     "Quanto ela enxerga de cima a baixo. 60° é o normal; mais = mais aberto.",
 )];
 
+const TERRAIN_FIELDS: &[F] = &[
+    help(
+        f(
+            "width",
+            "Largura",
+            W::Num {
+                speed: 0.5,
+                min: 1.0,
+                max: 4000.0,
+                suffix: " m",
+            },
+        ),
+        "De um lado ao outro (X). Mudar estica o que foi pintado.",
+    ),
+    help(
+        f(
+            "depth",
+            "Fundo",
+            W::Num {
+                speed: 0.5,
+                min: 1.0,
+                max: 4000.0,
+                suffix: " m",
+            },
+        ),
+        "De trás para a frente (Z).",
+    ),
+    help(
+        adv(
+            "cells",
+            "Detalhe",
+            W::Int {
+                min: 2.0,
+                max: 256.0,
+            },
+        ),
+        "Quadrados de cada lado: mais detalhe nos morros (e mais triângulos). 64 é um bom começo.",
+    ),
+    help(
+        adv(
+            "height",
+            "Altura máxima",
+            W::Num {
+                speed: 0.5,
+                min: 0.5,
+                max: 1000.0,
+                suffix: " m",
+            },
+        ),
+        "O chão vai desta altura para baixo até esta para cima.",
+    ),
+    section("Cores (Pintar cor)"),
+    f("color1", "Cor 1 (grama)", W::Color),
+    f("color2", "Cor 2 (terra)", W::Color),
+    f("color3", "Cor 3 (pedra)", W::Color),
+    f("color4", "Cor 4 (areia)", W::Color),
+    section("Água"),
+    help(
+        f("water", "Água", W::Bool),
+        "Um plano de água por cima: o que estiver mais baixo vira lago ou mar. O Jogador 3D que cair nela recebe a mensagem \"agua\".",
+    ),
+    help(
+        f(
+            "water_level",
+            "Nível da água",
+            W::Num {
+                speed: 0.05,
+                min: -1000.0,
+                max: 1000.0,
+                suffix: " m",
+            },
+        ),
+        "Em relação ao terreno (0 = a altura do chão plano).",
+    ),
+    f("water_color", "Cor da água", W::Color),
+];
+
 const ANIM3D_FIELDS: &[F] = &[
     help(
         f("animation", "Animação", W::Anim),
@@ -1267,7 +1344,10 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
 
 /// Componentes que só fazem sentido numa cena 3D.
 pub fn is_3d_kind(kind: &str) -> bool {
-    matches!(kind, "model" | "shape3d" | "camera3d" | "body3d" | "anim3d")
+    matches!(
+        kind,
+        "model" | "shape3d" | "camera3d" | "body3d" | "anim3d" | "terrain"
+    )
 }
 
 /// Componentes de cena 2D que não valem numa cena 3D (física 2D, mapa de
@@ -1283,6 +1363,7 @@ fn fields(kind: &str) -> &'static [F] {
         "camera3d" => CAMERA3D_FIELDS,
         "body3d" => BODY3D_FIELDS,
         "anim3d" => ANIM3D_FIELDS,
+        "terrain" => TERRAIN_FIELDS,
         "sprite" => SPRITE_FIELDS,
         "text" => TEXT_FIELDS,
         "shape" => SHAPE_FIELDS,
@@ -1392,6 +1473,10 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "camera3d" => (
             "Câmera 3D",
             "A câmera do jogo: ele mostra o que ela vê, de onde ela está.",
+        ),
+        "terrain" => (
+            "Terreno",
+            "Um chão com morros, vales, cores e água, pintado com o ✏ Pintar terreno da vista 3D.",
         ),
         "anim3d" => (
             "Animação 3D",
@@ -1563,6 +1648,21 @@ fn apply_changes(
         .and_then(|x| x.components.get_mut(ci))
     {
         for (k, v) in changes {
+            // Terreno: mais quadrados ou outra altura máxima refazem os dados
+            // (senão o que foi pintado se perde ou muda de altura).
+            if c.kind == "terrain" && (k == "cells" || k == "height") {
+                let old = crate::terrain_tool::terrain_of(c);
+                c.set(&k, v);
+                let new = if k == "cells" {
+                    old.resample(c.num("cells").clamp(2.0, 256.0) as u32)
+                } else {
+                    let mut t = old;
+                    t.max_height = (c.num("height") as f32).max(0.1);
+                    t
+                };
+                c.set("data", Prop::Str(new.encode()));
+                continue;
+            }
             c.set(&k, v);
         }
         for k in reverts {
@@ -2336,7 +2436,7 @@ impl Inspector {
                 let exists = o.component(kind).is_some();
                 let unique = matches!(
                     kind,
-                    "body" | "camera" | "map" | "layout" | "body3d" | "anim3d"
+                    "body" | "camera" | "map" | "layout" | "body3d" | "anim3d" | "terrain"
                 );
                 if ui
                     .add_enabled(!(exists && unique), egui::Button::new(title))

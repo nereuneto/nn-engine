@@ -523,3 +523,118 @@ fn super_toque(h: &mut Headless<Uma>, k: KeyCode) {
     h.ctx.input.release_key(k);
     h.run_frames(1);
 }
+
+#[test]
+fn terreno_com_morro_agua_e_jogador() {
+    use glam::Vec2;
+    use nn_render::d3::{BrushOp, TerrainData};
+    // Um morro de ~4 m em (8, 0) e um buraco com água em (-8, 0).
+    let mut t = TerrainData::flat(32, Vec2::new(32.0, 32.0), 10.0);
+    for _ in 0..8 {
+        t.brush(BrushOp::Raise, Vec2::new(8.0, 0.0), 6.0, 0.5);
+        t.brush(BrushOp::Lower, Vec2::new(-8.0, 0.0), 4.0, 0.5);
+    }
+    let data = t.encode();
+    let dir = projeto(
+        "terreno",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            (
+                "cenas/mundo.cena",
+                &format!(
+                    r#"return {{ format = 1, mode = "3d", gravity = -20, script = "cenas/obs.lua",
+  environment = {{ fog = false, shadows = false }},
+  objects = {{
+    {{ id = 1, name = "Terreno",
+      components = {{ {{ type = "terrain", data = "{data}", cells = 32, width = 32, depth = 32, height = 10,
+        water = true, water_level = -1 }} }} }},
+    {{ id = 2, name = "Herói", y = 1,
+      components = {{ {{ type = "shape3d", shape = "capsule" }},
+        {{ type = "behavior", script = "nn:jogador3d", prender_mouse = false }} }},
+      events = {{ {{ when = {{ {{ cond = "mensagem", quem = "@este", msg = "agua" }} }},
+        actions = {{ {{ act = "variavel", var = "molhou", op = "somar", valor = 1 }} }} }} }} }},
+  }} }}"#
+                ),
+            ),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    h.run_frames(30);
+    assert_eq!(h.game.0.error(), None);
+    // (A cápsula tem o centro no meio: os pés ficam 0,5 m abaixo.)
+    let y: f64 = lua(&rt, "C.objects['Herói'].y");
+    assert!((y - 0.5).abs() < 0.1, "em pé no plano: {y}");
+    // A altura do terreno pelo script.
+    let topo: f64 = lua(&rt, "C.objects.Terreno.terrain:height_at(8, 0)");
+    assert!(topo > 3.0, "morro: {topo}");
+    assert_eq!(lua::<Option<f64>>(&rt, "C:water_level(-8, 0)"), Some(-1.0));
+    // Em cima do morro: fica de pé lá em cima (o chão é o terreno).
+    rt.lua()
+        .load("C.objects['Herói']:move_to(8, 6, 0)")
+        .exec()
+        .unwrap();
+    h.run_frames(60);
+    let y: f64 = lua(&rt, "C.objects['Herói'].y");
+    assert!(
+        (y - 0.5 - topo).abs() < 0.3,
+        "no topo do morro: {y} (topo {topo})"
+    );
+    // Na água do buraco: recebe "agua" e volta ao chão firme.
+    rt.lua()
+        .load("C.objects['Herói']:move_to(-8, 0, 0)")
+        .exec()
+        .unwrap();
+    h.run_frames(60);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.molhou or 0"), 1.0);
+    let x: f64 = lua(&rt, "C.objects['Herói'].x");
+    assert!(x > 0.0, "voltou para o morro: {x}");
+    // O script pode mexer no terreno (e o chão acompanha no desenho).
+    let v0: f64 = lua(&rt, "C.objects.Terreno.terrain.version");
+    rt.lua()
+        .load("C.objects.Terreno.terrain:brush('subir', 0, 8, 3, 2)")
+        .exec()
+        .unwrap();
+    h.run_frames(2);
+    assert!(lua::<f64>(&rt, "C.objects.Terreno.terrain.version") > v0);
+    // ...e o chão da física também: o herói fica em cima do calombo novo.
+    rt.lua()
+        .load("C.objects['Herói']:move_to(0, 5, 8)")
+        .exec()
+        .unwrap();
+    h.run_frames(60);
+    let alto: f64 = lua(&rt, "C.objects.Terreno.terrain:height_at(0, 8)");
+    let y: f64 = lua(&rt, "C.objects['Herói'].y");
+    assert!(
+        alto > 1.0 && (y - 0.5 - alto).abs() < 0.3,
+        "no calombo: {y} ({alto})"
+    );
+    // O editor manda o terreno pintado ao vivo: o chão muda (e a física).
+    let mut plano = TerrainData::flat(32, Vec2::new(32.0, 32.0), 10.0);
+    for _ in 0..10 {
+        plano.brush(BrushOp::Raise, Vec2::new(-10.0, -10.0), 5.0, 0.5);
+    }
+    rt.lua()
+        .load(format!(
+            "AO_VIVO = {{ {{ id = 1, component = 1, field = 'data', value = '{}' }} }}",
+            plano.encode()
+        ))
+        .exec()
+        .unwrap();
+    h.run_frames(2);
+    let novo: f64 = lua(&rt, "C.objects.Terreno.terrain:height_at(-10, -10)");
+    assert!(novo > 3.0, "ao vivo: {novo}");
+    assert_eq!(
+        lua::<f64>(&rt, "C.objects.Terreno.terrain:height_at(8, 0)"),
+        0.0
+    );
+    rt.lua()
+        .load("C.objects['Herói']:move_to(-10, 8, -10)")
+        .exec()
+        .unwrap();
+    h.run_frames(60);
+    let y: f64 = lua(&rt, "C.objects['Herói'].y");
+    assert!((y - 0.5 - novo).abs() < 0.3, "no morro novo: {y} ({novo})");
+    assert_eq!(h.game.0.error(), None);
+}

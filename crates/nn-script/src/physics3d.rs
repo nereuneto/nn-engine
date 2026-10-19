@@ -282,6 +282,19 @@ fn body_from_opts(opts: &Table) -> Result<BodyDesc> {
             )));
         }
     };
+    // Um terreno: os triângulos dele (o chão exato).
+    let terrain = match opt::<Value>(o, "terrain")? {
+        Some(Value::UserData(ud)) if ud.is::<crate::terrain3d::LTerrain>() => {
+            Some(ud.borrow::<crate::terrain3d::LTerrain>()?.data.collision())
+        }
+        None | Some(Value::Nil) => None,
+        Some(other) => {
+            return Err(err(format!(
+                "\"terrain\" deve ser um terreno (nn.d3.terrain), recebeu {}",
+                other.type_name()
+            )));
+        }
+    };
     let shape_name = opt::<String>(o, "shape")?;
     let mut offset = Vec3::new(
         n("offset_x", 0.0)?,
@@ -289,6 +302,13 @@ fn body_from_opts(opts: &Table) -> Result<BodyDesc> {
         n("offset_z", 0.0)?,
     );
     let shape = match (shape_name.as_deref(), &model) {
+        _ if terrain.is_some() => {
+            let col = terrain.clone().expect("terreno");
+            Shape3::Mesh {
+                vertices: col.vertices,
+                triangles: col.triangles,
+            }
+        }
         (Some("mesh"), Some(m)) => Shape3::Mesh {
             vertices: m.collision.vertices.iter().map(|v| *v * scale).collect(),
             triangles: m.collision.triangles.clone(),
@@ -326,8 +346,13 @@ fn body_from_opts(opts: &Table) -> Result<BodyDesc> {
         }
     };
     let d = BodyDesc::default();
+    let kind = if terrain.is_some() && opt::<String>(o, "type")?.is_none() {
+        BodyKind3::Static
+    } else {
+        kind_from(o)?
+    };
     Ok(BodyDesc {
-        kind: kind_from(o)?,
+        kind,
         shape,
         offset,
         position: Vec3::new(n("x", 0.0)?, n("y", 0.0)?, n("z", 0.0)?),

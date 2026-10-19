@@ -151,6 +151,7 @@ fn thumb_png(t: Template) -> &'static [u8] {
         Template::TresD => include_bytes!("../assets/modelos/3d.png"),
         Template::Visual3D => include_bytes!("../assets/modelos/visual3d.png"),
         Template::Vazio3D => include_bytes!("../assets/modelos/vazio3d.png"),
+        Template::Vale3D => include_bytes!("../assets/modelos/vale3d.png"),
     }
 }
 
@@ -188,6 +189,10 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
         Template::Visual3D => (
             "3D",
             "A ilha das estrelas montada no editor, sem código: herói em terceira pessoa, caixotes que caem, plataformas e elevador que andam, moedas, estrelas e um evento de vitória.",
+        ),
+        Template::Vale3D => (
+            "Vale 3D",
+            "Um vale pintado num Terreno, sem código: morros, lago, trilha, árvores espalhadas, estrelas nos morros e uma fogueira. Mude o terreno com o ✏ Pintar terreno.",
         ),
         Template::Vazio3D => (
             "Vazio 3D",
