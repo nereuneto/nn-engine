@@ -937,10 +937,9 @@ impl Renderer {
 
     /// Desenha a malha no mundo 3D com a matriz `model` (posição, rotação e
     /// escala; veja [`Transform3`](crate::d3::Transform3)) e a cor `color`
-    /// multiplicando a dos vértices.
+    /// multiplicando a dos vértices. Projeta sombra.
     pub fn draw_mesh(&mut self, mesh: crate::d3::MeshId, model: Mat4, color: Color) {
-        let srgb = self.format.is_srgb();
-        self.d3.draw(mesh, model, color, self.white, srgb);
+        self.draw_mesh_with(mesh, model, color, None, true);
     }
 
     /// Como [`Renderer::draw_mesh`], com uma textura (pelas coordenadas `uv`
@@ -952,8 +951,65 @@ impl Renderer {
         color: Color,
         texture: TextureId,
     ) {
+        self.draw_mesh_with(mesh, model, color, Some(texture), true);
+    }
+
+    /// Desenha a malha escolhendo a textura e se ela projeta sombra.
+    pub fn draw_mesh_with(
+        &mut self,
+        mesh: crate::d3::MeshId,
+        model: Mat4,
+        color: Color,
+        texture: Option<TextureId>,
+        cast_shadow: bool,
+    ) {
         let srgb = self.format.is_srgb();
-        self.d3.draw(mesh, model, color, texture, srgb);
+        let texture = texture.unwrap_or(self.white);
+        self.d3.draw(mesh, model, color, texture, cast_shadow, srgb);
+    }
+
+    /// Envia um modelo (lido de um `.glb`) para a GPU.
+    pub fn create_model(&mut self, data: &crate::d3::ModelData) -> crate::d3::Model {
+        let textures: Vec<TextureId> = data
+            .images
+            .iter()
+            .map(|img| {
+                let options = if img.nearest {
+                    TextureOptions::PIXEL_ART
+                } else {
+                    TextureOptions::default()
+                };
+                self.create_texture(img.size, &img.rgba, options)
+            })
+            .collect();
+        let parts = data
+            .parts
+            .iter()
+            .map(|p| {
+                (
+                    self.create_mesh(&p.mesh),
+                    p.image.and_then(|i| textures.get(i).copied()),
+                )
+            })
+            .collect();
+        crate::d3::Model {
+            parts,
+            bounds: data.bounds(),
+            triangles: data.triangle_count(),
+        }
+    }
+
+    /// Desenha um modelo, como [`Renderer::draw_mesh_with`].
+    pub fn draw_model(
+        &mut self,
+        model: &crate::d3::Model,
+        matrix: Mat4,
+        color: Color,
+        cast_shadow: bool,
+    ) {
+        for (mesh, texture) in &model.parts {
+            self.draw_mesh_with(*mesh, matrix, color, *texture, cast_shadow);
+        }
     }
 
     /// A câmera 3D (vale até ser trocada).
@@ -972,6 +1028,24 @@ impl Renderer {
 
     pub fn light3d(&self) -> crate::d3::Light3D {
         self.d3.light
+    }
+
+    /// O céu em degradê atrás do mundo 3D (`None`: a cor de fundo).
+    pub fn set_sky3d(&mut self, sky: Option<crate::d3::Sky3D>) {
+        self.d3.sky = sky;
+    }
+
+    pub fn sky3d(&self) -> Option<crate::d3::Sky3D> {
+        self.d3.sky
+    }
+
+    /// As sombras do sol.
+    pub fn set_shadows3d(&mut self, shadows: crate::d3::Shadows) {
+        self.d3.shadows = shadows;
+    }
+
+    pub fn shadows3d(&self) -> crate::d3::Shadows {
+        self.d3.shadows
     }
 
     /// Quantas malhas foram desenhadas no último frame.

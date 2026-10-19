@@ -26,7 +26,7 @@ mod storage;
 mod ui;
 mod window;
 
-pub use assets::{AssetError, Assets};
+pub use assets::{AssetError, Assets, model_key};
 pub use config::AppConfig;
 pub use context::{Context, Game};
 pub use headless::Headless;

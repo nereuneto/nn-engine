@@ -446,6 +446,11 @@ impl FilePanel {
                         actions.push(Action::CopyText(format!("\"{}\"", e.rel)));
                         ui.close();
                     }
+                    if e.kind == FileKind::Model && ui.button("📋 Copiar nn.assets.model").clicked()
+                    {
+                        actions.push(Action::CopyText(format!("nn.assets.model(\"{}\")", e.rel)));
+                        ui.close();
+                    }
                     if e.kind == FileKind::Lua && ui.button("📋 Copiar require").clicked() {
                         actions.push(Action::CopyText(format!(
                             "require(\"{}\")",
@@ -640,6 +645,7 @@ pub fn paint_icon(painter: &egui::Painter, rect: egui::Rect, kind: FileKind, ope
         FileKind::Sound => (rgb(0xA0, 0x6C, 0xD5), "note"),
         FileKind::Image => (rgb(0xD8, 0x7A, 0x4A), "picture"),
         FileKind::Font => (rgb(0x8A, 0x93, 0x9E), "letter"),
+        FileKind::Model => (rgb(0x2F, 0xA8, 0xA0), "box"),
         _ => (rgb(0x6E, 0x76, 0x80), "none"),
     };
     let page = Rect::from_center_size(c, vec2(11.0, 14.0));

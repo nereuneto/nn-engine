@@ -47,7 +47,10 @@ wgpu = "30"
 winit = "0.30"
 glam = { version = "0.34", features = ["bytemuck"] }
 bytemuck = { version = "1", features = ["derive"] }
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Modelos 3D (.glb/.gltf). Sem o "import": os arquivos vêm do jogo (que pode
+# estar empacotado), não direto do disco.
+gltf = { version = "1.4", default-features = false, features = ["utils", "names"] }
 pollster = "1"
 log = "0.4"
 env_logger = "0.11"

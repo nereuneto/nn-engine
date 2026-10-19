@@ -789,7 +789,7 @@ O emissor tem `x`, `y`, `emitting` e `rate` (leitura e escrita), `count` e `fini
 
 ### nn.d3 (3D)
 
-O mundo 3D é desenhado **antes** de todo o 2D: sprites, `nn.screen` e menus ficam por cima, então o HUD de um jogo 3D é feito como sempre. O visual é *low-poly*: cada face recebe um tom só de luz, vindo do sol e de uma luz ambiente do céu e do chão. As coordenadas usam **Y para cima** e a unidade é livre (pense em metros: o cubo pronto tem 1 de lado).
+O mundo 3D é desenhado **antes** de todo o 2D: sprites, `nn.screen` e menus ficam por cima, então o HUD de um jogo 3D é feito como sempre. O visual é *low-poly*: cada face recebe um tom só de luz, vindo do sol (que faz sombras) e de uma luz ambiente do céu e do chão. As coordenadas usam **Y para cima** e a unidade é livre (pense em metros: o cubo pronto tem 1 de lado).
 
 #### Seu primeiro mundo 3D, passo a passo
 
@@ -825,24 +825,34 @@ nn.d3.draw(self.cubo, { x = 2, y = 0.5, z = -1 })          -- y = 0.5: apoiado n
 nn.d3.draw(self.cubo, { y = 0.5, ry = nn.time.elapsed() * 90 })   -- uma volta a cada 4 segundos
 ```
 
-**4. Luz e névoa.** O sol tem uma direção (para onde a luz vai, de cima para baixo); a névoa esconde o que está longe e combina com a cor de fundo:
+**4. Céu, luz e névoa.** O céu é um degradê com o disco do sol. O sol tem uma direção (para onde a luz vai, de cima para baixo) e faz sombras sozinho. A névoa esconde o que está longe e, sem `color`, pega a cor do horizonte, então o mundo some no céu:
 
 ```lua
-nn.window.set_clear_color("#9FD3E8")
+nn.d3.sky({ top = "#3F8FD8", horizon = "#CDEBF5", bottom = "#9AA79A", sun_size = 4 })
 nn.d3.light({
-  sun = { -0.5, -1, -0.3 },
-  sky = "#8FA9C8", ground = "#5A5040",
-  fog = { color = "#9FD3E8", near = 15, far = 50 },
+  sun = { -0.5, -0.8, -0.35 },
+  sky = "#93AFCF", ground = "#6A5D48",
+  fog = { near = 20, far = 60 },
 })
 ```
 
-**5. Câmera que segue.** `nn.d3.orbit` põe a câmera girando em volta de um ponto, perfeito para seguir o jogador visto de trás:
+**5. Modelos do Blender.** Exporte do Blender como **glTF Binary (.glb)**, ponha na pasta do jogo e carregue com `nn.assets.model`. As cores, os materiais e as texturas do modelo vêm junto:
+
+```lua
+self.casa = nn.assets.model("modelos/casa.glb")
+-- no draw:
+nn.d3.draw(self.casa, { x = 6, z = 4, ry = -30 })
+```
+
+No Blender, a frente do modelo é o eixo **−Y** (que vira **+Z** no glTF). Com o jogo aberto, exporte de novo por cima do arquivo e o modelo muda na hora.
+
+**6. Câmera que segue.** `nn.d3.orbit` põe a câmera girando em volta de um ponto, perfeito para seguir o jogador visto de trás:
 
 ```lua
 nn.d3.orbit({ target = { jogador.x, 1, jogador.z }, distance = 10, yaw = self.yaw, pitch = 25 })
 ```
 
-**6. Clicar no chão.** `nn.d3.ground_point` diz onde o mouse toca o chão:
+**7. Clicar no chão.** `nn.d3.ground_point` diz onde o mouse toca o chão:
 
 ```lua
 local mx, my = nn.input.mouse()
@@ -852,7 +862,7 @@ if mx and nn.input.mouse_pressed("left") then
 end
 ```
 
-O exemplo completo, com árvores, pedras, um herói que anda para onde a câmera olha e cubos que caem onde você clica, está em `jogos/cubos3d`.
+O exemplo completo, com árvores, casas e pedras em `.glb`, um herói que anda para onde a câmera olha, sombras, céu e cubos que caem onde você clica, está em `jogos/cubos3d`. Os modelos dele foram gerados pelo script `ferramentas/gerar_modelos.py` (no código da engine), que mostra como montar um `.glb` à mão.
 
 #### Formas
 
@@ -878,9 +888,19 @@ local piramide = nn.d3.mesh({
 })
 ```
 
+#### Modelos (.glb e .gltf)
+
+`nn.assets.model(caminho, opts)` carrega um modelo glTF 2.0: o `.glb` (um arquivo só, o mais prático) ou o `.gltf` com o `.bin` e as imagens ao lado. Vêm junto as partes, as posições, rotações e escalas dos objetos, a cor de cada material, as cores dos vértices e a imagem de cor (*base color*) dos materiais. Carregar o mesmo arquivo de novo não gasta memória.
+
+| Opção | Descrição |
+|---|---|
+| `flat` | `true`: cada face com um tom só (o visual low-poly), mesmo que o modelo tenha sombreado suave. |
+
+O modelo tem `triangles`, `width`, `height` e `depth`. Ele é desenhado com `nn.d3.draw`, como as formas. Ainda não entram: animações de esqueleto, luzes e câmeras do arquivo (por enquanto só modelos parados).
+
 #### Desenhar
 
-`nn.d3.draw(malha, opts)`, chamado no `draw` da cena:
+`nn.d3.draw(malha_ou_modelo, opts)`, chamado no `draw` da cena:
 
 | Opção | Descrição |
 |---|---|
@@ -888,7 +908,8 @@ local piramide = nn.d3.mesh({
 | `rx`, `ry`, `rz` | Rotação em graus: inclinar, virar e rolar. |
 | `scale` | Tamanho (padrão 1). `sx`, `sy`, `sz` mudam um eixo só. |
 | `color` | Cor (multiplica a da malha; padrão branco). |
-| `image` | Uma imagem de `nn.assets.texture` aplicada nas faces. |
+| `image` | Uma imagem de `nn.assets.texture` aplicada nas faces (nas formas prontas e nas malhas). |
+| `shadow` | `false`: não projeta sombra (boa para o chão, efeitos e coisas pequenas). Padrão `true`. |
 
 #### Câmera
 
@@ -909,7 +930,25 @@ A câmera continua a mesma ao trocar de cena; cada cena 3D costuma ajustá-la no
 | `sun` | Direção da luz do sol, `{x, y, z}` (para baixo: `y` negativo). |
 | `sun_color` | Cor e força do sol (mais escuro = mais fraco; `"#000000"` desliga). |
 | `sky`, `ground` | Luz ambiente que vem de cima e de baixo: deixa as sombras coloridas, nunca pretas. |
-| `fog` | `{ color =, near =, far = }`: a névoa começa em `near` e cobre tudo em `far`. `false` desliga. |
+| `fog` | `{ near =, far =, color = }`: a névoa começa em `near` e cobre tudo em `far`. Sem `color`, usa a cor do horizonte do céu. `false` desliga. |
+
+#### Céu
+
+`nn.d3.sky(opts)` desenha um céu em degradê atrás do mundo 3D, no lugar da cor de fundo. `nn.d3.sky(true)` usa o céu padrão (azul) e `nn.d3.sky(false)` tira o céu.
+
+| Opção | Descrição |
+|---|---|
+| `top`, `horizon`, `bottom` | Cor lá em cima, na linha do horizonte e abaixo dela. |
+| `sun_size` | Tamanho do disco do sol em graus (padrão 3; 0 = sem disco). Ele fica na direção de onde vem a luz do sol, com a cor de `sun_color`. |
+
+#### Sombras
+
+O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não projetar, desenhe com `shadow = false`.
+
+| Chamada | Descrição |
+|---|---|
+| `nn.d3.shadows(false)` / `nn.d3.shadows(true)` | Desliga ou liga todas as sombras (bom para uma opção "sombras" no menu, para computadores mais fracos). |
+| `nn.d3.shadows({ distance =, quality =, strength = })` | `distance`: até onde há sombra em volta do ponto para onde a câmera olha (padrão 30). `quality`: `"baixa"`, `"media"` (padrão) ou `"alta"`. `strength`: de 0 a 1, quanto a sombra escurece (padrão 1). |
 
 #### Da tela para o 3D e de volta
 
@@ -920,7 +959,7 @@ A câmera continua a mesma ao trocar de cena; cada cena 3D costuma ajustá-la no
 | `nn.d3.ray(x, y)` | O raio que sai da câmera pelo ponto da tela: origem e direção (seis números). |
 | `nn.d3.count()` | Quantas malhas foram desenhadas no último quadro. |
 
-Em breve: modelos `.glb` (Blender e outros), sombras, física 3D e o 3D no NN Studio.
+Em breve: física 3D, câmera em terceira pessoa e o 3D no NN Studio.
 
 ### nn.ui
 
