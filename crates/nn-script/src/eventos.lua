@@ -753,7 +753,7 @@ E.ACTIONS = {
     text = "o jogador ganhar {qtd} {item}",
     help = "Guarda no inventário (a imagem é o ícone que o Mostrar inventário usa).",
     props = { { "item", "chave", label = "Item" }, { "qtd", 1, min = 1, integer = true, label = "Quantos" },
-      { "icone", "", type = "image", label = "Ícone" } },
+      { "icone", "", type = "image", label = "Ícone", advanced = true } },
     lua = "nn.inventory.add(\"{item}\", {qtd}, \"{icone}\")",
     run = function(ctx, p)
       nn.inventory.add(fill(p.item), math.max(1, math.floor(number(p.qtd))), p.icone)
