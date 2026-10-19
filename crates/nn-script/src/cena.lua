@@ -862,7 +862,7 @@ local function build_object(scene, data, parent, fresh, depth)
   end
   o.scene, o.parent, o.alive = scene, parent, true
   o.components, o.children, o.behaviors = {}, {}, {}
-  o.start_x, o.start_y = o.x, o.y
+  o.start_x, o.start_y, o.start_z = o.x, o.y, o.z
   o._rules = data.events
   for _, c in ipairs(data.components or {}) do
     local comp = copy_component(c)
@@ -965,7 +965,10 @@ local function make_behavior(scene, o, c)
   local b = setmetatable({}, { __index = def })
   for _, p in ipairs(def._props) do
     local v = c[p.key]
-    if v == nil then v = p.default end
+    if v == nil then
+      v = p.default
+      if scene._3d and p.default3d ~= nil then v = p.default3d end
+    end
     b[p.key] = v
   end
   b.obj, b.scene, b.component, b.enabled = o, scene, c, true
@@ -2029,6 +2032,11 @@ function M.fixed_update(scene, dt)
       o.x = o.x + (o.vx or 0) * dt
       o.y = o.y + (o.vy or 0) * dt
       if o.vz then o.z = o.z + o.vz * dt end
+    end
+    -- Tiros 3D somem sozinhos depois de um tempo.
+    if o.alive and o._some_em then
+      o._some_em = o._some_em - dt
+      if o._some_em <= 0 then o:destroy() end
     end
   end
   if scene._3d then

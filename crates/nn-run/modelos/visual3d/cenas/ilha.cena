@@ -64,6 +64,7 @@ return {
       components = {
         { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true },
         { type = "behavior", script = "nn:jogador3d", altura = 0, camera = "atras", distancia = 7, inverter_y = false, prender_mouse = true, pulo = 8, pulos_no_ar = 0, queda = -3, raio = 0, sensibilidade = 0.15, velocidade = 6, virar = true },
+        { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, variavel = "vidas", vidas = 3 },
       },
       events = {
         { when = {
@@ -558,6 +559,36 @@ return {
       visible = true, layer = 0, anchor = "top",
       components = {
         { type = "text", text = "Ache as 5 estrelas! (Esc solta o mouse)", size = 34, color = "#FFFFFF", anchor = "center", font = "", hud = true },
+      },
+    },
+    {
+      id = 60, name = "Corações",
+      x = 40, y = -90, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0, anchor = "top_left",
+      components = {
+        { type = "icons", image = "assets/imagens/coracao.png", frame = 1, frame_w = 0, frame_h = 0, var = "vidas", count = 3, max = 3, size = 40, spacing = 6, color = "#FFFFFF", empty_color = "#FFFFFF40", align = "left", pixel_art = true, hud = true },
+      },
+    },
+    {
+      id = 61, name = "Besouro",
+      x = -9, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "behavior", script = "nn:inimigo3d", andar = "patrulha", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 0, z = -5 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, piscar = true, variavel = "", vidas = 1 },
+      },
+    },
+    {
+      id = 62, name = "Besouro",
+      x = 6, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "behavior", script = "nn:inimigo3d", andar = "vagar", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 3, velocidade = 1.8, virar = true, visao = 6, x = 5, z = 0 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, piscar = true, variavel = "", vidas = 1 },
       },
     },
   },

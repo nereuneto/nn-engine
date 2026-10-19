@@ -220,6 +220,7 @@ pub fn all() -> &'static [Tutorial] {
             mundo_3d(),
             efeitos_3d(),
             terreno(),
+            inimigos_3d(),
             eventos(),
             desenhe(),
             tiles(),
@@ -780,6 +781,120 @@ fn terreno() -> Tutorial {
             Step {
                 title: "Pronto: um lugar seu!",
                 text: "Você pintou morros, um lago, cores e árvores. O modelo Vale 3D (Novo projeto) é um vale inteiro feito assim, com trilha, estrelas e uma fogueira.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// O comportamento `script` do objeto, se tiver.
+fn behavior_of<'a>(o: &'a Object, script: &str) -> Option<&'a scene_data::Component> {
+    o.components
+        .iter()
+        .find(|c| c.is_behavior() && c.str("script") == script)
+}
+
+fn inimigos_3d() -> Tutorial {
+    Tutorial {
+        id: "inimigos-3d",
+        title: "Inimigos no 3D",
+        summary: "Um herói com vida e corações na tela, um besouro que persegue e machuca (e morre se você pular em cima), uma barra de vida e uma poça de lava.",
+        minutes: 12,
+        template: Template::Vazio3D,
+        project: "Inimigos 3D",
+        steps: vec![
+            Step {
+                title: "Perigo!",
+                text: "Um jogo fica bom quando dá para perder. Neste tutorial: vida, corações na tela, um inimigo que persegue e uma poça de lava. Tudo sem código.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "O herói",
+                text: "Arraste modelos/heroi.glb para a cena e adicione Jogador > Jogador 3D (ou ➕ Objeto > Jogador 3D).",
+                target: Some("arquivo:modelos/heroi.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| objects(ws).iter().any(|o| has_behavior(o, "nn:jogador3d"))),
+            },
+            Step {
+                title: "Vida",
+                text: "Com o herói selecionado: ➕ Adicionar componente > Jogador > Vida. Ele tem 3 vidas, guardadas na variável vidas. Quando acabam, a cena começa de novo.",
+                target: Some("inspetor.adicionar"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws)
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:jogador3d") && has_behavior(o, "nn:vida"))
+                }),
+            },
+            Step {
+                title: "Corações na tela",
+                text: "➕ Objeto > Vazio. No Inspetor: ➕ Adicionar componente > Interface > Ícones. Em Imagem, escolha assets/imagens/coracao.png e, em Variável, vidas: um coração por vida, preso no canto da tela.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        o.component("icons")
+                            .is_some_and(|c| c.str("var") == "vidas")
+                    })
+                }),
+            },
+            Step {
+                title: "Um besouro",
+                text: "Arraste modelos/bicho.glb para a cena, longe do herói, e adicione Inimigos > Inimigo 3D. Ele anda indo e voltando e, quando o herói chega perto, persegue.",
+                target: Some("arquivo:modelos/bicho.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    with_model(ws, "bicho.glb")
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:inimigo3d"))
+                }),
+            },
+            Step {
+                title: "Teste!",
+                text: "F6. Deixe o besouro te pegar: um coração some, você é empurrado e pisca um pouco. Agora pule em cima dele: ele some.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Um besouro mais forte",
+                text: "Selecione o besouro e adicione Jogador > Vida também: 3 vidas, Quando acabar: some, e marque Barra de vida em cima. Agora ele aguenta três pisões, e a barra mostra quanto falta.",
+                target: Some("inspetor.adicionar"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        has_behavior(o, "nn:inimigo3d")
+                            && behavior_of(o, "nn:vida").is_some_and(|c| {
+                                c.str("ao_acabar") == "destruir" && c.bool("barra")
+                            })
+                    })
+                }),
+            },
+            Step {
+                title: "Lava",
+                text: "➕ Objeto > Cubo. Achate (escala Y uns 0,1), alargue em X e Z, pinte de laranja e adicione Inimigos > Perigo: quem encosta perde uma vida e é empurrado.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws)
+                        .iter()
+                        .any(|o| o.component("shape3d").is_some() && has_behavior(o, "nn:perigo"))
+                }),
+            },
+            Step {
+                title: "Teste de novo",
+                text: "F6: três pisões no besouro, e cuidado com a lava. Se as vidas acabarem, a cena começa de novo.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: um desafio!",
+                text: "Você usou Vida, Ícones, Inimigo 3D e Perigo. Ideias: um Checkpoint no meio do caminho (Fases > Checkpoint), mais besouros com Vagar, ou Atirar no herói (com um prefab de bola) para derrubar os inimigos de longe.",
                 target: None,
                 show: None,
                 done: None,

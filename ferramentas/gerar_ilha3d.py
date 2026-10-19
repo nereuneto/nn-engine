@@ -12,7 +12,7 @@ import math, os, random, struct, sys
 
 sys.dont_write_bytecode = True
 
-from cenas3d import Cena, ENV, HEADER, comp, env, lua, particulas, som, write
+from cenas3d import Cena, ENV, HEADER, besouro, comp, coracoes, env, lua, particulas, som, vida_heroi, write
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = os.path.join(RAIZ, 'crates', 'nn-run', 'modelos')
@@ -39,7 +39,8 @@ heroi_events = [
 c.obj('Herói', [comp('model', file='modelos/heroi.glb', color='#FFFFFF', flat=False, shadow=True),
                 comp('behavior', script='nn:jogador3d', velocidade=6, pulo=8, pulos_no_ar=0, camera='atras',
                      distancia=7, prender_mouse=True, sensibilidade=0.15, inverter_y=False, virar=True,
-                     queda=-3, raio=0, altura=0)],
+                     queda=-3, raio=0, altura=0),
+                vida_heroi()],
       events=heroi_events, z=9, ry=180, scale_x=1.1, scale_y=1.1, scale_z=1.1,
       children=[c.child('Poeira', [particulas(
           mode="explosao", amount=14, on_start=False, lifetime=0.6, lifetime_var=0.4,
@@ -118,6 +119,11 @@ c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', 
       x=40, y=-44, anchor='top_left')
 c.obj('Dica', [comp('text', text='Ache as 5 estrelas! (Esc solta o mouse)', size=34, color='#FFFFFF', anchor='center', font='', hud=True)],
       y=-120, anchor='top')
+coracoes(c)
+
+# Besouros: andam pela ilha, perseguem o herói e morrem se ele pular em cima.
+besouro(c, -9, 0, 5, andar='patrulha', ax=0, az=-5)
+besouro(c, 6, 0, -2, andar='vagar', raio=3)
 
 def anchor_fix(text):
     # "anchor" é campo do objeto: a função obj não sabe dele, vai como transformação extra.

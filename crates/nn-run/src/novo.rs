@@ -195,6 +195,7 @@ impl Template {
             ),
             Template::Visual3D => modelo!("visual3d":
                 "config.lua",
+                ="assets/imagens/coracao.png" "comum/imagens/coracao.png",
                 "LEIAME.md",
                 "cenas/ilha.cena",
                 "cenas/fim.cena",
@@ -217,6 +218,7 @@ impl Template {
             ),
             Template::Vazio3D => modelo!("vazio3d":
                 "config.lua",
+                ="assets/imagens/coracao.png" "comum/imagens/coracao.png",
                 "LEIAME.md",
                 "cenas/mundo.cena",
                 ="modelos/arvore.glb" "../../../jogos/estrelas3d/modelos/arvore.glb",
@@ -236,6 +238,7 @@ impl Template {
             ),
             Template::Vale3D => modelo!("vale3d":
                 "config.lua",
+                ="assets/imagens/coracao.png" "comum/imagens/coracao.png",
                 "LEIAME.md",
                 "cenas/vale.cena",
                 "cenas/fim.cena",

@@ -1468,7 +1468,7 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
             .find(|b| b.script == "nn:jogador3d")
         {
             o.components
-                .push(Component::behavior(&info.script, &info.defaults()));
+                .push(Component::behavior(&info.script, &info.defaults_for(true)));
         }
         out = Some(o);
     }

@@ -11,7 +11,7 @@ O terreno é gravado no mesmo formato do NN Studio (TerrainData::encode).
 import base64, math, os, random, struct, sys
 
 sys.dont_write_bytecode = True
-from cenas3d import Cena, ENV, HEADER, comp, env, particulas, som, write
+from cenas3d import Cena, ENV, HEADER, besouro, comp, coracoes, env, particulas, som, vida_heroi, write
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEST = os.path.join(RAIZ, 'crates', 'nn-run', 'modelos', 'vale3d')
@@ -126,7 +126,8 @@ hx, hz = 0.0, 36.0
 c.obj('Herói', [comp('model', file='modelos/heroi.glb', color='#FFFFFF', flat=False, shadow=True),
                 comp('behavior', script='nn:jogador3d', velocidade=6, pulo=8, pulos_no_ar=0, camera='atras',
                      distancia=7, prender_mouse=True, sensibilidade=0.15, inverter_y=False, virar=True,
-                     agua='voltar', queda=-25, raio=0, altura=0)],
+                     agua='voltar', queda=-25, raio=0, altura=0),
+                vida_heroi()],
       events=heroi_events, x=hx, y=round(chao(hx, hz) + 0.05, 2), z=hz, ry=180, scale_x=1.1, scale_y=1.1, scale_z=1.1,
       children=[c.child('Poeira', [particulas(
           mode="explosao", amount=14, on_start=False, lifetime=0.6, lifetime_var=0.4,
@@ -196,6 +197,11 @@ c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', 
       x=40, y=-44, anchor='top_left')
 c.obj('Dica', [comp('text', text='Ache as 5 estrelas nos morros! (Esc solta o mouse)', size=32, color='#FFFFFF', anchor='center', font='', hud=True)],
       y=-120, anchor='top')
+coracoes(c)
+
+# Besouros perto da trilha.
+for (bx, bz, modo, ax) in [(8, 0, 'vagar', 0), (-8, -26, 'patrulha', 8), (14, -30, 'vagar', 0)]:
+    besouro(c, bx, round(chao(bx, bz), 2), bz, andar=modo, ax=ax, az=0, raio=4)
 
 eventos = '''  events = {
     { comment = "Começo: zera as estrelas e as moedas; a dica some depois de 4 segundos." },

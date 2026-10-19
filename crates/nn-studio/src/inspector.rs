@@ -2519,7 +2519,10 @@ impl Inspector {
                                 }
                                 chosen.push(body);
                             }
-                            chosen.push(Component::behavior(&b.script, &b.defaults()));
+                            chosen.push(Component::behavior(
+                                &b.script,
+                                &b.defaults_for(doc.data.three_d),
+                            ));
                             ui.close();
                         }
                     }
@@ -2546,7 +2549,10 @@ impl Inspector {
                 for rel in scripts {
                     if ui.button(&rel).clicked() {
                         let info = self.catalog.get(&root, &rel);
-                        chosen.push(Component::behavior(&rel, &info.defaults()));
+                        chosen.push(Component::behavior(
+                            &rel,
+                            &info.defaults_for(doc.data.three_d),
+                        ));
                         ui.close();
                     }
                 }
@@ -2626,10 +2632,11 @@ impl Inspector {
                 });
             }
         }
+        let three_d = doc.data.three_d;
         let value = |key: &str| -> Prop {
             comp.get(key)
                 .cloned()
-                .or_else(|| info.prop(key).map(|p| p.default.clone()))
+                .or_else(|| info.prop(key).map(|p| p.default_for(three_d)))
                 .unwrap_or(Prop::Str(String::new()))
         };
         egui::Grid::new(("grade-comportamento", id, ci))
@@ -2637,7 +2644,7 @@ impl Inspector {
             .spacing([8.0, 4.0])
             .show(ui, |ui| {
                 for p in &info.props {
-                    if p.advanced && !full {
+                    if (p.advanced && !full) || !p.fits(three_d) {
                         continue;
                     }
                     if let Some((other, values)) = &p.show_if {

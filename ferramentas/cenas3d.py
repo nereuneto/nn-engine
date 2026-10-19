@@ -87,3 +87,26 @@ def write(path, text):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     open(path, 'w').write(text)
 
+
+def vida_heroi(vidas=3):
+    """O comportamento Vida do herói (as vidas vão para a variável "vidas")."""
+    return comp('behavior', script='nn:vida', vidas=vidas, variavel='vidas', invencivel=1,
+                ao_acabar='reiniciar', cena='', piscar=True, barra=False, cor_barra='#FF5A5A')
+
+def coracoes(c, y=-90):
+    """Os corações no HUD, embaixo do placar (componente Ícones)."""
+    c.obj('Corações', [comp('icons', image='assets/imagens/coracao.png', frame=1, frame_w=0, frame_h=0,
+                            var='vidas', count=3, max=3, size=40, spacing=6, color='#FFFFFF',
+                            empty_color='#FFFFFF40', align='left', pixel_art=True, hud=True)],
+          x=40, y=y, anchor='top_left')
+
+def besouro(c, x, y, z, andar='patrulha', ax=5, az=0, raio=4, ry=0):
+    """Um besouro inimigo: anda, persegue o herói e morre se pisarem em cima."""
+    return c.obj('Besouro', [
+        comp('model', file='modelos/bicho.glb', color='#FFFFFF', flat=False, shadow=True),
+        comp('behavior', script='nn:inimigo3d', andar=andar, x=ax, z=az, raio=raio, velocidade=1.8,
+             perseguir=True, visao=6, correr=3.2, dano=1, empurrao=7, pisar=True, virar=True,
+             animar=True, anim_parado='parado', anim_andar='andar'),
+        comp('behavior', script='nn:vida', vidas=1, variavel='', invencivel=0.3, ao_acabar='destruir',
+             cena='', piscar=True, barra=False, cor_barra='#FF5A5A'),
+    ], x=x, y=y, z=z, ry=ry)
