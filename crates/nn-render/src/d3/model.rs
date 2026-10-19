@@ -186,6 +186,7 @@ fn add_primitive(
     image_of_texture: &std::collections::HashMap<usize, usize>,
     parts: &mut Vec<ModelPart>,
 ) -> Result<(), ModelError> {
+    check_accessors(prim)?;
     let reader = prim.reader(|b| buffers.get(b.index()).map(|d| d.as_slice()));
     let Some(positions) = reader.read_positions() else {
         return Ok(());
@@ -268,6 +269,41 @@ fn add_primitive(
             part.mesh
                 .indices
                 .extend([base + tri[0], base + tri[1], base + tri[2]]);
+        }
+    }
+    Ok(())
+}
+
+/// Confere os tipos dos dados antes de ler (o leitor do `gltf` para o
+/// programa com um tipo inesperado, em vez de dar erro).
+fn check_accessors(prim: &gltf::Primitive) -> Result<(), ModelError> {
+    use gltf::Semantic;
+    use gltf::accessor::{DataType as T, Dimensions as D};
+    let bad = |what: &str| Err(ModelError::Invalid(format!("tipo de dado inválido em {what}")));
+    if let Some(a) = prim.indices()
+        && !(a.dimensions() == D::Scalar && matches!(a.data_type(), T::U8 | T::U16 | T::U32))
+    {
+        return bad("índices");
+    }
+    for (semantic, a) in prim.attributes() {
+        let ok = match semantic {
+            Semantic::Positions | Semantic::Normals => {
+                a.dimensions() == D::Vec3 && a.data_type() == T::F32
+            }
+            Semantic::Colors(_) => {
+                matches!(a.dimensions(), D::Vec3 | D::Vec4)
+                    && matches!(a.data_type(), T::U8 | T::U16 | T::F32)
+            }
+            Semantic::TexCoords(_) => {
+                a.dimensions() == D::Vec2 && matches!(a.data_type(), T::U8 | T::U16 | T::F32)
+            }
+            _ => true,
+        };
+        if !ok {
+            return bad(&format!("{semantic:?}"));
+        }
+        if a.sparse().is_some() {
+            return Err(ModelError::Invalid("dados esparsos não são aceitos".into()));
         }
     }
     Ok(())
