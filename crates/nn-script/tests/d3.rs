@@ -310,11 +310,9 @@ fn modelo_alterado_recarrega() {
     );
     // Troca o arquivo por outro modelo (a casa) com o jogo aberto.
     std::thread::sleep(std::time::Duration::from_millis(1100));
-    std::fs::copy(
-        dir.join("modelos/casa.glb"),
-        dir.join("modelos/caixote.glb"),
-    )
-    .unwrap();
+    // (Gravar os bytes, não copiar: no Windows a cópia mantém a data do original.)
+    let casa = std::fs::read(dir.join("modelos/casa.glb")).unwrap();
+    std::fs::write(dir.join("modelos/caixote.glb"), casa).unwrap();
     for _ in 0..30 {
         h.run_frames(1);
         std::thread::sleep(std::time::Duration::from_millis(20));
