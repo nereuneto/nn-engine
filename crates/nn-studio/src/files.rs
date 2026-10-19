@@ -27,6 +27,8 @@ pub enum FileKind {
     Tileset,
     Text,
     Font,
+    /// Modelo 3D (`.glb`, `.gltf`).
+    Model,
     Other,
 }
 
@@ -47,6 +49,7 @@ impl FileKind {
             "tsj" | "tsx" => FileKind::Tileset,
             "md" | "txt" | "json" | "csv" | "toml" | "gitignore" => FileKind::Text,
             "ttf" | "otf" => FileKind::Font,
+            "glb" | "gltf" => FileKind::Model,
             _ => FileKind::Other,
         }
     }
@@ -65,6 +68,7 @@ impl FileKind {
             FileKind::Tileset => "tileset",
             FileKind::Text => "texto",
             FileKind::Font => "fonte",
+            FileKind::Model => "modelo 3D",
             FileKind::Other => "arquivo",
         }
     }
@@ -313,6 +317,7 @@ pub fn default_import_dir(root: &Path, kind: FileKind) -> String {
         FileKind::Image => &["assets/imagens", "assets/images", "assets/img", "imagens"],
         FileKind::Sound => &["assets/sons", "assets/sounds", "assets/audio", "sons"],
         FileKind::Font => &["assets/fontes", "assets/fonts", "fontes"],
+        FileKind::Model => &["assets/modelos", "assets/models", "modelos", "models"],
         FileKind::Map | FileKind::Tileset => &["fases", "mapas", "maps", "tilesets"],
         _ => &[],
     };
@@ -325,6 +330,7 @@ pub fn default_import_dir(root: &Path, kind: FileKind) -> String {
         FileKind::Image => "assets/imagens".into(),
         FileKind::Sound => "assets/sons".into(),
         FileKind::Font => "assets/fontes".into(),
+        FileKind::Model => "assets/modelos".into(),
         _ => String::new(),
     }
 }

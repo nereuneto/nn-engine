@@ -965,8 +965,7 @@ impl Renderer {
     ) {
         let srgb = self.format.is_srgb();
         let texture = texture.unwrap_or(self.white);
-        self.d3
-            .draw(mesh, model, color, texture, cast_shadow, srgb);
+        self.d3.draw(mesh, model, color, texture, cast_shadow, srgb);
     }
 
     /// Envia um modelo (lido de um `.glb`) para a GPU.

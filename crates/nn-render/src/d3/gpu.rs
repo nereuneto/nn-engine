@@ -521,10 +521,7 @@ impl Renderer3D {
         };
         let (fog, fog_range) = match l.fog {
             Some(f) => {
-                let color = f
-                    .color
-                    .or(self.sky.map(|s| s.horizon))
-                    .unwrap_or(l.sky);
+                let color = f.color.or(self.sky.map(|s| s.horizon)).unwrap_or(l.sky);
                 (c4(color), [f.near, f.far.max(f.near + 1e-3), 0.0, 0.0])
             }
             None => ([0.0; 4], [0.0; 4]),
@@ -537,7 +534,11 @@ impl Renderer3D {
             inv_view_proj: view_proj.inverse().to_cols_array(),
             light_view_proj: light_view_proj.to_cols_array(),
             camera: self.camera.position.extend(1.0).to_array(),
-            sun_dir: l.sun_direction.normalize_or(Vec3::NEG_Y).extend(0.0).to_array(),
+            sun_dir: l
+                .sun_direction
+                .normalize_or(Vec3::NEG_Y)
+                .extend(0.0)
+                .to_array(),
             sun_color: c4(l.sun_color),
             sky: c4(l.sky),
             ground: c4(l.ground),

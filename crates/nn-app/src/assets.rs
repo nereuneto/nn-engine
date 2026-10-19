@@ -25,6 +25,11 @@ pub enum AssetError {
     Render { path: PathBuf, source: RenderError },
     #[error("{path}: {source}")]
     Audio { path: PathBuf, source: AudioError },
+    #[error("{path}: {source}")]
+    Model {
+        path: PathBuf,
+        source: nn_render::d3::ModelError,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +50,8 @@ pub struct Assets {
     textures: HashMap<(String, TextureOptions), Tracked<TextureId>>,
     sounds: HashMap<String, Tracked<SoundId>>,
     fonts: HashMap<String, FontId>,
+    /// Modelos 3D, pela chave de [`model_key`].
+    models: HashMap<String, (nn_render::d3::Model, Option<SystemTime>)>,
     last_poll: Option<Instant>,
     reloaded: Vec<PathBuf>,
 }
@@ -62,6 +69,7 @@ impl Assets {
             textures: HashMap::new(),
             sounds: HashMap::new(),
             fonts: HashMap::new(),
+            models: HashMap::new(),
             last_poll: None,
             reloaded: Vec::new(),
         }
@@ -160,7 +168,77 @@ impl Assets {
     }
 }
 
+/// Chave de um modelo no cache: o caminho e se ele foi achatado.
+pub fn model_key(path: impl AsRef<Path>, flat: bool) -> String {
+    let key = normalize(path.as_ref());
+    if flat { format!("{key}|flat") } else { key }
+}
+
 impl Context {
+    /// Carrega um modelo 3D (`.glb` ou `.gltf`) dos assets, com cache. Com
+    /// `flat`, cada face ganha um tom só (o visual low-poly), mesmo que o
+    /// arquivo tenha sombreado suave. Com a recarga ligada, o modelo é lido
+    /// de novo quando o arquivo muda: busque-o com [`Context::model`] a cada
+    /// desenho para ver a mudança.
+    pub fn load_model(
+        &mut self,
+        path: impl AsRef<Path>,
+        flat: bool,
+    ) -> Result<nn_render::d3::Model, AssetError> {
+        let key = model_key(&path, flat);
+        if let Some((m, _)) = self.assets.models.get(&key) {
+            return Ok(m.clone());
+        }
+        let file = normalize(path.as_ref());
+        let model = self.read_model(&file, flat)?;
+        let modified = self.assets.source.modified(Path::new(&file));
+        self.assets.models.insert(key, (model.clone(), modified));
+        Ok(model)
+    }
+
+    /// Um modelo já carregado, pela chave de [`model_key`].
+    pub fn model(&self, key: &str) -> Option<&nn_render::d3::Model> {
+        self.assets.models.get(key).map(|(m, _)| m)
+    }
+
+    /// Desenha o modelo carregado com a chave `key` (de [`model_key`]), na
+    /// versão mais nova do arquivo. `false` se ele não estiver carregado.
+    pub fn draw_model_key(
+        &mut self,
+        key: &str,
+        matrix: glam::Mat4,
+        color: nn_core::Color,
+        cast_shadow: bool,
+    ) -> bool {
+        match self.assets.models.get(key) {
+            Some((model, _)) => {
+                self.renderer.draw_model(model, matrix, color, cast_shadow);
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn read_model(&mut self, file: &str, flat: bool) -> Result<nn_render::d3::Model, AssetError> {
+        let bytes = self.assets.read(file)?;
+        let dir = Path::new(file)
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let assets = &self.assets;
+        let mut data = nn_render::d3::ModelData::from_gltf(&bytes, &mut |uri| {
+            assets.read(normalize(&dir.join(uri))).ok()
+        })
+        .map_err(|source| AssetError::Model {
+            path: self.assets.resolve(file),
+            source,
+        })?;
+        if flat {
+            data.flatten();
+        }
+        Ok(self.renderer.create_model(&data))
+    }
+
     /// Carrega uma imagem (PNG) dos assets. Chamadas repetidas com o mesmo
     /// caminho e opções devolvem a mesma textura.
     pub fn load_texture(
@@ -297,6 +375,31 @@ impl Context {
                 t.modified = current;
             }
             self.assets.reloaded.push(PathBuf::from(path));
+        }
+
+        let models: Vec<_> = self
+            .assets
+            .models
+            .iter()
+            .map(|(k, (_, m))| (k.clone(), *m))
+            .collect();
+        for (key, modified) in models {
+            let (file, flat) = match key.strip_suffix("|flat") {
+                Some(f) => (f.to_string(), true),
+                None => (key.clone(), false),
+            };
+            let current = source.modified(Path::new(&file));
+            if current.is_none() || current == modified {
+                continue;
+            }
+            match self.read_model(&file, flat) {
+                Ok(model) => {
+                    log::info!("recarregado: {file}");
+                    self.assets.models.insert(key, (model, current));
+                    self.assets.reloaded.push(PathBuf::from(file));
+                }
+                Err(e) => log::warn!("não foi possível recarregar: {e}"),
+            }
         }
     }
 }

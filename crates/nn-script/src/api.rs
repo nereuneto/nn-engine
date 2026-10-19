@@ -676,6 +676,12 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         })?,
     )?;
     assets.set(
+        "model",
+        lua.create_function(|lua, (path, opts): (String, Option<Table>)| {
+            crate::d3::load_model(lua, &path, opts.as_ref())
+        })?,
+    )?;
+    assets.set(
         "read",
         lua.create_function(|lua, path: String| {
             with_ctx(lua, |c| {

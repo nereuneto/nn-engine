@@ -284,13 +284,20 @@ fn modelos_gerados_carregam_com_as_partes_e_as_cores() {
         .mesh
         .vertices
         .iter()
-        .map(|v| v.color.map(|c| (c * 255.0).round() as u8)[..3].try_into().unwrap())
+        .map(|v| {
+            v.color.map(|c| (c * 255.0).round() as u8)[..3]
+                .try_into()
+                .unwrap()
+        })
         .collect();
     assert!(cores.contains(&[0x8B, 0x5A, 0x3C]), "tronco: {cores:?}");
     assert!(cores.contains(&[0x3E, 0x9B, 0x4F]), "copa");
     // As copas sobem pelo nó: a árvore vai até ~2,25 de altura.
     let (min, max) = arvore.bounds();
-    assert!(min.y.abs() < 1e-4 && (max.y - 2.25).abs() < 0.01, "{min} {max}");
+    assert!(
+        min.y.abs() < 1e-4 && (max.y - 2.25).abs() < 0.01,
+        "{min} {max}"
+    );
 
     // A casa tem um nó pai com escala 1,5 (a chaminé vai a 2,15 → 3,225).
     let (_, max) = modelo("casa.glb").bounds();
@@ -308,7 +315,13 @@ fn modelos_gerados_carregam_com_as_partes_e_as_cores() {
 fn modelos_gerados_tem_as_faces_para_fora() {
     // Volume com sinal: positivo quando os triângulos estão no sentido
     // anti-horário vistos de fora (o lado de fora é o que aparece).
-    for nome in ["arvore.glb", "casa.glb", "pedra.glb", "heroi.glb", "caixote.glb"] {
+    for nome in [
+        "arvore.glb",
+        "casa.glb",
+        "pedra.glb",
+        "heroi.glb",
+        "caixote.glb",
+    ] {
         let m = modelo(nome);
         let mut volume = 0.0;
         for p in &m.parts {
@@ -354,8 +367,10 @@ fn modelo_aparece_com_textura() {
     let Some(mut h) = Harness::new() else { return };
     let data = modelo("caixote.glb");
     let model = h.renderer.create_model(&data);
-    h.renderer
-        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.5, 2.0), Vec3::new(0.0, 0.5, 0.0)));
+    h.renderer.set_camera3d(Camera3D::looking_at(
+        Vec3::new(0.0, 0.5, 2.0),
+        Vec3::new(0.0, 0.5, 0.0),
+    ));
     h.renderer
         .draw_model(&model, Mat4::IDENTITY, Color::WHITE, true);
     let img = h.render(Color::BLACK);
@@ -441,15 +456,25 @@ fn ceu_em_degrade_com_sol() {
         Vec3::new(0.0, 0.0, 10.0),
         Vec3::new(0.0, 0.0, 0.0),
     ));
-    h.renderer
-        .draw_mesh(cube, Mat4::from_translation(Vec3::new(0.0, 0.0, -30.0)), Color::RED);
+    h.renderer.draw_mesh(
+        cube,
+        Mat4::from_translation(Vec3::new(0.0, 0.0, -30.0)),
+        Color::RED,
+    );
     let img = h.render(Color::BLACK);
     let cima = pixel(&img, 32, 0);
     let baixo = pixel(&img, 32, 63);
     assert!(cima[2] > cima[0] + 40, "em cima puxa para o azul: {cima:?}");
-    assert!(baixo[1] > baixo[2] + 40, "embaixo puxa para o verde: {baixo:?}");
+    assert!(
+        baixo[1] > baixo[2] + 40,
+        "embaixo puxa para o verde: {baixo:?}"
+    );
     // O cubo longe, coberto de névoa, fica da cor do horizonte.
-    assert_color(pixel(&img, 32, 32), [255, 255, 255, 255], "névoa = horizonte");
+    assert_color(
+        pixel(&img, 32, 32),
+        [255, 255, 255, 255],
+        "névoa = horizonte",
+    );
 
     // O disco do sol, na direção da luz.
     h.renderer.set_sky3d(Some(Sky3D {
@@ -461,10 +486,16 @@ fn ceu_em_degrade_com_sol() {
         sun_color: Color::rgb(1.0, 0.9, 0.5),
         ..Light3D::default()
     });
-    h.renderer
-        .draw_mesh(cube, Mat4::from_translation(Vec3::new(0.0, -50.0, 0.0)), Color::RED);
+    h.renderer.draw_mesh(
+        cube,
+        Mat4::from_translation(Vec3::new(0.0, -50.0, 0.0)),
+        Color::RED,
+    );
     let img = h.render(Color::BLACK);
     let sol = pixel(&img, 32, 32);
     assert!(brightness(sol) > 650, "sol no meio: {sol:?}");
-    assert!(brightness(pixel(&img, 2, 2)) < brightness(sol), "o resto do céu é mais escuro");
+    assert!(
+        brightness(pixel(&img, 2, 2)) < brightness(sol),
+        "o resto do céu é mais escuro"
+    );
 }

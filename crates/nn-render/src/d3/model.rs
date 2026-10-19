@@ -109,7 +109,9 @@ impl ModelData {
                 gltf::buffer::Source::Uri(uri) => read_uri(uri, load)?,
             };
             if data.len() < buffer.length() {
-                return Err(ModelError::Invalid("dados binários menores que o esperado".into()));
+                return Err(ModelError::Invalid(
+                    "dados binários menores que o esperado".into(),
+                ));
             }
             buffers.push(data);
         }
@@ -205,7 +207,9 @@ fn add_primitive(
         None => (0..count as u32).collect(),
     };
     if indices.iter().any(|&i| i as usize >= count) {
-        return Err(ModelError::Invalid("índice de vértice fora da malha".into()));
+        return Err(ModelError::Invalid(
+            "índice de vértice fora da malha".into(),
+        ));
     }
 
     let material = prim.material();
@@ -253,8 +257,8 @@ fn add_primitive(
         return Ok(());
     }
     let normals = normals.expect("normais");
-    for i in 0..count {
-        let p = world.transform_point3(positions[i]);
+    for (i, &pos) in positions.iter().enumerate() {
+        let p = world.transform_point3(pos);
         let n = (normal_matrix * normals.get(i).copied().unwrap_or(Vec3::Y)).normalize_or_zero();
         part.mesh
             .vertices
@@ -279,7 +283,11 @@ fn add_primitive(
 fn check_accessors(prim: &gltf::Primitive) -> Result<(), ModelError> {
     use gltf::Semantic;
     use gltf::accessor::{DataType as T, Dimensions as D};
-    let bad = |what: &str| Err(ModelError::Invalid(format!("tipo de dado inválido em {what}")));
+    let bad = |what: &str| {
+        Err(ModelError::Invalid(format!(
+            "tipo de dado inválido em {what}"
+        )))
+    };
     if let Some(a) = prim.indices()
         && !(a.dimensions() == D::Scalar && matches!(a.data_type(), T::U8 | T::U16 | T::U32))
     {
@@ -343,7 +351,10 @@ fn to_srgb(c: f32) -> f32 {
     }
 }
 
-fn read_uri(uri: &str, load: &mut dyn FnMut(&str) -> Option<Vec<u8>>) -> Result<Vec<u8>, ModelError> {
+fn read_uri(
+    uri: &str,
+    load: &mut dyn FnMut(&str) -> Option<Vec<u8>>,
+) -> Result<Vec<u8>, ModelError> {
     if let Some(rest) = uri.strip_prefix("data:") {
         let (_, data) = rest
             .split_once(";base64,")

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use glam::{Vec2, Vec3};
 use mlua::{Lua, Result, Table, UserData, UserDataFields, Value};
-use nn_render::d3::{self, Camera3D, Mesh, MeshId, Transform3};
+use nn_render::d3::{self, Camera3D, Fog, Mesh, MeshId, Sky3D, Transform3};
 
 use crate::api::with_ctx;
 use crate::convert::{color, err, opt, opt_color};
@@ -25,6 +25,37 @@ impl UserData for LMesh {
         f.add_field_method_get("height", |_, this| Ok(this.size.y));
         f.add_field_method_get("depth", |_, this| Ok(this.size.z));
     }
+}
+
+/// Um modelo 3D de arquivo (`nn.assets.model`). Guarda só a chave: ao
+/// desenhar, usa a versão mais nova (recarregada quando o arquivo muda).
+#[derive(Debug, Clone)]
+pub(crate) struct LModel {
+    key: String,
+    triangles: usize,
+    size: Vec3,
+}
+
+impl UserData for LModel {
+    fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
+        f.add_field_method_get("triangles", |_, this| Ok(this.triangles));
+        f.add_field_method_get("width", |_, this| Ok(this.size.x));
+        f.add_field_method_get("height", |_, this| Ok(this.size.y));
+        f.add_field_method_get("depth", |_, this| Ok(this.size.z));
+    }
+}
+
+/// `nn.assets.model(caminho, opts)`.
+pub(crate) fn load_model(lua: &Lua, path: &str, opts: Option<&Table>) -> Result<LModel> {
+    let flat = opt::<bool>(opts, "flat")?.unwrap_or(false);
+    with_ctx(lua, |c| {
+        let model = c.load_model(path, flat).map_err(|e| err(e.to_string()))?;
+        Ok(LModel {
+            key: nn_app::model_key(path, flat),
+            triangles: model.triangles,
+            size: model.size(),
+        })
+    })
 }
 
 /// As formas prontas já criadas (uma de cada tipo e detalhe basta).
@@ -204,12 +235,19 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
 
     t.set(
         "draw",
-        lua.create_function(|lua, (mesh, opts): (Value, Option<Table>)| {
-            let mesh = match &mesh {
-                Value::UserData(ud) if ud.is::<LMesh>() => *ud.borrow::<LMesh>()?,
+        lua.create_function(|lua, (what, opts): (Value, Option<Table>)| {
+            enum Thing {
+                Mesh(LMesh),
+                Model(String),
+            }
+            let thing = match &what {
+                Value::UserData(ud) if ud.is::<LMesh>() => Thing::Mesh(*ud.borrow::<LMesh>()?),
+                Value::UserData(ud) if ud.is::<LModel>() => {
+                    Thing::Model(ud.borrow::<LModel>()?.key.clone())
+                }
                 other => {
                     return Err(err(format!(
-                        "nn.d3.draw: o primeiro valor deve ser uma malha (nn.d3.cube(), ...), recebeu {}",
+                        "nn.d3.draw: o primeiro valor deve ser uma malha (nn.d3.cube(), ...) ou um modelo (nn.assets.model), recebeu {}",
                         other.type_name()
                     )));
                 }
@@ -217,6 +255,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             let o = opts.as_ref();
             let model = transform(o)?.matrix();
             let col = opt_color(o, "color")?.unwrap_or(nn_core::Color::WHITE);
+            let shadow = opt::<bool>(o, "shadow")?.unwrap_or(true);
             let image = match opt::<Value>(o, "image")? {
                 None | Some(Value::Nil) => None,
                 Some(Value::UserData(ud)) if ud.is::<LTexture>() => Some(ud.borrow::<LTexture>()?.0),
@@ -228,9 +267,14 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                 }
             };
             with_ctx(lua, |c| {
-                match image {
-                    Some(tex) => c.renderer.draw_mesh_textured(mesh.id, model, col, tex),
-                    None => c.renderer.draw_mesh(mesh.id, model, col),
+                match thing {
+                    Thing::Mesh(mesh) => {
+                        c.renderer
+                            .draw_mesh_with(mesh.id, model, col, image, shadow)
+                    }
+                    Thing::Model(key) => {
+                        c.draw_model_key(&key, model, col, shadow);
+                    }
                 }
                 Ok(())
             })
@@ -334,8 +378,11 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                             if far <= near {
                                 return Err(err("névoa: \"far\" precisa ser maior que \"near\""));
                             }
-                            let col = opt_color(f, "color")?.unwrap_or(l.sky);
-                            l.fog = Some((col, near.max(0.0), far));
+                            l.fog = Some(Fog {
+                                color: opt_color(f, "color")?,
+                                near: near.max(0.0),
+                                far,
+                            });
                         }
                         Some(other) => {
                             return Err(err(format!(
@@ -347,6 +394,78 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                     c.renderer.set_light3d(l);
                 }
                 Ok(())
+            })
+        })?,
+    )?;
+
+    t.set(
+        "sky",
+        lua.create_function(|lua, v: Value| {
+            let sky = match &v {
+                Value::Nil | Value::Boolean(false) => None,
+                Value::Boolean(true) => Some(Sky3D::default()),
+                Value::Table(t) => {
+                    let o = Some(t);
+                    let d = Sky3D::default();
+                    Some(Sky3D {
+                        top: opt_color(o, "top")?.unwrap_or(d.top),
+                        horizon: opt_color(o, "horizon")?.unwrap_or(d.horizon),
+                        bottom: opt_color(o, "bottom")?.unwrap_or(d.bottom),
+                        sun_size: opt::<f32>(o, "sun_size")?.unwrap_or(d.sun_size).clamp(0.0, 45.0),
+                    })
+                }
+                other => {
+                    return Err(err(format!(
+                        "nn.d3.sky: use {{top =, horizon =, bottom =, sun_size =}}, true ou false, recebeu {}",
+                        other.type_name()
+                    )));
+                }
+            };
+            with_ctx(lua, |c| {
+                c.renderer.set_sky3d(sky);
+                Ok(())
+            })
+        })?,
+    )?;
+    t.set(
+        "shadows",
+        lua.create_function(|lua, v: Value| {
+            with_ctx(lua, |c| {
+                let mut s = c.renderer.shadows3d();
+                match &v {
+                    Value::Nil => {}
+                    Value::Boolean(on) => s.enabled = *on,
+                    Value::Table(t) => {
+                        let o = Some(t);
+                        s.enabled = opt::<bool>(o, "enabled")?.unwrap_or(true);
+                        if let Some(d) = opt::<f32>(o, "distance")? {
+                            s.distance = d.clamp(1.0, 1000.0);
+                        }
+                        if let Some(q) = opt::<String>(o, "quality")? {
+                            s.resolution = match q.as_str() {
+                                "baixa" | "low" => 1024,
+                                "media" | "média" | "medium" => 2048,
+                                "alta" | "high" => 4096,
+                                other => {
+                                    return Err(err(format!(
+                                        "qualidade de sombra inválida: \"{other}\" (use baixa, media ou alta)"
+                                    )));
+                                }
+                            };
+                        }
+                        if let Some(f) = opt::<f32>(o, "strength")? {
+                            s.strength = f.clamp(0.0, 1.0);
+                        }
+                    }
+                    other => {
+                        return Err(err(format!(
+                            "nn.d3.shadows: use true, false ou {{distance =, quality =, strength =}}, recebeu {}",
+                            other.type_name()
+                        )));
+                    }
+                }
+                c.renderer.set_shadows3d(s);
+                Ok(s.enabled)
             })
         })?,
     )?;

@@ -4,13 +4,17 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
-### 3D (primeira parte: pelo código)
+### 3D pelo código
 
 - **Mundo 3D na engine**, desenhado antes do 2D: o HUD, os sprites e os menus ficam por cima.
 - **Formas prontas**: cubo, plano, esfera, cilindro, cone e cápsula, e malhas montadas ponto a ponto.
 - **Visual low-poly**: luz do sol, luz ambiente do céu e do chão, uma cor por face e névoa.
 - **API Lua `nn.d3`**: desenhar com posição, rotação e escala; câmera que olha para um ponto ou gira em volta dele; achar onde o mouse toca o chão; pôr textos 2D em cima de coisas 3D.
-- **Exemplo `cubos3d`**, também entre os exemplos do NN Studio.
+- **Modelos `.glb` e `.gltf`** (do Blender e outros) com `nn.assets.model`: partes, materiais, cores e texturas; recarregam quando o arquivo muda.
+- **Sombras do sol**, ligadas por padrão, com qualidade, distância e `shadow = false` para quem não deve projetar.
+- **Céu em degradê** com o disco do sol; a névoa usa a cor do horizonte.
+- **Exemplo `cubos3d`** com árvores, casas, pedras, caixotes e herói em `.glb` (modelos nossos, gerados por `ferramentas/gerar_modelos.py`). Também entre os exemplos do NN Studio.
+- No NN Studio, modelos 3D aparecem com ícone próprio e "Copiar nn.assets.model".
 
 ## 0.1.0
 

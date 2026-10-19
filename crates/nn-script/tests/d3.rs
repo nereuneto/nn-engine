@@ -220,3 +220,109 @@ fn exemplo_cubos3d_roda() {
         h.save_png(out).unwrap();
     }
 }
+
+/// Copia os modelos do exemplo para um projeto de teste.
+fn com_modelos(dir: &Path) {
+    let origem = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/cubos3d/modelos");
+    std::fs::create_dir_all(dir.join("modelos")).unwrap();
+    for f in std::fs::read_dir(origem).unwrap() {
+        let f = f.unwrap();
+        std::fs::copy(f.path(), dir.join("modelos").join(f.file_name())).unwrap();
+    }
+}
+
+#[test]
+fn modelos_ceu_e_sombras_pelo_lua() {
+    let dir = projeto(
+        "modelos",
+        r##"
+        local c = {}
+        function c:enter()
+          self.caixote = nn.assets.model("modelos/caixote.glb")
+          self.casa = nn.assets.model("modelos/casa.glb", { flat = true })
+          self.tri = self.caixote.triangles
+          self.altura = self.casa.height
+          self.de_novo = nn.assets.model("modelos/caixote.glb").triangles
+          nn.d3.look_at(0, 0.5, 2, 0, 0.5, 0)
+          nn.d3.light({ sun_color = "#000000", sky = "#FFFFFF", ground = "#FFFFFF" })
+          nn.d3.sky({ top = "#0000FF", horizon = "#0000FF", bottom = "#0000FF", sun_size = 0 })
+          self.sombra = nn.d3.shadows(false)
+          self.sombra2 = nn.d3.shadows({ distance = 10, quality = "baixa" })
+        end
+        function c:draw()
+          nn.d3.draw(self.caixote, { shadow = false })
+          nn.d3.draw(self.casa, { x = 100 })
+        end
+        return c
+        "##,
+    );
+    com_modelos(&dir);
+    let Some(mut h) = cena(&dir) else { return };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    let f = |k: &str| h.game.0.field::<f64>(k).unwrap();
+    assert_eq!(f("tri"), 12.0);
+    assert_eq!(f("de_novo"), 12.0);
+    assert!((f("altura") - 3.225).abs() < 0.01);
+    assert_eq!(h.game.0.field::<bool>("sombra"), Some(false));
+    assert_eq!(h.game.0.field::<bool>("sombra2"), Some(true));
+    // O caixote no meio (madeira) e o céu azul nos cantos, no lugar do fundo preto.
+    let meio = pixel(&h, 32, 32);
+    assert!(
+        meio[0] > meio[1] && meio[1] > meio[2] && meio[0] > 90,
+        "madeira: {meio:?}"
+    );
+    assert_eq!(pixel(&h, 1, 1), [0, 0, 255, 255], "céu");
+}
+
+#[test]
+fn modelo_alterado_recarrega() {
+    let dir = projeto(
+        "recarga",
+        r##"
+        local c = {}
+        function c:enter() self.m = nn.assets.model("modelos/caixote.glb") end
+        function c:draw() nn.d3.draw(self.m) end
+        return c
+        "##,
+    );
+    com_modelos(&dir);
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let config = AppConfig::default()
+        .size(64, 64)
+        .assets_dir(&dir)
+        .hot_reload(true);
+    let Ok(mut h) = Headless::new(config, |ctx| {
+        let mut s = rt.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        assert!(!std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1"));
+        return;
+    };
+    h.run_frames(1);
+    assert!(
+        h.ctx
+            .model(&nn_app::model_key("modelos/caixote.glb", false))
+            .unwrap()
+            .triangles
+            == 12
+    );
+    // Troca o arquivo por outro modelo (a casa) com o jogo aberto.
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    std::fs::copy(
+        dir.join("modelos/casa.glb"),
+        dir.join("modelos/caixote.glb"),
+    )
+    .unwrap();
+    for _ in 0..30 {
+        h.run_frames(1);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let m = h
+        .ctx
+        .model(&nn_app::model_key("modelos/caixote.glb", false))
+        .unwrap();
+    assert!(m.triangles > 12, "recarregou: {} triângulos", m.triangles);
+    assert_eq!(h.game.0.error(), None);
+}

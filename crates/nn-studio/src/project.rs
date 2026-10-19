@@ -60,7 +60,8 @@ impl Tab {
             // A aba da imagem (o .anim abre junto com ela, em open_file).
             FileKind::Anim => Tab::Code(rel.into()),
             FileKind::Sound => Tab::Sound(rel.into()),
-            FileKind::Folder | FileKind::Font | FileKind::Other => return None,
+            // (O 3D no editor vem depois: por enquanto abre no programa padrão.)
+            FileKind::Folder | FileKind::Font | FileKind::Model | FileKind::Other => return None,
         })
     }
 

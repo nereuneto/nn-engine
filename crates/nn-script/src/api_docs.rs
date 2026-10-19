@@ -285,6 +285,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Carrega uma imagem PNG ({ pixel_art = true } para não suavizar).",
     ),
     d(
+        "nn.assets.model",
+        "(caminho, opts)",
+        "Modelo 3D .glb ou .gltf (do Blender e outros), para nn.d3.draw. opts: flat = true deixa cada face com um tom só.",
+    ),
+    d(
         "nn.assets.sheet",
         "(caminho, largura, altura, opts)",
         "Spritesheet com quadros do tamanho dado.",
@@ -495,7 +500,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.draw",
         "(malha, opts)",
-        "Desenha a malha (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, color, image).",
+        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, color, image, shadow = false).",
     ),
     d(
         "nn.d3.camera",
@@ -515,7 +520,17 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.light",
         "(opts)",
-        "Luz (opts: sun = direção {x, y, z}, sun_color, sky, ground, fog = {color, near, far} ou false).",
+        "Luz (opts: sun = direção {x, y, z}, sun_color, sky, ground, fog = {near, far, color} ou false; sem color, a névoa tem a cor do horizonte).",
+    ),
+    d(
+        "nn.d3.sky",
+        "(opts)",
+        "Céu em degradê com o sol (opts: top, horizon, bottom, sun_size em graus). true = o céu padrão, false = sem céu.",
+    ),
+    d(
+        "nn.d3.shadows",
+        "(opts)",
+        "Sombras do sol: true, false ou { distance, quality = \"baixa\"/\"media\"/\"alta\", strength }.",
     ),
     d(
         "nn.d3.to_screen",
