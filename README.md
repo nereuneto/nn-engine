@@ -60,7 +60,7 @@ cargo nn novo ../meu-jogo   # cria um jogo pequeno e completo, pronto para mudar
 cargo nn ../meu-jogo        # joga
 ```
 
-O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado do jeito recomendado (cenas, ações de controle, menus). `--titulo "Meu Jogo"` escolhe o título; `--modelo visual`, `--modelo aventura` e `--modelo nave` criam jogos montados como cenas visuais, sem nenhuma linha de código; `--modelo vazio` cria uma cena vazia com imagens e sons; e `--modelo minimo` cria só uma cena. Detalhes em [docs/lua.md](docs/lua.md#começando).
+O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado do jeito recomendado (cenas, ações de controle, menus). `--titulo "Meu Jogo"` escolhe o título; `--modelo visual`, `--modelo aventura` e `--modelo nave` criam jogos montados como cenas visuais, sem nenhuma linha de código; `--modelo 3d` cria um jogo de plataforma 3D em terceira pessoa; `--modelo vazio` cria uma cena vazia com imagens e sons; e `--modelo minimo` cria só uma cena. Detalhes em [docs/lua.md](docs/lua.md#começando).
 
 ### Jogos de demonstração em Lua
 
@@ -68,9 +68,10 @@ O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado 
 cargo nn jogos/plataforma   # plataforma: 2 fases do Tiled, inimigos, fundo em camadas, menus, recordes
 cargo nn jogos/demo         # menu, coletar moedas e pausa
 cargo nn jogos/cubos3d      # 3D: modelos .glb, física, sombras, céu e câmera que gira com o mouse
+cargo nn jogos/estrelas3d   # 3D em terceira pessoa: ache as 5 estrelas da ilha
 ```
 
-Os três são feitos inteiramente em Lua. O de plataforma tem duas fases (a segunda é liberada ao completar a primeira), inimigos que patrulham e perseguem (pise em cima para derrotar), funciona com teclado, mouse (nos menus) e **controle** (Xbox, PlayStation, Switch Pro e genéricos), e guarda as opções, as fases liberadas e os recordes de cada fase.
+Todos são feitos inteiramente em Lua. O de plataforma tem duas fases (a segunda é liberada ao completar a primeira), inimigos que patrulham e perseguem (pise em cima para derrotar), funciona com teclado, mouse (nos menus) e **controle** (Xbox, PlayStation, Switch Pro e genéricos), e guarda as opções, as fases liberadas e os recordes de cada fase.
 
 ### Exportar um jogo
 

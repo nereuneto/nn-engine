@@ -648,6 +648,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn movimento_do_mouse_soma_no_frame_e_zera_depois() {
+        let mut input = Input::new();
+        input.add_mouse_motion(Vec2::new(3.0, -1.0));
+        input.add_mouse_motion(Vec2::new(2.0, 4.0));
+        assert_eq!(input.mouse_delta(), Vec2::new(5.0, 3.0));
+        assert_eq!(input.last_device(), Device::Mouse);
+        input.end_frame();
+        assert_eq!(input.mouse_delta(), Vec2::ZERO);
+    }
+
+    #[test]
     fn aperto_dura_um_frame_e_segurar_continua() {
         let mut input = Input::new();
         input.press_key(KeyCode::Space);

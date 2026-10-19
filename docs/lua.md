@@ -11,14 +11,15 @@ cargo nn novo ../meu-jogo     # cria a pasta com um jogo pequeno e completo
 cargo nn ../meu-jogo          # joga
 ```
 
-O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"` e `--modelo`, que escolhe o modelo: `visual` (fase de plataforma montada no [NN Studio](studio.md), sem código, com [comportamentos](#comportamentos), [eventos](#eventos-quando-então) e um [prefab](#prefabs)), `aventura` (visto de cima: chave, porta e tesouro), `nave` (tiros, asteroides e recorde salvo), `vazio` (cena vazia com um pacote de imagens e sons) ou `minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
+O modelo padrão já vem com menu, partida, pausa, tela de fim e recorde salvo, usando o jeito recomendado de organizar um jogo; é só ir mudando. Opções: `--titulo "Meu Jogo"` e `--modelo`, que escolhe o modelo: `visual` (fase de plataforma montada no [NN Studio](studio.md), sem código, com [comportamentos](#comportamentos), [eventos](#eventos-quando-então) e um [prefab](#prefabs)), `aventura` (visto de cima: chave, porta e tesouro), `nave` (tiros, asteroides e recorde salvo), `3d` (plataforma 3D em terceira pessoa, veja [Seu primeiro jogo 3D](#seu-primeiro-jogo-3d)), `vazio` (cena vazia com um pacote de imagens e sons) ou `minimo` (só uma cena com um quadrado que anda). A pasta não pode existir com arquivos dentro. Com o `nn` instalado (sem o código da engine), o comando é `nn novo meu-jogo`.
 
 Para ver jogos prontos:
 
 ```sh
 cargo nn jogos/demo         # menu, coletar moedas, pausa
 cargo nn jogos/plataforma   # plataforma com mapa do Tiled e física
-cargo nn jogos/cubos3d      # 3D: campo low-poly, câmera que gira com o mouse
+cargo nn jogos/cubos3d      # 3D: modelos, física, sombras e céu
+cargo nn jogos/estrelas3d   # 3D em terceira pessoa: ache as 5 estrelas da ilha
 ```
 
 `cargo nn <pasta>` roda o projeto Lua da pasta. Durante o desenvolvimento, **salve qualquer `.lua`, imagem ou som e o jogo atualiza na hora**, sem fechar a janela e sem perder o estado. Se um script tiver erro, ele aparece na própria janela com o arquivo e a linha; corrija, salve e o jogo continua.
@@ -499,6 +500,7 @@ nn.screen.panel(20, 160, 300, 120, { image = moldura, slice = 6, slice_scale = 4
 | `mouse_world()` | Posição do cursor no mundo. |
 | `mouse_down(b)`, `mouse_pressed(b)`, `mouse_released(b)` | Botão `"left"` (padrão), `"right"` ou `"middle"`. |
 | `scroll()` | Rolagem do mouse neste frame. |
+| `mouse_delta()` | Quanto o mouse andou neste frame (`dx, dy`, em pixels), mesmo com ele preso (`nn.window.capture_mouse`). É o que gira uma câmera em terceira ou primeira pessoa. |
 | `text()` | O texto digitado neste frame, com acentos e maiúsculas (para campos de texto). |
 
 Nomes de teclas: `"a"` a `"z"`, `"0"` a `"9"`, `"space"`, `"enter"`, `"escape"`, `"tab"`, `"backspace"`, `"delete"`, `"shift"`, `"ctrl"`, `"alt"`, `"left"`, `"right"`, `"up"`, `"down"`, `"f1"` a `"f12"`.
@@ -919,8 +921,52 @@ O modelo tem `triangles`, `width`, `height` e `depth`. Ele é desenhado com `nn.
 | `nn.d3.look_at(x, y, z, ax, ay, az)` | Câmera em `x, y, z` olhando para o ponto `ax, ay, az`. |
 | `nn.d3.orbit(opts)` | Câmera em volta de `target` (`{x, y, z}`), a `distance`, girada `yaw` graus para os lados e `pitch` graus para cima. |
 | `nn.d3.camera(opts)` | Muda só o que for dado (`x`, `y`, `z`, `target`, `fov` em graus, `near`, `far`) e devolve a câmera como ficou. Sem nada, só devolve. |
+| `nn.d3.third_person(opts)` | Uma câmera em terceira pessoa pronta (abaixo). |
 
 A câmera continua a mesma ao trocar de cena; cada cena 3D costuma ajustá-la no `enter`.
+
+#### Câmera em terceira pessoa
+
+`nn.d3.third_person(opts)` cria uma câmera que fica atrás do personagem, gira com o **mouse preso** e com o **analógico direito**, aproxima e afasta com a rodinha e chega mais perto quando uma parede ou árvore fica no caminho, para nunca atravessar o cenário:
+
+```lua
+function cena:enter()
+  self.camera = nn.d3.third_person({ distance = 7, pitch = 18 })
+  nn.window.capture_mouse(true)          -- o cursor some; o mouse gira a câmera
+end
+
+function cena:update(dt)
+  -- Andar para onde a câmera olha: a entrada (X para a direita, Y para a frente)
+  -- vira uma direção no chão.
+  local ix, iy = nn.input.move()
+  local vx, vz = self.camera:direction(ix, iy)
+  self.heroi:walk(vx * 6, vz * 6)
+
+  self.camera:update(dt, self.heroi.x, self.heroi.y, self.heroi.z,
+    { world = self.mundo, ignore = self.heroi })
+end
+```
+
+| Opção | Descrição |
+|---|---|
+| `distance` | Distância até o personagem (padrão 6). `min_distance` e `max_distance` limitam a rodinha. |
+| `yaw`, `pitch` | Ângulo inicial em graus: em volta (0 = atrás, olhando para −Z) e acima do horizonte (padrão 20). `min_pitch` e `max_pitch` limitam (padrão −30 e 70). |
+| `height` | Altura do ponto olhado acima dos pés (padrão 1,5). |
+| `sensitivity` | Graus por pixel do mouse (padrão 0,15). |
+| `stick_speed` | Graus por segundo com o analógico no fim (padrão 150). |
+| `invert_y` | Inverte o movimento vertical. |
+| `zoom` | `false` desliga a rodinha. |
+| `follow` | Quão grudada ela segue o personagem (padrão 12; maior = mais grudada, 0 = sem suavizar). |
+
+`camera:update(dt, x, y, z, opts)` vai no `update`. Ela lê o mouse (só quando ele está preso), o analógico e a rodinha, e põe a câmera do `nn.d3`. As opções são:
+- `world`: um mundo de `nn.physics3d`, para não atravessar paredes;
+- `ignore`: o corpo do personagem;
+- `control = false`: ignora a entrada, para cenas cinematográficas.
+
+Os campos `yaw`, `pitch`, `distance`, `sensitivity` e `invert_y` podem ser lidos e mudados (por exemplo, numa tela de opções), e `x`, `y`, `z` dizem onde a câmera está. Os métodos são:
+- `camera:direction(ix, iy)`: transforma a entrada em `vx, vz` no chão;
+- `camera:forward()`: para onde ela olha, `fx, fz`;
+- `camera:rotate(graus_lado, graus_cima)`.
 
 #### Luz
 
@@ -960,7 +1006,58 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | `nn.d3.ray(x, y)` | O raio que sai da câmera pelo ponto da tela: origem e direção (seis números). |
 | `nn.d3.count()` | Quantas malhas foram desenhadas no último quadro. |
 
-Em breve: câmera em terceira pessoa e o 3D no NN Studio.
+Em breve: o 3D no NN Studio.
+
+### Seu primeiro jogo 3D
+
+O modelo `3d` cria um jogo de plataforma 3D em terceira pessoa, já jogando: a **Ilha das Estrelas**. São 5 estrelas escondidas, moedas, plataformas que andam, cronômetro, pausa com opções da câmera e recorde salvo. Este guia mostra como transformá-lo no seu jogo.
+
+**1. Crie e jogue.** No NN Studio, escolha **Novo projeto > 3D**, ou pelo terminal:
+
+```sh
+cargo nn novo ../minha-ilha --modelo 3d
+cargo nn ../minha-ilha
+```
+
+O mouse fica preso e gira a câmera. **Esc** pausa e solta o mouse. Na pausa dá para ajustar a sensibilidade e inverter o Y.
+
+**2. Entenda as peças.** Tudo é código Lua curto:
+- `lib/ilha.lua` monta a fase (a física e o desenho);
+- `cenas/jogo.lua` tem as regras: o herói, a câmera, as moedas, as estrelas, cair no mar e o HUD;
+- `cenas/titulo.lua`, `cenas/pausa.lua` e `cenas/fim.lua` são as outras telas;
+- `lib/jogo.lua` tem os controles, o céu, a luz e as opções.
+
+**3. Mude a fase.** No começo de `lib/ilha.lua` ficam três tabelas, e cada linha é uma coisa:
+
+```lua
+local PLATAFORMAS = {
+  { -4, 1, 2, 3, 3 },   -- x, y (altura do topo), z, largura, profundidade
+  ...
+}
+local MOVEIS = {
+  { a = { 0, 3.5, -10 }, b = { 6, 3.5, -10 }, v = 1.6, w = 3, d = 3 },  -- vai de a até b
+  ...
+}
+local ESTRELAS = { { -6, 4, -7 }, ... }   -- onde fica cada estrela
+```
+
+Acrescente uma plataforma, salve e o jogo aberto recarrega. O herói pula cerca de 1,6 de altura e alcança uns 4 de distância. Lembre-se disso para a fase continuar possível. Para saber onde você está, ponha `print(self.heroi.x, self.heroi.y, self.heroi.z)` no `update` e veja no terminal.
+
+**4. Ajuste o herói.** Em `cenas/jogo.lua`, `VELOCIDADE` e `PULO` mudam o jeito de andar. A gravidade é o `gravity` do mundo em `lib/ilha.lua`: mais negativa deixa o pulo mais "pesado".
+
+**5. Troque os modelos.** Os modelos ficam em `modelos/`. Faça um personagem no Blender, exporte como **glTF Binary (.glb)** com a frente virada para −Y do Blender, e salve por cima de `modelos/heroi.glb`. Ele aparece na hora. Veja também [Modelos](#modelos-glb-e-gltf).
+
+**6. Uma regra nova.** Exemplo: uma estrela vermelha que dá 10 segundos de bônus. Em `lib/ilha.lua`, crie o item com outro tipo, `self:item("bonus", { 2, 1, 6 }, 0.6)`, e desenhe-o em `ilha:desenhar` (copie o desenho da estrela com `color = "#FF5A5A"`). Em `cenas/jogo.lua`, no `fixed_update`, junto das moedas:
+
+```lua
+elseif it and it.tipo == "bonus" then
+  self.tempo = math.max(0, self.tempo - 10)
+  self:avisar("-10 segundos!")
+```
+
+**7. Distribua.** `cargo nn exportar ../minha-ilha` gera um executável único, como em qualquer jogo da engine (veja [Distribuindo o jogo](#distribuindo-o-jogo)).
+
+As referências estão em [nn.d3](#nnd3-3d), [nn.physics3d](#nnphysics3d-física-3d) e [Câmera em terceira pessoa](#câmera-em-terceira-pessoa).
 
 ### nn.physics3d (física 3D)
 
@@ -1232,6 +1329,10 @@ Enquanto a tela escurece, a cena que está saindo continua desenhada mas fica pa
 `nn.window.size()` devolve `largura, altura`; `nn.window.set_clear_color(cor)` muda a cor de fundo.
 
 `nn.window.fullscreen()` diz se está em tela cheia; `nn.window.set_fullscreen(true/false)` e `nn.window.toggle_fullscreen()` mudam (no fim do frame). A janela muda de tamanho, então use `nn.window.size()` a cada frame em vez de guardar o tamanho.
+
+`nn.window.capture_mouse(true)` prende o mouse na janela e esconde o cursor (para girar a câmera com `nn.input.mouse_delta()`); `nn.window.capture_mouse(false)` solta. Solte ao abrir a pausa e os menus, e prenda de novo ao voltar (o `resume` da cena é um bom lugar). Ao sair da janela (Alt+Tab) o mouse é solto sozinho e volta a ser preso quando ela recebe o foco. `nn.window.mouse_captured()` diz se está preso.
+
+`nn.window.title()` devolve o título do jogo (o `title` do config.lua).
 
 ### Outros
 
