@@ -149,6 +149,26 @@ fn with_model<'a>(ws: &'a ProjectWorkspace, file: &str) -> Vec<&'a Object> {
         .collect()
 }
 
+/// Objetos com partículas cujo efeito começa com esta cor.
+fn with_particles<'a>(ws: &'a ProjectWorkspace, color_start: &str) -> Vec<&'a Object> {
+    objects(ws)
+        .into_iter()
+        .filter(|o| {
+            o.component("particles")
+                .is_some_and(|c| color_start.is_empty() || c.str("color_start") == color_start)
+        })
+        .collect()
+}
+
+/// Todas as regras da cena: as da cena e as dos objetos.
+fn all_rules(ws: &ProjectWorkspace) -> Vec<&scene_data::Rule> {
+    let mut out = scene_rules(ws);
+    for o in objects(ws) {
+        out.extend(o.events.iter());
+    }
+    out
+}
+
 fn body3d_is(o: &Object, kind: &str) -> bool {
     o.component("body3d").is_some_and(|b| b.str("body") == kind)
 }
@@ -186,6 +206,7 @@ pub fn all() -> &'static [Tutorial] {
         vec![
             primeiro_jogo(),
             mundo_3d(),
+            efeitos_3d(),
             eventos(),
             desenhe(),
             tiles(),
@@ -509,6 +530,128 @@ fn mundo_3d() -> Tutorial {
             Step {
                 title: "Pronto: um mundo seu!",
                 text: "Você montou um mundo 3D com um herói animado, física, um bicho que anda, uma plataforma que anda, o Ambiente e um evento. Próximos passos: o modelo 3D (Novo projeto), uma ilha inteira sem código, para ver como tudo se junta; e Colisões, na barra da cena, para ver os corpos.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+fn efeitos_3d() -> Tutorial {
+    Tutorial {
+        id: "efeitos-3d",
+        title: "Efeitos no 3D",
+        summary: "Uma fogueira com fogo, fumaça e o som estalando (mais alto de perto), poeira nos pés do herói ao pular e uma chuva caindo.",
+        minutes: 10,
+        template: Template::Vazio3D,
+        project: "Efeitos 3D",
+        steps: vec![
+            Step {
+                title: "Fogo, fumaça e som",
+                text: "Numa cena 3D, as partículas e os sons ficam no mundo: as partículas aparecem atrás e na frente das coisas, e o som de um objeto fica mais alto quando você chega perto dele.\n\nVamos montar uma fogueira.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "O fogo",
+                text: "➕ Objeto > Partículas > Fogo. Ele já anima aqui na vista. As partículas saem para o \"cima\" do objeto: com ⟲ Girar dá para apontar para outro lado.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| !with_particles(ws, "#FFE066").is_empty()),
+            },
+            Step {
+                title: "A fumaça",
+                text: "➕ Objeto > Partículas > Fumaça, e com a seta verde (Y) suba ela uns 1,5 m, para sair por cima do fogo.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| with_particles(ws, "#9A9A9AAA").iter().any(|o| o.y >= 0.8)),
+            },
+            Step {
+                title: "O estalar",
+                text: "No painel Arquivos, abra assets > sons e arraste fogueira.wav para perto do fogo. No Inspetor, marque Repetir. \"Som no espaço 3D\" já vem ligado: o som sai dali.",
+                target: Some("arquivo:assets/sons/fogueira.wav"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        o.component("sound").is_some_and(|c| {
+                            c.str("sound").ends_with("fogueira.wav")
+                                && c.bool("loop")
+                                && c.bool("spatial")
+                        })
+                    })
+                }),
+            },
+            Step {
+                title: "Alguém para ouvir",
+                text: "➕ Objeto > Jogador 3D. Ele anda, pula e leva a câmera: quem ouve os sons é a câmera.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| objects(ws).iter().any(|o| has_behavior(o, "nn:jogador3d"))),
+            },
+            Step {
+                title: "Teste!",
+                text: "F6 (▶ Testar daqui). Ande para perto da fogueira e para longe: o estalar sobe e desce, e passa de um ouvido para o outro quando você vira.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Poeira nos pés",
+                text: "➕ Objeto > Partículas > Poeira. Na Hierarquia, arraste a poeira para cima do Jogador: ela vira filha dele e vai junto. Deixe ela nos pés (y = 0).",
+                target: Some("hierarquia"),
+                show: Some(Tab::Hierarchy),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        has_behavior(o, "nn:jogador3d")
+                            && o.children.iter().any(|c| {
+                                c.component("particles")
+                                    .is_some_and(|p| p.str("color_start") == "#E8DCC4CC")
+                            })
+                    })
+                }),
+            },
+            Step {
+                title: "Soltar ao pular",
+                text: "A poeira só sai quando pedem. Selecione o Jogador e, no painel Eventos: ➕ Regra de Jogador > Mensagens > Receber mensagem, e troque \"abrir\" por pulou (o Jogador 3D manda essa mensagem a cada pulo). Em Então: ➕ ação > Aparência > Soltar partículas, de poeira.",
+                target: Some("eventos.regra_cena"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    all_rules(ws).iter().any(|r| {
+                        r.when
+                            .iter()
+                            .any(|c| c.id == "mensagem" && c.str("msg") == "pulou")
+                            && r.actions.iter().any(|a| a.id == "soltar_particulas")
+                    })
+                }),
+            },
+            Step {
+                title: "Chuva",
+                text: "➕ Objeto > Partículas > Chuva, e suba ela uns 10 m: a chuva nasce numa área deitada e cai. Quer neve? Partículas > Neve.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| {
+                    with_particles(ws, "#C8DDF0AA")
+                        .iter()
+                        .chain(with_particles(ws, "#FFFFFF").iter())
+                        .any(|o| {
+                            o.y >= 4.0
+                                && o.component("particles")
+                                    .is_some_and(|c| c.str("area") == "retangulo")
+                        })
+                }),
+            },
+            Step {
+                title: "Teste de novo",
+                text: "F6: pule para ver a poeira, ande até a fogueira na chuva.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: um mundo com vida!",
+                text: "Você usou partículas 3D, som no espaço 3D e um evento com mensagem. O mar.wav (em assets/sons) fica bom na beira de um lago, com Repetir, e o modelo 3D (Novo projeto) tem uma ilha inteira com fogueira, ondas e poeira.",
                 target: None,
                 show: None,
                 done: None,

@@ -542,7 +542,6 @@ E.CONDITIONS = {
     end,
   },
   {
-    mode = "2d",
     id = "particulas_terminaram", name = "Partículas terminarem", category = "Objetos", trigger = true,
     text = "as partículas de {quem} terminarem",
     help = "Uma explosão acabou (ou um emissor desligado ficou sem partículas).",
@@ -1003,7 +1002,6 @@ E.ACTIONS = {
     end,
   },
   {
-    mode = "2d",
     id = "faiscas", name = "Faíscas", category = "Aparência",
     text = "soltar faíscas em {alvo}",
     props = { who("alvo"), { "cor", "#FFD166", type = "color", advanced = true },
@@ -1011,13 +1009,17 @@ E.ACTIONS = {
     lua = "self:burst(x, y, \"{cor}\")",
     run = function(ctx, p, b)
       for _, o in ipairs(resolve(ctx.scene, p.alvo, b, true)) do
-        local x, y = o:world_transform()
-        ctx.scene:burst(x, y, p.cor, math.floor(number(p.quantidade)))
+        if ctx.scene._3d then
+          local x, y, z = o:position3d()
+          ctx.scene:burst(x, y, p.cor, math.floor(number(p.quantidade)), z)
+        else
+          local x, y = o:world_transform()
+          ctx.scene:burst(x, y, p.cor, math.floor(number(p.quantidade)))
+        end
       end
     end,
   },
   {
-    mode = "2d",
     id = "soltar_particulas", name = "Soltar partículas", category = "Aparência",
     text = "soltar {quantidade} partículas de {alvo}",
     help = "O objeto precisa do componente Partículas: solta de uma vez (poeira ao pular, brilho, explosão).",
@@ -1030,7 +1032,6 @@ E.ACTIONS = {
     end,
   },
   {
-    mode = "2d",
     id = "emissor", name = "Ligar ou desligar partículas", category = "Aparência",
     text = "{acao} as partículas de {alvo}",
     help = "Para a emissão contínua (as que já saíram terminam a vida) ou volta a emitir.",
@@ -1056,12 +1057,25 @@ E.ACTIONS = {
   {
     id = "som", name = "Tocar som", category = "Som",
     text = "tocar o som {som}",
+    text3d = "tocar o som {som} saindo de {onde}",
+    help3d = "O som sai do objeto: mais baixo longe dele e do lado em que ele está.",
     props = { { "som", "", type = "sound", label = "Som" },
-      { "volume", 1, min = 0, max = 2, advanced = true } },
+      { "volume", 1, min = 0, max = 2, advanced = true },
+      who("onde", "@este", "Saindo de", { mode = "3d" }),
+      { "distancia", 30, label = "Ouvido até (m)", min = 1, max = 500, advanced = true, mode = "3d",
+        help = "Mais longe que isso, não se ouve." } },
     lua = "nn.audio.play(nn.assets.sound(\"{som}\"))",
-    run = function(ctx, p)
+    run = function(ctx, p, b)
       if p.som == "" then return end
-      nn.audio.play(nn.assets.sound(p.som), { volume = number(p.volume) })
+      local opts = { volume = number(p.volume) }
+      if ctx.scene._3d then
+        local o = resolve(ctx.scene, p.onde, b)[1]
+        if o then
+          opts.x, opts.y, opts.z = o:position3d()
+          opts.distance = p.distancia and number(p.distancia) or 30
+        end
+      end
+      nn.audio.play(nn.assets.sound(p.som), opts)
     end,
   },
   {

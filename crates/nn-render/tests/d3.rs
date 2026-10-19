@@ -674,3 +674,87 @@ fn parte_sem_ossos_anima_pelo_no() {
     let j = s.joint_matrices(&s.rest_pose());
     assert!(j[0].transform_point3(ponta).abs_diff_eq(ponta, 1e-4));
 }
+
+// --- Partículas 3D (Sprint 27) ----------------------------------------------
+
+#[test]
+fn particulas_3d_viram_para_a_camera_e_respeitam_a_profundidade() {
+    use nn_render::d3::{ParticleConfig3, ParticleEmitter3};
+    use nn_render::{Blend, Rect};
+    let Some(mut h) = Harness::new() else { return };
+    let white = h.renderer.white_texture();
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    // De frente e de cima: o quadrado aparece do mesmo tamanho (virado para
+    // a câmera).
+    for eye in [Vec3::new(0.0, 0.0, 5.0), Vec3::new(0.0, 5.0, 0.01)] {
+        h.renderer
+            .set_camera3d(Camera3D::looking_at(eye, Vec3::ZERO));
+        h.renderer.draw_billboard(
+            white,
+            Vec3::ZERO,
+            1.0,
+            0.0,
+            Color::RED,
+            Rect::FULL,
+            Blend::Alpha,
+        );
+        let img = h.render(Color::BLACK);
+        assert_color(pixel(&img, 32, 32), [255, 0, 0, 255], "vermelho no meio");
+        assert_color(pixel(&img, 4, 32), [0, 0, 0, 255], "pequeno");
+    }
+    // Atrás de um cubo: escondida; na frente: aparece por cima.
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.0, 5.0), Vec3::ZERO));
+    h.renderer.draw_mesh(cube, Mat4::IDENTITY, Color::BLUE);
+    h.renderer.draw_billboard(
+        white,
+        Vec3::new(0.0, 0.0, -2.0),
+        0.6,
+        0.0,
+        Color::RED,
+        Rect::FULL,
+        Blend::Alpha,
+    );
+    let img = h.render(Color::BLACK);
+    assert_color(pixel(&img, 32, 32), [0, 0, 255, 255], "atrás do cubo");
+    h.renderer.draw_mesh(cube, Mat4::IDENTITY, Color::BLUE);
+    h.renderer.draw_billboard(
+        white,
+        Vec3::new(0.0, 0.0, 2.0),
+        0.3,
+        0.0,
+        Color::RED,
+        Rect::FULL,
+        Blend::Alpha,
+    );
+    let img = h.render(Color::BLACK);
+    assert_color(pixel(&img, 32, 32), [255, 0, 0, 255], "na frente do cubo");
+    // Somar luz: duas metades de verde somam um verde cheio.
+    for _ in 0..2 {
+        h.renderer.draw_billboard(
+            white,
+            Vec3::ZERO,
+            1.0,
+            0.0,
+            Color::rgba(0.0, 1.0, 0.0, 0.5),
+            Rect::FULL,
+            Blend::Add,
+        );
+    }
+    let img = h.render(Color::BLACK);
+    let g = pixel(&img, 32, 32)[1];
+    assert!(g > 240, "aditivo soma: {g}");
+    // Um emissor inteiro.
+    let mut e = ParticleEmitter3::new(ParticleConfig3 {
+        speed: (0.0, 0.0),
+        size: (0.5, 0.5),
+        lifetime: (5.0, 5.0),
+        colors: vec![Color::WHITE],
+        ..Default::default()
+    });
+    e.burst(10);
+    e.update(0.1);
+    e.draw(&mut h.renderer);
+    let img = h.render(Color::BLACK);
+    assert!(brightness(pixel(&img, 32, 32)) > 600);
+}

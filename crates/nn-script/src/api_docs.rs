@@ -78,6 +78,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Emissor de partículas (fumaça, faíscas...): :update(dt), :draw(), :burst(n, x, y).",
     ),
     d(
+        "nn.particles3d",
+        "(opts)",
+        "Partículas 3D em metros (fogo, chuva...): x, y, z, direction = {x, y, z}, spread em graus, gravity, size, area = {radius} ou {w, h, d}. :update(dt), :draw(), :burst(n, x, y, z).",
+    ),
+    d(
         "nn.text_size",
         "(texto, opts)",
         "Largura e altura de um texto, sem desenhar.",
@@ -325,7 +330,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.audio.play",
         "(som, opts)",
-        "Toca um som (opts: volume, speed, pan, loop, channel).",
+        "Toca um som (opts: volume, speed, pan, loop, channel; som 3D: x, y, z e distance).",
     ),
     d(
         "nn.audio.set_volume",

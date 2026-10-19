@@ -57,7 +57,7 @@ return {
       },
     },
     {
-      id = 4, name = "Herói",
+      id = 5, name = "Herói",
       x = 0, y = 0, rotation = 0, scale_x = 1.1, scale_y = 1.1,
       z = 9, rx = 0, ry = 180, rz = 0, scale_z = 1.1,
       visible = true, layer = 0,
@@ -69,17 +69,84 @@ return {
         { when = {
             { cond = "mensagem", quem = "@este", msg = "pulou" },
           }, actions = {
-            { act = "som", som = "assets/sons/pulo.wav", volume = 0.5 },
+            { act = "som", som = "assets/sons/pulo.wav", volume = 0.5, onde = "@este", distancia = 30 },
+            { act = "soltar_particulas", alvo = "Poeira", quantidade = 14 },
           } },
         { when = {
             { cond = "mensagem", quem = "@este", msg = "caiu" },
           }, actions = {
-            { act = "som", som = "assets/sons/dano.wav", volume = 1 },
+            { act = "som", som = "assets/sons/dano.wav", volume = 1, onde = "@este", distancia = 30 },
           } },
+      },
+      children = {
+        {
+          id = 4, name = "Poeira",
+          x = 0, y = 0.05, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 14, on_start = false, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 0.8, speed_max = 2, direction = 90, spread = 200, gravity = 0.5, drag = 4, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.35, size_end = 0.6, size_var = 0, color_start = "#E8DCC4CC", color_mid = "", color_end = "#C8B89800", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500 },
+          },
+        },
       },
     },
     {
-      id = 5, name = "Plataforma",
+      id = 8, name = "Fogueira",
+      x = -4, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.15,
+      z = 6.5, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cylinder", color = "#5B3A29", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+        { type = "sound", sound = "assets/sons/fogueira.wav", autoplay = true, loop = true, volume = 1, channel = "effects", spatial = true, distance = 14 },
+      },
+      children = {
+        {
+          id = 6, name = "Fogo",
+          x = 0, y = 1, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "particles", mode = "continuo", rate = 60, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.8, lifetime_var = 0.4, speed_min = 0.6, speed_max = 1.6, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.25, size_start = 0.5, size_end = 0.1, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+          },
+        },
+        {
+          id = 7, name = "Fumaça",
+          x = 0, y = 8, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "particles", mode = "continuo", rate = 8, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 3, lifetime_var = 0.3, speed_min = 0.5, speed_max = 1, direction = 90, spread = 30, gravity = 0.4, drag = 0.3, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.2, size_start = 0.4, size_end = 1.8, size_var = 0, color_start = "#9A9A9AAA", color_mid = "", color_end = "#5A5A5A00", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 30, blend = "alpha", follow = false, max = 500 },
+          },
+        },
+      },
+    },
+    {
+      id = 9, name = "Ondas",
+      x = 16, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -6, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sound", sound = "assets/sons/mar.wav", autoplay = true, loop = true, volume = 0.7, channel = "effects", spatial = true, distance = 18 },
+      },
+    },
+    {
+      id = 10, name = "Ondas",
+      x = -14, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 10, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sound", sound = "assets/sons/mar.wav", autoplay = true, loop = true, volume = 0.7, channel = "effects", spatial = true, distance = 18 },
+      },
+    },
+    {
+      id = 11, name = "Ondas",
+      x = 6, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 17, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "sound", sound = "assets/sons/mar.wav", autoplay = true, loop = true, volume = 0.7, channel = "effects", spatial = true, distance = 18 },
+      },
+    },
+    {
+      id = 12, name = "Plataforma",
       x = -4, y = 1, rotation = 0, scale_x = 3, scale_y = 1,
       z = 2, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -89,7 +156,7 @@ return {
       },
     },
     {
-      id = 6, name = "Plataforma",
+      id = 13, name = "Plataforma",
       x = -8, y = 2, rotation = 0, scale_x = 3, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -99,7 +166,7 @@ return {
       },
     },
     {
-      id = 7, name = "Plataforma",
+      id = 14, name = "Plataforma",
       x = -6, y = 3.2, rotation = 0, scale_x = 3, scale_y = 1,
       z = -7, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -109,7 +176,7 @@ return {
       },
     },
     {
-      id = 8, name = "Plataforma",
+      id = 15, name = "Plataforma",
       x = 10, y = 4.5, rotation = 0, scale_x = 3, scale_y = 1,
       z = -10, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -119,7 +186,7 @@ return {
       },
     },
     {
-      id = 9, name = "Plataforma",
+      id = 16, name = "Plataforma",
       x = 11, y = 5.8, rotation = 0, scale_x = 2.5, scale_y = 1,
       z = -5.5, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
       visible = true, layer = 0,
@@ -129,7 +196,7 @@ return {
       },
     },
     {
-      id = 10, name = "Plataforma",
+      id = 17, name = "Plataforma",
       x = 8, y = 7.2, rotation = 0, scale_x = 2.5, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
       visible = true, layer = 0,
@@ -139,7 +206,7 @@ return {
       },
     },
     {
-      id = 11, name = "Plataforma",
+      id = 18, name = "Plataforma",
       x = 10.5, y = 8.5, rotation = 0, scale_x = 2.5, scale_y = 1,
       z = 1.5, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
       visible = true, layer = 0,
@@ -149,7 +216,7 @@ return {
       },
     },
     {
-      id = 12, name = "Plataforma",
+      id = 19, name = "Plataforma",
       x = 0, y = 8, rotation = 0, scale_x = 4, scale_y = 1,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 4,
       visible = true, layer = 0,
@@ -159,7 +226,7 @@ return {
       },
     },
     {
-      id = 13, name = "Plataforma que anda",
+      id = 20, name = "Plataforma que anda",
       x = 0, y = 3.5, rotation = 0, scale_x = 3, scale_y = 1,
       z = -10, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -170,7 +237,7 @@ return {
       },
     },
     {
-      id = 14, name = "Elevador",
+      id = 21, name = "Elevador",
       x = 3.2, y = 0.3, rotation = 0, scale_x = 2, scale_y = 1,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2,
       visible = true, layer = 0,
@@ -181,7 +248,7 @@ return {
       },
     },
     {
-      id = 15, name = "Árvore",
+      id = 22, name = "Árvore",
       x = -9, y = 0, rotation = 0, scale_x = 1.3, scale_y = 1.3,
       z = -6, rx = 0, ry = 20, rz = 0, scale_z = 1.3,
       visible = true, layer = 0,
@@ -191,7 +258,7 @@ return {
       },
     },
     {
-      id = 16, name = "Árvore",
+      id = 23, name = "Árvore",
       x = -11, y = 0, rotation = 0, scale_x = 1.1, scale_y = 1.1,
       z = 3, rx = 0, ry = 80, rz = 0, scale_z = 1.1,
       visible = true, layer = 0,
@@ -201,7 +268,7 @@ return {
       },
     },
     {
-      id = 17, name = "Árvore",
+      id = 24, name = "Árvore",
       x = -5, y = 0, rotation = 0, scale_x = 1.4, scale_y = 1.4,
       z = 9, rx = 0, ry = 140, rz = 0, scale_z = 1.4,
       visible = true, layer = 0,
@@ -211,7 +278,7 @@ return {
       },
     },
     {
-      id = 18, name = "Árvore",
+      id = 25, name = "Árvore",
       x = 6, y = 0, rotation = 0, scale_x = 1.2, scale_y = 1.2,
       z = -5, rx = 0, ry = 200, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
@@ -221,7 +288,7 @@ return {
       },
     },
     {
-      id = 19, name = "Árvore",
+      id = 26, name = "Árvore",
       x = 9, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 4, rx = 0, ry = 260, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -231,7 +298,7 @@ return {
       },
     },
     {
-      id = 20, name = "Árvore",
+      id = 27, name = "Árvore",
       x = -2, y = 0, rotation = 0, scale_x = 1.5, scale_y = 1.5,
       z = -11, rx = 0, ry = 300, rz = 0, scale_z = 1.5,
       visible = true, layer = 0,
@@ -241,7 +308,7 @@ return {
       },
     },
     {
-      id = 21, name = "Árvore",
+      id = 28, name = "Árvore",
       x = 12, y = 0, rotation = 0, scale_x = 1.3, scale_y = 1.3,
       z = -2, rx = 0, ry = 40, rz = 0, scale_z = 1.3,
       visible = true, layer = 0,
@@ -251,7 +318,7 @@ return {
       },
     },
     {
-      id = 22, name = "Árvore",
+      id = 29, name = "Árvore",
       x = -12, y = 0, rotation = 0, scale_x = 1.2, scale_y = 1.2,
       z = -2, rx = 0, ry = 110, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
@@ -261,7 +328,7 @@ return {
       },
     },
     {
-      id = 23, name = "Pedra",
+      id = 30, name = "Pedra",
       x = -7, y = 0.468, rotation = 0, scale_x = 1.8, scale_y = 1.8,
       z = 6, rx = 0, ry = 30, rz = 0, scale_z = 1.8,
       visible = true, layer = 0,
@@ -271,7 +338,7 @@ return {
       },
     },
     {
-      id = 24, name = "Pedra",
+      id = 31, name = "Pedra",
       x = 5, y = 0.39, rotation = 0, scale_x = 1.5, scale_y = 1.5,
       z = 6, rx = 0, ry = 90, rz = 0, scale_z = 1.5,
       visible = true, layer = 0,
@@ -281,7 +348,7 @@ return {
       },
     },
     {
-      id = 25, name = "Pedra",
+      id = 32, name = "Pedra",
       x = 11, y = 0.572, rotation = 0, scale_x = 2.2, scale_y = 2.2,
       z = 9, rx = 0, ry = 150, rz = 0, scale_z = 2.2,
       visible = true, layer = 0,
@@ -291,7 +358,7 @@ return {
       },
     },
     {
-      id = 26, name = "Pedra",
+      id = 33, name = "Pedra",
       x = -10, y = 0.442, rotation = 0, scale_x = 1.7, scale_y = 1.7,
       z = -9, rx = 0, ry = 220, rz = 0, scale_z = 1.7,
       visible = true, layer = 0,
@@ -301,7 +368,7 @@ return {
       },
     },
     {
-      id = 27, name = "Caixote",
+      id = 34, name = "Caixote",
       x = -2, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -311,7 +378,7 @@ return {
       },
     },
     {
-      id = 28, name = "Caixote",
+      id = 35, name = "Caixote",
       x = -0.8, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5.2, rx = 0, ry = 15, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -321,7 +388,7 @@ return {
       },
     },
     {
-      id = 29, name = "Caixote",
+      id = 36, name = "Caixote",
       x = -1.4, y = 1, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5.1, rx = 0, ry = 40, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -331,153 +398,153 @@ return {
       },
     },
     {
-      id = 30, name = "moeda",
+      id = 37, name = "moeda",
       x = -8.457, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -3.078, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 31, name = "moeda",
+      id = 38, name = "moeda",
       x = -7.092, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -5.541, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 32, name = "moeda",
+      id = 39, name = "moeda",
       x = -5.033, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7.461, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 33, name = "moeda",
+      id = 40, name = "moeda",
       x = -2.481, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -8.651, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 34, name = "moeda",
+      id = 41, name = "moeda",
       x = 0.314, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -8.995, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 35, name = "moeda",
+      id = 42, name = "moeda",
       x = 3.078, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -8.457, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 36, name = "moeda",
+      id = 43, name = "moeda",
       x = 5.541, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7.092, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 37, name = "moeda",
+      id = 44, name = "moeda",
       x = 7.461, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -5.033, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 38, name = "moeda",
+      id = 45, name = "moeda",
       x = -4, y = 1.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 39, name = "moeda",
+      id = 46, name = "moeda",
       x = -8, y = 2.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 40, name = "moeda",
+      id = 47, name = "moeda",
       x = 11, y = 6.4, rotation = 0, scale_x = 1, scale_y = 1,
       z = -5.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 41, name = "moeda",
+      id = 48, name = "moeda",
       x = 8, y = 7.8, rotation = 0, scale_x = 1, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 42, name = "moeda",
+      id = 49, name = "moeda",
       x = 6, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 9, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 43, name = "moeda",
+      id = 50, name = "moeda",
       x = 7.5, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 7.8, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 44, name = "moeda",
+      id = 51, name = "moeda",
       x = 9, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 6.6, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 45, name = "moeda",
+      id = 52, name = "moeda",
       x = 10.5, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5.4, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 46, name = "estrela",
+      id = 53, name = "estrela",
       x = -6, y = 3.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 47, name = "estrela",
+      id = 54, name = "estrela",
       x = 10, y = 4.9, rotation = 0, scale_x = 1, scale_y = 1,
       z = -10, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 48, name = "estrela",
+      id = 55, name = "estrela",
       x = 10.5, y = 8.9, rotation = 0, scale_x = 1, scale_y = 1,
       z = 1.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 49, name = "estrela",
+      id = 56, name = "estrela",
       x = 0, y = 8.4, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 50, name = "estrela",
+      id = 57, name = "estrela",
       x = -3, y = 0.5, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 51, name = "Placar",
+      id = 58, name = "Placar",
       x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -486,7 +553,7 @@ return {
       },
     },
     {
-      id = 52, name = "Dica",
+      id = 59, name = "Dica",
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top",
       components = {

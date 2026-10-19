@@ -30,6 +30,27 @@ struct ViewUniform3 {
     sky_bottom: [f32; 4],
     sky_params: [f32; 4],
     shadow: [f32; 4],
+    /// Direita e cima da câmera (para as partículas virarem para ela).
+    cam_right: [f32; 4],
+    cam_up: [f32; 4],
+}
+
+/// Uma partícula 3D (um quadrado virado para a câmera).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub(crate) struct Billboard3 {
+    center: [f32; 3],
+    size: f32,
+    color: [f32; 4],
+    region: [f32; 4],
+    rotation: f32,
+    _pad: [f32; 3],
+}
+
+struct BillboardDraw {
+    texture: TextureId,
+    additive: bool,
+    data: Billboard3,
 }
 
 #[repr(C)]
@@ -83,6 +104,11 @@ pub(crate) struct Renderer3D {
     shadow_pipeline: wgpu::RenderPipeline,
     skinned_pipeline: wgpu::RenderPipeline,
     skinned_shadow_pipeline: wgpu::RenderPipeline,
+    billboard_pipeline: wgpu::RenderPipeline,
+    billboard_add_pipeline: wgpu::RenderPipeline,
+    billboards: Vec<BillboardDraw>,
+    billboard_buffer: wgpu::Buffer,
+    billboard_capacity: usize,
     joint_layout: wgpu::BindGroupLayout,
     /// As matrizes dos ossos de todos os desenhos com ossos deste frame.
     joint_data: Vec<[f32; 16]>,
@@ -370,6 +396,74 @@ impl Renderer3D {
                 multiview_mask: None,
                 cache: None,
             });
+        // Partículas: quadrados virados para a câmera, sem escrever a
+        // profundidade (as de trás aparecem pelas da frente).
+        let billboard_attrs = wgpu::vertex_attr_array![
+            0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4
+        ];
+        let billboard_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("nn 3d particles"),
+            bind_group_layouts: &[Some(&view_layout), Some(texture_layout)],
+            immediate_size: 0,
+        });
+        let make_billboard = |label: &str, fs: &str, blend: wgpu::BlendState| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&billboard_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_particle"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: size_of::<Billboard3>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &billboard_attrs,
+                    })],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(fs),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(blend),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let billboard_pipeline = make_billboard(
+            "nn 3d particles",
+            "fs_particle",
+            wgpu::BlendState::ALPHA_BLENDING,
+        );
+        let billboard_add_pipeline = make_billboard(
+            "nn 3d particles additive",
+            "fs_particle_add",
+            wgpu::BlendState {
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                alpha: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::Zero,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
+            },
+        );
         let sky_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nn 3d sky"),
             layout: Some(&view_only),
@@ -414,11 +508,18 @@ impl Renderer3D {
         let instances = Self::instance_buffer(device, capacity);
         let joint_capacity = 4;
         let (joint_buffer, joint_group) = Self::joint_buffer(device, &joint_layout, joint_capacity);
+        let billboard_capacity = 256;
+        let billboard_buffer = Self::billboard_buffer(device, billboard_capacity);
         Self {
             pipeline,
             shadow_pipeline,
             skinned_pipeline,
             skinned_shadow_pipeline,
+            billboard_pipeline,
+            billboard_add_pipeline,
+            billboards: Vec::new(),
+            billboard_buffer,
+            billboard_capacity,
             joint_layout,
             joint_data: Vec::new(),
             joint_buffer,
@@ -510,6 +611,43 @@ impl Renderer3D {
             }],
         });
         (buffer, group)
+    }
+
+    fn billboard_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("nn 3d particles"),
+            size: (capacity * size_of::<Billboard3>()) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    /// Uma partícula 3D para este frame.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn billboard(
+        &mut self,
+        texture: TextureId,
+        center: Vec3,
+        size: f32,
+        rotation: f32,
+        color: Color,
+        region: crate::Rect,
+        additive: bool,
+        srgb: bool,
+    ) {
+        let color = if srgb { color.to_linear() } else { color };
+        self.billboards.push(BillboardDraw {
+            texture,
+            additive,
+            data: Billboard3 {
+                center: center.to_array(),
+                size,
+                color: [color.r, color.g, color.b, color.a],
+                region: [region.x, region.y, region.w, region.h],
+                rotation,
+                _pad: [0.0; 3],
+            },
+        });
     }
 
     fn instance_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer {
@@ -621,7 +759,7 @@ impl Renderer3D {
     }
 
     pub(crate) fn has_draws(&self) -> bool {
-        !self.draws.is_empty()
+        !self.draws.is_empty() || !self.billboards.is_empty()
     }
 
     /// Matriz do sol: um quadrado de lado `2 × distance` em volta do ponto
@@ -720,6 +858,9 @@ impl Renderer3D {
             None => ([0.0; 4], [0.0; 4]),
         };
         let view_proj = self.camera.view_projection(aspect);
+        let forward = (self.camera.target - self.camera.position).normalize_or(Vec3::NEG_Z);
+        let cam_right = forward.cross(self.camera.up).normalize_or(Vec3::X);
+        let cam_up = cam_right.cross(forward).normalize_or(Vec3::Y);
         let (light_view_proj, texel) = self.light_view_proj();
         let sky = self.sky.unwrap_or_default();
         let view = ViewUniform3 {
@@ -756,6 +897,8 @@ impl Renderer3D {
                 self.shadows.strength.clamp(0.0, 1.0),
                 0.0,
             ],
+            cam_right: cam_right.extend(0.0).to_array(),
+            cam_up: cam_up.extend(0.0).to_array(),
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&view));
 
@@ -803,6 +946,29 @@ impl Renderer3D {
             }
             groups.push((key, i as u32..j as u32));
             i = j;
+        }
+
+        // As partículas: as transparentes de trás para a frente, depois as
+        // que somam luz (a ordem não importa), agrupadas por imagem.
+        let eye = self.camera.position;
+        let dist =
+            |b: &BillboardDraw| -> f32 { Vec3::from_array(b.data.center).distance_squared(eye) };
+        self.billboards.sort_by(|a, b| {
+            a.additive.cmp(&b.additive).then_with(|| {
+                if a.additive {
+                    a.texture.0.cmp(&b.texture.0)
+                } else {
+                    dist(b).total_cmp(&dist(a))
+                }
+            })
+        });
+        if self.billboards.len() > self.billboard_capacity {
+            self.billboard_capacity = self.billboards.len().next_power_of_two();
+            self.billboard_buffer = Self::billboard_buffer(device, self.billboard_capacity);
+        }
+        if !self.billboards.is_empty() {
+            let data: Vec<Billboard3> = self.billboards.iter().map(|b| b.data).collect();
+            queue.write_buffer(&self.billboard_buffer, 0, bytemuck::cast_slice(&data));
         }
 
         // 1. O mapa de sombras, visto do sol.
@@ -911,10 +1077,32 @@ impl Renderer3D {
                     }
                 }
             }
+            // 3. As partículas, por cima do que já tem profundidade.
+            let mut i = 0;
+            while i < self.billboards.len() {
+                let (tex, add) = (self.billboards[i].texture, self.billboards[i].additive);
+                let mut j = i + 1;
+                while j < self.billboards.len()
+                    && self.billboards[j].texture == tex
+                    && self.billboards[j].additive == add
+                {
+                    j += 1;
+                }
+                pass.set_pipeline(if add {
+                    &self.billboard_add_pipeline
+                } else {
+                    &self.billboard_pipeline
+                });
+                pass.set_bind_group(1, &textures[tex.0 as usize].bind_group, &[]);
+                pass.set_vertex_buffer(0, self.billboard_buffer.slice(..));
+                pass.draw(0..6, i as u32..j as u32);
+                i = j;
+            }
         }
         drop(pass);
         self.last_count = self.draws.len() as u32;
         self.draws.clear();
         self.joint_data.clear();
+        self.billboards.clear();
     }
 }

@@ -29,9 +29,14 @@ function B:pegar(quem)
     nn.vars[self.variavel] = (tonumber(nn.vars[self.variavel]) or 0) + self.valor
   end
   if self.som ~= "" then nn.audio.play(nn.assets.sound(self.som)) end
-  if self.brilho and not self.scene._3d then
-    local x, y = self.obj:world_transform()
-    self.scene:burst(x, y, self.cor_brilho)
+  if self.brilho then
+    if self.scene._3d then
+      local x, y, z = self.obj:position3d()
+      self.scene:burst(x, y, self.cor_brilho, 20, z)
+    else
+      local x, y = self.obj:world_transform()
+      self.scene:burst(x, y, self.cor_brilho)
+    end
   end
   quem:send("coletou", self.obj)
   self.obj:destroy()

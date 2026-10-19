@@ -77,6 +77,22 @@ pub(crate) fn play_options(opts: Option<&Table>) -> Result<PlayOptions> {
     if let Some(v) = opt::<String>(opts, "channel")? {
         o.channel = crate::convert::channel(&v)?;
     }
+    // Som 3D: x, y, z (qualquer um basta) e a distância máxima.
+    let (x, y, z) = (
+        opt::<f32>(opts, "x")?,
+        opt::<f32>(opts, "y")?,
+        opt::<f32>(opts, "z")?,
+    );
+    if x.is_some() || y.is_some() || z.is_some() {
+        o.position = Some(glam::Vec3::new(
+            x.unwrap_or(0.0),
+            y.unwrap_or(0.0),
+            z.unwrap_or(0.0),
+        ));
+    }
+    if let Some(v) = opt::<f32>(opts, "distance")? {
+        o.distance = v.max(0.1);
+    }
     Ok(o)
 }
 
@@ -121,6 +137,17 @@ impl UserData for LSound {
             Ok(())
         });
         m.add_method("playing", |_, this, ()| Ok(this.0.is_playing()));
+        // Som 3D: muda onde ele está (o volume e o lado acompanham).
+        m.add_method_mut("set_position", |_, this, (x, y, z): (f32, f32, f32)| {
+            this.0.set_position(glam::Vec3::new(x, y, z));
+            Ok(())
+        });
+        m.add_method("position", |_, this, ()| {
+            let p = this.0.position();
+            Ok((p.map(|p| p.x), p.map(|p| p.y), p.map(|p| p.z)))
+        });
+        // O volume que a distância deixa (0 a 1; 1 num som comum).
+        m.add_method("distance_volume", |_, this, ()| Ok(this.0.distance_gain()));
     }
 }
 

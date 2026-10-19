@@ -17,6 +17,8 @@ struct View {
     sky_bottom: vec4<f32>,
     sky_params: vec4<f32>,   // x = cosseno do raio do sol, y = 1 com céu
     shadow: vec4<f32>,       // x = 1 com sombra, y = texel no mundo, z = força
+    cam_right: vec4<f32>,    // direita da câmera (partículas)
+    cam_up: vec4<f32>,       // cima da câmera
 };
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -197,4 +199,60 @@ fn fs_sky(in: SkyOut) -> @location(0) vec4<f32> {
         c = mix(c, min(view.sun_color.rgb * 1.1 + vec3<f32>(0.25), vec3<f32>(1.0)), disk);
     }
     return vec4<f32>(c, 1.0);
+}
+
+// --- Partículas: quadrados virados para a câmera ----------------------------
+
+struct ParticleIn {
+    @location(0) center_size: vec4<f32>,
+    @location(1) color: vec4<f32>,
+    @location(2) region: vec4<f32>,  // x, y, largura, altura (uv)
+    @location(3) rot: vec4<f32>,     // x = giro em radianos
+};
+
+struct ParticleOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) color: vec4<f32>,
+    @location(1) uv: vec2<f32>,
+    @location(2) world: vec3<f32>,
+};
+
+@vertex
+fn vs_particle(@builtin(vertex_index) i: u32, p: ParticleIn) -> ParticleOut {
+    // Dois triângulos: os cantos de -0,5 a 0,5.
+    var corners = array<vec2<f32>, 6>(
+        vec2<f32>(-0.5, -0.5), vec2<f32>(0.5, -0.5), vec2<f32>(0.5, 0.5),
+        vec2<f32>(-0.5, -0.5), vec2<f32>(0.5, 0.5), vec2<f32>(-0.5, 0.5),
+    );
+    let c = corners[i];
+    let s = sin(p.rot.x);
+    let k = cos(p.rot.x);
+    let r = vec2<f32>(c.x * k - c.y * s, c.x * s + c.y * k) * p.center_size.w;
+    let world = p.center_size.xyz + view.cam_right.xyz * r.x + view.cam_up.xyz * r.y;
+    var out: ParticleOut;
+    out.clip = view.view_proj * vec4<f32>(world, 1.0);
+    out.color = p.color;
+    out.uv = p.region.xy + vec2<f32>(c.x + 0.5, 0.5 - c.y) * p.region.zw;
+    out.world = world;
+    return out;
+}
+
+fn particle_fog(world: vec3<f32>) -> f32 {
+    if (view.fog_range.y > view.fog_range.x) {
+        let d = distance(world, view.camera.xyz);
+        return clamp((d - view.fog_range.x) / (view.fog_range.y - view.fog_range.x), 0.0, 1.0);
+    }
+    return 0.0;
+}
+
+@fragment
+fn fs_particle(in: ParticleOut) -> @location(0) vec4<f32> {
+    let c = in.color * textureSample(tex, samp, in.uv);
+    return vec4<f32>(mix(c.rgb, view.fog.rgb, particle_fog(in.world)), c.a);
+}
+
+@fragment
+fn fs_particle_add(in: ParticleOut) -> @location(0) vec4<f32> {
+    let c = in.color * textureSample(tex, samp, in.uv);
+    return vec4<f32>(c.rgb * (1.0 - particle_fog(in.world)), c.a);
 }
