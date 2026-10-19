@@ -578,6 +578,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "()",
         "Quantas malhas foram desenhadas no último quadro.",
     ),
+    d(
+        "nn.d3.third_person",
+        "(opts)",
+        "Câmera em terceira pessoa (mouse preso, analógico direito, não atravessa paredes): :update(dt, x, y, z, { world, ignore }), :direction(ix, iy).",
+    ),
 ];
 
 /// Campos e métodos de um tipo de valor (para completar depois do `.`).
