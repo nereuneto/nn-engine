@@ -3473,6 +3473,11 @@ mod tests {
                 assert!(engine.contains(k), "{kind}.{k} não existe na engine");
             }
             for k in &engine {
+                // As alturas do terreno são pintadas na vista (✏ Pintar
+                // terreno), não editadas no inspetor.
+                if (kind.as_str(), *k) == ("terrain", "data") {
+                    continue;
+                }
                 assert!(ours.contains(k), "{kind}.{k} não aparece no inspetor");
             }
             assert_ne!(component_info(kind).0, "Componente");
