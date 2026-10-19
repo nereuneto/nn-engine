@@ -68,6 +68,21 @@ pub fn diff(before: &SceneData, after: &SceneData) -> Vec<LiveChange> {
     if before.events != after.events {
         out.push(events(0, &after.events));
     }
+    if after.three_d && before.environment != after.environment {
+        // O Ambiente vai inteiro (o jogo refaz o céu, a luz e as sombras).
+        let env: serde_json::Map<String, serde_json::Value> = after
+            .environment
+            .iter()
+            .map(|(k, v)| (k.clone(), v.to_json()))
+            .collect();
+        out.push(LiveChange {
+            id: 0,
+            component: None,
+            field: "environment".into(),
+            value: Prop::Bool(false),
+            json: Some(serde_json::Value::Object(env)),
+        });
+    }
     scene_data::visit(&after.objects, &mut |o| {
         let Some(b) = before.find(o.id) else { return };
         if b.events != o.events {
@@ -2491,6 +2506,26 @@ mod tests {
         assert_eq!(json["value"], "#FF0000");
         // A engine aceita a mensagem.
         assert!(nn_script::live::push(&d[0].to_json("teste-diff.cena")));
+    }
+
+    #[test]
+    fn ambiente_vai_inteiro_para_o_jogo() {
+        let a = SceneData::new_3d();
+        let mut b = a.clone();
+        b.set_env("sun_height", Prop::Num(12.0));
+        let d = diff(&a, &b);
+        assert_eq!(d.len(), 1);
+        assert_eq!((d[0].id, d[0].field.as_str()), (0, "environment"));
+        let json: serde_json::Value = serde_json::from_str(&d[0].to_json("m.cena")).unwrap();
+        assert_eq!(json["value"]["sun_height"], 12.0);
+        assert_eq!(json["value"]["fog"], true);
+        // Campos 3D dos objetos também vão.
+        let mut c = a.clone();
+        c.objects[2].z = 3.0;
+        c.objects[2].ry = 45.0;
+        let d = diff(&a, &c);
+        let fields: Vec<&str> = d.iter().map(|x| x.field.as_str()).collect();
+        assert_eq!(fields, ["z", "ry"]);
     }
 
     #[test]

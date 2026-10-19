@@ -1,0 +1,15 @@
+-- Configuração do jogo. Todas as opções estão na documentação da nn-engine
+-- (docs/lua.md, seção "config.lua").
+return {
+  title = "{{TITULO}}",
+  -- Nome da pasta onde o progresso é salvo. Não mude depois de distribuir
+  -- o jogo.
+  id = "{{ID}}",
+  width = 1280,
+  height = 720,
+  resolution = { 1280, 720 },
+  clear_color = "#BFE3F2",
+  start = "cenas/ilha.cena",
+  -- Variáveis do jogo (nn.vars): crie em Configurações do projeto.
+  vars = { estrelas = 0, moedas = 0 },
+}

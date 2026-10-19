@@ -356,6 +356,7 @@ E.CONDITIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "tile", name = "Encostar num tile", category = "Toques",
     text = "{quem} estiver encostando num tile {tipo}",
     help = "Tiles de um mapa com esse tipo (marcado no tileset: \"lava\", \"agua\", \"tijolo\"). Vazio = qualquer tile. Com Quando, acontece ao começar a encostar.",
@@ -377,11 +378,24 @@ E.CONDITIONS = {
   {
     id = "perto", name = "Estiver perto de", category = "Toques",
     text = "{quem} estiver a menos de {distancia} de {alvo}",
-    props = { who("quem"), { "distancia", 200, min = 0 }, who("alvo", "@jogador", "De") },
+    props = { who("quem"), { "distancia", 200, min = 0, default3d = 3 }, who("alvo", "@jogador", "De") },
     lua = "distancia({quem}, {alvo}) < {distancia}",
     test = function(ctx, p, st, b)
       local out = {}
       local d = number(p.distancia)
+      if ctx.scene._3d then
+        for _, a in ipairs(resolve(ctx.scene, p.quem, b)) do
+          local ax, ay, az = a:position3d()
+          for _, o in ipairs(resolve(ctx.scene, p.alvo, b)) do
+            if o ~= a then
+              local ox, oy, oz = o:position3d()
+              local dx, dy, dz = ox - ax, oy - ay, oz - az
+              if dx * dx + dy * dy + dz * dz < d * d then table.insert(out, { este = a, outro = o }) end
+            end
+          end
+        end
+        return out
+      end
       for _, a in ipairs(resolve(ctx.scene, p.quem, b)) do
         local ax, ay = a:world_transform()
         for _, o in ipairs(resolve(ctx.scene, p.alvo, b)) do
@@ -464,6 +478,7 @@ E.CONDITIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "saiu_da_tela", name = "Sair da tela", category = "Objetos", trigger = true,
     text = "{quem} sair da tela",
     props = { who("quem") },
@@ -527,6 +542,7 @@ E.CONDITIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "particulas_terminaram", name = "Partículas terminarem", category = "Objetos", trigger = true,
     text = "as partículas de {quem} terminarem",
     help = "Uma explosão acabou (ou um emissor desligado ficou sem partículas).",
@@ -542,6 +558,7 @@ E.CONDITIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "animacao_terminou", name = "Animação terminar", category = "Objetos", trigger = true,
     text = "{quem} terminar a animação {nome}",
     help = "Só animações que tocam uma vez (modo \"uma vez\" no editor de animação). Vazio = qualquer uma.",
@@ -616,18 +633,29 @@ local function each(ctx, sel, b, f)
   for _, o in ipairs(resolve(ctx.scene, sel, b)) do f(o) end
 end
 
-local function set_velocity(o, vx, vy, add)
-  if o.body and o.body.alive then
-    if add then
-      o.body.vx, o.body.vy = o.body.vx + vx, o.body.vy + vy
+local function set_velocity(o, vx, vy, add, vz)
+  local b = o.body
+  if b and b.alive then
+    if vz then
+      -- 3D (o personagem também: vy é o pulo, vx e vz um empurrão).
+      if add then
+        b:set_velocity(b.vx + vx, b.vy + vy, b.vz + vz)
+      else
+        b:set_velocity(vx, vy, vz)
+      end
+      if b.is_character and (vx ~= 0 or vz ~= 0) then o.empurrado = 0.3 end
+    elseif add then
+      b.vx, b.vy = b.vx + vx, b.vy + vy
     else
-      o.body.vx, o.body.vy = vx, vy
+      b.vx, b.vy = vx, vy
     end
   else
     if add then
       o.vx, o.vy = (o.vx or 0) + vx, (o.vy or 0) + vy
+      if vz then o.vz = (o.vz or 0) + vz end
     else
       o.vx, o.vy = vx, vy
+      if vz then o.vz = vz end
     end
   end
 end
@@ -759,13 +787,25 @@ E.ACTIONS = {
       who("onde", "@este", "Onde"),
       { "dx", 0, label = "Deslocar x", advanced = true },
       { "dy", 0, label = "Deslocar y", advanced = true },
+      { "dz", 0, label = "Deslocar z", advanced = true, mode = "3d" },
       { "vx", 0, label = "Velocidade x", advanced = true },
       { "vy", 0, label = "Velocidade y", advanced = true },
+      { "vz", 0, label = "Velocidade z", advanced = true, mode = "3d" },
     },
     lua = "self:spawn(\"{prefab}\", x, y)",
     run = function(ctx, p, b)
       if p.prefab == "" then return end
       local spots = resolve(ctx.scene, p.onde, b, true)
+      if ctx.scene._3d then
+        for _, o in ipairs(spots) do
+          local x, y, z = o:position3d()
+          local n = ctx.scene:spawn(p.prefab, 0, 0)
+          n:move_to(x + number(p.dx), y + number(p.dy), z + number(p.dz))
+          local vx, vy, vz = number(p.vx), number(p.vy), number(p.vz)
+          if vx ~= 0 or vy ~= 0 or vz ~= 0 then set_velocity(n, vx, vy, false, vz) end
+        end
+        return
+      end
       for _, o in ipairs(spots) do
         local x, y = o:world_transform()
         local n = ctx.scene:spawn(p.prefab, x + number(p.dx), y + number(p.dy))
@@ -809,13 +849,14 @@ E.ACTIONS = {
     text = "levar {alvo} {modo} {x}, {y}",
     props = { who("alvo"),
       { "modo", "para", options = { { "para", "para a posição" }, { "somar", "andando" } } },
-      { "x", 0 }, { "y", 0 } },
+      { "x", 0 }, { "y", 0 }, { "z", 0, mode = "3d" } },
+    text3d = "levar {alvo} {modo} {x}, {y}, {z}",
     lua = "{alvo}:move_to(x, y)",
     run = function(ctx, p, b)
       each(ctx, p.alvo, b, function(o)
-        local x, y = number(p.x), number(p.y)
-        if p.modo == "somar" then x, y = o.x + x, o.y + y end
-        o:move_to(x, y)
+        local x, y, z = number(p.x), number(p.y), number(p.z)
+        if p.modo == "somar" then x, y, z = o.x + x, o.y + y, (o.z or 0) + z end
+        o:move_to(x, y, z)
       end)
     end,
   },
@@ -824,10 +865,13 @@ E.ACTIONS = {
     text = "{modo} {alvo}: {vx}, {vy}",
     help = "Velocidade em x (direita +) e y (cima +). Com corpo físico, vale para o corpo.",
     props = { { "modo", "definir", options = { { "definir", "mudar a velocidade de" }, { "somar", "empurrar" } } },
-      who("alvo"), { "vx", 0 }, { "vy", 600 } },
+      who("alvo"), { "vx", 0 }, { "vy", 600, default3d = 10 }, { "vz", 0, mode = "3d" } },
+    text3d = "{modo} {alvo}: {vx}, {vy}, {vz}",
+    help3d = "Velocidade em x, y (cima +) e z, em metros por segundo. Com corpo físico, vale para o corpo; num Jogador 3D, y é um pulo.",
     lua = "{alvo}.body.vx, {alvo}.body.vy = {vx}, {vy}",
     run = function(ctx, p, b)
-      each(ctx, p.alvo, b, function(o) set_velocity(o, number(p.vx), number(p.vy), p.modo == "somar") end)
+      local vz = ctx.scene._3d and number(p.vz) or nil
+      each(ctx, p.alvo, b, function(o) set_velocity(o, number(p.vx), number(p.vy), p.modo == "somar", vz) end)
     end,
   },
   -- Aparência
@@ -848,6 +892,7 @@ E.ACTIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "imagem", name = "Mudar imagem", category = "Aparência",
     text = "mudar a imagem de {alvo} para {imagem}",
     props = { who("alvo"), { "imagem", "", type = "image", label = "Imagem" } },
@@ -863,6 +908,7 @@ E.ACTIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "quadro", name = "Mudar quadro", category = "Aparência",
     text = "mudar o quadro de {alvo} para {quadro}",
     props = { who("alvo"), { "quadro", 1, min = 1, integer = true } },
@@ -874,6 +920,7 @@ E.ACTIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "animacao", name = "Tocar animação", category = "Aparência",
     text = "tocar a animação {nome} em {alvo}",
     help = "Uma animação do .anim da imagem (feita no editor de animação). Se já estiver tocando, continua.",
@@ -889,6 +936,7 @@ E.ACTIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "trocar_tile", name = "Trocar o tile tocado", category = "Mapas",
     text = "trocar o tile tocado pelo tile {tile}",
     help = "Os tiles da condição \"Encostar num tile\" (blocos que quebram, moedas no mapa). 0 apaga; a colisão acompanha.",
@@ -901,6 +949,7 @@ E.ACTIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "trocar_tile_em", name = "Trocar o tile em um objeto", category = "Mapas",
     text = "trocar o tile em {alvo} pelo tile {tile}",
     help = "O tile do mapa no centro do objeto (na camada de cima que tiver tile ali). 0 apaga.",
@@ -936,12 +985,16 @@ E.ACTIONS = {
     run = function(ctx, p, b)
       each(ctx, p.alvo, b, function(o)
         for _, c in ipairs(o.components) do
-          if c.type == "sprite" or c.type == "shape" or c.type == "text" then c.color = p.cor end
+          if c.type == "sprite" or c.type == "shape" or c.type == "text" or c.type == "model"
+            or c.type == "shape3d" then
+            c.color = p.cor
+          end
         end
       end)
     end,
   },
   {
+    mode = "2d",
     id = "faiscas", name = "Faíscas", category = "Aparência",
     text = "soltar faíscas em {alvo}",
     props = { who("alvo"), { "cor", "#FFD166", type = "color", advanced = true },
@@ -955,6 +1008,7 @@ E.ACTIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "soltar_particulas", name = "Soltar partículas", category = "Aparência",
     text = "soltar {quantidade} partículas de {alvo}",
     help = "O objeto precisa do componente Partículas: solta de uma vez (poeira ao pular, brilho, explosão).",
@@ -967,6 +1021,7 @@ E.ACTIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "emissor", name = "Ligar ou desligar partículas", category = "Aparência",
     text = "{acao} as partículas de {alvo}",
     help = "Para a emissão contínua (as que já saíram terminam a vida) ou volta a emitir.",
@@ -980,6 +1035,7 @@ E.ACTIONS = {
     end,
   },
   {
+    mode = "2d",
     id = "tremer", name = "Tremer a câmera", category = "Aparência",
     text = "tremer a câmera",
     props = { { "forca", 8, min = 0, label = "Força", advanced = true },
@@ -1106,7 +1162,8 @@ function E.catalog()
       if type(trig) == "function" then trig = "depends" end
       table.insert(out, {
         id = d.id, name = d.name, category = d.category, text = d.text, help = d.help,
-        lua = d.lua, trigger = trig, props = d._props,
+        lua = d.lua, trigger = trig, props = d._props, mode = d.mode, text3d = d.text3d,
+        help3d = d.help3d,
       })
     end
     return out

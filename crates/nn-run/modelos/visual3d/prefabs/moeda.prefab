@@ -1,0 +1,15 @@
+-- Prefab do NN Studio: um objeto pronto para usar em várias cenas.
+-- Dá para editar à mão; ao salvar pelo editor, comentários se perdem.
+return {
+  format = 1,
+  object = {
+    id = 1, name = "moeda",
+    x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+    visible = true, layer = 0,
+    components = {
+      { type = "model", file = "modelos/moeda.glb", color = "#FFFFFF", flat = false, shadow = false },
+      { type = "behavior", script = "nn:coletavel", brilho = true, cor_brilho = "#FFD166", quem = "", som = "assets/sons/moeda.wav", valor = 1, variavel = "moedas" },
+      { type = "behavior", script = "nn:girar3d", altura = 0.12, duracao = 3, eixo = "y", velocidade = 180 },
+    },
+  },
+}

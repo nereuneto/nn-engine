@@ -149,6 +149,8 @@ fn thumb_png(t: Template) -> &'static [u8] {
         Template::Vazio => include_bytes!("../assets/modelos/vazio.png"),
         Template::Minimo => include_bytes!("../assets/modelos/minimo.png"),
         Template::TresD => include_bytes!("../assets/modelos/3d.png"),
+        Template::Visual3D => include_bytes!("../assets/modelos/visual3d.png"),
+        Template::Vazio3D => include_bytes!("../assets/modelos/vazio3d.png"),
     }
 }
 
@@ -180,8 +182,16 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
             "Só uma cena com um quadrado que anda. Para quem quer começar do zero.",
         ),
         Template::TresD => (
-            "3D",
+            "3D em código",
             "Plataforma 3D em terceira pessoa, em código Lua: ache as 5 estrelas da ilha. Câmera com o mouse, pulo, física, plataformas que andam, menu, pausa e recorde.",
+        ),
+        Template::Visual3D => (
+            "3D",
+            "A ilha das estrelas montada no editor, sem código: herói em terceira pessoa, caixotes que caem, plataformas e elevador que andam, moedas, estrelas e um evento de vitória.",
+        ),
+        Template::Vazio3D => (
+            "Vazio 3D",
+            "Um mundo 3D com chão e um pacote de modelos e sons para montar do seu jeito (o tutorial 3D começa daqui).",
         ),
     }
 }

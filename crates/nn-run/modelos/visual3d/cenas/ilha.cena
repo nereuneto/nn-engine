@@ -1,0 +1,497 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  gravity = -20,
+  mode = "3d",
+  environment = { sky = true, sky_top = "#3F8FD8", sky_horizon = "#CDEBF5", sky_bottom = "#2E6F9E", sun_height = 53, sun_turn = 48, sun_color = "#FFF1D6", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 35, fog_far = 90, shadows = true, shadow_distance = 25 },
+  events = {
+    { comment = "Começo: zera as estrelas e as moedas; a dica some depois de 4 segundos." },
+    { when = {
+        { cond = "comecou" },
+      }, actions = {
+        { act = "variavel", var = "estrelas", op = "definir", valor = 0 },
+        { act = "variavel", var = "moedas", op = "definir", valor = 0 },
+      } },
+    { when = {
+        { cond = "depois_de", segundos = 4 },
+      }, actions = {
+        { act = "mostrar", acao = "esconder", alvo = "Dica" },
+      } },
+    { comment = "Achou as 5 estrelas: vitória!" },
+    { when = {
+        { cond = "variavel", var = "estrelas", op = ">=", valor = 5 },
+      }, actions = {
+        { act = "som", som = "assets/sons/vitoria.wav", volume = 1 },
+        { act = "esperar", segundos = 1.2 },
+        { act = "ir_para_cena", cena = "cenas/fim.cena", escurecer = 0.8 },
+      } },
+  },
+  objects = {
+    {
+      id = 1, name = "Mar",
+      x = 0, y = -0.4, rotation = 0, scale_x = 400, scale_y = 1,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 400,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "plane", color = "#3FA7D6", shadow = false },
+      },
+    },
+    {
+      id = 2, name = "Areia",
+      x = 0, y = -0.55, rotation = 0, scale_x = 29.5, scale_y = 1,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 29.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cylinder", color = "#F2D49B", shadow = false },
+      },
+    },
+    {
+      id = 3, name = "Ilha",
+      x = 0, y = -2, rotation = 0, scale_x = 28, scale_y = 4,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 28,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cylinder", color = "#7BC86C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 4, name = "Herói",
+      x = 0, y = 0, rotation = 0, scale_x = 1.1, scale_y = 1.1,
+      z = 9, rx = 0, ry = 180, rz = 0, scale_z = 1.1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "behavior", script = "nn:jogador3d", altura = 0, camera = "atras", distancia = 7, inverter_y = false, prender_mouse = true, pulo = 8, pulos_no_ar = 0, queda = -3, raio = 0, sensibilidade = 0.15, velocidade = 6, virar = true },
+      },
+      events = {
+        { when = {
+            { cond = "mensagem", quem = "@este", msg = "pulou" },
+          }, actions = {
+            { act = "som", som = "assets/sons/pulo.wav", volume = 0.5 },
+          } },
+        { when = {
+            { cond = "mensagem", quem = "@este", msg = "caiu" },
+          }, actions = {
+            { act = "som", som = "assets/sons/dano.wav", volume = 1 },
+          } },
+      },
+    },
+    {
+      id = 5, name = "Plataforma",
+      x = -4, y = 1, rotation = 0, scale_x = 3, scale_y = 1,
+      z = 2, rx = 0, ry = 0, rz = 0, scale_z = 3,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 6, name = "Plataforma",
+      x = -8, y = 2, rotation = 0, scale_x = 3, scale_y = 1,
+      z = -2, rx = 0, ry = 0, rz = 0, scale_z = 3,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 7, name = "Plataforma",
+      x = -6, y = 3.2, rotation = 0, scale_x = 3, scale_y = 1,
+      z = -7, rx = 0, ry = 0, rz = 0, scale_z = 3,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 8, name = "Plataforma",
+      x = 10, y = 4.5, rotation = 0, scale_x = 3, scale_y = 1,
+      z = -10, rx = 0, ry = 0, rz = 0, scale_z = 3,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 9, name = "Plataforma",
+      x = 11, y = 5.8, rotation = 0, scale_x = 2.5, scale_y = 1,
+      z = -5.5, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 10, name = "Plataforma",
+      x = 8, y = 7.2, rotation = 0, scale_x = 2.5, scale_y = 1,
+      z = -2, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 11, name = "Plataforma",
+      x = 10.5, y = 8.5, rotation = 0, scale_x = 2.5, scale_y = 1,
+      z = 1.5, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 12, name = "Plataforma",
+      x = 0, y = 8, rotation = 0, scale_x = 4, scale_y = 1,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 4,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 13, name = "Plataforma que anda",
+      x = 0, y = 3.5, rotation = 0, scale_x = 3, scale_y = 1,
+      z = -10, rx = 0, ry = 0, rz = 0, scale_z = 3,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFE6B0", flat = false, shadow = true },
+        { type = "body3d", body = "kinematic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+        { type = "behavior", script = "nn:plataforma3d", duracao = 3.75, espera = 0.5, x = 6, y = 0, z = 0 },
+      },
+    },
+    {
+      id = 14, name = "Elevador",
+      x = 3.2, y = 0.3, rotation = 0, scale_x = 2, scale_y = 1,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFE6B0", flat = false, shadow = true },
+        { type = "body3d", body = "kinematic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+        { type = "behavior", script = "nn:plataforma3d", duracao = 5.8, espera = 1, x = 0, y = 7.6, z = 0 },
+      },
+    },
+    {
+      id = 15, name = "Árvore",
+      x = -9, y = 0, rotation = 0, scale_x = 1.3, scale_y = 1.3,
+      z = -6, rx = 0, ry = 20, rz = 0, scale_z = 1.3,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 16, name = "Árvore",
+      x = -11, y = 0, rotation = 0, scale_x = 1.1, scale_y = 1.1,
+      z = 3, rx = 0, ry = 80, rz = 0, scale_z = 1.1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 17, name = "Árvore",
+      x = -5, y = 0, rotation = 0, scale_x = 1.4, scale_y = 1.4,
+      z = 9, rx = 0, ry = 140, rz = 0, scale_z = 1.4,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 18, name = "Árvore",
+      x = 6, y = 0, rotation = 0, scale_x = 1.2, scale_y = 1.2,
+      z = -5, rx = 0, ry = 200, rz = 0, scale_z = 1.2,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 19, name = "Árvore",
+      x = 9, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 4, rx = 0, ry = 260, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 20, name = "Árvore",
+      x = -2, y = 0, rotation = 0, scale_x = 1.5, scale_y = 1.5,
+      z = -11, rx = 0, ry = 300, rz = 0, scale_z = 1.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 21, name = "Árvore",
+      x = 12, y = 0, rotation = 0, scale_x = 1.3, scale_y = 1.3,
+      z = -2, rx = 0, ry = 40, rz = 0, scale_z = 1.3,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 22, name = "Árvore",
+      x = -12, y = 0, rotation = 0, scale_x = 1.2, scale_y = 1.2,
+      z = -2, rx = 0, ry = 110, rz = 0, scale_z = 1.2,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 23, name = "Pedra",
+      x = -7, y = 0.468, rotation = 0, scale_x = 1.8, scale_y = 1.8,
+      z = 6, rx = 0, ry = 30, rz = 0, scale_z = 1.8,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 24, name = "Pedra",
+      x = 5, y = 0.39, rotation = 0, scale_x = 1.5, scale_y = 1.5,
+      z = 6, rx = 0, ry = 90, rz = 0, scale_z = 1.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 25, name = "Pedra",
+      x = 11, y = 0.572, rotation = 0, scale_x = 2.2, scale_y = 2.2,
+      z = 9, rx = 0, ry = 150, rz = 0, scale_z = 2.2,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 26, name = "Pedra",
+      x = -10, y = 0.442, rotation = 0, scale_x = 1.7, scale_y = 1.7,
+      z = -9, rx = 0, ry = 220, rz = 0, scale_z = 1.7,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 27, name = "Caixote",
+      x = -2, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "dynamic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 8, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 28, name = "Caixote",
+      x = -0.8, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 5.2, rx = 0, ry = 15, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "dynamic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 8, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 29, name = "Caixote",
+      x = -1.4, y = 1, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 5.1, rx = 0, ry = 40, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "body3d", body = "dynamic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 8, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 30, name = "moeda",
+      x = -8.457, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -3.078, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 31, name = "moeda",
+      x = -7.092, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -5.541, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 32, name = "moeda",
+      x = -5.033, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -7.461, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 33, name = "moeda",
+      x = -2.481, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -8.651, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 34, name = "moeda",
+      x = 0.314, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -8.995, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 35, name = "moeda",
+      x = 3.078, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -8.457, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 36, name = "moeda",
+      x = 5.541, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -7.092, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 37, name = "moeda",
+      x = 7.461, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -5.033, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 38, name = "moeda",
+      x = -4, y = 1.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 2, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 39, name = "moeda",
+      x = -8, y = 2.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 40, name = "moeda",
+      x = 11, y = 6.4, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -5.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 41, name = "moeda",
+      x = 8, y = 7.8, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 42, name = "moeda",
+      x = 6, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 9, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 43, name = "moeda",
+      x = 7.5, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 7.8, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 44, name = "moeda",
+      x = 9, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 6.6, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 45, name = "moeda",
+      x = 10.5, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 5.4, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/moeda.prefab",
+    },
+    {
+      id = 46, name = "estrela",
+      x = -6, y = 3.6, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -7, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/estrela.prefab",
+    },
+    {
+      id = 47, name = "estrela",
+      x = 10, y = 4.9, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -10, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/estrela.prefab",
+    },
+    {
+      id = 48, name = "estrela",
+      x = 10.5, y = 8.9, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 1.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/estrela.prefab",
+    },
+    {
+      id = 49, name = "estrela",
+      x = 0, y = 8.4, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/estrela.prefab",
+    },
+    {
+      id = 50, name = "estrela",
+      x = -3, y = 0.5, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/estrela.prefab",
+    },
+    {
+      id = 51, name = "Placar",
+      x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0, anchor = "top_left",
+      components = {
+        { type = "text", text = "", size = 30, color = "#FFD93D", anchor = "left", font = "", hud = true },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Estrelas {estrelas} / 5     Moedas {moedas}" },
+      },
+    },
+    {
+      id = 52, name = "Dica",
+      x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0, anchor = "top",
+      components = {
+        { type = "text", text = "Ache as 5 estrelas! (Esc solta o mouse)", size = 34, color = "#FFFFFF", anchor = "center", font = "", hud = true },
+      },
+    },
+  },
+}

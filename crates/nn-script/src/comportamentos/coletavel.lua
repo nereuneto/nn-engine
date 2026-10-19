@@ -3,6 +3,7 @@ local B = {
   title = "Coletável",
   description = "Moeda, item, vida extra: some quando o jogador encosta e soma numa variável do jogo.",
   category = "Itens",
+  mode = "both",
   props = {
     { "quem", "", type = "object", label = "Quem pega", help = "Vazio = o jogador." },
     { "variavel", "moedas", label = "Soma na variável",
@@ -28,7 +29,7 @@ function B:pegar(quem)
     nn.vars[self.variavel] = (tonumber(nn.vars[self.variavel]) or 0) + self.valor
   end
   if self.som ~= "" then nn.audio.play(nn.assets.sound(self.som)) end
-  if self.brilho then
+  if self.brilho and not self.scene._3d then
     local x, y = self.obj:world_transform()
     self.scene:burst(x, y, self.cor_brilho)
   end

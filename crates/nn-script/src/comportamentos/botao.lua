@@ -4,6 +4,7 @@ local B = {
   title = "Botão",
   description = "Para menus: destaca ao passar o mouse (ou com as setas) e faz algo ao clicar ou apertar Enter.",
   category = "Interface",
+  mode = "both",
   props = {
     { "acao", "nada", label = "Ao clicar",
       options = {

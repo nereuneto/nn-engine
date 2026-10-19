@@ -32,6 +32,25 @@ pub struct EventDef {
     pub lua: String,
     pub trigger: Trigger,
     pub props: Vec<PropSpec>,
+    /// Só numa cena "2d" ou "3d" (vazio = nas duas).
+    pub mode: String,
+    /// Frase e ajuda numa cena 3D, quando são outras.
+    pub text3d: String,
+    pub help3d: String,
+}
+
+thread_local! {
+    static THREE_D: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// A cena cujos eventos estão sendo mostrados é 3D? Muda as frases, os
+/// padrões e o que aparece nos menus. (Quem desenha uma cena chama antes.)
+pub fn set_three_d(on: bool) {
+    THREE_D.with(|c| c.set(on));
+}
+
+pub fn three_d() -> bool {
+    THREE_D.with(|c| c.get())
 }
 
 /// Pedaço de uma frase: texto ou o campo que vai no meio dela.
@@ -46,10 +65,34 @@ impl EventDef {
         self.props.iter().find(|p| p.key == key)
     }
 
+    /// Vale na cena aberta (2D ou 3D)?
+    pub fn fits(&self) -> bool {
+        crate::behaviors::mode_fits(&self.mode, three_d())
+    }
+
+    /// A ajuda (a do 3D numa cena 3D, se houver).
+    pub fn help_text(&self) -> &str {
+        if three_d() && !self.help3d.is_empty() {
+            &self.help3d
+        } else {
+            &self.help
+        }
+    }
+
+    /// As propriedades que valem na cena aberta.
+    pub fn props_now(&self) -> impl Iterator<Item = &PropSpec> {
+        let three_d = three_d();
+        self.props.iter().filter(move |p| p.fits(three_d))
+    }
+
     /// A frase em pedaços.
     pub fn pieces(&self) -> Vec<Piece> {
         let mut out = Vec::new();
-        let mut rest = self.text.as_str();
+        let mut rest = if three_d() && !self.text3d.is_empty() {
+            self.text3d.as_str()
+        } else {
+            self.text.as_str()
+        };
         while let Some(i) = rest.find('{') {
             let Some(j) = rest[i..].find('}').map(|j| j + i) else {
                 break;
@@ -84,14 +127,13 @@ impl EventDef {
             id: self.id.clone(),
             not: false,
             props: self
-                .props
-                .iter()
+                .props_now()
                 .map(|p| {
-                    let v = match (&p.default, p.kind) {
+                    let v = match (p.default_for(three_d()), p.kind) {
                         (Prop::Str(s), PropType::Target) if s == "@este" && !in_object => {
                             Prop::Str("@jogador".into())
                         }
-                        (d, _) => d.clone(),
+                        (d, _) => d,
                     };
                     (p.key.clone(), v)
                 })
@@ -174,6 +216,9 @@ fn read_list(t: &Table) -> Vec<EventDef> {
                 .flatten()
                 .map(|p| read_props(&p))
                 .unwrap_or_default(),
+            mode: opt_str(&d, "mode"),
+            text3d: opt_str(&d, "text3d"),
+            help3d: opt_str(&d, "help3d"),
         });
     }
     out
@@ -453,6 +498,34 @@ pub fn to_lua(rules: &[Rule], owner: Option<&str>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn numa_cena_3d_frases_padroes_e_menus_mudam() {
+        let cat = catalog();
+        set_three_d(true);
+        // Só do 2D: some do menu.
+        assert!(!cat.condition("tile").unwrap().fits());
+        assert!(cat.condition("perto").unwrap().fits());
+        // Velocidade: com z, em metros, e a frase mostra os três.
+        let vel = cat.action("velocidade").unwrap();
+        let item = vel.new_item(false);
+        assert_eq!(item.get("vy"), Some(&Prop::Num(10.0)));
+        assert_eq!(item.get("vz"), Some(&Prop::Num(0.0)));
+        assert!(vel.pieces().contains(&Piece::Field("vz".into())));
+        assert_eq!(
+            cat.condition("perto")
+                .unwrap()
+                .new_item(false)
+                .get("distancia"),
+            Some(&Prop::Num(3.0))
+        );
+        set_three_d(false);
+        let item = vel.new_item(false);
+        assert_eq!(item.get("vy"), Some(&Prop::Num(600.0)));
+        assert_eq!(item.get("vz"), None);
+        assert!(!vel.pieces().contains(&Piece::Field("vz".into())));
+        assert!(cat.condition("tile").unwrap().fits());
+    }
 
     #[test]
     fn catalogo_tem_condicoes_e_acoes_com_frases() {

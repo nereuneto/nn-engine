@@ -529,6 +529,8 @@ impl SceneDoc {
                 .response
                 .on_hover_text("Tamanho da grade, em metros");
             ui.checkbox(&mut self.show_grid3, "Grade");
+            ui.checkbox(&mut self.show_colliders, "Colisões")
+                .on_hover_text("Mostra os Corpos 3D (verde) e o Jogador 3D (azul)");
             ui.separator();
             let menu = ui.menu_button("➕ Objeto", |ui| {
                 if let Some(o) = add_object3_menu(ui) {
@@ -989,9 +991,22 @@ impl SceneDoc {
     }
 
     fn overlays3(&self, painter: &egui::Painter, rect: Rect, env: &mut SceneEnv) {
-        // Caixas de seleção e de destaque.
-        let mut boxes: Vec<(u32, Color32)> =
-            self.selection.iter().map(|id| (*id, ORANGE)).collect();
+        // Caixas de seleção e de destaque (e das colisões, se pedido).
+        let mut boxes: Vec<(u32, Color32)> = Vec::new();
+        if self.show_colliders {
+            scene_data::visit(&self.data.objects, &mut |o| {
+                let player = o
+                    .components
+                    .iter()
+                    .any(|c| c.kind == "behavior" && c.str("script") == "nn:jogador3d");
+                if player {
+                    boxes.push((o.id, Color32::from_rgb(90, 160, 255)));
+                } else if o.component("body3d").is_some() {
+                    boxes.push((o.id, Color32::from_rgb(90, 230, 120)));
+                }
+            });
+        }
+        boxes.extend(self.selection.iter().map(|id| (*id, ORANGE)));
         if let Some(h) = self.hover
             && !self.selection.contains(&h)
         {
@@ -1139,6 +1154,8 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
             if s == "plane" {
                 o.scale_x = 10.0;
                 o.scale_z = 10.0;
+                // Um chão: já vem com um Corpo 3D parado.
+                o.components.push(Component::new("body3d"));
             }
             out = Some(o);
         }
@@ -1168,6 +1185,22 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
         .clicked()
     {
         out = Some(Object::new(0, "Grupo"));
+    }
+    ui.separator();
+    if ui
+        .button("Jogador 3D")
+        .on_hover_text("Uma cápsula que anda, pula e leva a câmera atrás dela. Troque a forma por um modelo .glb no Inspetor.")
+        .clicked()
+    {
+        let mut o = shape("Jogador", "capsule", "#FF8C42");
+        if let Some(info) = crate::behaviors::builtins()
+            .iter()
+            .find(|b| b.script == "nn:jogador3d")
+        {
+            o.components
+                .push(Component::behavior(&info.script, &info.defaults()));
+        }
+        out = Some(o);
     }
     out
 }

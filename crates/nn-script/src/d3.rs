@@ -51,6 +51,23 @@ impl UserData for LMat4 {
             let p = this.0.transform_point3(Vec3::new(x, y, z));
             Ok((p.x, p.y, p.z))
         });
+        m.add_method("inverse", |_, this, ()| Ok(LMat4(this.0.inverse())));
+        // Posição, rotação (graus, como no draw) e escala.
+        m.add_method("decompose", |_, this, ()| {
+            let (s, q, t) = this.0.to_scale_rotation_translation();
+            let (y, x, z) = q.to_euler(glam::EulerRot::YXZ);
+            Ok((
+                t.x,
+                t.y,
+                t.z,
+                x.to_degrees(),
+                y.to_degrees(),
+                z.to_degrees(),
+                s.x,
+                s.y,
+                s.z,
+            ))
+        });
     }
 }
 
@@ -72,6 +89,14 @@ impl UserData for LModel {
         f.add_field_method_get("width", |_, this| Ok(this.size.x));
         f.add_field_method_get("height", |_, this| Ok(this.size.y));
         f.add_field_method_get("depth", |_, this| Ok(this.size.z));
+    }
+
+    fn add_methods<M: mlua::UserDataMethods<Self>>(m: &mut M) {
+        // A caixa em volta do modelo: min x, y, z e max x, y, z.
+        m.add_method("bounds", |_, this, ()| {
+            let (a, b) = this.bounds;
+            Ok((a.x, a.y, a.z, b.x, b.y, b.z))
+        });
     }
 }
 

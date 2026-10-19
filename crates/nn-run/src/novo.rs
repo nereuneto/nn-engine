@@ -25,16 +25,24 @@ pub enum Template {
     /// Jogo 3D em terceira pessoa (o "Ilha das Estrelas"): câmera, personagem,
     /// física, plataformas que andam, menu, pausa e recorde.
     TresD,
+    /// A ilha das estrelas montada no NN Studio, sem código: Jogador 3D,
+    /// corpos 3D, plataformas que andam, prefabs e eventos.
+    Visual3D,
+    /// Mundo 3D vazio (câmera e chão) com modelos e sons (o tutorial 3D
+    /// começa daqui).
+    Vazio3D,
 }
 
 impl Template {
-    pub const ALL: [Template; 7] = [
+    pub const ALL: [Template; 9] = [
         Template::Padrao,
         Template::Visual,
         Template::Aventura,
         Template::Nave,
+        Template::Visual3D,
         Template::TresD,
         Template::Vazio,
+        Template::Vazio3D,
         Template::Minimo,
     ];
 
@@ -47,6 +55,8 @@ impl Template {
             Template::Nave => "nave",
             Template::Vazio => "vazio",
             Template::TresD => "3d",
+            Template::Visual3D => "visual3d",
+            Template::Vazio3D => "vazio3d",
         }
     }
 
@@ -59,6 +69,8 @@ impl Template {
             "nave" => Some(Template::Nave),
             "vazio" => Some(Template::Vazio),
             "3d" | "3D" => Some(Template::TresD),
+            "visual3d" | "3d-visual" => Some(Template::Visual3D),
+            "vazio3d" | "3d-vazio" => Some(Template::Vazio3D),
             _ => None,
         }
     }
@@ -172,6 +184,41 @@ impl Template {
                 ="assets/sons/moeda.wav" "padrao/assets/sons/moeda.wav",
                 ="assets/sons/menu.wav" "padrao/assets/sons/menu.wav",
                 ="assets/sons/confirmar.wav" "padrao/assets/sons/confirmar.wav",
+                ="assets/sons/pulo.wav" "comum/sons/pulo.wav",
+                ="assets/sons/vitoria.wav" "comum/sons/vitoria.wav",
+                ="assets/sons/dano.wav" "comum/sons/dano.wav",
+            ),
+            Template::Visual3D => modelo!("visual3d":
+                "config.lua",
+                "LEIAME.md",
+                "cenas/ilha.cena",
+                "cenas/fim.cena",
+                "prefabs/moeda.prefab",
+                "prefabs/estrela.prefab",
+                ="modelos/arvore.glb" "../../../jogos/estrelas3d/modelos/arvore.glb",
+                ="modelos/caixote.glb" "../../../jogos/estrelas3d/modelos/caixote.glb",
+                ="modelos/estrela.glb" "../../../jogos/estrelas3d/modelos/estrela.glb",
+                ="modelos/heroi.glb" "../../../jogos/estrelas3d/modelos/heroi.glb",
+                ="modelos/moeda.glb" "../../../jogos/estrelas3d/modelos/moeda.glb",
+                ="modelos/pedra.glb" "../../../jogos/estrelas3d/modelos/pedra.glb",
+                ="modelos/plataforma.glb" "../../../jogos/estrelas3d/modelos/plataforma.glb",
+                ="assets/sons/moeda.wav" "padrao/assets/sons/moeda.wav",
+                ="assets/sons/pulo.wav" "comum/sons/pulo.wav",
+                ="assets/sons/vitoria.wav" "comum/sons/vitoria.wav",
+                ="assets/sons/dano.wav" "comum/sons/dano.wav",
+            ),
+            Template::Vazio3D => modelo!("vazio3d":
+                "config.lua",
+                "LEIAME.md",
+                "cenas/mundo.cena",
+                ="modelos/arvore.glb" "../../../jogos/estrelas3d/modelos/arvore.glb",
+                ="modelos/caixote.glb" "../../../jogos/estrelas3d/modelos/caixote.glb",
+                ="modelos/estrela.glb" "../../../jogos/estrelas3d/modelos/estrela.glb",
+                ="modelos/heroi.glb" "../../../jogos/estrelas3d/modelos/heroi.glb",
+                ="modelos/moeda.glb" "../../../jogos/estrelas3d/modelos/moeda.glb",
+                ="modelos/pedra.glb" "../../../jogos/estrelas3d/modelos/pedra.glb",
+                ="modelos/plataforma.glb" "../../../jogos/estrelas3d/modelos/plataforma.glb",
+                ="assets/sons/moeda.wav" "padrao/assets/sons/moeda.wav",
                 ="assets/sons/pulo.wav" "comum/sons/pulo.wav",
                 ="assets/sons/vitoria.wav" "comum/sons/vitoria.wav",
                 ="assets/sons/dano.wav" "comum/sons/dano.wav",
