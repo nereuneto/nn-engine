@@ -403,3 +403,76 @@ fn cena_visual_3d_roda_no_jogo() {
         "madeira do caixote: {p:?}"
     );
 }
+
+#[test]
+fn heroi_animado_pelo_lua() {
+    let dir = projeto(
+        "animado",
+        r##"
+        local c = {}
+        function c:enter()
+          self.heroi = nn.assets.model("modelos/heroi.glb")
+          self.anim = self.heroi:animator()
+          nomes = table.concat(self.heroi:animations(), ",")
+          nn.d3.look_at(0, 1, 3, 0, 0.9, 0)
+          nn.d3.light({ sun_color = "#000000", sky = "#FFFFFF", ground = "#FFFFFF" })
+          nn.d3.shadows(false)
+        end
+        function c:update(dt)
+          self.anim:update(dt)
+          tocando = self.anim.animation
+          terminou = self.anim:finished()
+        end
+        function c:draw()
+          nn.d3.draw(self.heroi, { animator = self.anim })
+        end
+        return c
+        "##,
+    );
+    com_modelos(&dir);
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let config = AppConfig::default()
+        .size(64, 64)
+        .assets_dir(&dir)
+        .hot_reload(false)
+        .clear_color(nn_core::Color::BLACK);
+    let Ok(mut h) = Headless::new(config, |ctx| {
+        let mut s = rt.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        assert!(!std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1"));
+        return;
+    };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    let parado = h.pixels().unwrap();
+    // Acenando: o braço sobe e a imagem muda.
+    let lua = rt.lua();
+    lua.globals()
+        .set("cena", h.game.0.table().unwrap())
+        .unwrap();
+    lua.load("cena.anim:play('acenar', { blend = 0 })")
+        .exec()
+        .unwrap();
+    h.run_frames(20);
+    assert_eq!(h.game.0.error(), None);
+    let acenando = h.pixels().unwrap();
+    let diff = parado
+        .chunks(4)
+        .zip(acenando.chunks(4))
+        .filter(|(a, b)| a != b)
+        .count();
+    assert!(diff > 10, "o braço subiu: {diff} pixels");
+    let nomes: String = lua.globals().get("nomes").unwrap();
+    assert_eq!(nomes, "parado,andar,correr,pular,cair,acenar");
+    let tocando: String = lua.globals().get("tocando").unwrap();
+    assert_eq!(tocando, "acenar");
+    // Uma animação que não existe: erro com a lista.
+    let e = lua
+        .load("cena.anim:play('voar')")
+        .exec()
+        .unwrap_err()
+        .to_string();
+    assert!(e.contains("não tem a animação \"voar\""), "{e}");
+}

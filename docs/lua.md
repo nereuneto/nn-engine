@@ -211,6 +211,7 @@ return {
 | `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true) |
 | `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true) |
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
+| `anim3d` | `animation` ("": nenhuma), `speed` (1), `loop` (true): a animação que o `model` do objeto toca desde o começo |
 | `body3d` | `body` ("static", "dynamic" ou "kinematic"), `shape` ("auto", "box", "sphere", "capsule", "cylinder", "mesh"), `sensor`, `bounce` (0), `friction` (0.5), `mass` (0 = pelo tamanho), `lock_rotation`, `gravity_scale` (1), `tag` |
 
 O `body3d` é um corpo de [`nn.physics3d`](#nnphysics3d-física-3d) no mundo da cena (com a `gravity` dela; numa cena 3D, -20 por padrão). A forma `"auto"` usa a malha exata de um `model` num corpo `static` ou `kinematic`; nos outros casos, uma caixa (ou esfera, cápsula e cilindro, conforme o `shape3d`) do tamanho do modelo ou da forma, com a escala do objeto. Os comportamentos que funcionam no 3D são `nn:jogador3d`, `nn:girar3d`, `nn:plataforma3d`, `nn:coletavel`, `nn:ir_para_cena`, `nn:checkpoint`, `nn:mostrar_valor` e `nn:botao` (veja os [prontos](#comportamentos-prontos)); um comportamento seu pode dizer `mode = "3d"` (ou `"2d"`, ou `"both"`) para o NN Studio só oferecer ele nesse tipo de cena.
@@ -227,6 +228,7 @@ No script:
 | `obj:touching(outro, margem)` | As caixas se tocam (margem padrão 0,05 m)? |
 | `obj:move_to(x, y, z)` | Leva o objeto (e o corpo) para lá, parado. |
 | `self:world3()` | O mundo da física 3D da cena (`raycast`, `query_sphere`...). |
+| `obj:play(nome, opts)`, `obj:animator()` | Toca uma animação do modelo do objeto (as opções do [animator](#animações-personagens-com-esqueleto)) / o animator dele. Uma animação sem `loop` manda a mensagem `animacao_terminou` (com o nome) ao terminar. |
 
 Os eventos de toque da física 3D chegam ao `contact(e)` da cena e ao `contact(outro, e)` dos comportamentos, com `e.object_a` e `e.object_b`.
 
@@ -361,7 +363,7 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:atirar` | Cria um prefab andando. | `prefab`, `tecla` ("x"; vazio = sozinho), `intervalo` (0.3), `velocidade` (700), `direcao` ("frente", "jogador", "direita", "cima"), `som`, `distancia` (24) |
 | `nn:gerador` | Cria um prefab de tempos em tempos. | `prefab`, `intervalo` (2), `maximo` (10), `espalhar_x`, `espalhar_y` (0), `comecar_ja` (false) |
 | `nn:temporario` | Some depois de um tempo ou fora da tela. | `tempo` (3), `fora_da_tela` (true) |
-| `nn:jogador3d` | (3D) Jogador 3D: anda para onde a câmera olha (WASD, setas, analógico), pula (espaço, A) e leva a câmera em 3ª pessoa. Cria o próprio corpo (uma cápsula do tamanho do modelo). Manda `pulou` e `caiu`. | `velocidade` (6), `pulo` (8), `pulos_no_ar` (0), `camera` ("atras" ou "cena"), `distancia` (7), `prender_mouse` (true), `sensibilidade` (0.15), `inverter_y` (false), `virar` (true), `queda` (-10), `raio`, `altura` (0 = pelo modelo) |
+| `nn:jogador3d` | (3D) Jogador 3D: anda para onde a câmera olha (WASD, setas, analógico), pula (espaço, A) e leva a câmera em 3ª pessoa. Cria o próprio corpo (uma cápsula do tamanho do modelo). Manda `pulou` e `caiu`. | `velocidade` (6), `pulo` (8), `pulos_no_ar` (0), `camera` ("atras" ou "cena"), `distancia` (7), `prender_mouse` (true), `sensibilidade` (0.15), `inverter_y` (false), `virar` (true), `animar` (true: parado, andar, correr, pular e cair num modelo animado), `anim_parado`, `anim_andar`, `anim_correr`, `anim_pular`, `anim_cair` (os nomes das animações), `queda` (-10), `raio`, `altura` (0 = pelo modelo) |
 | `nn:girar3d` | (3D) Gira em volta de um eixo e flutua. | `velocidade` (90 graus/s), `eixo` ("y", "x", "z"), `altura` (0.2 m), `duracao` (2 s) |
 | `nn:plataforma3d` | (3D) Vai e volta a partir de onde está; com um `body3d` kinematic, leva quem está em cima. | `x` (4), `y` (0), `z` (0), `duracao` (3 s), `espera` (0.5 s) |
 | `nn:botao` | Botão de menu: destaca com o mouse ou as setas (teclado e controle); clique, Enter ou A apertam. Manda a mensagem `clicou` e faz a ação. | `acao` ("nada", "cena", "reiniciar", "sair"), `cena`, `foco` (false: começa selecionado), `cor` ("#FFD166": cor ao destacar), `aumentar` (1.1), `som` |
@@ -950,7 +952,46 @@ local piramide = nn.d3.mesh({
 
 `modelo:bounds()` devolve a caixa em volta do modelo: `x0, y0, z0, x1, y1, z1`.
 
-O modelo tem `triangles`, `width`, `height` e `depth`. Ele é desenhado com `nn.d3.draw`, como as formas. Ainda não entram: animações de esqueleto, luzes e câmeras do arquivo (por enquanto só modelos parados).
+O modelo tem `triangles`, `width`, `height` e `depth`. Ele é desenhado com `nn.d3.draw`, como as formas. Luzes e câmeras do arquivo não entram.
+
+#### Animações (personagens com esqueleto)
+
+Um modelo com esqueleto (ossos) e animações, como um personagem do Blender ou do Mixamo, se mexe na GPU, com sombra. Cada objeto que usa o modelo tem o seu **animator**, que diz qual animação toca e em que instante:
+
+```lua
+function cena:enter()
+  self.heroi = nn.assets.model("modelos/heroi.glb")
+  print(table.concat(self.heroi:animations(), ", "))   -- parado, andar, correr, pular, cair, acenar
+  self.anim = self.heroi:animator()
+  self.anim:play("parado")
+end
+
+function cena:update(dt)
+  if nn.input.down("w") then self.anim:play("andar") else self.anim:play("parado") end
+  self.anim:update(dt)                 -- avança o tempo da animação
+end
+
+function cena:draw()
+  nn.d3.draw(self.heroi, { x = 0, z = 0, animator = self.anim })
+end
+```
+
+| No animator | O que faz |
+|---|---|
+| `anim:play(nome, opts)` | Começa a tocar `nome`. Se já estiver tocando, continua de onde está (dá para chamar todo quadro). Opções: `loop` (padrão `true`; `false` toca uma vez e para no fim), `blend` (segundos de transição suave da anterior para a nova, padrão 0,2; 0 = troca na hora), `speed` e `restart` (`true`: começa do zero mesmo se já estiver tocando). Uma animação que não existe dá erro com a lista das que existem. |
+| `anim:update(dt)` | Avança o tempo (no `update`). |
+| `anim:stop()` | Volta para a pose do modelo, sem animação. |
+| `anim:finished()` | Uma animação sem `loop` chegou ao fim? |
+| `anim:animations()`, `anim:has(nome)` | Os nomes / se tem essa. |
+| `anim:bone(nome)` | Onde está um osso (ou parte) agora, como [matriz](#desenhar) no espaço do modelo: para prender uma espada na mão, `nn.d3.draw(espada, { matrix = matriz_do_heroi * anim:bone("braco_d") })`. |
+| `anim.animation`, `anim.time`, `anim.duration` | A animação tocando (ou `nil`), o instante e a duração (segundos). `time` pode ser mudado. |
+| `anim.speed`, `anim.looping` | Velocidade (1 = normal; negativo toca ao contrário) e se repete. |
+
+Os modelos dos exemplos e dos modelos de projeto 3D trazem o `heroi.glb` (as animações acima; a frente dele é o +Z) e o `bicho.glb` (`parado` e `andar`).
+
+**Do Blender:** cada *Action* do personagem vira uma animação com o mesmo nome. Exporte em *Arquivo > Exportar > glTF 2.0*, formato *glb*, com *Animação* marcada. Um personagem olhando para −Y no Blender (a vista de frente) olha para +Z no jogo, como os nossos. Use 1 unidade = 1 metro.
+
+**Do Mixamo:** baixe o personagem e as animações em FBX, importe no Blender, dê às *Actions* nomes como `parado` e `andar` (no Mixamo elas vêm como `mixamo.com`) e exporte em glb como acima. Confira a escala depois de importar. Até 128 ossos por modelo; com mais, ele aparece parado.
 
 #### Desenhar
 
@@ -966,6 +1007,7 @@ O modelo tem `triangles`, `width`, `height` e `depth`. Ele é desenhado com `nn.
 | `shadow` | `false`: não projeta sombra (boa para o chão, efeitos e coisas pequenas). Padrão `true`. |
 | `body` | Um corpo de [`nn.physics3d`](#nnphysics3d-física-3d): desenha na posição e rotação dele (a escala continua vindo de `scale`). |
 | `matrix` | Uma matriz de `nn.d3.matrix` (no lugar de posição, rotação e escala). |
+| `animator` | Um modelo animado na pose de `modelo:animator()` ([animações](#animações-personagens-com-esqueleto)). |
 
 `nn.d3.matrix(opts)` guarda posição, rotação e escala (as mesmas opções do `draw`) numa matriz. `pai * filho` junta duas, para coisas presas a outras (uma espada na mão, uma roda no carro): `nn.d3.draw(roda, { matrix = carro * nn.d3.matrix({ x = 1, y = -0.3 }) })`. `m:position()` devolve onde ela está, `m:forward()` para onde aponta (−Z), `m:transform_point(x, y, z)` leva um ponto para o mundo, `m:inverse()` desfaz a matriz e `m:decompose()` devolve posição, rotação (graus) e escala: `x, y, z, rx, ry, rz, sx, sy, sz`.
 

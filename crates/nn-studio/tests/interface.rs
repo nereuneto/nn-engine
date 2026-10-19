@@ -2803,6 +2803,7 @@ fn tutorial_mundo_3d_avanca_sozinho_ate_o_fim() {
     let proj = dir.join("projetos/primeiro-mundo-3d");
     assert!(proj.join("cenas/mundo.cena").is_file());
     assert!(proj.join("modelos/heroi.glb").is_file());
+    assert!(proj.join("modelos/bicho.glb").is_file());
     h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
     // A cena aberta é 3D.
     h.get_by_label("Vista da cena 3D");
@@ -2856,21 +2857,27 @@ fn tutorial_mundo_3d_avanca_sozinho_ate_o_fim() {
     caixote.components.push(corpo("dynamic"));
     doc(&mut h).data.objects.push(caixote);
     espera(&mut h, 7);
+    let mut bicho = modelo(15, "bicho", "modelos/bicho.glb");
+    let mut anim = Component::new("anim3d");
+    anim.set("animation", Prop::Str("andar".into()));
+    bicho.components.push(anim);
+    doc(&mut h).data.objects.push(bicho);
+    espera(&mut h, 8);
     let mut estrela = modelo(13, "estrela", "modelos/estrela.glb");
     estrela
         .components
         .push(Component::behavior("nn:coletavel", &[]));
     doc(&mut h).data.objects.push(estrela);
-    espera(&mut h, 8);
+    espera(&mut h, 9);
     let mut plat = modelo(14, "plataforma", "modelos/plataforma.glb");
     plat.components.push(corpo("kinematic"));
     plat.components
         .push(Component::behavior("nn:plataforma3d", &[]));
     doc(&mut h).data.objects.push(plat);
-    espera(&mut h, 9);
+    espera(&mut h, 10);
     // O passo do Ambiente: o sol mais baixo.
     doc(&mut h).data.set_env("sun_height", Prop::Num(15.0));
-    espera(&mut h, 10);
+    espera(&mut h, 11);
     assert!(tabs(&h).contains(&Tab::Events));
     let cat = nn_studio::events::catalog();
     let mut acabou = cat.condition("acabaram").unwrap().new_item(false);
@@ -2880,9 +2887,9 @@ fn tutorial_mundo_3d_avanca_sozinho_ate_o_fim() {
         actions: vec![cat.action("reiniciar").unwrap().new_item(false)],
         ..Default::default()
     });
-    espera(&mut h, 11);
-    h.get_by_label("▶ Testar daqui").click();
     espera(&mut h, 12);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 13);
     let text = std::fs::read_to_string(proj.join("cenas/mundo.cena")).unwrap();
     assert!(
         text.contains("nn:jogador3d") && text.contains("sun_height = 15"),
@@ -2892,4 +2899,65 @@ fn tutorial_mundo_3d_avanca_sozinho_ate_o_fim() {
     h.get_by_label("Concluir").click();
     h.run_steps(4);
     assert!(h.state().tutorial.is_none());
+}
+
+/// Com GPU: a vista 3D anima o modelo com a Animação 3D (a prévia), e o
+/// Inspetor oferece as animações do modelo.
+#[test]
+fn cena_3d_previa_da_animacao_e_inspetor() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    if std::env::var_os("NN_REQUIRE_GPU").is_none() {
+        eprintln!("sem NN_REQUIRE_GPU: pulando o teste com GPU");
+        return;
+    }
+    let dir = temp("cena-3d-animacao");
+    let proj = plataforma(&dir);
+    let modelos = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/estrelas3d/modelos");
+    std::fs::create_dir_all(proj.join("modelos")).unwrap();
+    std::fs::write(
+        proj.join("modelos/heroi.glb"),
+        std::fs::read(modelos.join("heroi.glb")).unwrap(),
+    )
+    .unwrap();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    com_cena3d(&mut h, &proj);
+    // (Com animação na cena, a vista se redesenha sem parar: passos contados.)
+    {
+        let doc = cena_mut(&mut h);
+        let mut o = Object::new(20, "Herói");
+        let mut m = Component::new("model");
+        m.set("file", Prop::Str("modelos/heroi.glb".into()));
+        o.components.push(m);
+        let mut a = Component::new("anim3d");
+        a.set("animation", Prop::Str("correr".into()));
+        o.components.push(a);
+        doc.data.objects.push(o);
+        doc.selection = vec![20];
+        doc.cam3.look_at(
+            glam::Vec3::new(0.0, 1.0, 3.0),
+            glam::Vec3::new(0.0, 0.9, 0.0),
+        );
+        doc.cam3_set = true;
+    }
+    h.run_steps(4);
+    // O Inspetor mostra a Animação 3D com as animações do modelo no ☰.
+    h.get_by_label("Animação 3D");
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let a = h.render().expect("render");
+    // Um pouco depois, a pose é outra (a vista se redesenha sozinha).
+    std::thread::sleep(std::time::Duration::from_millis(120));
+    h.step();
+    let b = h.render().expect("render");
+    tela(&mut h, "cena-3d-animacao");
+    let ppp = a.width() as f32 / 1280.0;
+    let mut diff = 0;
+    for y in (rect.top() as u32)..(rect.bottom() as u32) {
+        for x in (rect.left() as u32)..(rect.right() as u32) {
+            let (px, py) = ((x as f32 * ppp) as u32, (y as f32 * ppp) as u32);
+            if a.get_pixel(px, py) != b.get_pixel(px, py) {
+                diff += 1;
+            }
+        }
+    }
+    assert!(diff > 30, "a prévia animou: {diff} pixels");
 }

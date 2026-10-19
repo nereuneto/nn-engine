@@ -3,11 +3,14 @@
 use glam::{Mat3, Mat4, UVec2, Vec3, Vec4};
 use nn_core::Color;
 
-use super::{Camera3D, Light3D, MeshId, Shadows, Sky3D, Vertex3};
+use super::{Camera3D, Light3D, MAX_JOINTS, MeshId, Shadows, SkinVertex, Sky3D, Vertex3};
 use crate::TextureId;
 use crate::texture::GpuTexture;
 
 pub(crate) const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+/// Bytes das matrizes dos ossos de um desenho (o shader lê `MAX_JOINTS`).
+const JOINT_SLOT: u64 = (MAX_JOINTS * 64) as u64;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
@@ -54,6 +57,8 @@ struct GpuMesh {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     count: u32,
+    /// Os ossos de cada vértice (malhas de modelos animados).
+    skin: Option<wgpu::Buffer>,
 }
 
 /// Uma malha para desenhar neste frame.
@@ -62,6 +67,8 @@ struct Draw3 {
     texture: TextureId,
     cast_shadow: bool,
     instance: Instance3,
+    /// Malha com ossos: onde estão as matrizes dela em `joint_data`.
+    joints: Option<u32>,
 }
 
 struct ShadowMap {
@@ -74,6 +81,14 @@ struct ShadowMap {
 pub(crate) struct Renderer3D {
     pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
+    skinned_pipeline: wgpu::RenderPipeline,
+    skinned_shadow_pipeline: wgpu::RenderPipeline,
+    joint_layout: wgpu::BindGroupLayout,
+    /// As matrizes dos ossos de todos os desenhos com ossos deste frame.
+    joint_data: Vec<[f32; 16]>,
+    joint_buffer: wgpu::Buffer,
+    joint_group: wgpu::BindGroup,
+    joint_capacity: u64,
     sky_pipeline: wgpu::RenderPipeline,
     view_buffer: wgpu::Buffer,
     view_group: wgpu::BindGroup,
@@ -183,6 +198,31 @@ impl Renderer3D {
             cull_mode: Some(wgpu::Face::Back),
             ..Default::default()
         };
+        // Malhas com ossos: mais um buffer com os ossos de cada vértice e as
+        // matrizes dos ossos num uniform (um pedaço por desenho).
+        let skin_attrs = wgpu::vertex_attr_array![12 => Uint32x4, 13 => Float32x4];
+        let skinned_buffers = [
+            buffers[0].clone(),
+            buffers[1].clone(),
+            Some(wgpu::VertexBufferLayout {
+                array_stride: size_of::<SkinVertex>() as wgpu::BufferAddress,
+                step_mode: wgpu::VertexStepMode::Vertex,
+                attributes: &skin_attrs,
+            }),
+        ];
+        let joint_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("nn 3d joints"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: true,
+                    min_binding_size: wgpu::BufferSize::new(JOINT_SLOT),
+                },
+                count: None,
+            }],
+        });
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nn 3d"),
@@ -256,6 +296,80 @@ impl Renderer3D {
             multiview_mask: None,
             cache: None,
         });
+        let skinned_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("nn 3d skinned"),
+            bind_group_layouts: &[
+                Some(&view_layout),
+                Some(texture_layout),
+                Some(&shadow_layout),
+                Some(&joint_layout),
+            ],
+            immediate_size: 0,
+        });
+        let skinned_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nn 3d skinned"),
+            layout: Some(&skinned_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_skinned"),
+                compilation_options: Default::default(),
+                buffers: &skinned_buffers,
+            },
+            primitive,
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: Default::default(),
+                bias: Default::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let skinned_shadow_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("nn 3d skinned shadow"),
+                bind_group_layouts: &[Some(&view_layout), None, None, Some(&joint_layout)],
+                immediate_size: 0,
+            });
+        let skinned_shadow_pipeline =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("nn 3d skinned shadow"),
+                layout: Some(&skinned_shadow_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_shadow_skinned"),
+                    compilation_options: Default::default(),
+                    buffers: &skinned_buffers,
+                },
+                primitive,
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    stencil: Default::default(),
+                    bias: wgpu::DepthBiasState {
+                        constant: 2,
+                        slope_scale: 2.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                fragment: None,
+                multiview_mask: None,
+                cache: None,
+            });
         let sky_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nn 3d sky"),
             layout: Some(&view_only),
@@ -298,9 +412,18 @@ impl Renderer3D {
         let shadow_map = Self::shadow_map(device, &shadow_layout, &shadow_sampler, 1);
         let capacity = 256;
         let instances = Self::instance_buffer(device, capacity);
+        let joint_capacity = 4;
+        let (joint_buffer, joint_group) = Self::joint_buffer(device, &joint_layout, joint_capacity);
         Self {
             pipeline,
             shadow_pipeline,
+            skinned_pipeline,
+            skinned_shadow_pipeline,
+            joint_layout,
+            joint_data: Vec::new(),
+            joint_buffer,
+            joint_group,
+            joint_capacity,
             sky_pipeline,
             view_buffer,
             view_group,
@@ -362,6 +485,33 @@ impl Renderer3D {
         }
     }
 
+    /// Buffer das matrizes dos ossos com lugar para `slots` desenhos.
+    fn joint_buffer(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        slots: u64,
+    ) -> (wgpu::Buffer, wgpu::BindGroup) {
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("nn 3d joints"),
+            size: slots * JOINT_SLOT,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nn 3d joints"),
+            layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &buffer,
+                    offset: 0,
+                    size: wgpu::BufferSize::new(JOINT_SLOT),
+                }),
+            }],
+        });
+        (buffer, group)
+    }
+
     fn instance_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("nn 3d instances"),
@@ -377,6 +527,7 @@ impl Renderer3D {
         queue: &wgpu::Queue,
         vertices: &[Vertex3],
         indices: &[u32],
+        skin: Option<&[SkinVertex]>,
     ) -> MeshId {
         let make = |label: &str, bytes: &[u8], usage: wgpu::BufferUsages| {
             let buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -402,6 +553,13 @@ impl Renderer3D {
                 wgpu::BufferUsages::INDEX,
             ),
             count: indices.len() as u32,
+            skin: skin.map(|s| {
+                make(
+                    "nn 3d skin",
+                    bytemuck::cast_slice(s),
+                    wgpu::BufferUsages::VERTEX,
+                )
+            }),
         };
         self.meshes.push(mesh);
         MeshId(self.meshes.len() as u32 - 1)
@@ -423,8 +581,43 @@ impl Renderer3D {
                 texture,
                 cast_shadow,
                 instance: Instance3::new(model, color, srgb),
+                joints: None,
             });
         }
+    }
+
+    /// Desenha uma malha com ossos nas posições `joints` (uma matriz por
+    /// osso; as que faltam ficam paradas).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn draw_skinned(
+        &mut self,
+        mesh: MeshId,
+        model: Mat4,
+        color: Color,
+        texture: TextureId,
+        cast_shadow: bool,
+        srgb: bool,
+        joints: &[Mat4],
+    ) {
+        let Some(m) = self.meshes.get(mesh.0 as usize) else {
+            return;
+        };
+        if m.skin.is_none() {
+            self.draw(mesh, model, color, texture, cast_shadow, srgb);
+            return;
+        }
+        let slot = (self.joint_data.len() / MAX_JOINTS) as u32;
+        for i in 0..MAX_JOINTS {
+            let j = joints.get(i).copied().unwrap_or(Mat4::IDENTITY);
+            self.joint_data.push(j.to_cols_array());
+        }
+        self.draws.push(Draw3 {
+            mesh,
+            texture,
+            cast_shadow,
+            instance: Instance3::new(model, color, srgb),
+            joints: Some(slot),
+        });
     }
 
     pub(crate) fn has_draws(&self) -> bool {
@@ -566,9 +759,29 @@ impl Renderer3D {
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&view));
 
-        // Agrupa por malha, textura e sombra (uma chamada por grupo).
+        // Agrupa por malha, textura e sombra (uma chamada por grupo); os com
+        // ossos vão no fim, um por chamada.
         self.draws
-            .sort_by_key(|d| (d.mesh, d.texture.0, !d.cast_shadow));
+            .sort_by_key(|d| (d.joints.is_some(), d.mesh, d.texture.0, !d.cast_shadow));
+        let skinned_from = self
+            .draws
+            .iter()
+            .position(|d| d.joints.is_some())
+            .unwrap_or(self.draws.len());
+        if !self.joint_data.is_empty() {
+            let slots = (self.joint_data.len() / MAX_JOINTS) as u64;
+            if slots > self.joint_capacity {
+                self.joint_capacity = slots.next_power_of_two();
+                let (b, g) = Self::joint_buffer(device, &self.joint_layout, self.joint_capacity);
+                self.joint_buffer = b;
+                self.joint_group = g;
+            }
+            queue.write_buffer(
+                &self.joint_buffer,
+                0,
+                bytemuck::cast_slice(&self.joint_data),
+            );
+        }
         if self.draws.len() > self.capacity {
             self.capacity = self.draws.len().next_power_of_two();
             self.instances = Self::instance_buffer(device, self.capacity);
@@ -577,11 +790,11 @@ impl Renderer3D {
         queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&data));
         let mut groups = Vec::new();
         let mut i = 0;
-        while i < self.draws.len() {
+        while i < skinned_from {
             let d = &self.draws[i];
             let key = (d.mesh, d.texture, d.cast_shadow);
             let mut j = i + 1;
-            while j < self.draws.len() {
+            while j < skinned_from {
                 let e = &self.draws[j];
                 if (e.mesh, e.texture, e.cast_shadow) != key {
                     break;
@@ -618,6 +831,20 @@ impl Renderer3D {
                     pass.set_vertex_buffer(0, m.vertices.slice(..));
                     pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
                     pass.draw_indexed(0..m.count, 0, range.clone());
+                }
+            }
+            pass.set_pipeline(&self.skinned_shadow_pipeline);
+            for (k, d) in self.draws.iter().enumerate().skip(skinned_from) {
+                let m = &self.meshes[d.mesh.0 as usize];
+                if let (true, Some(slot), Some(skin)) = (d.cast_shadow, d.joints, &m.skin)
+                    && m.count > 0
+                {
+                    let offset = (slot as u64 * JOINT_SLOT) as u32;
+                    pass.set_bind_group(3, &self.joint_group, &[offset]);
+                    pass.set_vertex_buffer(0, m.vertices.slice(..));
+                    pass.set_vertex_buffer(2, skin.slice(..));
+                    pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
+                    pass.draw_indexed(0..m.count, 0, k as u32..k as u32 + 1);
                 }
             }
         }
@@ -667,9 +894,27 @@ impl Renderer3D {
                     pass.draw_indexed(0..m.count, 0, range.clone());
                 }
             }
+            if skinned_from < self.draws.len() {
+                pass.set_pipeline(&self.skinned_pipeline);
+                for (k, d) in self.draws.iter().enumerate().skip(skinned_from) {
+                    let m = &self.meshes[d.mesh.0 as usize];
+                    if let (Some(slot), Some(skin)) = (d.joints, &m.skin)
+                        && m.count > 0
+                    {
+                        let offset = (slot as u64 * JOINT_SLOT) as u32;
+                        pass.set_bind_group(1, &textures[d.texture.0 as usize].bind_group, &[]);
+                        pass.set_bind_group(3, &self.joint_group, &[offset]);
+                        pass.set_vertex_buffer(0, m.vertices.slice(..));
+                        pass.set_vertex_buffer(2, skin.slice(..));
+                        pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..m.count, 0, k as u32..k as u32 + 1);
+                    }
+                }
+            }
         }
         drop(pass);
         self.last_count = self.draws.len() as u32;
         self.draws.clear();
+        self.joint_data.clear();
     }
 }

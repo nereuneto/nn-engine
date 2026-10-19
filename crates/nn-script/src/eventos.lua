@@ -558,10 +558,10 @@ E.CONDITIONS = {
     end,
   },
   {
-    mode = "2d",
     id = "animacao_terminou", name = "Animação terminar", category = "Objetos", trigger = true,
     text = "{quem} terminar a animação {nome}",
     help = "Só animações que tocam uma vez (modo \"uma vez\" no editor de animação). Vazio = qualquer uma.",
+    help3d = "Só animações que tocam uma vez (Repetir desligado). Vazio = qualquer uma.",
     props = { who("quem"), { "nome", "", type = "anim", label = "Animação", allow_empty = "qualquer uma" } },
     lua = "{quem}.sprite:finished()",
     test = function(ctx, p, st, b)
@@ -920,16 +920,25 @@ E.ACTIONS = {
     end,
   },
   {
-    mode = "2d",
     id = "animacao", name = "Tocar animação", category = "Aparência",
     text = "tocar a animação {nome} em {alvo}",
     help = "Uma animação do .anim da imagem (feita no editor de animação). Se já estiver tocando, continua.",
+    help3d = "Uma animação do modelo 3D (as do arquivo .glb). Se já estiver tocando, continua.",
     props = { { "nome", "andar", type = "anim", label = "Animação" }, who("alvo"),
       { "reiniciar", false, label = "Do começo", advanced = true,
-        help = "Começa do primeiro quadro mesmo se já estiver tocando." } },
+        help = "Começa do primeiro quadro mesmo se já estiver tocando." },
+      { "repetir", true, label = "Repetir", advanced = true, mode = "3d",
+        help = "Desligado: toca uma vez e para no fim (a condição \"Animação terminar\" avisa)." } },
     lua = "{alvo}.sprite:play(\"{nome}\")",
     run = function(ctx, p, b)
       each(ctx, p.alvo, b, function(o)
+        if ctx.scene._3d then
+          local a = M.model_animator(o)
+          if a and a:has(p.nome) then
+            a:play(p.nome, { loop = p.repetir ~= false, restart = p.reiniciar })
+          end
+          return
+        end
         local s = o.sprite
         if s and s._anims and s._anims.by_name[p.nome] then s:play(p.nome, p.reiniciar) end
       end)

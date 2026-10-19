@@ -373,7 +373,7 @@ fn mundo_3d() -> Tutorial {
     Tutorial {
         id: "primeiro-mundo-3d",
         title: "Seu primeiro mundo 3D",
-        summary: "Monte um mundo 3D sem código: um herói que anda e pula com a câmera atrás dele, árvores, uma caixa que cai, uma estrela, uma plataforma que anda, o sol da tarde e um evento de vitória.",
+        summary: "Monte um mundo 3D sem código: um herói animado que anda e pula com a câmera atrás dele, árvores, uma caixa que cai, um bicho, uma estrela, uma plataforma que anda, o sol da tarde e um evento de vitória.",
         minutes: 15,
         template: Template::Vazio3D,
         project: "Primeiro mundo 3D",
@@ -412,7 +412,7 @@ fn mundo_3d() -> Tutorial {
             },
             Step {
                 title: "Teste!",
-                text: "Aperte ▶ Testar daqui (F6). WASD anda para onde a câmera olha, espaço pula e o mouse gira a câmera. Esc solta o mouse. Depois feche a janela do jogo.",
+                text: "Aperte ▶ Testar daqui (F6). WASD anda para onde a câmera olha, espaço pula e o mouse gira a câmera. Esc solta o mouse. O herói tem animações: ele fica parado respirando, corre e pula sozinho. Depois feche a janela do jogo.",
                 target: Some("cena.testar"),
                 show: None,
                 done: Some(|_, st| st.played),
@@ -437,6 +437,18 @@ fn mundo_3d() -> Tutorial {
                     with_model(ws, "caixote.glb")
                         .iter()
                         .any(|o| body3d_is(o, "dynamic"))
+                }),
+            },
+            Step {
+                title: "Um bicho que se mexe",
+                text: "Arraste bicho.glb para a cena. Ele também tem animações: ➕ Adicionar componente > Animação 3D e, em Animação, clique no ☰ e escolha andar. Ele já anda na cena, aqui no editor.",
+                target: Some("arquivo:modelos/bicho.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    with_model(ws, "bicho.glb").iter().any(|o| {
+                        o.component("anim3d")
+                            .is_some_and(|a| !a.str("animation").is_empty())
+                    })
                 }),
             },
             Step {
@@ -496,7 +508,7 @@ fn mundo_3d() -> Tutorial {
             },
             Step {
                 title: "Pronto: um mundo seu!",
-                text: "Você montou um mundo 3D com um herói, física, uma plataforma que anda, o Ambiente e um evento. Próximos passos: o modelo 3D (Novo projeto), uma ilha inteira sem código, para ver como tudo se junta; e Colisões, na barra da cena, para ver os corpos.",
+                text: "Você montou um mundo 3D com um herói animado, física, um bicho que anda, uma plataforma que anda, o Ambiente e um evento. Próximos passos: o modelo 3D (Novo projeto), uma ilha inteira sem código, para ver como tudo se junta; e Colisões, na barra da cena, para ver os corpos.",
                 target: None,
                 show: None,
                 done: None,

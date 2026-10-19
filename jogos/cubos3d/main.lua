@@ -34,6 +34,9 @@ function cena:enter()
   self.pedra = nn.assets.model("modelos/pedra.glb")
   self.casa = nn.assets.model("modelos/casa.glb")
   self.heroi = nn.assets.model("modelos/heroi.glb")
+  -- O herói tem animações (parado, andar, correr, pular, cair, acenar).
+  self.anim = self.heroi:animator()
+  self.anim:play("parado")
   self.caixote = nn.assets.model("modelos/caixote.glb")
 
   -- Uma pirâmide feita à mão: pontos e triângulos (anti-horário vistos de fora).
@@ -157,6 +160,16 @@ function cena:update(dt)
   end
   self.heroi_corpo:walk(vx, vz)
   if nn.input.pressed("space") then self.heroi_corpo:jump(8) end
+  -- A animação conforme o movimento (a troca é suave).
+  local hc = self.heroi_corpo
+  if not hc.on_ground then
+    self.anim:play(hc.vy > 0 and "pular" or "cair", { loop = hc.vy <= 0 })
+  elseif vx ~= 0 or vz ~= 0 then
+    self.anim:play("correr")
+  else
+    self.anim:play("parado")
+  end
+  self.anim:update(dt)
 
   -- Clique (sem arrastar): um cubo cai onde o mouse aponta (no chão, num
   -- telhado ou em cima de outro cubo).
@@ -215,11 +228,10 @@ function cena:draw()
     end
   end
 
-  -- O herói (virado para +Z no modelo) balança enquanto anda no chão.
+  -- O herói (virado para +Z no modelo), com a animação.
   local h = self.heroi_corpo
-  local andando = (h.vx ~= 0 or h.vz ~= 0) and h.on_ground
-  local pulo = andando and math.abs(math.sin(t * 10)) * 0.08 or 0
-  nn.d3.draw(self.heroi, { x = h.x, y = h.y + pulo, z = h.z, scale = 1.2, ry = self.jogador.direcao })
+  nn.d3.draw(self.heroi, { x = h.x, y = h.y, z = h.z, scale = 1.2, ry = self.jogador.direcao,
+    animator = self.anim })
 
   if self.colisoes then self.mundo:debug_draw() end
 

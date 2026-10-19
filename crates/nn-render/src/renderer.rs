@@ -932,7 +932,57 @@ impl Renderer {
             })
             .collect();
         self.d3
-            .create_mesh(&self.device, &self.queue, &vertices, &mesh.indices)
+            .create_mesh(&self.device, &self.queue, &vertices, &mesh.indices, None)
+    }
+
+    /// Como [`Renderer::create_mesh`], com os ossos de cada vértice (para
+    /// desenhar com [`Renderer::draw_mesh_skinned`]).
+    pub fn create_mesh_skinned(
+        &mut self,
+        mesh: &crate::d3::Mesh,
+        skin: &[crate::d3::SkinVertex],
+    ) -> crate::d3::MeshId {
+        let srgb = self.format.is_srgb();
+        let vertices: Vec<crate::d3::Vertex3> = mesh
+            .vertices
+            .iter()
+            .map(|v| {
+                let mut v = *v;
+                if srgb {
+                    let [r, g, b, a] = v.color;
+                    let c = Color::rgba(r, g, b, a).to_linear();
+                    v.color = [c.r, c.g, c.b, c.a];
+                }
+                v
+            })
+            .collect();
+        let mut skin = skin.to_vec();
+        skin.resize(vertices.len(), crate::d3::SkinVertex::rigid(0));
+        self.d3.create_mesh(
+            &self.device,
+            &self.queue,
+            &vertices,
+            &mesh.indices,
+            Some(&skin),
+        )
+    }
+
+    /// Desenha uma malha com ossos, com as matrizes dos ossos em `joints`
+    /// (veja [`Skeleton::joint_matrices`](crate::d3::Skeleton::joint_matrices)).
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_mesh_skinned(
+        &mut self,
+        mesh: crate::d3::MeshId,
+        model: Mat4,
+        color: Color,
+        texture: Option<TextureId>,
+        cast_shadow: bool,
+        joints: &[Mat4],
+    ) {
+        let srgb = self.format.is_srgb();
+        let texture = texture.unwrap_or(self.white);
+        self.d3
+            .draw_skinned(mesh, model, color, texture, cast_shadow, srgb, joints);
     }
 
     /// Desenha a malha no mundo 3D com a matriz `model` (posição, rotação e
@@ -982,21 +1032,31 @@ impl Renderer {
                 self.create_texture(img.size, &img.rgba, options)
             })
             .collect();
+        let skinned = data.skeleton.is_some();
         let parts = data
             .parts
             .iter()
             .map(|p| {
-                (
-                    self.create_mesh(&p.mesh),
-                    p.image.and_then(|i| textures.get(i).copied()),
-                )
+                let mesh = if skinned {
+                    self.create_mesh_skinned(&p.mesh, &p.skin)
+                } else {
+                    self.create_mesh(&p.mesh)
+                };
+                (mesh, p.image.and_then(|i| textures.get(i).copied()))
             })
             .collect();
+        let skeleton = data.skeleton.clone().map(std::sync::Arc::new);
+        let rest_joints = skeleton
+            .as_ref()
+            .map(|s| s.joint_matrices(&s.rest_pose()))
+            .unwrap_or_default();
         crate::d3::Model {
             parts,
             bounds: data.bounds(),
             triangles: data.triangle_count(),
             collision: std::sync::Arc::new(data.collision_mesh()),
+            skeleton,
+            rest_joints: std::sync::Arc::new(rest_joints),
         }
     }
 
@@ -1008,8 +1068,35 @@ impl Renderer {
         color: Color,
         cast_shadow: bool,
     ) {
+        if model.skeleton.is_some() {
+            let joints = model.rest_joints.clone();
+            self.draw_model_posed(model, matrix, color, cast_shadow, &joints);
+            return;
+        }
         for (mesh, texture) in &model.parts {
             self.draw_mesh_with(*mesh, matrix, color, *texture, cast_shadow);
+        }
+    }
+
+    /// Desenha um modelo animado numa pose: as matrizes dos ossos de
+    /// [`Skeleton::joint_matrices`](crate::d3::Skeleton::joint_matrices). Num
+    /// modelo sem esqueleto, é o mesmo que [`Renderer::draw_model`].
+    pub fn draw_model_posed(
+        &mut self,
+        model: &crate::d3::Model,
+        matrix: Mat4,
+        color: Color,
+        cast_shadow: bool,
+        joints: &[Mat4],
+    ) {
+        if model.skeleton.is_none() {
+            for (mesh, texture) in &model.parts {
+                self.draw_mesh_with(*mesh, matrix, color, *texture, cast_shadow);
+            }
+            return;
+        }
+        for (mesh, texture) in &model.parts {
+            self.draw_mesh_skinned(*mesh, matrix, color, *texture, cast_shadow, joints);
         }
     }
 

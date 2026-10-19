@@ -642,6 +642,7 @@ pub fn schema() -> &'static Schema {
             "textfield",
             "layout",
             "model",
+            "anim3d",
             "shape3d",
             "camera3d",
             "body3d",
@@ -1818,7 +1819,7 @@ mod tests {
     fn esquema_vem_da_engine() {
         let s = schema();
         assert!(s.order.contains(&"sprite".to_string()));
-        assert_eq!(s.order.len(), 20);
+        assert_eq!(s.order.len(), 21);
         assert_eq!(s.shapes3d.len(), 6);
         assert_eq!(s.environment[0], ("sky".to_string(), Prop::Bool(true)));
         assert_eq!(s.default_of("body", "gravity_scale"), Some(&Prop::Num(1.0)));

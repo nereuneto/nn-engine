@@ -116,9 +116,13 @@ pub struct Sizes {
     pub anims: crate::anim_file::AnimCache,
     /// Tamanho (em pixels, sem escala) dos mapas abertos no editor.
     pub map_px: HashMap<String, (f32, f32)>,
-    /// Modelo 3D → caixa que envolve (mínimo, máximo).
-    models: HashMap<String, Option<(glam::Vec3, glam::Vec3)>>,
+    /// Modelo 3D → caixa que envolve (mínimo, máximo) e os nomes das
+    /// animações.
+    models: HashMap<String, Option<ModelInfo>>,
 }
+
+/// O que o editor sabe de um modelo 3D: a caixa e os nomes das animações.
+type ModelInfo = ((glam::Vec3, glam::Vec3), Vec<String>);
 
 impl Sizes {
     pub fn invalidate(&mut self, rel: &str) {
@@ -138,12 +142,32 @@ impl Sizes {
         if rel.is_empty() {
             return None;
         }
-        if let Some(b) = self.models.get(rel) {
-            return *b;
+        self.model_info(root, rel).map(|(b, _)| *b)
+    }
+
+    /// As animações de um modelo 3D (vazio se não tiver ou não abrir).
+    pub fn model_anims(&mut self, root: &Path, rel: &str) -> Vec<String> {
+        self.model_info(root, rel)
+            .map(|(_, a)| a.clone())
+            .unwrap_or_default()
+    }
+
+    fn model_info(&mut self, root: &Path, rel: &str) -> Option<&ModelInfo> {
+        if rel.is_empty() {
+            return None;
         }
-        let b = read_model(root, rel).ok().map(|m| m.bounds());
-        self.models.insert(rel.to_string(), b);
-        b
+        if !self.models.contains_key(rel) {
+            let info = read_model(root, rel).ok().map(|m| {
+                let anims = m
+                    .skeleton
+                    .as_ref()
+                    .map(|s| s.animations.iter().map(|a| a.name.clone()).collect())
+                    .unwrap_or_default();
+                (m.bounds(), anims)
+            });
+            self.models.insert(rel.to_string(), info);
+        }
+        self.models.get(rel).and_then(|i| i.as_ref())
     }
 
     pub fn image(&mut self, root: &Path, rel: &str) -> Option<(f32, f32)> {
@@ -652,6 +676,28 @@ pub struct View3 {
     pub background: Color,
     /// Passo da grade no chão (0 = sem grade).
     pub grid: f32,
+    /// Segundos desde que a vista abriu (para a prévia das animações).
+    pub time: f32,
+}
+
+/// A animação que a prévia mostra num objeto: a da Animação 3D, ou "parado"
+/// num Jogador 3D. Nome e velocidade.
+pub fn preview_anim3d(o: &Object) -> Option<(String, f32)> {
+    if let Some(a) = o.component("anim3d") {
+        let name = a.str("animation");
+        return (!name.is_empty()).then(|| (name.to_string(), a.num("speed") as f32));
+    }
+    o.components
+        .iter()
+        .find(|c| c.is_behavior() && c.str("script") == "nn:jogador3d")
+        .filter(|c| c.get("animar").is_none_or(|v| v.num() != 0.0))
+        .map(|c| {
+            let name = c.str("anim_parado");
+            (
+                if name.is_empty() { "parado" } else { name }.to_string(),
+                1.0,
+            )
+        })
 }
 
 impl std::fmt::Debug for SceneRenderer {
@@ -763,8 +809,9 @@ impl SceneRenderer {
         self.renderer.set_camera3d(view.camera);
 
         // Os objetos, com a transformação dos pais.
-        let mut draws: Vec<(Mat4, Component)> = Vec::new();
-        fn walk(list: &[Object], parent: Mat4, out: &mut Vec<(Mat4, Component)>) {
+        type Draw = (Mat4, Component, Option<(String, f32)>);
+        let mut draws: Vec<Draw> = Vec::new();
+        fn walk(list: &[Object], parent: Mat4, out: &mut Vec<Draw>) {
             for o in list {
                 if !o.visible {
                     continue;
@@ -772,7 +819,7 @@ impl SceneRenderer {
                 let m = parent * crate::scene_data::local_matrix3(o);
                 for c in &o.components {
                     if matches!(c.kind.as_str(), "model" | "shape3d" | "camera3d") {
-                        out.push((m, c.clone()));
+                        out.push((m, c.clone(), preview_anim3d(o)));
                     }
                 }
                 walk(o.prefab_children(), m, out);
@@ -780,16 +827,33 @@ impl SceneRenderer {
             }
         }
         walk(&scene.objects, Mat4::IDENTITY, &mut draws);
-        for (m, c) in draws {
+        for (m, c, anim) in draws {
             match c.kind.as_str() {
                 "model" => {
                     if let Some(model) = self.model3(root, c.str("file"), c.bool("flat")) {
-                        self.renderer.draw_model(
-                            &model,
-                            m,
-                            parse_color(c.str("color")),
-                            c.bool("shadow"),
-                        );
+                        // Modelo animado: a prévia toca a animação, em volta.
+                        let joints = model.skeleton.as_ref().and_then(|s| {
+                            let (name, speed) = anim.as_ref()?;
+                            let i = s.animation(name)?;
+                            let d = s.animations[i].duration.max(1e-3);
+                            let t = (view.time * speed).rem_euclid(d);
+                            Some(s.joint_matrices(&s.pose(i, t)))
+                        });
+                        match joints {
+                            Some(j) => self.renderer.draw_model_posed(
+                                &model,
+                                m,
+                                parse_color(c.str("color")),
+                                c.bool("shadow"),
+                                &j,
+                            ),
+                            None => self.renderer.draw_model(
+                                &model,
+                                m,
+                                parse_color(c.str("color")),
+                                c.bool("shadow"),
+                            ),
+                        }
                     }
                 }
                 "shape3d" => {

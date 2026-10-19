@@ -80,9 +80,10 @@ projeto continua aberto.
   corpo físico, herói que anda e pula, animação, moedas (e um prefab delas),
   placar no HUD e um evento para vencer.
 - **Seu primeiro mundo 3D** (uns 15 minutos), a partir do modelo Vazio 3D:
-  um herói que anda e pula com a câmera atrás dele, árvores que bloqueiam,
-  uma caixa que cai, uma estrela, uma plataforma que anda, o sol da tarde e
-  um evento de vitória ([cenas 3D](#cenas-3d)).
+  um herói animado que anda e pula com a câmera atrás dele, árvores que
+  bloqueiam, uma caixa que cai, um bicho que anda (Animação 3D), uma estrela,
+  uma plataforma que anda, o sol da tarde e um evento de vitória
+  ([cenas 3D](#cenas-3d)).
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -617,7 +618,7 @@ uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
 - **Forma 3D:** cubo, esfera, cilindro, cone, cápsula ou plano, com cor e
   "Projeta sombra".
 - **Modelo 3D:** um arquivo `.glb` (Blender exporta: *Arquivo > Exportar >
-  glTF 2.0*, formato *glb*). **Cor** tinge o modelo; **Faces retas**
+  glTF 2.0*, formato *glb*), parado ou animado. **Cor** tinge o modelo; **Faces retas**
   (no modo Completo) dá a cada face um tom só, o visual low-poly, mesmo que
   o modelo venha com sombreado suave.
 - **Câmera 3D:** de onde o jogo olha, com o **campo de visão** (60° é o
@@ -682,6 +683,26 @@ olhando para outro lado).
 
 Ele também manda a mensagem **pulou** a cada pulo.
 
+Com um modelo animado (como o `heroi.glb` dos modelos 3D), o Jogador 3D
+**anima sozinho**: *parado*, *andar* (com o analógico pela metade),
+*correr*, *pular* e *cair*, com troca suave. A vista do editor já mostra ele
+respirando, parado. No modo Completo dá para trocar os nomes das animações
+(para personagens com outros nomes) ou desligar **Animar o modelo**.
+
+### Animação 3D
+
+Modelos `.glb` com esqueleto trazem animações (no Blender, as *Actions*;
+veja [o guia do Lua](lua.md#animações-personagens-com-esqueleto) para trazer
+personagens do Blender e do Mixamo). Para um objeto tocar uma:
+**➕ Adicionar componente > Animação 3D** e, em **Animação**, clique no ☰ e
+escolha (o ☰ lista as do modelo do objeto). **Velocidade** acelera ou
+desacelera; sem **Repetir**, ela toca uma vez e para no fim. A vista do
+editor toca a animação na hora, para você ver como fica.
+
+Nos eventos, **Tocar animação** troca a animação de um objeto (com
+**Repetir** no modo Completo) e **Animação terminar** avisa quando uma que
+toca uma vez chega ao fim. No código, `obj:play("acenar")`.
+
 ### Comportamentos e eventos no 3D
 
 Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
@@ -692,6 +713,8 @@ Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
   devagar (estrelas, moedas);
 - **Plataforma que anda** (Movimento): vai e volta em X, Y e Z, com espera
   nas pontas; já ganha um Corpo 3D que se move sozinho;
+- **Animação 3D** (um componente, não um comportamento): toca uma animação
+  do modelo;
 - **Ir para cena**, **Checkpoint**, **Mostrar valor** e **Botão**, como no 2D
   (no 3D, a porta de **Ir para cena** com tecla abre com **E** ou o **Y** do
   controle).

@@ -25,6 +25,18 @@ local B = {
       show_if = { "camera", "atras" } },
     { "virar", true, label = "Virar para onde anda",
       help = "O modelo vira para a direção do movimento (a frente do modelo é o +Z)." },
+    { "animar", true, label = "Animar o modelo",
+      help = "Num modelo com animações: parado, andar, correr, pular e cair, conforme o movimento." },
+    { "anim_parado", "parado", type = "anim", label = "Animação: parado", advanced = true,
+      show_if = { "animar", true } },
+    { "anim_andar", "andar", type = "anim", label = "Animação: andar", advanced = true,
+      show_if = { "animar", true } },
+    { "anim_correr", "correr", type = "anim", label = "Animação: correr", advanced = true,
+      show_if = { "animar", true }, help = "Com a velocidade a partir de 4,5 m/s (sem ela, andar)." },
+    { "anim_pular", "pular", type = "anim", label = "Animação: pular", advanced = true,
+      show_if = { "animar", true } },
+    { "anim_cair", "cair", type = "anim", label = "Animação: cair", advanced = true,
+      show_if = { "animar", true } },
     { "queda", -10, label = "Volta se cair abaixo de", advanced = true,
       help = "Altura (Y). Caiu abaixo dela: volta ao último chão firme e recebe a mensagem \"caiu\"." },
     { "raio", 0, label = "Raio do corpo", min = 0, advanced = true,
@@ -129,7 +141,34 @@ function B:update(dt)
     if o._s3 then o._s3[5] = o.ry end
   end
   if apertou_pulo() then self.pedido = 0.12 end
+  self:animar_modelo(vx, vz)
   self:seguir(dt)
+end
+
+-- Escolhe a animação do modelo pelo movimento (se ele tiver animações).
+function B:animar_modelo(vx, vz)
+  local a = self.obj:animator()
+  if not (self.animar and a) then return end
+  local c = self.corpo
+  local nome, repetir = nil, true
+  if not c.on_ground and self.no_ar > 0.08 then
+    if c.vy > 0.5 then
+      nome, repetir = self.anim_pular, false
+    else
+      nome = a:has(self.anim_cair) and self.anim_cair or self.anim_pular
+      repetir = nome == self.anim_cair
+    end
+  else
+    local v = math.sqrt(vx * vx + vz * vz) * self.velocidade
+    if (self.obj.empurrado or 0) > 0 or v < 0.1 then
+      nome = self.anim_parado
+    elseif v >= 4.5 and a:has(self.anim_correr) then
+      nome = self.anim_correr
+    else
+      nome = self.anim_andar
+    end
+  end
+  if nome and a:has(nome) then a:play(nome, { loop = repetir, blend = 0.15 }) end
 end
 
 function B:fixed_update(dt)

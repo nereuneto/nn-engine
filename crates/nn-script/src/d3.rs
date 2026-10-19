@@ -81,6 +81,8 @@ pub(crate) struct LModel {
     /// Caixa que envolve o modelo e os triângulos (para a física).
     pub bounds: (Vec3, Vec3),
     pub collision: std::sync::Arc<d3::CollisionMesh>,
+    /// Esqueleto e animações (modelos animados).
+    pub skeleton: Option<std::sync::Arc<d3::Skeleton>>,
 }
 
 impl UserData for LModel {
@@ -97,6 +99,18 @@ impl UserData for LModel {
             let (a, b) = this.bounds;
             Ok((a.x, a.y, a.z, b.x, b.y, b.z))
         });
+        // Os nomes das animações do modelo.
+        m.add_method("animations", |_, this, ()| {
+            Ok(this
+                .skeleton
+                .as_ref()
+                .map(|s| s.animations.iter().map(|a| a.name.clone()).collect())
+                .unwrap_or_else(Vec::<String>::new))
+        });
+        // Quem toca as animações de um objeto (cada objeto tem o seu).
+        m.add_method("animator", |_, this, ()| {
+            Ok(crate::anim3d::LAnimator::new(this.skeleton.clone()))
+        });
     }
 }
 
@@ -111,6 +125,7 @@ pub(crate) fn load_model(lua: &Lua, path: &str, opts: Option<&Table>) -> Result<
             size: model.size(),
             bounds: model.bounds,
             collision: model.collision.clone(),
+            skeleton: model.skeleton.clone(),
         })
     })
 }
@@ -341,6 +356,18 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             };
             let col = opt_color(o, "color")?.unwrap_or(nn_core::Color::WHITE);
             let shadow = opt::<bool>(o, "shadow")?.unwrap_or(true);
+            let joints = match opt::<Value>(o, "animator")? {
+                None | Some(Value::Nil) => None,
+                Some(Value::UserData(ud)) if ud.is::<crate::anim3d::LAnimator>() => {
+                    Some(ud.borrow::<crate::anim3d::LAnimator>()?.joints())
+                }
+                Some(other) => {
+                    return Err(err(format!(
+                        "\"animator\" deve vir de modelo:animator(), recebeu {}",
+                        other.type_name()
+                    )));
+                }
+            };
             let image = match opt::<Value>(o, "image")? {
                 None | Some(Value::Nil) => None,
                 Some(Value::UserData(ud)) if ud.is::<LTexture>() => Some(ud.borrow::<LTexture>()?.0),
@@ -357,9 +384,14 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                         c.renderer
                             .draw_mesh_with(mesh.id, model, col, image, shadow)
                     }
-                    Thing::Model(key) => {
-                        c.draw_model_key(&key, model, col, shadow);
-                    }
+                    Thing::Model(key) => match &joints {
+                        Some(j) => {
+                            c.draw_model_key_posed(&key, model, col, shadow, j);
+                        }
+                        None => {
+                            c.draw_model_key(&key, model, col, shadow);
+                        }
+                    },
                 }
                 Ok(())
             })

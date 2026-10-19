@@ -115,6 +115,10 @@ M.FIELDS = {
   camera3d = {
     { "fov", 60 },
   },
+  -- A animação que o modelo 3D do objeto toca (as do arquivo .glb).
+  anim3d = {
+    { "animation", "" }, { "speed", 1 }, { "loop", true },
+  },
   -- Corpo da física 3D. Forma "auto": parado (ou kinematic) com modelo usa a
   -- malha exata; o resto, uma caixa, esfera, cápsula ou cilindro do tamanho
   -- do modelo ou da forma.
@@ -445,6 +449,27 @@ end
 --- 3D: onde o objeto está no mundo (x, y, z).
 function Object:position3d(alpha)
   return self:matrix3d(alpha):position()
+end
+
+--- 3D: quem toca as animações do modelo do objeto (nil sem modelo animado).
+function M.model_animator(o)
+  for _, c in ipairs(o.components) do
+    if c.type == "model" and c._anim then return c._anim end
+  end
+  return nil
+end
+
+function Object:animator()
+  return M.model_animator(self)
+end
+
+--- 3D: toca uma animação do modelo ("andar"); veja modelo:animator().
+function Object:play(name, opts)
+  local a = M.model_animator(self)
+  if not a then
+    error(("objeto \"%s\": o modelo dele não tem animações"):format(self.name), 2)
+  end
+  return a:play(name, opts)
 end
 
 --- 3D: a caixa do objeto no espaço dele (min e max), sem escala: do
@@ -1621,8 +1646,26 @@ function M.prepare(scene, o, c, live)
   elseif t == "camera" then
     scene._camera = scene._camera or o
   elseif t == "model" then
-    c._model = nil
-    if c.file ~= "" then c._model = nn.assets.model(c.file, { flat = c.flat }) end
+    c._model, c._anim = nil, nil
+    if c.file ~= "" then
+      c._model = nn.assets.model(c.file, { flat = c.flat })
+      -- Modelo animado: cada objeto toca as animações dele.
+      if #c._model:animations() > 0 then c._anim = c._model:animator() end
+    end
+    local a = o:component("anim3d")
+    if live and a then M.prepare(scene, o, a, true) end
+  elseif t == "anim3d" then
+    local anim = M.model_animator(o)
+    if anim then
+      anim.speed = c.speed
+      if c.animation ~= "" then
+        if not anim:has(c.animation) then
+          error(("objeto \"%s\": o modelo não tem a animação \"%s\" (tem: %s)"):format(
+            o.name, c.animation, table.concat(anim:animations(), ", ")), 0)
+        end
+        anim:play(c.animation, { loop = c.loop, blend = 0, restart = true })
+      end
+    end
   elseif t == "shape3d" then
     local make = nn.d3[c.shape]
     local ok = false
@@ -1710,7 +1753,7 @@ end
 
 local PREPARE_ORDER = {
   "map", "sprite", "body", "sound", "particles", "panel", "button", "bar", "icons",
-  "slider", "checkbox", "textfield", "camera", "model", "shape3d", "camera3d", "body3d",
+  "slider", "checkbox", "textfield", "camera", "model", "anim3d", "shape3d", "camera3d", "body3d",
 }
 
 -- Mapas antes dos corpos: a câmera e a colisão dependem deles.
@@ -1926,6 +1969,21 @@ function M.update(scene, dt)
   M.events.step(scene, dt)
   refresh_list(scene)
   update_animations(scene, dt)
+  if scene._3d then
+    -- Animações dos modelos 3D; as que tocam uma vez avisam ao terminar.
+    for _, o in ipairs(scene.object_list) do
+      if o.alive then
+        for _, c in ipairs(o.components) do
+          local a = c._anim
+          if a then
+            local was = a:finished()
+            a:update(dt)
+            if not was and a:finished() then o:send("animacao_terminou", a.animation) end
+          end
+        end
+      end
+    end
+  end
   update_particles(scene, dt)
   for _, fx in pairs(scene._fx or {}) do fx:update(dt) end
   M.arrange_all(scene)
@@ -2128,7 +2186,7 @@ local function draw_object(o, alpha)
   for _, c in ipairs(o.components) do
     if (c.type == "model" and c._model) or (c.type == "shape3d" and c._mesh) then
       m3 = m3 or o:matrix3d(alpha)
-      nn.d3.draw(c._model or c._mesh, { matrix = m3, color = c.color, shadow = c.shadow })
+      nn.d3.draw(c._model or c._mesh, { matrix = m3, color = c.color, shadow = c.shadow, animator = c._anim })
     end
   end
   local x, y, rot, sx, sy = o:world_transform()

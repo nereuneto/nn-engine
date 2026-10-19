@@ -292,7 +292,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.assets.model",
         "(caminho, opts)",
-        "Modelo 3D .glb ou .gltf (do Blender e outros), para nn.d3.draw. opts: flat = true deixa cada face com um tom só.",
+        "Modelo 3D .glb ou .gltf (do Blender e outros), para nn.d3.draw. opts: flat = true deixa cada face com um tom só. Animado: modelo:animations() e modelo:animator().",
     ),
     d(
         "nn.assets.sheet",
@@ -526,7 +526,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.draw",
         "(malha, opts)",
-        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, color, image, shadow = false).",
+        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator()).",
     ),
     d(
         "nn.d3.camera",

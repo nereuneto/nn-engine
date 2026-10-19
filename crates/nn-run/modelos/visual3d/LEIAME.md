@@ -5,7 +5,7 @@ Jogo 3D feito com a [nn-engine](https://github.com/nereuneto/nn-engine) no **NN 
 Tudo está montado nas cenas visuais:
 
 - `cenas/ilha.cena`: a ilha. Abra no NN Studio para ver a vista 3D.
-  - **Herói**: modelo `heroi.glb` com o comportamento **Jogador 3D** (anda, pula e leva a câmera atrás dele).
+  - **Herói**: modelo animado `heroi.glb` com o comportamento **Jogador 3D** (anda, pula e leva a câmera atrás dele, tocando as animações parado, correr, pular e cair sozinho).
   - **Ilha**, **Plataforma**, **Árvore** e **Pedra**: **Corpo 3D** parado. Nas plataformas e nas árvores, a forma automática usa a malha exata do modelo.
   - **Plataforma que anda** e **Elevador**: Corpo 3D que se move sozinho e o comportamento **Plataforma que anda**. Elas levam o herói junto.
   - **Caixote**: Corpo 3D que cai e é empurrado. Empurre com o herói!

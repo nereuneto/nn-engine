@@ -340,3 +340,90 @@ fn ambiente_e_corpo_mudam_ao_vivo() {
     let y: f64 = lua(&rt, "C.objects.Caixa.y");
     assert!((y - 0.5).abs() < 0.05, "caiu de volta: {y}");
 }
+
+fn com_modelos(dir: &Path) {
+    let origem = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/estrelas3d/modelos");
+    std::fs::create_dir_all(dir.join("modelos")).unwrap();
+    for f in std::fs::read_dir(origem).unwrap() {
+        let f = f.unwrap();
+        std::fs::write(
+            dir.join("modelos").join(f.file_name()),
+            std::fs::read(f.path()).unwrap(),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
+fn modelos_animados_jogador_anima_sozinho_e_eventos_tocam() {
+    let dir = projeto(
+        "animados",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            (
+                "cenas/mundo.cena",
+                &format!(
+                    r#"return {{ format = 1, mode = "3d", gravity = -20, script = "cenas/obs.lua",
+  events = {{
+    {{ when = {{ {{ cond = "tecla", modo = "apertar", tecla = "e" }} }},
+      actions = {{ {{ act = "animacao", alvo = "Bicho", nome = "parado", repetir = false }} }} }},
+    {{ when = {{ {{ cond = "animacao_terminou", quem = "Bicho", nome = "parado" }} }},
+      actions = {{ {{ act = "variavel", var = "fim", op = "somar", valor = 1 }} }} }},
+  }},
+  objects = {{
+    {CHAO},
+    {{ id = 10, name = "Herói", y = 0.1,
+      components = {{ {{ type = "model", file = "modelos/heroi.glb" }},
+        {{ type = "behavior", script = "nn:jogador3d", prender_mouse = false }} }} }},
+    {{ id = 11, name = "Bicho", x = 4,
+      components = {{ {{ type = "model", file = "modelos/bicho.glb" }},
+        {{ type = "anim3d", animation = "andar", speed = 2 }} }} }},
+  }} }}"#
+                ),
+            ),
+        ],
+    );
+    com_modelos(&dir);
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    let anim = |rt: &ScriptRuntime, nome: &str| -> String {
+        lua(rt, &format!("C.objects['{nome}']:animator().animation"))
+    };
+    h.run_frames(20);
+    assert_eq!(h.game.0.error(), None);
+    // O corpo do herói vem do modelo (1,8 m) e os pés ficam no chão.
+    let y: f64 = lua(&rt, "C.objects['Herói'].y");
+    assert!(y.abs() < 0.05, "pés no chão: {y}");
+    assert_eq!(anim(&rt, "Herói"), "parado");
+    assert_eq!(anim(&rt, "Bicho"), "andar");
+    assert_eq!(lua::<f64>(&rt, "C.objects.Bicho:animator().speed"), 2.0);
+    // Andando com o teclado (velocidade 6): corre.
+    h.ctx.input.press_key(KeyCode::KeyW);
+    h.run_frames(15);
+    assert_eq!(anim(&rt, "Herói"), "correr");
+    h.ctx.input.release_key(KeyCode::KeyW);
+    // Pula: "pular" (uma vez), depois "cair", e de volta ao chão, "parado".
+    h.ctx.input.press_key(KeyCode::Space);
+    h.run_frames(4);
+    h.ctx.input.release_key(KeyCode::Space);
+    assert_eq!(anim(&rt, "Herói"), "pular");
+    h.run_frames(30);
+    assert_eq!(anim(&rt, "Herói"), "cair");
+    h.run_frames(60);
+    assert_eq!(anim(&rt, "Herói"), "parado");
+    // Um evento toca "parado" uma vez no bicho; ao terminar, outro evento.
+    h.ctx.input.press_key(KeyCode::KeyE);
+    h.run_frames(2);
+    h.ctx.input.release_key(KeyCode::KeyE);
+    assert_eq!(anim(&rt, "Bicho"), "parado");
+    h.run_frames(60);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.fim or 0"), 1.0);
+    // Pelo script: obj:play.
+    rt.lua()
+        .load("C.objects.Bicho:play('andar')")
+        .exec()
+        .unwrap();
+    assert_eq!(anim(&rt, "Bicho"), "andar");
+}

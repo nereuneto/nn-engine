@@ -1129,7 +1129,11 @@ fn field(
                     ui.close();
                 }
                 if ctx.env.anims.is_empty() {
-                    ui.weak("Nenhuma animação ainda: crie na aba de uma imagem (Animações).");
+                    ui.weak(if events::three_d() {
+                        "Nenhum modelo 3D animado nesta cena."
+                    } else {
+                        "Nenhuma animação ainda: crie na aba de uma imagem (Animações)."
+                    });
                 }
                 for name in ctx.env.anims {
                     if ui.button(name).clicked() {
@@ -1139,7 +1143,11 @@ fn field(
                 }
             })
             .response
-            .on_hover_text("Animações das imagens do projeto");
+            .on_hover_text(if events::three_d() {
+                "Animações dos modelos 3D da cena"
+            } else {
+                "Animações das imagens do projeto"
+            });
             if let Some(c) = chosen {
                 new = Some(Prop::Str(c));
                 structural = true;
