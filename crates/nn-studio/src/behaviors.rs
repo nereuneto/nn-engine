@@ -38,6 +38,8 @@ pub enum PropType {
     Anim,
     /// Um tile do mapa (número; 0 = nenhum).
     Tile,
+    /// Um arquivo de diálogo (`.dialogo`).
+    Dialogue,
     /// O tipo de um tile (`tipo` no tileset: "lava", "agua"...).
     TileType,
 }
@@ -61,6 +63,7 @@ impl PropType {
             "anim" => Self::Anim,
             "tile" => Self::Tile,
             "tiletype" => Self::TileType,
+            "dialogue" => Self::Dialogue,
             _ => Self::Text,
         }
     }

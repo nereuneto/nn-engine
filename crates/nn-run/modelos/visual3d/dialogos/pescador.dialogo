@@ -1,0 +1,32 @@
+-- Diálogo do NN Studio (editor de conversa). Dá para editar à mão;
+-- ao salvar pelo editor, comentários escritos aqui se perdem.
+return {
+  format = 1,
+  start = 1,
+  speed = 40,
+  characters = {
+    { name = "Pescador", color = "#4CC9F0", image = "", sound = "" },
+  },
+  nodes = {
+    { id = 1, x = 40, y = 120, who = "Pescador",
+      text = "Olá, aventureiro! Veio atrás das estrelas da ilha?",
+      choices = {
+        { text = "Vim sim!", next = 2 },
+        { text = "Só estou passeando.", next = 4 },
+      },
+    },
+    { id = 2, x = 340, y = 40, who = "Pescador",
+      text = "Quatro estão por aí, nas plataformas e lá no alto. A quinta está trancada no cofre de pedra, perto daqui.",
+      next = 3,
+    },
+    { id = 3, x = 640, y = 40, who = "Pescador",
+      text = "A chave do cofre ficou numa plataforma do lado oeste, depois da fogueira. Boa sorte!",
+      next = 0,
+      var = "dica", value = 1,
+    },
+    { id = 4, x = 340, y = 260, who = "Pescador",
+      text = "Então aproveite a vista! Se mudar de ideia, é só falar comigo.",
+      next = 0,
+    },
+  },
+}

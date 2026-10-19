@@ -1473,7 +1473,7 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
             }
             c
         };
-        let items: [(&str, &str, &str); 5] = [
+        let items: [(&str, &str, &str); 6] = [
             (
                 "porta",
                 "Porta",
@@ -1498,6 +1498,11 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
                 "inventario",
                 "Mostrar inventário",
                 "Os itens que o jogador carrega, num canto da tela.",
+            ),
+            (
+                "personagem",
+                "Personagem que fala",
+                "Alguém para conversar: perto dele aparece \"E falar\" e abre uma conversa (.dialogo) numa caixa de fala.",
             ),
         ];
         for (id, label, tip) in items {
@@ -1541,6 +1546,10 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
                     let mut c = Component::new("text3d");
                     c.set("text", Prop::Str("Olá!".into()));
                     o.components.push(c);
+                }
+                "personagem" => {
+                    o = shape("Personagem", "capsule", "#4CC9F0");
+                    o.components.push(behavior("nn:dialogo", &[]));
                 }
                 _ => {
                     o = Object::new(0, "Inventário");

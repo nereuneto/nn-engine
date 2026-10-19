@@ -74,6 +74,13 @@ pub const EVENTS_RUNTIME: &str = include_str!("eventos.lua");
 /// teclado, controle e digitação).
 pub const INTERFACE_RUNTIME: &str = include_str!("interface.lua");
 
+/// Diálogos (arquivos `.dialogo`, do editor de conversa do NN Studio): a
+/// caixa de fala, as escolhas e as mensagens das conversas.
+pub const DIALOGUE_RUNTIME: &str = include_str!("dialogos.lua");
+
+/// Extensão dos arquivos de diálogo.
+pub const DIALOGUE_EXTENSION: &str = "dialogo";
+
 /// Extensão dos arquivos de cena visual.
 pub const SCENE_EXTENSION: &str = "cena";
 
@@ -114,6 +121,7 @@ pub const BEHAVIORS: &[(&str, &str)] = &[
     ("gatilho", include_str!("comportamentos/gatilho.lua")),
     ("interagir", include_str!("comportamentos/interagir.lua")),
     ("inventario", include_str!("comportamentos/inventario.lua")),
+    ("dialogo", include_str!("comportamentos/dialogo.lua")),
     ("girar3d", include_str!("comportamentos/girar3d.lua")),
     (
         "plataforma3d",
@@ -312,6 +320,11 @@ impl ScriptRuntime {
             .set_name("@nn/interface.lua")
             .call(scene_runtime.clone())?;
         scene_runtime.set("ui", interface)?;
+        let dialogue: Table = lua
+            .load(DIALOGUE_RUNTIME)
+            .set_name("@nn/dialogos.lua")
+            .call(scene_runtime.clone())?;
+        scene_runtime.set("dialogue", dialogue)?;
         lua.load(ANIMATIONS_LUA)
             .set_name("@nn/animacoes.lua")
             .call::<()>(scene_runtime.clone())?;

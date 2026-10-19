@@ -45,6 +45,8 @@ pub enum Tab {
     Events,
     /// Painel Tiles: pincel, camadas e tileset do mapa sendo pintado.
     Tiles,
+    /// Diálogo (`.dialogo`) no editor de conversa.
+    Dialogue(String),
 }
 
 impl Tab {
@@ -60,6 +62,7 @@ impl Tab {
             // A aba da imagem (o .anim abre junto com ela, em open_file).
             FileKind::Anim => Tab::Code(rel.into()),
             FileKind::Sound => Tab::Sound(rel.into()),
+            FileKind::Dialogue => Tab::Dialogue(rel.into()),
             // (O 3D no editor vem depois: por enquanto abre no programa padrão.)
             FileKind::Folder | FileKind::Font | FileKind::Model | FileKind::Other => return None,
         })
@@ -67,14 +70,24 @@ impl Tab {
 
     pub fn rel(&self) -> Option<&str> {
         match self {
-            Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) | Tab::Scene(r) => Some(r),
+            Tab::Code(r)
+            | Tab::Image(r)
+            | Tab::Sound(r)
+            | Tab::Map(r)
+            | Tab::Scene(r)
+            | Tab::Dialogue(r) => Some(r),
             _ => None,
         }
     }
 
     fn set_rel(&mut self, new: String) {
         match self {
-            Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) | Tab::Scene(r) => *r = new,
+            Tab::Code(r)
+            | Tab::Image(r)
+            | Tab::Sound(r)
+            | Tab::Map(r)
+            | Tab::Scene(r)
+            | Tab::Dialogue(r) => *r = new,
             _ => {}
         }
     }
@@ -108,6 +121,8 @@ pub enum NewKind {
     Folder,
     /// Imagem para o editor de pixel art.
     Image,
+    /// Conversa para o editor de diálogos.
+    Dialogue,
 }
 
 impl NewKind {
@@ -118,6 +133,7 @@ impl NewKind {
             NewKind::Module => "Novo script (módulo)",
             NewKind::Folder => "Nova pasta",
             NewKind::Image => "Nova imagem (pixel art)",
+            NewKind::Dialogue => "Novo diálogo (conversa)",
         }
     }
 
@@ -127,6 +143,7 @@ impl NewKind {
             NewKind::Module => "util",
             NewKind::Folder => "nova_pasta",
             NewKind::Image => "desenho",
+            NewKind::Dialogue => "conversa",
         }
     }
 }
@@ -267,6 +284,8 @@ pub struct ProjectWorkspace {
     pub docs: HashMap<String, CodeDoc>,
     /// Imagens abertas no editor de pixel art.
     pub pixels: HashMap<String, PixelDoc>,
+    /// Diálogos abertos no editor de conversa.
+    pub dialogues: HashMap<String, crate::dialogue::DialogueDoc>,
     /// Paleta do projeto (`paleta.hex`), lida na primeira vez.
     palette: Option<Vec<crate::pixel_ops::Color>>,
     sounds: HashMap<String, SoundView>,
@@ -378,6 +397,7 @@ impl ProjectWorkspace {
             file_panel: FilePanel::default(),
             docs: HashMap::new(),
             pixels: HashMap::new(),
+            dialogues: HashMap::new(),
             palette: None,
             sounds: HashMap::new(),
             maps: HashMap::new(),
@@ -460,6 +480,12 @@ impl ProjectWorkspace {
                     .map(|s| s.rel.clone()),
             )
             .chain(
+                self.dialogues
+                    .values()
+                    .filter(|s| s.is_dirty())
+                    .map(|s| s.rel.clone()),
+            )
+            .chain(
                 self.tilesets
                     .values()
                     .filter(|s| s.is_dirty())
@@ -475,6 +501,10 @@ impl ProjectWorkspace {
         self.docs.get(rel).is_some_and(CodeDoc::is_dirty)
             || self.scenes.get(rel).is_some_and(SceneDoc::is_dirty)
             || self.pixels.get(rel).is_some_and(PixelDoc::is_dirty)
+            || self
+                .dialogues
+                .get(rel)
+                .is_some_and(crate::dialogue::DialogueDoc::is_dirty)
             || self
                 .map_docs
                 .get(rel)
@@ -543,6 +573,7 @@ impl ProjectWorkspace {
         self.docs.clear();
         self.scenes.clear();
         self.pixels.clear();
+        self.dialogues.clear();
         self.map_docs.clear();
         self.tilesets.clear();
     }
@@ -578,6 +609,12 @@ impl ProjectWorkspace {
             match img.save(&self.root) {
                 Ok(()) => saved.push(img.rel.clone()),
                 Err(e) => errors.push(format!("{}: {e}", img.rel)),
+            }
+        }
+        for d in self.dialogues.values_mut().filter(|s| s.is_dirty()) {
+            match d.save(&self.root) {
+                Ok(()) => saved.push(d.rel.clone()),
+                Err(e) => errors.push(format!("{}: {e}", d.rel)),
             }
         }
         let (ok, err) = self.save_maps(None);
@@ -735,6 +772,9 @@ impl ProjectWorkspace {
             }
             Tab::Image(r) => {
                 self.pixels.remove(r);
+            }
+            Tab::Dialogue(r) => {
+                self.dialogues.remove(r);
             }
             Tab::Sound(r) => {
                 if let Some(mut s) = self.sounds.remove(r) {
@@ -941,6 +981,14 @@ impl ProjectWorkspace {
             .find(|p| self.root.join(p).is_file())
     }
 
+    /// Diálogo com o foco (recebe Desfazer e Salvar).
+    fn focused_dialogue(&mut self) -> Option<String> {
+        match self.dock.find_active_focused() {
+            Some((_, Tab::Dialogue(r))) => Some(r.clone()),
+            _ => None,
+        }
+    }
+
     /// Imagem com o foco (recebe Desfazer e Salvar).
     fn focused_image(&mut self) -> Option<String> {
         match self.dock.find_active_focused() {
@@ -1069,6 +1117,9 @@ impl ProjectWorkspace {
             if let Some(v) = self.pixels.get_mut(rel) {
                 v.disk_changed(&root);
             }
+            if let Some(v) = self.dialogues.get_mut(rel) {
+                v.disk_changed(&root);
+            }
             // O .anim mudou fora: a imagem dele relê (se não houver nada a perder).
             if FileKind::of(Path::new(rel)) == FileKind::Anim {
                 self.sizes.anims.forget(rel);
@@ -1166,6 +1217,14 @@ impl ProjectWorkspace {
             Command::Undo | Command::Redo => {
                 if let Some(map_rel) = self.focused_map() {
                     self.undo_map(&map_rel, cmd == Command::Undo);
+                } else if let Some(rel) = self.focused_dialogue()
+                    && let Some(doc) = self.dialogues.get_mut(&rel)
+                {
+                    if cmd == Command::Undo {
+                        doc.undo();
+                    } else {
+                        doc.redo();
+                    }
                 } else if let Some(rel) = self.focused_image()
                     && let Some(doc) = self.pixels.get_mut(&rel)
                 {
@@ -1192,6 +1251,8 @@ impl ProjectWorkspace {
                     let r = r.clone();
                     self.save_doc(&r);
                 } else if let Some(rel) = self.focused_image() {
+                    self.save_doc(&rel);
+                } else if let Some(rel) = self.focused_dialogue() {
                     self.save_doc(&rel);
                 } else if let Some(rel) = self.focused_scene() {
                     self.save_doc(&rel);
@@ -1268,7 +1329,9 @@ impl ProjectWorkspace {
                 let tab = self.dock.find_active_focused().map(|(_, t)| t.clone());
                 if let Some(tab) = tab {
                     match &tab {
-                        Tab::Code(r) | Tab::Scene(r) | Tab::Image(r) if self.is_dirty(r) => {
+                        Tab::Code(r) | Tab::Scene(r) | Tab::Image(r) | Tab::Dialogue(r)
+                            if self.is_dirty(r) =>
+                        {
                             self.dialog = Some(Dialog::CloseTab(r.clone()));
                         }
                         _ => self.close_tab(&tab),
@@ -1554,6 +1617,18 @@ impl ProjectWorkspace {
     }
 
     fn save_doc(&mut self, rel: &str) {
+        if let Some(d) = self.dialogues.get_mut(rel) {
+            match d.save(&self.root) {
+                Ok(()) => {
+                    self.console.info(format!("Salvo: {rel}"));
+                    self.files.rescan();
+                }
+                Err(e) => self
+                    .console
+                    .error(format!("Não foi possível salvar {rel}: {e}")),
+            }
+            return;
+        }
         if let Some(img) = self.pixels.get_mut(rel) {
             match img.save(&self.root) {
                 Ok(()) => {
@@ -1812,6 +1887,15 @@ impl ProjectWorkspace {
                         *slot = Some(n);
                     }
                 }
+                let dialogues: Vec<String> = self.dialogues.keys().cloned().collect();
+                for k in dialogues {
+                    if let Some(n) = fix(&k)
+                        && let Some(mut d) = self.dialogues.remove(&k)
+                    {
+                        d.rel = n.clone();
+                        self.dialogues.insert(n, d);
+                    }
+                }
                 let pixels: Vec<String> = self.pixels.keys().cloned().collect();
                 for k in pixels {
                     if let Some(n) = fix(&k)
@@ -1931,6 +2015,7 @@ impl ProjectWorkspace {
                 file_panel: &mut self.file_panel,
                 docs: &mut self.docs,
                 pixels: &mut self.pixels,
+                dialogues: &mut self.dialogues,
                 map_docs: &mut self.map_docs,
                 tilesets: &mut self.tilesets,
                 paint: &mut self.paint,
@@ -2111,6 +2196,7 @@ impl ProjectWorkspace {
                         file_name.push_str(match kind {
                             NewKind::VisualScene => ".cena",
                             NewKind::Image => ".png",
+                            NewKind::Dialogue => ".dialogo",
                             _ => ".lua",
                         });
                     }
@@ -2165,6 +2251,9 @@ impl ProjectWorkspace {
                     if kind == NewKind::Image {
                         ui.weak("Abre no editor de pixel art. 16 × 16 é um bom tamanho para personagens e itens.");
                     }
+                    if kind == NewKind::Dialogue {
+                        ui.weak("Abre no editor de conversa, já com um exemplo: falas, escolhas e um personagem. Na cena, use o comportamento Diálogo.");
+                    }
                     if let Some(e) = error {
                         ui.colored_label(theme::ERROR, e.as_str());
                     }
@@ -2187,6 +2276,7 @@ impl ProjectWorkspace {
                                     files::create_file(&self.root, parent, &file_name, &text)
                                 }
                                 NewKind::Module => files::create_file(&self.root, parent, name, &files::module_template(&rel)),
+                                NewKind::Dialogue => files::create_file(&self.root, parent, &file_name, &crate::dialogue::template()),
                                 NewKind::Image => {
                                     let [w, h, n] = *size;
                                     create_image(&self.root, &rel, w, h, n)
@@ -2705,6 +2795,7 @@ struct Viewer<'a> {
     file_panel: &'a mut FilePanel,
     docs: &'a mut HashMap<String, CodeDoc>,
     pixels: &'a mut HashMap<String, PixelDoc>,
+    dialogues: &'a mut HashMap<String, crate::dialogue::DialogueDoc>,
     palette: &'a mut Vec<crate::pixel_ops::Color>,
     map_docs: &'a mut HashMap<String, crate::map_doc::MapDoc>,
     tilesets: &'a mut HashMap<String, crate::tileset::TilesetDoc>,
@@ -2768,11 +2859,20 @@ impl TabViewer for Viewer<'_> {
             Tab::Inspector => "Inspetor".to_string(),
             Tab::Events => "Eventos".to_string(),
             Tab::Tiles => "Tiles".to_string(),
-            Tab::Code(r) | Tab::Image(r) | Tab::Sound(r) | Tab::Map(r) | Tab::Scene(r) => {
+            Tab::Code(r)
+            | Tab::Image(r)
+            | Tab::Sound(r)
+            | Tab::Map(r)
+            | Tab::Scene(r)
+            | Tab::Dialogue(r) => {
                 let name = r.rsplit('/').next().unwrap_or(r).to_string();
                 if self.docs.get(r.as_str()).is_some_and(CodeDoc::is_dirty)
                     || self.scenes.get(r.as_str()).is_some_and(SceneDoc::is_dirty)
                     || self.pixels.get(r.as_str()).is_some_and(PixelDoc::is_dirty)
+                    || self
+                        .dialogues
+                        .get(r.as_str())
+                        .is_some_and(crate::dialogue::DialogueDoc::is_dirty)
                     || self
                         .map_docs
                         .get(r.as_str())
@@ -2829,6 +2929,19 @@ impl TabViewer for Viewer<'_> {
             }
             Tab::Code(r) => {
                 self.docs.remove(r.as_str());
+                OnCloseResponse::Close
+            }
+            Tab::Dialogue(r)
+                if self
+                    .dialogues
+                    .get(r.as_str())
+                    .is_some_and(crate::dialogue::DialogueDoc::is_dirty) =>
+            {
+                self.actions.push(Action::AskCloseTab(r.clone()));
+                OnCloseResponse::Ignore
+            }
+            Tab::Dialogue(r) => {
+                self.dialogues.remove(r.as_str());
                 OnCloseResponse::Close
             }
             Tab::Image(r) if self.pixels.get(r.as_str()).is_some_and(PixelDoc::is_dirty) => {
@@ -2945,6 +3058,40 @@ impl TabViewer for Viewer<'_> {
                         PixelAction::Save => self.actions.push(Action::SaveDoc(rel.clone())),
                         PixelAction::CopyText(t) => self.actions.push(Action::CopyText(t)),
                         PixelAction::SavePalette => self.actions.push(Action::SavePalette),
+                    }
+                }
+            }
+            Tab::Dialogue(rel) => {
+                if !self.dialogues.contains_key(rel.as_str()) {
+                    let doc = crate::dialogue::DialogueDoc::open(self.root, rel);
+                    self.dialogues.insert(rel.clone(), doc);
+                }
+                if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(ui.max_rect())
+                {
+                    self.actions
+                        .push(Action::FocusTab(Tab::Dialogue(rel.clone())));
+                }
+                let env = crate::dialogue::DialogueEnv {
+                    images: self
+                        .files
+                        .files_of(FileKind::Image)
+                        .map(|e| e.rel.clone())
+                        .collect(),
+                    sounds: self
+                        .files
+                        .files_of(FileKind::Sound)
+                        .map(|e| e.rel.clone())
+                        .collect(),
+                };
+                let doc = self
+                    .dialogues
+                    .get_mut(rel.as_str())
+                    .expect("diálogo aberto");
+                for a in doc.ui(ui, &env) {
+                    match a {
+                        crate::dialogue::DialogueAction::Save => {
+                            self.actions.push(Action::SaveDoc(rel.clone()))
+                        }
                     }
                 }
             }

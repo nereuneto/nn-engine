@@ -752,3 +752,107 @@ fn inventario_guarda_tira_e_volta_com_as_variaveis() {
         .to_string();
     assert!(e.contains("o item é um nome"), "{e}");
 }
+
+const CONVERSA: &str = r##"return {
+  format = 1, start = 1, speed = 0,
+  characters = { { name = "Ana", color = "#FFD166" } },
+  nodes = {
+    { id = 1, who = "Ana", text = "Oi, {nome}!", next = 2 },
+    { id = 2, who = "Ana", text = "Me ajuda?", choices = {
+        { text = "Ajudo", next = 3, var = "ajudou", value = 1 },
+        { text = "Agora não", next = 0 },
+        { text = "Toma a chave", next = 3, need = "chave" },
+    } },
+    { id = 3, who = "Ana", text = "Valeu! Tome.", item = "moeda rara", var = "fim", value = "sim", next = 0 },
+  },
+}"##;
+
+#[test]
+fn dialogo_abre_com_e_escolhe_e_termina() {
+    let dir = projeto(
+        "dialogo",
+        &[
+            ("config.lua", "return { vars = { nome = 'Bia' } }"),
+            (
+                "cenas/obs.lua",
+                "local c = {} function c:enter() C = self end return c",
+            ),
+            ("dialogos/ana.dialogo", CONVERSA),
+            (
+                "cenas/fase.cena",
+                r##"return { script = "cenas/obs.lua",
+  events = {
+    { when = { { cond = "escolheu", opcao = "Ajudo", quem = "ana" } },
+      actions = { { act = "variavel", var = "escolhas", op = "somar", valor = 1 } } },
+    { when = { { cond = "conversa_comecou", quem = "ana" } },
+      actions = { { act = "variavel", var = "comecou", op = "somar", valor = 1 } } },
+    { when = { { cond = "conversa_terminou", quem = "ana" } },
+      actions = { { act = "variavel", var = "terminou", op = "somar", valor = 1 } } },
+  },
+  objects = {
+  { id = 1, name = "heroi", x = 0, y = 0, components = {
+    { type = "shape", w = 10, h = 10, color = "#FF0000" },
+    { type = "behavior", script = "nn:topdown", velocidade = 300 },
+  } },
+  { id = 2, name = "ana", x = 30, y = 0, components = {
+    { type = "shape", w = 10, h = 20, color = "#FFD166" },
+    { type = "behavior", script = "nn:dialogo", arquivo = "dialogos/ana.dialogo", distancia = 30 },
+  } },
+} }"##,
+            ),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/fase.cena") else {
+        return;
+    };
+    let apertar = |h: &mut Headless<Uma>, k: KeyCode| {
+        h.ctx.input.press_key(k);
+        h.run_frames(1);
+        h.ctx.input.release_key(k);
+        h.run_frames(2);
+    };
+    h.run_frames(3);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(lua::<String>(&rt, "C._ia.text"), "falar");
+    apertar(&mut h, KeyCode::KeyE);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(lua::<String>(&rt, "C:dialogue()"), "dialogos/ana.dialogo");
+    assert_eq!(lua::<String>(&rt, "C._dlg.text"), "Oi, Bia!");
+    assert_eq!(lua::<f64>(&rt, "nn.vars.comecou"), 1.0);
+    // Parado durante a conversa (e sem o aviso).
+    segurar(&mut h, KeyCode::KeyD, 10);
+    assert!(lua::<f64>(&rt, "C.objects.heroi.x").abs() < 0.01);
+    assert!(lua::<bool>(&rt, "C._ia == nil"));
+    // Enter passa; as escolhas: a que pede a chave não aparece.
+    apertar(&mut h, KeyCode::Enter);
+    assert_eq!(lua::<i64>(&rt, "C._dlg.node.id"), 2);
+    assert_eq!(lua::<i64>(&rt, "#C._dlg.choices"), 2);
+    // Desce e sobe (volta à primeira) e escolhe com espaço.
+    apertar(&mut h, KeyCode::ArrowDown);
+    assert_eq!(lua::<i64>(&rt, "C._dlg.choice"), 2);
+    apertar(&mut h, KeyCode::ArrowUp);
+    apertar(&mut h, KeyCode::Space);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.ajudou"), 1.0);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.escolhas"), 1.0);
+    // A fala 3 dá o item e muda a variável; E fecha.
+    assert_eq!(lua::<i64>(&rt, "nn.inventory.count('moeda rara')"), 1);
+    assert_eq!(lua::<String>(&rt, "nn.vars.fim"), "sim");
+    apertar(&mut h, KeyCode::KeyE);
+    assert!(lua::<bool>(&rt, "C:dialogue() == nil"));
+    assert_eq!(lua::<f64>(&rt, "nn.vars.terminou"), 1.0);
+    // Fechou com E sem abrir de novo; depois, E abre outra vez. Com a chave,
+    // a terceira escolha aparece; "Agora não" termina.
+    h.run_frames(2);
+    assert!(lua::<bool>(&rt, "C:dialogue() == nil"));
+    rt.lua().load("nn.inventory.add('chave')").exec().unwrap();
+    apertar(&mut h, KeyCode::KeyE);
+    apertar(&mut h, KeyCode::Enter);
+    assert_eq!(lua::<i64>(&rt, "#C._dlg.choices"), 3);
+    apertar(&mut h, KeyCode::Digit2);
+    assert!(lua::<bool>(&rt, "C:dialogue() == nil"));
+    assert_eq!(lua::<f64>(&rt, "nn.vars.terminou"), 2.0);
+    // Anda de novo.
+    segurar(&mut h, KeyCode::KeyA, 10);
+    assert!(lua::<f64>(&rt, "C.objects.heroi.x") < -10.0);
+    assert_eq!(h.game.0.error(), None);
+}

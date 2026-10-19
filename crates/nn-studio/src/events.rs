@@ -288,7 +288,10 @@ pub fn value_text(spec: Option<&PropSpec>, v: &Prop, in_object: bool) -> String 
         };
     };
     match spec.kind {
-        PropType::Target => target_label(v.str(), in_object),
+        PropType::Target => match &spec.allow_empty {
+            Some(empty) if v.str().is_empty() => empty.clone(),
+            _ => target_label(v.str(), in_object),
+        },
         PropType::Choice => {
             let s = match v {
                 Prop::Str(s) => s.clone(),
@@ -300,7 +303,11 @@ pub fn value_text(spec: Option<&PropSpec>, v: &Prop, in_object: bool) -> String 
                 .map(|(_, l)| l.clone())
                 .unwrap_or(s)
         }
-        PropType::Scene | PropType::Prefab | PropType::Sound | PropType::Image => {
+        PropType::Scene
+        | PropType::Prefab
+        | PropType::Sound
+        | PropType::Image
+        | PropType::Dialogue => {
             let s = v.str();
             if s.is_empty() {
                 "(nenhum)".into()

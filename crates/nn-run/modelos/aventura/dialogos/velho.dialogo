@@ -1,0 +1,31 @@
+-- Diálogo do NN Studio (editor de conversa). Dá para editar à mão;
+-- ao salvar pelo editor, comentários escritos aqui se perdem.
+return {
+  format = 1,
+  start = 1,
+  speed = 40,
+  characters = {
+    { name = "Velho", color = "#B8E0FF", image = "", sound = "" },
+  },
+  nodes = {
+    { id = 1, x = 40, y = 120, who = "Velho",
+      text = "Ah, um viajante! Faz tempo que ninguém passa por aqui.",
+      next = 2,
+    },
+    { id = 2, x = 340, y = 120, who = "Velho",
+      text = "Procura o tesouro? Ele está atrás da porta trancada, à direita.",
+      choices = {
+        { text = "E a chave?", next = 3 },
+        { text = "Eu me viro, obrigado.", next = 4 },
+      },
+    },
+    { id = 3, x = 640, y = 40, who = "Velho",
+      text = "Lá em cima, depois das lesmas. Cuidado com os morcegos!",
+      next = 0,
+    },
+    { id = 4, x = 640, y = 220, who = "Velho",
+      text = "Hehe, coragem não te falta. Boa sorte!",
+      next = 0,
+    },
+  },
+}

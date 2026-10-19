@@ -222,6 +222,7 @@ pub fn all() -> &'static [Tutorial] {
             terreno(),
             inimigos_3d(),
             portas_e_chaves(),
+            uma_conversa(),
             eventos(),
             desenhe(),
             tiles(),
@@ -1016,6 +1017,153 @@ fn portas_e_chaves() -> Tutorial {
             Step {
                 title: "Pronto: uma fase com segredo!",
                 text: "Você usou Porta 3D, Coletável com inventário, Mostrar inventário, Texto 3D e Zona de gatilho. Ideias: Fases > Interagir numa placa (\"E ler\") com um evento que dá um item (Itens > Ganhar item), a regra Itens > Ter um item, ou uma porta que abre sozinha quando o herói chega (Abre com: o jogador chegando perto).",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// Os diálogos abertos no editor de conversa.
+fn dialogues(ws: &ProjectWorkspace) -> Vec<&crate::dialogue::DialogueDoc> {
+    let mut v: Vec<_> = ws.dialogues.values().collect();
+    v.sort_by(|a, b| a.rel.cmp(&b.rel));
+    v
+}
+
+fn uma_conversa() -> Tutorial {
+    Tutorial {
+        id: "uma-conversa",
+        title: "Uma conversa",
+        summary: "Monte uma conversa com falas, escolhas e personagens no editor de conversa, ponha um personagem que fala na cena e faça um evento para a escolha do jogador.",
+        minutes: 12,
+        template: Template::Vazio3D,
+        project: "Uma conversa",
+        steps: vec![
+            Step {
+                title: "Conversas",
+                text: "Personagens que falam deixam o jogo vivo: dão dicas, pedem ajuda, dão itens. Neste tutorial você monta uma conversa no editor de conversa e põe quem fala na cena. Funciona igual no 2D.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Um diálogo novo",
+                text: "No painel Arquivos: ➕ Novo > 💬 Diálogo (conversa), e Criar. Ele abre no editor de conversa, já com um exemplo.",
+                target: Some("arquivos.novo"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| !dialogues(ws).is_empty()),
+            },
+            Step {
+                title: "As falas",
+                text: "Cada cartão é uma fala: quem fala, o texto e, na bolinha da direita, para onde a conversa vai depois. A fala com a borda verde é o início. Clique nela e mude o texto no painel da direita.",
+                target: Some("dialogo.tela"),
+                show: None,
+                done: Some(|ws, _| {
+                    dialogues(ws).iter().any(|d| {
+                        d.data
+                            .node(d.data.start)
+                            .is_some_and(|n| n.text != "Olá! Que bom te ver por aqui.")
+                    })
+                }),
+            },
+            Step {
+                title: "Uma fala nova",
+                text: "Arraste da bolinha da fala 3 (a última) para um espaço vazio e solte: nasce uma fala nova, já ligada. Escreva o texto dela.",
+                target: Some("dialogo.saida:3"),
+                show: None,
+                done: Some(|ws, _| {
+                    dialogues(ws).iter().any(|d| {
+                        d.data.nodes.len() >= 4 && d.data.nodes.iter().any(|n| n.next >= 4)
+                    })
+                }),
+            },
+            Step {
+                title: "Escolhas",
+                text: "Com a fala nova escolhida, clique em ➕ Escolha duas vezes: o jogador escolhe o que responder. Escreva as respostas e, em \"Vai para\", para onde cada uma leva (ou o fim).",
+                target: Some("dialogo.escolha"),
+                show: None,
+                done: Some(|ws, _| {
+                    dialogues(ws)
+                        .iter()
+                        .any(|d| d.data.nodes.iter().filter(|n| n.choices.len() >= 2).count() >= 2)
+                }),
+            },
+            Step {
+                title: "Um personagem",
+                text: "Clique num espaço vazio da tela: o painel mostra a conversa. ➕ Personagem, dê um nome e uma cor. Depois escolha uma fala e, em Quem fala, o personagem novo.",
+                target: Some("dialogo.personagem"),
+                show: None,
+                done: Some(|ws, _| {
+                    dialogues(ws).iter().any(|d| {
+                        d.data.characters.len() >= 2
+                            && d.data.nodes.iter().any(|n| {
+                                !n.who.is_empty()
+                                    && n.who != "Ana"
+                                    && d.data.character(&n.who).is_some()
+                            })
+                    })
+                }),
+            },
+            Step {
+                title: "Salve",
+                text: "Ctrl+S salva a conversa (a aba perde o •).",
+                target: Some("dialogo.tela"),
+                show: None,
+                done: Some(|ws, _| {
+                    let d = dialogues(ws);
+                    !d.is_empty()
+                        && d.iter().all(|d| !d.is_dirty())
+                        && d.iter().any(|d| d.data.nodes.len() >= 4)
+                }),
+            },
+            Step {
+                title: "Na cena",
+                text: "Abra cenas/mundo.cena (painel Arquivos) e ponha um herói: ➕ Objeto > Jogador 3D.",
+                target: Some("arquivo:cenas/mundo.cena"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| objects(ws).iter().any(|o| has_behavior(o, "nn:jogador3d"))),
+            },
+            Step {
+                title: "Quem fala",
+                text: "➕ Objeto > Portas e itens > Personagem que fala, perto do herói. No Inspetor, em Diálogo > Conversa, escolha o seu diálogo. (O botão 💬 Editar a conversa volta para o editor.)",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        behavior_of(o, "nn:dialogo").is_some_and(|c| !c.str("arquivo").is_empty())
+                    })
+                }),
+            },
+            Step {
+                title: "Converse!",
+                text: "F6. Chegue perto do personagem: \"E falar\". E (ou Enter) passa as falas; as setas e os números escolhem. Enquanto a conversa está aberta, o herói fica parado.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "A escolha faz algo",
+                text: "Feche o jogo. No painel Eventos: ➕ Regra da cena > Conversas > Escolher numa conversa, e escreva o texto de uma escolha (igual ao do editor). Em Então, por exemplo, Itens > Ganhar item ou Aparência > Mudar cor.",
+                target: Some("eventos.regra_cena"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    all_rules(ws)
+                        .iter()
+                        .any(|r| r.when.iter().any(|c| c.id == "escolheu") && !r.actions.is_empty())
+                }),
+            },
+            Step {
+                title: "Teste de novo",
+                text: "F6 e escolha a resposta do evento: ele acontece na hora. A conversa também pode mudar variáveis e dar itens sozinha: no editor, abra \"Ao aparecer\" numa fala, ou \"Mais\" numa escolha.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: alguém para conversar!",
+                text: "Você usou o editor de conversa, personagens, escolhas, o comportamento Diálogo e o evento Escolher numa conversa. Ideias: uma escolha que só aparece com um item (Mais > Só aparece com o item), um retrato para o personagem, ou a conversa começando sozinha quando a cena começa.",
                 target: None,
                 show: None,
                 done: None,

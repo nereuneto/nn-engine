@@ -938,8 +938,11 @@ fn field(
         }
         PropType::Target => {
             let v = current.str().to_string();
-            let label = events::target_label(&v, ctx.in_object);
+            let label = events::value_text(Some(spec), &current, ctx.in_object);
             let mut options: Vec<(String, String)> = Vec::new();
+            if let Some(empty) = &spec.allow_empty {
+                options.push((String::new(), empty.clone()));
+            }
             if ctx.in_object {
                 options.push(("@este".into(), "este objeto".into()));
             }
@@ -1280,11 +1283,16 @@ fn field(
             }
             r
         }
-        PropType::Scene | PropType::Prefab | PropType::Sound | PropType::Image => {
+        PropType::Scene
+        | PropType::Prefab
+        | PropType::Sound
+        | PropType::Image
+        | PropType::Dialogue => {
             let v = current.str().to_string();
             let kinds: &[FileKind] = match spec.kind {
                 PropType::Scene => &[FileKind::Scene, FileKind::Lua],
                 PropType::Prefab => &[FileKind::Prefab],
+                PropType::Dialogue => &[FileKind::Dialogue],
                 PropType::Sound => &[FileKind::Sound],
                 _ => &[FileKind::Image],
             };

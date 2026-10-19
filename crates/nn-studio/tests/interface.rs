@@ -3574,6 +3574,157 @@ fn tutorial_portas_e_chaves_avanca_sozinho_ate_o_fim() {
     let _ = Component::new("text3d");
 }
 
+#[test]
+fn tutorial_uma_conversa_e_o_editor_de_conversa() {
+    use nn_studio::scene_data::{Component, EventItem, Object, Prop, Rule};
+    let dir = temp("tutorial-conversa");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("uma-conversa");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/uma-conversa");
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    fn conversa<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::dialogue::DialogueDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.dialogues.values_mut().next().unwrap()
+    }
+    espera(&mut h, 1);
+    // Arquivos > ➕ Novo > Diálogo > Criar.
+    h.get_by_label("➕ Novo").click();
+    h.run_steps(2);
+    h.get_by_label("💬 Diálogo (conversa)").click();
+    h.run_steps(2);
+    h.get_by_label("Criar").click();
+    espera(&mut h, 2);
+    assert!(projeto.join("dialogos/conversa.dialogo").is_file());
+    assert_eq!(conversa(&mut h).data.nodes.len(), 3);
+    // Clicar no cartão escolhe a fala; o texto muda no painel.
+    assert!(nn_studio::tutorial::anchor_rect(&h.ctx, "dialogo.fala:1").is_some());
+    {
+        let d = conversa(&mut h);
+        d.selected = Some(1);
+        d.data.node_mut(1).unwrap().text = "Oi! Tudo bem por aí?".into();
+    }
+    espera(&mut h, 3);
+    // Arrastar da bolinha da fala 3 para o vazio cria a fala 4, ligada.
+    let saida = nn_studio::tutorial::anchor_rect(&h.ctx, "dialogo.saida:3")
+        .unwrap()
+        .center();
+    let destino = saida + egui::vec2(120.0, 150.0);
+    h.hover_at(saida);
+    h.run_steps(1);
+    h.drag_at(saida);
+    h.run_steps(1);
+    for i in 1..=6 {
+        h.hover_at(saida + (destino - saida) * (i as f32 / 6.0));
+        h.run_steps(1);
+    }
+    h.drop_at(destino);
+    h.run_steps(2);
+    {
+        let d = conversa(&mut h);
+        assert_eq!(d.data.nodes.len(), 4, "nasceu uma fala");
+        assert_eq!(d.data.node(3).unwrap().next, 4, "já ligada");
+        assert_eq!(d.selected, Some(4));
+        d.data.node_mut(4).unwrap().text = "Quer uma dica?".into();
+    }
+    espera(&mut h, 4);
+    // ➕ Escolha duas vezes na fala nova.
+    for _ in 0..2 {
+        h.get_by_label("➕ Escolha").click();
+        h.run_steps(2);
+    }
+    assert_eq!(conversa(&mut h).data.node(4).unwrap().choices.len(), 2);
+    espera(&mut h, 5);
+    tela(&mut h, "editor-de-conversa");
+    // Desfazer tira a segunda escolha; refazer põe de volta.
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(conversa(&mut h).data.node(4).unwrap().choices.len(), 1);
+    atalho(&mut h, Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
+    assert_eq!(conversa(&mut h).data.node(4).unwrap().choices.len(), 2);
+    // Sem fala escolhida, o painel mostra a conversa: ➕ Personagem.
+    conversa(&mut h).selected = None;
+    h.run_steps(2);
+    h.get_by_label("➕ Personagem").click();
+    h.run_steps(2);
+    {
+        let d = conversa(&mut h);
+        assert_eq!(d.data.characters.len(), 2);
+        let nome = d.data.characters[1].name.clone();
+        d.data.node_mut(4).unwrap().who = nome;
+    }
+    espera(&mut h, 6);
+    h.get_by_label("Salvar").click();
+    espera(&mut h, 7);
+    let salvo = std::fs::read_to_string(projeto.join("dialogos/conversa.dialogo")).unwrap();
+    let lido = nn_studio::dialogue::read(&salvo, "conversa.dialogo").unwrap();
+    assert_eq!(lido.nodes.len(), 4);
+    assert_eq!(lido.node(4).unwrap().choices.len(), 2);
+    // Na cena: o herói e quem fala.
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("cenas/mundo.cena", None);
+    h.run_steps(2);
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/mundo.cena").unwrap()
+    }
+    let mut heroi = Object::new(50, "Jogador");
+    heroi
+        .components
+        .push(Component::behavior("nn:jogador3d", &[]));
+    doc(&mut h).data.objects.push(heroi);
+    espera(&mut h, 8);
+    let mut ana = Object::new(51, "Ana");
+    ana.components.push(Component::behavior(
+        "nn:dialogo",
+        &[(
+            "arquivo".into(),
+            Prop::Str("dialogos/conversa.dialogo".into()),
+        )],
+    ));
+    doc(&mut h).data.objects.push(ana);
+    doc(&mut h).selection = vec![51];
+    espera(&mut h, 9);
+    // O Inspetor tem o botão para abrir a conversa.
+    h.get_by_label("💬 Editar a conversa");
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 10);
+    {
+        let mut quando = EventItem {
+            id: "escolheu".into(),
+            ..Default::default()
+        };
+        quando.set("opcao", Prop::Str("Sim".into()));
+        let mut entao = EventItem {
+            id: "dar_item".into(),
+            ..Default::default()
+        };
+        entao.set("item", Prop::Str("mapa".into()));
+        doc(&mut h).data.events.push(Rule {
+            when: vec![quando],
+            actions: vec![entao],
+            ..Default::default()
+        });
+    }
+    espera(&mut h, 11);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 12);
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}
+
 /// Numa cena 3D, o Inspetor de um comportamento só mostra as propriedades
 /// que valem nela, com o padrão do 3D (o empurrão do Perigo em m/s).
 #[test]

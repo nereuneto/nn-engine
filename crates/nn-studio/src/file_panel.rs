@@ -130,6 +130,12 @@ impl FilePanel {
                     actions.push(Action::NewItem { kind: NewKind::Image, parent: image_dir(tree, &dir) });
                     ui.close();
                 }
+                let r = ui.button("💬 Diálogo (conversa)").on_hover_text("Uma conversa com falas e escolhas, montada no editor de conversa. Na cena, use o comportamento Diálogo");
+                crate::tutorial::anchor_in(ui, "arquivos:novo-dialogo", r.rect);
+                if r.clicked() {
+                    actions.push(Action::NewItem { kind: NewKind::Dialogue, parent: dialogue_dir(&dir) });
+                    ui.close();
+                }
                 if ui.button("🔧 Script (módulo)").on_hover_text("Código usado por várias cenas, com require").clicked() {
                     actions.push(Action::NewItem { kind: NewKind::Module, parent: module_dir(tree, &dir) });
                     ui.close();
@@ -501,6 +507,13 @@ impl FilePanel {
             });
             ui.close();
         }
+        if ui.button("💬 Novo diálogo aqui").clicked() {
+            actions.push(Action::NewItem {
+                kind: NewKind::Dialogue,
+                parent: dir.to_string(),
+            });
+            ui.close();
+        }
         if ui.button("🎨 Nova imagem aqui").clicked() {
             actions.push(Action::NewItem {
                 kind: NewKind::Image,
@@ -564,6 +577,15 @@ pub fn image_dir(tree: &FileTree, chosen: &str) -> String {
         .find(|d| tree.get(d).is_some_and(|e| e.is_dir))
         .map(|d| d.to_string())
         .unwrap_or_default()
+}
+
+/// Pasta sugerida para diálogos novos: a escolhida, ou `dialogos`.
+fn dialogue_dir(chosen: &str) -> String {
+    if chosen.is_empty() {
+        "dialogos".into()
+    } else {
+        chosen.to_string()
+    }
 }
 
 /// Pasta sugerida para módulos novos: a escolhida, ou `lib`, se existir.
@@ -646,6 +668,7 @@ pub fn paint_icon(painter: &egui::Painter, rect: egui::Rect, kind: FileKind, ope
         FileKind::Image => (rgb(0xD8, 0x7A, 0x4A), "picture"),
         FileKind::Font => (rgb(0x8A, 0x93, 0x9E), "letter"),
         FileKind::Model => (rgb(0x2F, 0xA8, 0xA0), "box"),
+        FileKind::Dialogue => (rgb(0xE0, 0x9F, 0x3E), "bubble"),
         _ => (rgb(0x6E, 0x76, 0x80), "none"),
     };
     let page = Rect::from_center_size(c, vec2(11.0, 14.0));
@@ -742,6 +765,20 @@ pub fn paint_icon(painter: &egui::Painter, rect: egui::Rect, kind: FileKind, ope
                 ],
                 s,
             );
+        }
+        "bubble" => {
+            // Um balão de fala.
+            let b = Rect::from_center_size(page.center() + vec2(0.0, 0.5), vec2(7.5, 5.0));
+            painter.rect_filled(b, 1.5, white);
+            painter.add(egui::Shape::convex_polygon(
+                vec![
+                    Pos2::new(b.left() + 1.5, b.bottom() - 0.5),
+                    Pos2::new(b.left() + 4.0, b.bottom() - 0.5),
+                    Pos2::new(b.left() + 1.0, b.bottom() + 2.5),
+                ],
+                white,
+                Stroke::NONE,
+            ));
         }
         "letter" => {
             painter.text(

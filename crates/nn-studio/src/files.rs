@@ -29,6 +29,8 @@ pub enum FileKind {
     Font,
     /// Modelo 3D (`.glb`, `.gltf`).
     Model,
+    /// Diálogo do editor de conversa (`.dialogo`).
+    Dialogue,
     Other,
 }
 
@@ -50,6 +52,7 @@ impl FileKind {
             "md" | "txt" | "json" | "csv" | "toml" | "gitignore" => FileKind::Text,
             "ttf" | "otf" => FileKind::Font,
             "glb" | "gltf" => FileKind::Model,
+            "dialogo" => FileKind::Dialogue,
             _ => FileKind::Other,
         }
     }
@@ -69,6 +72,7 @@ impl FileKind {
             FileKind::Text => "texto",
             FileKind::Font => "fonte",
             FileKind::Model => "modelo 3D",
+            FileKind::Dialogue => "diálogo",
             FileKind::Other => "arquivo",
         }
     }

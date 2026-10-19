@@ -35,6 +35,8 @@ function B:update(dt)
   self.espera = math.max(0, self.espera - dt)
   if self.prefab == "" or self.espera > 0 then return end
   local quer = self.tecla == "" or nn.input.down(self.tecla) or nn.input.pad_down("x")
+  -- Numa conversa, o jogador não atira.
+  if self.tecla ~= "" and self.scene._dlg then quer = false end
   if quer then
     self.espera = self.intervalo
     self:atirar()
