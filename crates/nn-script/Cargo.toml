@@ -14,6 +14,7 @@ nn-render.workspace = true
 nn-audio.workspace = true
 nn-app.workspace = true
 nn-physics.workspace = true
+nn-physics3d.workspace = true
 nn-tilemap.workspace = true
 glam.workspace = true
 log.workspace = true

@@ -34,6 +34,9 @@ pub(crate) struct LModel {
     key: String,
     triangles: usize,
     size: Vec3,
+    /// Caixa que envolve o modelo e os triângulos (para a física).
+    pub bounds: (Vec3, Vec3),
+    pub collision: std::sync::Arc<d3::CollisionMesh>,
 }
 
 impl UserData for LModel {
@@ -54,6 +57,8 @@ pub(crate) fn load_model(lua: &Lua, path: &str, opts: Option<&Table>) -> Result<
             key: nn_app::model_key(path, flat),
             triangles: model.triangles,
             size: model.size(),
+            bounds: model.bounds,
+            collision: model.collision.clone(),
         })
     })
 }
@@ -73,7 +78,12 @@ fn upload(lua: &Lua, mesh: &Mesh) -> Result<LMesh> {
     })
 }
 
-fn shape(lua: &Lua, name: &'static str, detail: u32, make: fn(u32) -> Mesh) -> Result<LMesh> {
+pub(crate) fn shape(
+    lua: &Lua,
+    name: &'static str,
+    detail: u32,
+    make: fn(u32) -> Mesh,
+) -> Result<LMesh> {
     if let Some(m) = lua
         .app_data_ref::<ShapeCache>()
         .and_then(|c| c.0.get(&(name, detail)).copied())
@@ -253,7 +263,21 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                 }
             };
             let o = opts.as_ref();
-            let model = transform(o)?.matrix();
+            let model = match opt::<Value>(o, "body")? {
+                None | Some(Value::Nil) => transform(o)?.matrix(),
+                Some(Value::UserData(ud)) if ud.is::<crate::physics3d::LBody3>() => {
+                    // Posição e rotação do corpo da física; a escala das opções.
+                    let (p, q) = ud.borrow::<crate::physics3d::LBody3>()?.pose()?;
+                    let s = transform(o)?.scale;
+                    glam::Mat4::from_scale_rotation_translation(s, q, p)
+                }
+                Some(other) => {
+                    return Err(err(format!(
+                        "\"body\" deve ser um corpo de nn.physics3d, recebeu {}",
+                        other.type_name()
+                    )));
+                }
+            };
             let col = opt_color(o, "color")?.unwrap_or(nn_core::Color::WHITE);
             let shadow = opt::<bool>(o, "shadow")?.unwrap_or(true);
             let image = match opt::<Value>(o, "image")? {

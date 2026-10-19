@@ -2892,6 +2892,7 @@ dependencies = [
  "nn-core",
  "nn-input",
  "nn-physics",
+ "nn-physics3d",
  "nn-render",
  "nn-tilemap",
  "serde_json",

@@ -35,6 +35,7 @@ mod input;
 pub mod live;
 mod particles;
 mod physics;
+mod physics3d;
 mod save;
 mod tilemap;
 mod types;

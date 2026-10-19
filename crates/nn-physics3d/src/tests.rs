@@ -317,3 +317,4 @@ fn personagem_entra_no_sensor() {
     // O sensor não barra.
     assert!(w.position(p).unwrap().x > 2.5);
 }
+

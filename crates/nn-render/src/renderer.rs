@@ -996,6 +996,7 @@ impl Renderer {
             parts,
             bounds: data.bounds(),
             triangles: data.triangle_count(),
+            collision: std::sync::Arc::new(data.collision_mesh()),
         }
     }
 

@@ -416,6 +416,34 @@ fn base64(s: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
+/// Os triângulos de um modelo, na memória (para a física: colisão exata).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CollisionMesh {
+    pub vertices: Vec<Vec3>,
+    pub triangles: Vec<[u32; 3]>,
+}
+
+impl ModelData {
+    /// Todos os triângulos do modelo juntos (posições só).
+    pub fn collision_mesh(&self) -> CollisionMesh {
+        let mut out = CollisionMesh::default();
+        for p in &self.parts {
+            let base = out.vertices.len() as u32;
+            out.vertices
+                .extend(p.mesh.vertices.iter().map(|v| Vec3::from_array(v.position)));
+            out.triangles.extend(
+                p.mesh
+                    .indices
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
+                    .map(|t| t.map(|i| base + i)),
+            );
+        }
+        out
+    }
+}
+
 /// Um modelo na GPU: uma malha por imagem usada.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Model {
@@ -423,6 +451,8 @@ pub struct Model {
     /// Caixa que envolve o modelo (mínimo, máximo).
     pub bounds: (Vec3, Vec3),
     pub triangles: usize,
+    /// Os triângulos, para a colisão exata da física.
+    pub collision: std::sync::Arc<CollisionMesh>,
 }
 
 impl Model {
