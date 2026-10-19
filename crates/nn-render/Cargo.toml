@@ -1,6 +1,6 @@
 [package]
 name = "nn-render"
-description = "Renderer 2D da nn-engine baseado em wgpu: sprites em lote, texturas e câmera."
+description = "Renderer da nn-engine baseado em wgpu: sprites em lote, texto, câmera 2D e o mundo 3D."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,6 +16,7 @@ image.workspace = true
 log.workspace = true
 thiserror.workspace = true
 fontdue.workspace = true
+gltf.workspace = true
 
 [dev-dependencies]
 pollster.workspace = true

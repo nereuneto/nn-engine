@@ -3,7 +3,7 @@
 
 use glam::{Mat4, UVec2, Vec2, Vec3};
 use nn_core::Color;
-use nn_render::d3::{Camera3D, Light3D, Transform3, shapes};
+use nn_render::d3::{Camera3D, Fog, Light3D, Transform3, shapes};
 use nn_render::{Camera2D, GpuContext, OffscreenTarget, Presentation, Renderer, ScaleMode};
 
 const SIZE: UVec2 = UVec2::new(64, 64);
@@ -189,7 +189,11 @@ fn nevoa_some_com_o_que_esta_longe() {
     h.renderer
         .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.0, 30.0), Vec3::ZERO));
     h.renderer.set_light3d(Light3D {
-        fog: Some((Color::rgb(0.0, 1.0, 0.0), 1.0, 10.0)),
+        fog: Some(Fog {
+            color: Some(Color::rgb(0.0, 1.0, 0.0)),
+            near: 1.0,
+            far: 10.0,
+        }),
         ..flat_light()
     });
     let big = Mat4::from_scale(Vec3::splat(20.0));
