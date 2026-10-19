@@ -521,6 +521,70 @@ fn modelo_nave_tiro_da_pontos_e_o_recorde_vai_para_o_disco() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+#[test]
+fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
+    let dir = temp("visual3d");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: None,
+        template: Template::Visual3D,
+    })
+    .unwrap();
+    let Some((mut h, rt)) = cena_do_modelo(&dir, "cenas/ilha.cena") else {
+        return;
+    };
+    h.run_frames(30);
+    assert_eq!(h.game.0.error(), None);
+    // O herói está em pé na ilha e a câmera atrás dele: W anda para −Z.
+    let y: f64 = lua(&rt, "return cena.objects['Herói'].y");
+    assert!(y.abs() < 0.1, "em pé no chão: {y}");
+    h.ctx.input.press_key(KeyCode::KeyW);
+    h.run_frames(40);
+    h.ctx.input.release_key(KeyCode::KeyW);
+    let z: f64 = lua(&rt, "return cena.objects['Herói'].z");
+    assert!(z < 6.5, "andou para a ilha: {z}");
+    // O elevador sobe e a plataforma anda.
+    h.run_frames(120);
+    let ey: f64 = lua(&rt, "return cena.objects.Elevador.y");
+    assert!(ey > 1.0, "elevador subiu: {ey}");
+    // Leva o herói até cada estrela: pega as 5 e o evento de vitória
+    // dispara (o som e a espera vêm antes de ir para o fim).
+    let estrelas: Vec<(f64, f64, f64)> = rt
+        .lua()
+        .load(
+            "local out = {}
+             for _, e in ipairs(cena:find_all('estrela')) do
+               local x, y, z = e:position3d()
+               table.insert(out, { x, y, z })
+             end
+             return out",
+        )
+        .eval::<Vec<Vec<f64>>>()
+        .unwrap()
+        .into_iter()
+        .map(|p| (p[0], p[1], p[2]))
+        .collect();
+    assert_eq!(estrelas.len(), 5);
+    for (x, y, z) in estrelas {
+        rt.lua()
+            .load(format!(
+                "cena.objects['Herói']:move_to({x}, {}, {z})",
+                y - 0.5
+            ))
+            .exec()
+            .unwrap();
+        h.run_frames(3);
+    }
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.estrelas"), 5);
+    assert!(lua::<i64>(&rt, "return #cena:find_all('estrela')") == 0);
+    // O placar mostra.
+    let placar: String = lua(&rt, "return cena.objects.Placar.text.text");
+    assert!(placar.contains("Estrelas 5 / 5"), "{placar}");
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 fn toque_uma(h: &mut Headless<Uma>, k: KeyCode) {
     h.ctx.input.press_key(k);
     h.run_frames(1);
@@ -576,7 +640,11 @@ fn miniaturas_dos_modelos() {
             return;
         };
         h.run_frames(if template == Template::Nave { 150 } else { 40 });
-        if template == Template::TresD {
+        if template == Template::Visual3D {
+            // A dica do começo some depois de 4 segundos.
+            h.run_frames(220);
+        }
+        if template == Template::TresD || template == Template::Visual3D {
             // Anda um pouco para a frente, para a ilha aparecer melhor.
             h.ctx.input.press_key(KeyCode::KeyW);
             h.run_frames(25);
