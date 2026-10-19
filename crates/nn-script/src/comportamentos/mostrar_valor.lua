@@ -1,7 +1,7 @@
 -- Mostra variáveis do jogo num texto (placar, vidas...).
 local B = {
   title = "Mostrar valor",
-  description = "Mostra variáveis do jogo no texto do objeto: \"Moedas: {moedas}\".",
+  description = "Mostra variáveis do jogo no texto do objeto (Texto ou Texto 3D): \"Moedas: {moedas}\".",
   category = "Aparência",
   mode = "both",
   requires = { "text" },
@@ -19,7 +19,7 @@ local function valor(nome)
 end
 
 function B:update(dt)
-  local texto = self.obj.text
+  local texto = self.obj.text or self.obj.text3d
   if texto then texto.text = (self.texto:gsub("{([%w_]+)}", valor)) end
 end
 

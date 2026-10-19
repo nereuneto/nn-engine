@@ -409,6 +409,65 @@ E.CONDITIONS = {
       return out
     end,
   },
+  {
+    id = "entrar_zona", name = "Entrar numa zona", category = "Toques", trigger = true,
+    text = "{por} entrar na zona {quem}",
+    help = "Precisa do comportamento Zona de gatilho na zona.",
+    props = { who("quem", "@este", "Zona"), who("por", "@jogador", "Quem entra") },
+    lua = "function B:entrou(quem) ... end",
+    test = function(ctx, p, st, b)
+      local zonas = set_of(resolve(ctx.scene, p.quem, b, true))
+      local por = set_of(resolve(ctx.scene, p.por, b, true))
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "entrou")) do
+        if zonas[s.obj] and por[s.arg] then table.insert(out, { este = s.obj, outro = s.arg }) end
+      end
+      return out
+    end,
+  },
+  {
+    id = "sair_zona", name = "Sair de uma zona", category = "Toques", trigger = true,
+    text = "{por} sair da zona {quem}",
+    help = "Precisa do comportamento Zona de gatilho na zona.",
+    props = { who("quem", "@este", "Zona"), who("por", "@jogador", "Quem sai") },
+    lua = "function B:saiu(quem) ... end",
+    test = function(ctx, p, st, b)
+      local zonas = set_of(resolve(ctx.scene, p.quem, b, true))
+      local por = set_of(resolve(ctx.scene, p.por, b, true))
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "saiu")) do
+        if zonas[s.obj] and por[s.arg] then table.insert(out, { este = s.obj, outro = s.arg }) end
+      end
+      return out
+    end,
+  },
+  {
+    id = "interagir", name = "Usar (apertar E)", category = "Controles", trigger = true,
+    text = "{por} usar {quem}",
+    help = "Perto de um objeto com o comportamento Interagir, apertou E (ou o Y do controle).",
+    props = { who("quem", "@este", "Objeto"), who("por", "@jogador", "Quem usa") },
+    lua = "function B:interagiu(quem) ... end",
+    test = function(ctx, p, st, b)
+      local objs = set_of(resolve(ctx.scene, p.quem, b, true))
+      local por = set_of(resolve(ctx.scene, p.por, b, true))
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "interagiu")) do
+        if objs[s.obj] and por[s.arg] then table.insert(out, { este = s.obj, outro = s.arg }) end
+      end
+      return out
+    end,
+  },
+  -- Itens
+  {
+    id = "tem_item", name = "Ter um item", category = "Itens",
+    text = "o jogador tiver {qtd} {item}",
+    help = "Itens do inventário: guardados por um Coletável (Guardar no inventário) ou pela ação Ganhar item.",
+    props = { { "item", "chave", label = "Item" }, { "qtd", 1, min = 0, integer = true, label = "Pelo menos" } },
+    lua = "nn.inventory.has(\"{item}\", {qtd})",
+    test = function(ctx, p)
+      return nn.inventory.count(fill(p.item)) >= number(p.qtd)
+    end,
+  },
   -- Variáveis
   {
     id = "variavel", name = "Comparar variável", category = "Variáveis",
@@ -690,6 +749,27 @@ E.ACTIONS = {
     end,
   },
   {
+    id = "dar_item", name = "Ganhar item", category = "Itens",
+    text = "o jogador ganhar {qtd} {item}",
+    help = "Guarda no inventário (a imagem é o ícone que o Mostrar inventário usa).",
+    props = { { "item", "chave", label = "Item" }, { "qtd", 1, min = 1, integer = true, label = "Quantos" },
+      { "icone", "", type = "image", label = "Ícone" } },
+    lua = "nn.inventory.add(\"{item}\", {qtd}, \"{icone}\")",
+    run = function(ctx, p)
+      nn.inventory.add(fill(p.item), math.max(1, math.floor(number(p.qtd))), p.icone)
+    end,
+  },
+  {
+    id = "tirar_item", name = "Gastar item", category = "Itens",
+    text = "o jogador gastar {qtd} {item}",
+    help = "Tira do inventário (se não tiver tudo isso, não tira nada).",
+    props = { { "item", "chave", label = "Item" }, { "qtd", 1, min = 1, integer = true, label = "Quantos" } },
+    lua = "nn.inventory.remove(\"{item}\", {qtd})",
+    run = function(ctx, p)
+      nn.inventory.remove(fill(p.item), math.max(1, math.floor(number(p.qtd))))
+    end,
+  },
+  {
     id = "salvar", name = "Salvar no disco", category = "Variáveis",
     text = "salvar no disco: {var}",
     help = "Guarda a variável (ou todas) para a próxima vez que o jogo abrir.",
@@ -882,7 +962,7 @@ E.ACTIONS = {
     lua = "{alvo}.text.text = \"{texto}\"",
     run = function(ctx, p, b)
       each(ctx, p.alvo, b, function(o)
-        local c = o.text or o.button or o.checkbox
+        local c = o.text or o.text3d or o.button or o.checkbox
         if c then
           c.text = fill(p.texto)
           o._fixed_text = true

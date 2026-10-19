@@ -964,6 +964,47 @@ const CAMERA3D_FIELDS: &[F] = &[help(
     "Quanto ela enxerga de cima a baixo. 60° é o normal; mais = mais aberto.",
 )];
 
+const TEXT3D_FIELDS: &[F] = &[
+    help(
+        f("text", "Texto", W::Multiline),
+        "Escrito no mundo 3D: placas, nomes em cima dos personagens, avisos. O Mostrar valor troca {variavel} pelo valor.",
+    ),
+    help(
+        f(
+            "size",
+            "Tamanho",
+            W::Num {
+                speed: 0.01,
+                min: 0.01,
+                max: 100.0,
+                suffix: " m",
+            },
+        ),
+        "A altura das letras, em metros (a escala do objeto também conta).",
+    ),
+    f("color", "Cor", W::Color),
+    help(
+        f(
+            "facing",
+            "Virado para",
+            W::Choice(&[
+                ("camera", "A câmera (sempre de frente)"),
+                ("placa", "A frente do objeto (placa)"),
+            ]),
+        ),
+        "Placa: fica preso como uma placa na parede, lido de frente pelo lado +Z do objeto (gire o objeto para virar).",
+    ),
+    help(
+        f("outline", "Contorno", W::OptColor),
+        "Uma borda em volta das letras: lê em qualquer fundo. Vazio = sem.",
+    ),
+    help(
+        f("background", "Fundo", W::OptColor),
+        "Um retângulo atrás do texto. Vazio = sem.",
+    ),
+    adv("font", "Fonte", W::Font),
+];
+
 const TERRAIN_FIELDS: &[F] = &[
     help(
         f(
@@ -1346,7 +1387,7 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
 pub fn is_3d_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "model" | "shape3d" | "camera3d" | "body3d" | "anim3d" | "terrain"
+        "model" | "shape3d" | "camera3d" | "body3d" | "anim3d" | "terrain" | "text3d"
     )
 }
 
@@ -1364,6 +1405,7 @@ fn fields(kind: &str) -> &'static [F] {
         "body3d" => BODY3D_FIELDS,
         "anim3d" => ANIM3D_FIELDS,
         "terrain" => TERRAIN_FIELDS,
+        "text3d" => TEXT3D_FIELDS,
         "sprite" => SPRITE_FIELDS,
         "text" => TEXT_FIELDS,
         "shape" => SHAPE_FIELDS,
@@ -1477,6 +1519,10 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "terrain" => (
             "Terreno",
             "Um chão com morros, vales, cores e água, pintado com o ✏ Pintar terreno da vista 3D.",
+        ),
+        "text3d" => (
+            "Texto 3D",
+            "Escreve no mundo 3D: placas, nomes em cima dos personagens, avisos.",
         ),
         "anim3d" => (
             "Animação 3D",
@@ -2622,7 +2668,13 @@ impl Inspector {
         }
         // Do que ele precisa.
         for req in &info.requires {
-            if o.component(req).is_none() {
+            // Numa cena 3D, quem precisa de texto usa o Texto 3D.
+            let req = if req == "text" && doc.data.three_d {
+                "text3d"
+            } else {
+                req.as_str()
+            };
+            if o.component(req).is_none() && !(req == "text3d" && o.component("text").is_some()) {
                 let (title, _) = component_info(req);
                 ui.horizontal_wrapped(|ui| {
                     ui.colored_label(crate::theme::WARNING, format!("⚠ Precisa de: {title}"));

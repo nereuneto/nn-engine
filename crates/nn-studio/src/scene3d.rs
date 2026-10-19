@@ -707,8 +707,11 @@ impl SceneDoc {
             let menu = ui.menu_button("➕ Objeto", |ui| {
                 if let Some(o) = add_object3_menu(ui) {
                     let p = self.spawn_point3();
+                    // Formas em pé no chão (a origem delas é o meio).
                     let lift = if o.component("shape3d").is_some_and(|c| c.str("shape") != "plane") {
-                        0.5
+                        0.5 * o.scale_y as f32
+                    } else if o.component("text3d").is_some() {
+                        1.5
                     } else {
                         0.0
                     };
@@ -1454,6 +1457,98 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
                 out = Some(o);
                 ui.close();
             }
+        }
+    });
+    ui.menu_button("Portas e itens", |ui| {
+        let behavior = |script: &str, set: &[(&str, Prop)]| {
+            let mut c = match crate::behaviors::builtins()
+                .iter()
+                .find(|b| b.script == script)
+            {
+                Some(info) => Component::behavior(script, &info.defaults_for(true)),
+                None => Component::behavior(script, &[]),
+            };
+            for (k, v) in set {
+                c.set(k, v.clone());
+            }
+            c
+        };
+        let items: [(&str, &str, &str); 5] = [
+            (
+                "porta",
+                "Porta",
+                "Uma porta que abre com E (girando na dobradiça). Ponha um nome de item em \"Precisa do item\" para trancar.",
+            ),
+            (
+                "chave",
+                "Chave",
+                "Um item que vai para o inventário (\"chave\") quando o jogador encosta. Abre portas trancadas.",
+            ),
+            (
+                "zona",
+                "Zona de gatilho",
+                "Uma área invisível no jogo que avisa quando o jogador entra ou sai (abre uma porta, liga uma armadilha...).",
+            ),
+            (
+                "texto3d",
+                "Texto 3D",
+                "Um texto no mundo: placa, nome, aviso. Sempre virado para a câmera (ou preso como placa).",
+            ),
+            (
+                "inventario",
+                "Mostrar inventário",
+                "Os itens que o jogador carrega, num canto da tela.",
+            ),
+        ];
+        for (id, label, tip) in items {
+            let r = ui.button(label).on_hover_text(tip);
+            crate::tutorial::anchor(ui.ctx(), &format!("cena.objeto:{id}"), r.rect);
+            if !r.clicked() {
+                continue;
+            }
+            let mut o;
+            match id {
+                "porta" => {
+                    o = shape("Porta", "cube", "#9C6B43");
+                    (o.scale_x, o.scale_y, o.scale_z) = (1.2, 2.2, 0.15);
+                    let mut body = Component::new("body3d");
+                    body.set("body", Prop::Str("kinematic".into()));
+                    o.components.push(body);
+                    o.components.push(behavior("nn:porta3d", &[]));
+                }
+                "chave" => {
+                    o = shape("Chave", "cube", "#FFD166");
+                    (o.scale_x, o.scale_y, o.scale_z) = (0.35, 0.35, 0.35);
+                    o.components.push(behavior(
+                        "nn:coletavel",
+                        &[
+                            ("variavel", Prop::Str(String::new())),
+                            ("item", Prop::Str("chave".into())),
+                        ],
+                    ));
+                    o.components.push(behavior("nn:girar3d", &[]));
+                }
+                "zona" => {
+                    o = shape("Zona", "cube", "#3FA7D640");
+                    (o.scale_x, o.scale_y, o.scale_z) = (3.0, 2.0, 3.0);
+                    if let Some(c) = o.components.first_mut() {
+                        c.set("shadow", Prop::Bool(false));
+                    }
+                    o.components.push(behavior("nn:gatilho", &[]));
+                }
+                "texto3d" => {
+                    o = Object::new(0, "Texto");
+                    let mut c = Component::new("text3d");
+                    c.set("text", Prop::Str("Olá!".into()));
+                    o.components.push(c);
+                }
+                _ => {
+                    o = Object::new(0, "Inventário");
+                    o.components.push(behavior("nn:inventario", &[]));
+                }
+            }
+            out = Some(o);
+            ui.close();
         }
     });
     ui.separator();

@@ -48,6 +48,25 @@ pub fn bounds3(o: &Object, root: &Path, sizes: &mut Sizes) -> (glam::Vec3, glam:
                 }
             }
             "shape3d" => add(shape3_bounds(c.str("shape"))),
+            "text3d" => {
+                // Uma caixa do tamanho aproximado do texto (para clicar nele).
+                let size = c.num("size") as f32;
+                let text = c.str("text");
+                let lines = text.lines().count().max(1) as f32;
+                let w = text
+                    .lines()
+                    .map(|l| l.chars().count())
+                    .max()
+                    .unwrap_or(1)
+                    .max(1) as f32
+                    * size
+                    * 0.55;
+                let h = lines * size * 1.2;
+                add((
+                    Vec3::new(-w / 2.0, -h / 2.0, -0.02),
+                    Vec3::new(w / 2.0, h / 2.0, 0.02),
+                ));
+            }
             "terrain" => {
                 let (w, d) = (c.num("width") as f32 / 2.0, c.num("depth") as f32 / 2.0);
                 let t = crate::terrain_tool::terrain_of(c);
@@ -879,7 +898,7 @@ impl SceneRenderer {
                 for (ci, c) in o.components.iter().enumerate() {
                     if matches!(
                         c.kind.as_str(),
-                        "model" | "shape3d" | "camera3d" | "particles" | "terrain"
+                        "model" | "shape3d" | "camera3d" | "particles" | "terrain" | "text3d"
                     ) {
                         out.push((m, c.clone(), preview_anim3d(o), o.id, ci));
                     }
@@ -970,6 +989,33 @@ impl SceneRenderer {
                         None,
                         c.bool("shadow"),
                     );
+                }
+                "text3d" => {
+                    let font = self.font(root, c.str("font"));
+                    let opt = |k: &str| {
+                        let v = c.str(k);
+                        (!v.is_empty()).then(|| parse_color(v))
+                    };
+                    let mut t3 = nn_render::d3::Text3D::at(
+                        m.transform_point3(Vec3::ZERO),
+                        c.num("size") as f32,
+                    );
+                    if c.str("facing") == "placa" {
+                        t3.axes = Some((m.x_axis.truncate(), m.y_axis.truncate()));
+                    } else {
+                        t3.size *= m.y_axis.truncate().length();
+                    }
+                    t3.outline = opt("outline");
+                    t3.background = opt("background");
+                    let content = c.str("text").to_string();
+                    let mut text = nn_render::Text::new(&content)
+                        .color(parse_color(c.str("color")))
+                        .anchor(nn_render::Anchor::Center)
+                        .align(nn_render::Align::Center);
+                    if let Some(f) = font {
+                        text = text.font(f);
+                    }
+                    self.renderer.draw_text3d(&text, &t3);
                 }
                 "camera3d" => {
                     // A câmera do jogo: uma caixinha com a lente para a frente.

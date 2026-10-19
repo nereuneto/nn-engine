@@ -188,7 +188,7 @@ fn template_info(t: Template) -> (&'static str, &'static str) {
         ),
         Template::Visual3D => (
             "3D",
-            "A ilha das estrelas montada no editor, sem código: herói em terceira pessoa, caixotes que caem, plataformas e elevador que andam, moedas, estrelas e um evento de vitória.",
+            "A ilha das estrelas montada no editor, sem código: herói em terceira pessoa, caixotes que caem, plataformas e elevador que andam, besouros, moedas, estrelas, um cofre trancado (ache a chave) e um evento de vitória.",
         ),
         Template::Vale3D => (
             "Vale 3D",

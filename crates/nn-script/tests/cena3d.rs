@@ -775,3 +775,145 @@ fn inimigos_vida_perigo_e_tiro_no_3d() {
     assert!(lua::<f64>(&rt, "nn.vars.vidas") < antes, "a lava queima");
     assert_eq!(h.game.0.error(), None);
 }
+
+#[test]
+fn portas_chaves_zonas_interagir_e_texto_no_3d() {
+    let dir = projeto(
+        "portas",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            (
+                "cenas/mundo.cena",
+                &format!(
+                    r##"return {{ format = 1, mode = "3d", gravity = -20, script = "cenas/obs.lua",
+  environment = {{ fog = false, shadows = false }},
+  events = {{
+    {{ when = {{ {{ cond = "comecou" }} }},
+      actions = {{ {{ act = "dar_item", item = "mapa", qtd = 2 }} }} }},
+    {{ when = {{ {{ cond = "interagir", quem = "Placa", por = "@jogador" }} }},
+      actions = {{ {{ act = "variavel", var = "lida", op = "somar", valor = 1 }},
+        {{ act = "tirar_item", item = "mapa", qtd = 1 }} }} }},
+    {{ when = {{ {{ cond = "entrar_zona", quem = "Zona", por = "@jogador" }} }},
+      actions = {{ {{ act = "variavel", var = "entrou", op = "somar", valor = 1 }} }} }},
+    {{ when = {{ {{ cond = "sair_zona", quem = "Zona", por = "@jogador" }} }},
+      actions = {{ {{ act = "variavel", var = "saiu", op = "somar", valor = 1 }} }} }},
+    {{ when = {{ {{ cond = "tem_item", item = "mapa", qtd = 2 }} }}, mode = "enquanto",
+      actions = {{ {{ act = "variavel", var = "dois_mapas", op = "definir", valor = 1 }} }} }},
+  }},
+  objects = {{
+    {CHAO},
+    {HEROI}
+    {{ id = 20, name = "Chave", x = 4, y = 0.5, scale_x = 0.3, scale_y = 0.3, scale_z = 0.3,
+      components = {{ {{ type = "shape3d", shape = "cube", color = "#FFD166" }},
+        {{ type = "behavior", script = "nn:coletavel", variavel = "", item = "chave", icone = "" }} }} }},
+    {{ id = 21, name = "Porta", y = 1, z = -5, scale_x = 1.2, scale_y = 2, scale_z = 0.2,
+      components = {{ {{ type = "shape3d", shape = "cube", color = "#9C7049" }},
+        {{ type = "body3d", body = "kinematic" }},
+        {{ type = "behavior", script = "nn:porta3d", chave = "chave", tempo = 0.5 }} }} }},
+    {{ id = 22, name = "Zona", x = 8, y = 1, scale_x = 2, scale_y = 2, scale_z = 2,
+      components = {{ {{ type = "shape3d", shape = "cube", color = "#3FA7D640" }},
+        {{ type = "behavior", script = "nn:gatilho", alvo = "Portão", mensagem = "abrir", mensagem_saida = "fechar" }} }} }},
+    {{ id = 23, name = "Portão", x = 8, y = 1, z = -5, scale_x = 2, scale_y = 2, scale_z = 0.2,
+      components = {{ {{ type = "shape3d", shape = "cube" }}, {{ type = "body3d", body = "kinematic" }},
+        {{ type = "behavior", script = "nn:porta3d", abre = "subindo", abrir_com = "mensagem", tempo = 0.3 }} }} }},
+    {{ id = 24, name = "Placa", x = -6, y = 0.5,
+      components = {{ {{ type = "shape3d", shape = "cube" }},
+        {{ type = "text3d", text = "Mapas: {{mapa}}", facing = "placa" }},
+        {{ type = "behavior", script = "nn:interagir", texto = "ler" }} }} }},
+    {{ id = 25, name = "Itens", components = {{ {{ type = "behavior", script = "nn:inventario" }} }} }},
+  }} }}"##
+                ),
+            ),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    let apertar_e = |h: &mut Headless<Uma>| {
+        h.ctx.input.press_key(KeyCode::KeyE);
+        h.run_frames(2);
+        h.ctx.input.release_key(KeyCode::KeyE);
+        h.run_frames(1);
+    };
+    let ir = |rt: &ScriptRuntime, x: f64, z: f64| {
+        rt.lua()
+            .load(format!("C.objects['Herói']:move_to({x}, 1, {z})"))
+            .exec()
+            .unwrap();
+    };
+    h.run_frames(10);
+    assert_eq!(h.game.0.error(), None);
+    // O evento do começo deu 2 mapas (a regra "tem 2 mapas" vale).
+    assert_eq!(lua::<i64>(&rt, "nn.inventory.count('mapa')"), 2);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.dois_mapas or 0"), 1.0);
+    // A zona não aparece no jogo.
+    assert!(!lua::<bool>(&rt, "C.objects.Zona.visible"));
+
+    // Perto da porta trancada: o aviso pede a chave e E não abre.
+    ir(&rt, 0.0, -3.6);
+    h.run_frames(5);
+    assert_eq!(
+        lua::<String>(&rt, "C._ia and C._ia.text or ''"),
+        "Precisa de: chave"
+    );
+    apertar_e(&mut h);
+    h.run_frames(30);
+    let ry: f64 = lua(&rt, "C.objects.Porta.ry");
+    assert_eq!(ry, 0.0, "trancada");
+
+    // Pega a chave (vai para o inventário, a variável não muda).
+    ir(&rt, 4.0, 0.0);
+    h.run_frames(5);
+    assert_eq!(lua::<i64>(&rt, "nn.inventory.count('chave')"), 1);
+    assert!(lua::<bool>(&rt, "C.objects.Chave == nil"));
+
+    // Volta à porta: E abre (gira para longe do herói) e gasta a chave.
+    ir(&rt, 0.0, -3.6);
+    h.run_frames(5);
+    assert_eq!(lua::<String>(&rt, "C._ia.text"), "abrir");
+    apertar_e(&mut h);
+    h.run_frames(40);
+    let (ry, pz): (f64, f64) = (
+        lua(&rt, "C.objects.Porta.ry"),
+        lua(&rt, "C.objects.Porta.z"),
+    );
+    assert!(ry.abs() > 90.0, "girou: {ry}");
+    assert!(pz < -5.2, "a ponta foi para longe do herói (z < -5): {pz}");
+    assert_eq!(lua::<i64>(&rt, "nn.inventory.count('chave')"), 0);
+    // O corpo foi junto: dá para passar pelo meio da porta.
+    let (bx, bz): (f64, f64) = (
+        lua(&rt, "C.objects.Porta.body.x"),
+        lua(&rt, "C.objects.Porta.body.z"),
+    );
+    assert!((bz - pz).abs() < 0.01 && bx.abs() > 0.3, "corpo: {bx} {bz}");
+    // Aberta: o aviso vira "fechar" e E fecha de novo.
+    h.run_frames(2);
+    assert_eq!(lua::<String>(&rt, "C._ia.text"), "fechar");
+    apertar_e(&mut h);
+    h.run_frames(40);
+    let ry: f64 = lua(&rt, "C.objects.Porta.ry");
+    assert!(ry.abs() < 0.01, "fechou: {ry}");
+
+    // A zona abre o portão ao entrar e fecha ao sair.
+    let y0: f64 = lua(&rt, "C.objects['Portão'].y");
+    ir(&rt, 8.0, 0.0);
+    h.run_frames(30);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.entrou or 0"), 1.0);
+    let y1: f64 = lua(&rt, "C.objects['Portão'].y");
+    assert!(y1 > y0 + 1.5, "o portão subiu: {y0} → {y1}");
+    ir(&rt, 12.0, 3.0);
+    h.run_frames(30);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.saiu or 0"), 1.0);
+    let y2: f64 = lua(&rt, "C.objects['Portão'].y");
+    assert!((y2 - y0).abs() < 0.01, "o portão desceu: {y2}");
+
+    // A placa: E perto dela avisa o evento (e o texto 3D desenha).
+    ir(&rt, -4.4, 0.0);
+    h.run_frames(5);
+    assert_eq!(lua::<String>(&rt, "C._ia.text"), "ler");
+    apertar_e(&mut h);
+    h.run_frames(2);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.lida or 0"), 1.0);
+    assert_eq!(lua::<i64>(&rt, "nn.inventory.count('mapa')"), 1);
+    assert_eq!(h.game.0.error(), None);
+}

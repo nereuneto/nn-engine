@@ -647,6 +647,7 @@ pub fn schema() -> &'static Schema {
             "camera3d",
             "body3d",
             "terrain",
+            "text3d",
         ]
         .into_iter()
         .filter(|k| components.contains_key(*k))

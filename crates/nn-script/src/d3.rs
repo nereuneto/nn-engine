@@ -415,6 +415,58 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
     )?;
 
     t.set(
+        "text",
+        lua.create_function(|lua, (content, opts): (Value, Option<Table>)| {
+            let content = match &content {
+                Value::String(s) => s.to_str()?.to_string(),
+                Value::Nil => String::new(),
+                other => lua
+                    .coerce_string(other.clone())?
+                    .map(|s| s.to_string_lossy())
+                    .unwrap_or_else(|| format!("{other:?}")),
+            };
+            let o = opts.as_ref();
+            let mut text = crate::api::build_text(&content, 0.0, 0.0, o)?;
+            if opt::<String>(o, "anchor")?.is_none() {
+                text = text.anchor(nn_render::Anchor::Center);
+            }
+            let size = opt::<f32>(o, "size")?.unwrap_or(0.5);
+            let mut t3 = d3::Text3D::at(Vec3::ZERO, size);
+            match opt::<Value>(o, "matrix")? {
+                Some(Value::UserData(ud)) if ud.is::<LMat4>() => {
+                    // Uma placa: os eixos X e Y da matriz (com a escala).
+                    let m = ud.borrow::<LMat4>()?.0;
+                    t3.position = m.transform_point3(Vec3::ZERO);
+                    if !opt::<bool>(o, "face_camera")?.unwrap_or(false) {
+                        t3.axes = Some((m.x_axis.truncate(), m.y_axis.truncate()));
+                    } else {
+                        t3.size *= m.y_axis.truncate().length();
+                    }
+                }
+                None | Some(Value::Nil) => {
+                    t3.position = Vec3::new(
+                        opt::<f32>(o, "x")?.unwrap_or(0.0),
+                        opt::<f32>(o, "y")?.unwrap_or(0.0),
+                        opt::<f32>(o, "z")?.unwrap_or(0.0),
+                    );
+                }
+                Some(other) => {
+                    return Err(err(format!(
+                        "\"matrix\" deve ser uma nn.d3.matrix, recebeu {}",
+                        other.type_name()
+                    )));
+                }
+            }
+            t3.background = opt_color(o, "background")?;
+            t3.outline = opt_color(o, "outline")?;
+            with_ctx(lua, |c| {
+                c.renderer.draw_text3d(&text, &t3);
+                Ok(())
+            })
+        })?,
+    )?;
+
+    t.set(
         "camera",
         lua.create_function(|lua, opts: Option<Table>| {
             with_ctx(lua, |c| {

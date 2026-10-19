@@ -110,6 +110,10 @@ pub const BEHAVIORS: &[(&str, &str)] = &[
     ("botao", include_str!("comportamentos/botao.lua")),
     ("jogador3d", include_str!("comportamentos/jogador3d.lua")),
     ("inimigo3d", include_str!("comportamentos/inimigo3d.lua")),
+    ("porta3d", include_str!("comportamentos/porta3d.lua")),
+    ("gatilho", include_str!("comportamentos/gatilho.lua")),
+    ("interagir", include_str!("comportamentos/interagir.lua")),
+    ("inventario", include_str!("comportamentos/inventario.lua")),
     ("girar3d", include_str!("comportamentos/girar3d.lua")),
     (
         "plataforma3d",
@@ -132,6 +136,75 @@ nn.vars = copy(initial)
 function nn.reset_vars()
   for k in pairs(nn.vars) do nn.vars[k] = nil end
   for k, v in pairs(copy(initial)) do nn.vars[k] = v end
+end
+-- Inventário: os itens que o jogador carrega (chaves, poções...), em
+-- nn.vars._itens (vale entre as cenas, volta ao começo com nn.reset_vars e
+-- vai junto quando o jogo salva as variáveis).
+nn.inventory = {}
+local function items()
+  local t = nn.vars._itens
+  if type(t) ~= "table" then
+    t = {}
+    nn.vars._itens = t
+  end
+  return t
+end
+local function find(item)
+  for i, e in ipairs(items()) do
+    if e.item == item then return e, i end
+  end
+end
+local function check(item, fn)
+  if type(item) ~= "string" or item == "" then
+    error(("nn.inventory.%s: o item é um nome (texto), recebeu %s"):format(fn, tostring(item)), 3)
+  end
+end
+--- Guarda `n` (1) do item; `icon` é a imagem que o inventário mostra.
+--- Devolve quantos tem agora.
+function nn.inventory.add(item, n, icon)
+  check(item, "add")
+  n = n or 1
+  if n <= 0 then return nn.inventory.count(item) end
+  local e = find(item)
+  if e then
+    e.count = e.count + n
+    if icon and icon ~= "" then e.icon = icon end
+  else
+    e = { item = item, count = n, icon = (icon ~= "" and icon) or nil }
+    table.insert(items(), e)
+  end
+  return e.count
+end
+--- Tira `n` (1) do item, se tiver tudo isso. Devolve true se tirou.
+function nn.inventory.remove(item, n)
+  check(item, "remove")
+  n = n or 1
+  local e, i = find(item)
+  if not e or e.count < n then return false end
+  e.count = e.count - n
+  if e.count <= 0 then table.remove(items(), i) end
+  return true
+end
+--- Quantos do item o jogador tem (0 se nenhum).
+function nn.inventory.count(item)
+  local e = find(item)
+  return e and e.count or 0
+end
+--- Tem pelo menos `n` (1) do item?
+function nn.inventory.has(item, n)
+  return nn.inventory.count(item) >= (n or 1)
+end
+--- Os itens, na ordem em que foram pegos: { {item =, count =, icon =}, ... }.
+function nn.inventory.items()
+  local out = {}
+  for _, e in ipairs(items()) do
+    table.insert(out, { item = e.item, count = e.count, icon = e.icon })
+  end
+  return out
+end
+--- Esvazia o inventário.
+function nn.inventory.clear()
+  nn.vars._itens = {}
 end
 -- O config.lua mudou com o jogo aberto: variáveis novas aparecem.
 function nn._merge_vars(new)

@@ -156,7 +156,12 @@ fn build_sprite(
     Ok(sprite)
 }
 
-fn build_text<'a>(content: &'a str, x: f32, y: f32, opts: Option<&Table>) -> Result<Text<'a>> {
+pub(crate) fn build_text<'a>(
+    content: &'a str,
+    x: f32,
+    y: f32,
+    opts: Option<&Table>,
+) -> Result<Text<'a>> {
     let mut text = Text::new(content).at(Vec2::new(x, y));
     if let Some(size) = opt::<f32>(opts, "size")? {
         text = text.size(size);

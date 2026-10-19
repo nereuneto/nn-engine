@@ -192,6 +192,17 @@ c.obj('Fogueira', [comp('shape3d', shape='cylinder', color='#5B3A29', shadow=Tru
       ])
 c.obj('Lago', [som('assets/sons/mar.wav', 16, 0.5)], x=LAGO[0], y=NIVEL, z=LAGO[1])
 
+# Uma placa na entrada da trilha (Texto 3D preso como placa).
+px, pz = 2.6, 31.0
+ph = round(chao(px, pz), 2)
+c.obj('Placa', [comp('shape3d', shape='cube', color='#9C6B43', shadow=True), comp('body3d', body='static')],
+      x=px, y=round(ph + 1.55, 2), z=pz, scale_x=2.6, scale_y=0.75, scale_z=0.1,
+      children=[c.child('Poste', [comp('shape3d', shape='cylinder', color='#7A5232', shadow=True)],
+                        y=-1.25, scale_x=0.06, scale_y=2.1, scale_z=1.2),
+                c.child('Letreiro', [comp('text3d', text='Vale das Estrelas', size=0.26, color='#FFF1D6',
+                                          facing='placa', outline='#3A2E1FC0', background='', font='')],
+                        z=0.6, scale_x=0.385, scale_y=1.333, scale_z=10)])
+
 c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
                  comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 5     Moedas {moedas}')],
       x=40, y=-44, anchor='top_left')

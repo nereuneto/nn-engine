@@ -9,6 +9,10 @@ local B = {
     { "variavel", "moedas", label = "Soma na variável",
       help = "Variável do jogo (nn.vars). Vazio = não soma nada." },
     { "valor", 1, label = "Quanto soma" },
+    { "item", "", label = "Guardar no inventário",
+      help = "Nome do item (\"chave\", \"poção\"). Vazio = não guarda. Portas e o Interagir pedem itens pelo nome." },
+    { "icone", "", type = "image", label = "Ícone do item",
+      help = "Como ele aparece no Mostrar inventário. Vazio = a imagem do objeto (no 2D)." },
     { "som", "", type = "sound", label = "Som" },
     { "brilho", true, label = "Brilho ao pegar" },
     { "cor_brilho", "#FFD166", type = "color", label = "Cor do brilho", advanced = true },
@@ -27,6 +31,11 @@ end
 function B:pegar(quem)
   if self.variavel ~= "" then
     nn.vars[self.variavel] = (tonumber(nn.vars[self.variavel]) or 0) + self.valor
+  end
+  if self.item ~= "" then
+    local icone = self.icone
+    if icone == "" and self.obj.sprite then icone = self.obj.sprite.image or "" end
+    nn.inventory.add(self.item, 1, icone)
   end
   if self.som ~= "" then nn.audio.play(nn.assets.sound(self.som)) end
   if self.brilho then

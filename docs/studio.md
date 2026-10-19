@@ -98,6 +98,10 @@ projeto continua aberto.
   herói com vida e corações na tela, um besouro que persegue e machuca
   (e morre se você pular em cima), uma barra de vida e uma poça de lava
   ([inimigos no 3D](#inimigos-vida-e-dano-no-3d)).
+- **Portas e chaves** (uns 10 minutos), a partir do modelo Vazio 3D: uma
+  porta que abre com E, trancada até o herói achar a chave, os itens na
+  tela, uma placa de Texto 3D e uma zona que fecha a porta atrás de você
+  ([portas, chaves e zonas](#portas-chaves-e-zonas)).
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -637,6 +641,10 @@ uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
   o modelo venha com sombreado suave.
 - **Câmera 3D:** de onde o jogo olha, com o **campo de visão** (60° é o
   normal; menos é zoom). Sem câmera, o jogo olha do alto, de (0, 5, 10) para o centro.
+- **Texto 3D:** um texto no mundo (placas, nomes, avisos), com o tamanho das
+  letras em metros, cor, contorno e fundo. **Virado para a câmera** fica
+  sempre de frente; **a frente do objeto** prende como uma placa (gire o
+  objeto para virar). Ele aparece atrás das paredes, como tudo do mundo.
 - Hierarquia, prefabs e os componentes de **Som** funcionam como no 2D:
   arraste um objeto para dentro de outro na Hierarquia e ele passa a se mover
   junto (girar o pai gira os filhos em volta dele).
@@ -794,6 +802,42 @@ o rangido). O **Coletável** solta um brilho 3D ao ser pego.
   bola com **Corpo 3D** (só detecta) e **Perigo** com *Machuca* = o nome do
   inimigo derruba inimigos de longe.
 
+### Portas, chaves e zonas
+
+**➕ Objeto > Portas e itens** traz tudo pronto:
+
+- **Porta** (comportamento **Porta 3D**, em Fases): fechada, ela bloqueia a
+  passagem (já vem com um Corpo 3D que se move). Perto dela aparece
+  **E abrir**; apertando, ela **gira na dobradiça** para longe de você (ou
+  **sobe**, **desce** ou **desliza**). **Abre com** também pode ser *o jogador
+  chegando perto* (porta automática) ou *só mensagem* (uma alavanca, uma
+  zona, um evento). **Fecha sozinha depois de** fecha de novo. Troque o cubo
+  por `modelos/porta.glb` (os modelos 3D trazem) para uma porta de madeira.
+- **Trancar:** em **Precisa do item**, escreva o nome de um item, como
+  *chave*. Sem ele, o aviso diz **Precisa de: chave**; com ele no
+  inventário, E destranca (e gasta a chave, se **Gasta a chave** estiver
+  marcado). Mensagens (*abrir*) abrem mesmo trancada.
+- **Chave:** um **Coletável** com **Guardar no inventário** = *chave* e nada
+  na variável. Qualquer coisa pode ser um item: poção, mapa, gema.
+- **Mostrar inventário** (Itens): os itens que o jogador carrega, num canto
+  da tela, com o **Ícone do item** de cada um (escolhido no Coletável) e
+  quantos tem.
+- **Zona de gatilho** (Fases): uma caixa que aparece no editor e some no
+  jogo. Quando o jogador entra, ela manda a **Mensagem ao entrar** para o
+  objeto escolhido (*abrir* abre uma porta, *fechar* fecha) e, ao sair, a
+  **Mensagem ao sair**. Estique e posicione com as alças.
+- **Interagir** (Fases): qualquer coisa que se usa com E (uma placa para
+  ler, um baú, uma alavanca), com o texto do aviso (*E ler*), um item que
+  ela pode pedir e a mensagem que ela manda. Só o objeto mais perto do
+  jogador mostra o aviso.
+- **Texto 3D:** placas e nomes no mundo ([objetos 3D](#objetos-3d)).
+
+Nos eventos: **Entrar numa zona** e **Sair de uma zona** (Toques), **Usar
+(apertar E)** (Controles), **Ter um item**, **Ganhar item** e **Gastar
+item** (Itens). Por exemplo: *o jogador usar a Placa* → *o jogador ganhar 1
+mapa*. O modelo **3D** (a ilha sem código) tem um cofre trancado com uma estrela
+dentro, e a chave numa das plataformas.
+
 ### Comportamentos e eventos no 3D
 
 Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
@@ -801,7 +845,9 @@ Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
 - **Jogador 3D** e **Vida** (Jogador);
 - **Inimigo 3D** e **Perigo** (Inimigos);
 - **Atirar** e **Destruir depois** (Ações);
-- **Coletável** (Itens): some quando o jogador encosta e soma numa variável;
+- **Coletável** (Itens): some quando o jogador encosta, soma numa variável e
+  pode guardar um item no inventário; **Mostrar inventário** (Itens);
+- **Porta 3D**, **Zona de gatilho** e **Interagir** (Fases);
 - **Girar e flutuar** (Movimento): gira em volta de um eixo e sobe e desce
   devagar (estrelas, moedas);
 - **Plataforma que anda** (Movimento): vai e volta em X, Y e Z, com espera

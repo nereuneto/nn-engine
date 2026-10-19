@@ -10,6 +10,7 @@ Tudo está montado nas cenas visuais:
   - **arvore** e **pedra**: espalhadas, com **Corpo 3D** parado.
   - **estrela** e **moeda**: prefabs (`prefabs/`) com **Coletável** e **Girar e flutuar**.
   - **Fogueira**: fogo, fumaça e o estalar (som 3D). **Lago**: o barulho da água.
+  - **Placa**: na entrada da trilha, com o **Letreiro** (um **Texto 3D** preso como placa) e o **Poste** como filhos.
   - **Eventos** da cena: zerar as variáveis, esconder a dica e ir para o fim com as 5 estrelas.
 - `cenas/fim.cena`: a tela de fim, com botões.
 

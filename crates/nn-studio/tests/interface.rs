@@ -3425,6 +3425,155 @@ fn tutorial_inimigos_3d_avanca_sozinho_ate_o_fim() {
     assert!(h.state().tutorial.is_none());
 }
 
+#[test]
+fn tutorial_portas_e_chaves_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, Prop};
+    let dir = temp("tutorial-portas");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("portas-e-chaves");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/portas-e-chaves");
+    for f in [
+        "modelos/porta.glb",
+        "modelos/chave.glb",
+        "assets/imagens/chave.png",
+    ] {
+        assert!(projeto.join(f).is_file(), "o modelo vazio3d traz {f}");
+    }
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    h.run_steps(4);
+    const MUNDO: &str = "cenas/mundo.cena";
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut(MUNDO).unwrap()
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    // ➕ Objeto > Portas e itens > (item).
+    let novo = |h: &mut Harness<'_, StudioApp>, nome: &str| {
+        h.get_by_label("➕ Objeto").click();
+        h.run_steps(2);
+        h.get_by(|n| n.label().is_some_and(|l| l.starts_with("Portas e itens")))
+            .hover();
+        h.run_steps(3);
+        h.get_by(|n| n.role() == Role::Button && n.label().as_deref() == Some(nome))
+            .click();
+        h.run_steps(2);
+    };
+    let ultimo = |h: &mut Harness<'_, StudioApp>| {
+        let d = doc(h);
+        let id = d.selection[0];
+        d.data.find(id).unwrap().clone()
+    };
+    espera(&mut h, 1);
+    h.get_by_label("➕ Objeto").click();
+    h.run_steps(2);
+    h.get_by(|n| n.role() == Role::Button && n.label().as_deref() == Some("Jogador 3D"))
+        .click();
+    espera(&mut h, 2);
+    novo(&mut h, "Porta");
+    let porta = ultimo(&mut h);
+    assert_eq!(porta.name, "Porta");
+    assert!((porta.y - 1.1).abs() < 0.01, "em pé no chão: {}", porta.y);
+    let body = porta.component("body3d").expect("a porta vem com corpo");
+    assert_eq!(body.str("body"), "kinematic");
+    espera(&mut h, 3);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 4);
+    {
+        let d = doc(&mut h);
+        let o = d.data.find_mut(porta.id).unwrap();
+        let c = o
+            .components
+            .iter_mut()
+            .find(|c| c.str("script") == "nn:porta3d")
+            .unwrap();
+        c.set("chave", Prop::Str("chave".into()));
+    }
+    espera(&mut h, 5);
+    novo(&mut h, "Chave");
+    let chave = ultimo(&mut h);
+    let col = chave
+        .components
+        .iter()
+        .find(|c| c.str("script") == "nn:coletavel")
+        .unwrap();
+    assert_eq!(col.str("item"), "chave");
+    assert_eq!(col.str("variavel"), "");
+    espera(&mut h, 6);
+    novo(&mut h, "Mostrar inventário");
+    espera(&mut h, 7);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 8);
+    novo(&mut h, "Texto 3D");
+    let texto = ultimo(&mut h);
+    assert_eq!(texto.component("text3d").unwrap().str("text"), "Olá!");
+    espera(&mut h, 9);
+    novo(&mut h, "Zona de gatilho");
+    let zona = ultimo(&mut h);
+    {
+        let d = doc(&mut h);
+        let o = d.data.find_mut(zona.id).unwrap();
+        let c = o
+            .components
+            .iter_mut()
+            .find(|c| c.str("script") == "nn:gatilho")
+            .unwrap();
+        c.set("alvo", Prop::Str("Porta".into()));
+        c.set("mensagem", Prop::Str("fechar".into()));
+    }
+    espera(&mut h, 10);
+    {
+        // Cada um no seu lugar, para a foto.
+        let d = doc(&mut h);
+        for (nome, x, y, z, ry) in [
+            ("Porta", 0.0, 1.1, 0.0, 0.0),
+            ("Chave", 2.5, 0.5, 1.5, 0.0),
+            ("Texto", 0.0, 2.7, 0.1, 0.0),
+            ("Zona", 0.0, 1.0, -2.2, 0.0),
+            ("Jogador", -1.5, 1.0, 2.5, 0.0),
+        ] {
+            let id = d.data.objects.iter().find(|o| o.name == nome).unwrap().id;
+            let o = d.data.find_mut(id).unwrap();
+            (o.x, o.y, o.z, o.ry) = (x, y, z, ry);
+        }
+        let id = d
+            .data
+            .objects
+            .iter()
+            .find(|o| o.name == "Texto")
+            .unwrap()
+            .id;
+        let o = d.data.find_mut(id).unwrap();
+        o.components[0].set("text", Prop::Str("Cuidado!".into()));
+        o.components[0].set("facing", Prop::Str("placa".into()));
+        o.components[0].set("background", Prop::Str("#F2D49B".into()));
+        o.components[0].set("color", Prop::Str("#3A2E1F".into()));
+        o.components[0].set("outline", Prop::Str(String::new()));
+        d.cam3.look_at(
+            glam::Vec3::new(4.5, 3.5, 6.5),
+            glam::Vec3::new(0.0, 1.0, 0.0),
+        );
+        d.cam3_set = true;
+    }
+    h.run_steps(3);
+    tela(&mut h, "tutorial-portas");
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 11);
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+    let _ = Component::new("text3d");
+}
+
 /// Numa cena 3D, o Inspetor de um comportamento só mostra as propriedades
 /// que valem nela, com o padrão do 3D (o empurrão do Perigo em m/s).
 #[test]

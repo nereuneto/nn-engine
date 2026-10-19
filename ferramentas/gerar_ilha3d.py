@@ -88,7 +88,7 @@ arvores = [(-9, -6, 1.3, 20), (-11, 3, 1.1, 80), (-5, 9, 1.4, 140), (6, -5, 1.2,
 for (x, z, s, r) in arvores:
     c.obj('Árvore', [comp('model', file='modelos/arvore.glb', color='#FFFFFF', flat=False, shadow=True),
                      comp('body3d', body='static')], x=x, z=z, ry=r, scale_x=s, scale_y=s, scale_z=s)
-for (x, z, s, r) in [(-7, 6, 1.8, 30), (5, 6, 1.5, 90), (11, 9, 2.2, 150), (-10, -9, 1.7, 220)]:
+for (x, z, s, r) in [(-7, 6, 1.8, 30), (3.5, 11.5, 1.5, 90), (11.5, 3, 2.2, 150), (-10, -9, 1.7, 220)]:
     c.obj('Pedra', [comp('model', file='modelos/pedra.glb', color='#FFFFFF', flat=False, shadow=True),
                     comp('body3d', body='static')], x=x, y=0.26 * s, z=z, ry=r, scale_x=s, scale_y=s, scale_z=s)
 for (x, z) in [(2, 4), (2.2, 5.3), (2.1, 4.65)]:
@@ -105,14 +105,51 @@ moedas = []
 for i in range(8):
     a = math.radians(200 + i * 18)
     moedas.append((math.cos(a) * 9, 0.6, math.sin(a) * 9))
-for (x, y, z) in [(-4, 1, 2), (-8, 2, -2), (11, 5.8, -5.5), (8, 7.2, -2)]:
+for (x, y, z) in [(-4, 1, 2), (11, 5.8, -5.5), (8, 7.2, -2)]:
     moedas.append((x, y + 0.6, z))
-for i in range(4):
-    moedas.append((6 + i * 1.5, 0.6, 9 - i * 1.2))
+# Um caminho de moedas até a porta do cofre.
+for i in range(3):
+    moedas.append((1.5 + i * 1.3, 0.6, 8.6 - i * 0.3))
 for (x, y, z) in moedas:
     c.obj('moeda', prefab='prefabs/moeda.prefab', x=x, y=y, z=z)
-for (x, y, z) in [(-6, 4, -7), (10, 5.3, -10), (10.5, 9.3, 1.5), (0, 8.8, 0), (-3, 0.9, 5)]:
+for (x, y, z) in [(-6, 4, -7), (10, 5.3, -10), (10.5, 9.3, 1.5), (0, 8.8, 0), (7.5, 0.9, 7.5)]:
     c.obj('estrela', prefab='prefabs/estrela.prefab', x=x, y=y - 0.4, z=z)
+
+# O cofre: uma casinha de pedra com uma porta trancada e uma estrela dentro.
+# A chave fica numa plataforma (vai para o inventário quando o herói encosta).
+CX, CZ, LADO, ALTO, ESP = 7.5, 7.5, 3.4, 2.6, 0.3
+PEDRA = '#A9AEB8'
+def parede(x, y, z, sx, sy, sz, cor=PEDRA):
+    c.obj('Parede', [comp('shape3d', shape='cube', color=cor, shadow=True), comp('body3d', body='static')],
+          x=x, y=y, z=z, scale_x=sx, scale_y=sy, scale_z=sz)
+meio = LADO / 2 - ESP / 2
+parede(CX, ALTO / 2, CZ - meio, LADO, ALTO, ESP)
+parede(CX, ALTO / 2, CZ + meio, LADO, ALTO, ESP)
+parede(CX + meio, ALTO / 2, CZ, ESP, ALTO, LADO - 2 * ESP)
+# A frente (virada para o herói, em -X) com o vão da porta (1,2 m) no meio.
+vao, dentro = 1.2, LADO - 2 * ESP
+pedaco = (dentro - vao) / 2
+for lado in (-1, 1):
+    parede(CX - meio, ALTO / 2, CZ + lado * (vao / 2 + pedaco / 2), ESP, ALTO, pedaco)
+parede(CX - meio, 2.2 + (ALTO - 2.2) / 2, CZ, ESP, ALTO - 2.2, vao)
+parede(CX, ALTO + 0.12, CZ, LADO + 0.4, 0.25, LADO + 0.4, '#8B5A3C')
+c.obj('Porta do cofre', [
+    comp('model', file='modelos/porta.glb', color='#FFFFFF', flat=False, shadow=True),
+    comp('body3d', body='kinematic'),
+    comp('behavior', script='nn:porta3d', abre='girando', lado='esquerda', angulo=100, tempo=0.6,
+         abrir_com='tecla', distancia=1.2, chave='chave', gastar_chave=True, fechar_depois=0,
+         texto='abrir', texto_fechar='fechar', texto_trancada='Precisa de: {item}',
+         som='assets/sons/porta.wav', som_trancada='assets/sons/dano.wav'),
+], x=CX - meio, z=CZ, ry=-90)
+c.obj('Placa do cofre', [comp('text3d', text='COFRE', size=0.32, color='#3A2E1F', facing='placa',
+                              outline='', background='#F2D49B', font='')],
+      x=CX - meio - ESP / 2 - 0.02, y=2.4, z=CZ, ry=-90)
+c.obj('Chave', [
+    comp('model', file='modelos/chave.glb', color='#FFFFFF', flat=False, shadow=True),
+    comp('behavior', script='nn:coletavel', quem='', variavel='', valor=1, item='chave',
+         icone='assets/imagens/chave.png', som='assets/sons/chave.wav', brilho=True, cor_brilho='#FFD166'),
+    comp('behavior', script='nn:girar3d', velocidade=120, eixo='y', altura=0.15, duracao=2),
+], x=-8, y=2.1, z=-2, scale_x=1.6, scale_y=1.6, scale_z=1.6)
 
 c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
                  comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 5     Moedas {moedas}')],
@@ -120,6 +157,7 @@ c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', 
 c.obj('Dica', [comp('text', text='Ache as 5 estrelas! (Esc solta o mouse)', size=34, color='#FFFFFF', anchor='center', font='', hud=True)],
       y=-120, anchor='top')
 coracoes(c)
+c.obj('Inventário', [comp('behavior', script='nn:inventario', canto='baixo_esquerda', tamanho=56, margem=24, fundo=True)])
 
 # Besouros: andam pela ilha, perseguem o herói e morrem se ele pular em cima.
 besouro(c, -9, 0, 5, andar='patrulha', ax=0, az=-5)
