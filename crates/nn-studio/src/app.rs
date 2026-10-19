@@ -908,6 +908,9 @@ impl StudioApp {
                             ("Desfazer / refazer", "Ctrl+Z / Ctrl+Y"),
                             ("Renomear arquivo (no painel)", "F2"),
                             ("Mandar para a lixeira (no painel)", "Del"),
+                            ("Voar (na cena 3D)", "Botão direito + WASD, Q/E"),
+                            ("Girar em volta (na cena 3D)", "Alt + arrastar"),
+                            ("Arrastar a vista (na cena 3D)", "Botão do meio"),
                         ] {
                             ui.label(what);
                             ui.monospace(keys);

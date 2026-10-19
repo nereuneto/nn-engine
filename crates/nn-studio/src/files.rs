@@ -547,6 +547,11 @@ pub fn scene_template(rel: &str) -> String {
 }
 
 /// Conteúdo de uma cena visual nova: um título e um quadrado.
+/// Uma cena 3D nova: câmera, chão, um cubo e o ambiente padrão.
+pub fn scene3d_template() -> String {
+    crate::scene_data::write(&crate::scene_data::SceneData::new_3d())
+}
+
 pub fn visual_scene_template() -> String {
     use crate::scene_data::{Component, Object, Prop, SceneData, write};
     let mut title = Object::new(1, "titulo");

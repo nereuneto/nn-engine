@@ -843,42 +843,54 @@ impl SceneRenderer {
             let (cx, cz) = ((c.x / step).round() * step, (c.z / step).round() * step);
             let n = 30;
             let half = n as f32 * step;
-            let thick = 0.012 * step.max(0.25);
+            // Linhas feitas de pedaços, cada um com cerca de 1,5 pixel de
+            // largura na distância em que está (linhas finas demais somem em
+            // pontinhos; grossas demais pesam perto da câmera).
+            let px = 2.0 * (view.camera.fov.to_radians() * 0.5).tan() / view.size.y.max(1) as f32;
+            let eye = view.camera.position;
+            let pieces = n;
+            let piece = half * 2.0 / pieces as f32;
             for i in -n..=n {
                 let off = i as f32 * step;
                 let (x, z) = (cx + off, cz + off);
-                let color = |axis: bool, c: Color| {
-                    if axis { c } else { Color::rgba(0.0, 0.0, 0.0, 0.18) }
-                };
-                // Linhas paralelas a Z (x fixo) e a X (z fixo).
-                self.renderer.draw_mesh_with(
-                    line,
-                    Mat4::from_scale_rotation_translation(
-                        Vec3::new(thick, 0.002, half * 2.0),
-                        Quat::IDENTITY,
-                        Vec3::new(x, 0.003, cz),
-                    ),
-                    color(x.abs() < step * 0.01, Color::hex(0x4A78FF)),
-                    None,
-                    false,
-                );
-                self.renderer.draw_mesh_with(
-                    line,
-                    Mat4::from_scale_rotation_translation(
-                        Vec3::new(half * 2.0, 0.002, thick),
-                        Quat::IDENTITY,
-                        Vec3::new(cx, 0.003, z),
-                    ),
-                    color(z.abs() < step * 0.01, Color::hex(0xFF5A5A)),
-                    None,
-                    false,
-                );
+                let x_axis = x.abs() < step * 0.01;
+                let z_axis = z.abs() < step * 0.01;
+                for k in 0..pieces {
+                    let along = -half + (k as f32 + 0.5) * piece;
+                    // Paralela a Z (x fixo) e paralela a X (z fixo).
+                    for (center, axis, color, along_z) in [
+                        (Vec3::new(x, 0.003, cz + along), x_axis, 0x4A78FF, true),
+                        (Vec3::new(cx + along, 0.003, z), z_axis, 0xFF5A5A, false),
+                    ] {
+                        let width = (center - eye).length() * px * if axis { 2.2 } else { 1.3 };
+                        let size = if along_z {
+                            Vec3::new(width, 0.002, piece)
+                        } else {
+                            Vec3::new(piece, 0.002, width)
+                        };
+                        self.renderer.draw_mesh_with(
+                            line,
+                            Mat4::from_scale_rotation_translation(size, Quat::IDENTITY, center),
+                            if axis {
+                                Color::hex(color)
+                            } else {
+                                Color::rgba(0.0, 0.0, 0.0, 0.16)
+                            },
+                            None,
+                            false,
+                        );
+                    }
+                }
             }
         }
 
         let target = &self.targets[key];
-        self.renderer
-            .render(&target.view, size, &Camera2D::default(), Some(view.background));
+        self.renderer.render(
+            &target.view,
+            size,
+            &Camera2D::default(),
+            Some(view.background),
+        );
         target.id
     }
 
