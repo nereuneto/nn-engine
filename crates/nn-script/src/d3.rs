@@ -34,9 +34,10 @@ pub(crate) struct LMat4(pub glam::Mat4);
 
 impl UserData for LMat4 {
     fn add_methods<M: mlua::UserDataMethods<Self>>(m: &mut M) {
-        m.add_meta_method(mlua::MetaMethod::Mul, |_, this, other: mlua::AnyUserData| {
-            Ok(LMat4(this.0 * other.borrow::<LMat4>()?.0))
-        });
+        m.add_meta_method(
+            mlua::MetaMethod::Mul,
+            |_, this, other: mlua::AnyUserData| Ok(LMat4(this.0 * other.borrow::<LMat4>()?.0)),
+        );
         m.add_method("position", |_, this, ()| {
             let p = this.0.w_axis;
             Ok((p.x, p.y, p.z))
@@ -408,7 +409,9 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
     t.set("third_person", crate::camera3d::constructor(lua)?)?;
     t.set(
         "matrix",
-        lua.create_function(|_, opts: Option<Table>| Ok(LMat4(transform(opts.as_ref())?.matrix())))?,
+        lua.create_function(|_, opts: Option<Table>| {
+            Ok(LMat4(transform(opts.as_ref())?.matrix()))
+        })?,
     )?;
     t.set(
         "light",

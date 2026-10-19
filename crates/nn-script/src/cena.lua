@@ -124,7 +124,7 @@ M.SHAPES3D = { "cube", "sphere", "cylinder", "cone", "capsule", "plane" }
 M.ENVIRONMENT = {
   { "sky", true }, { "sky_top", "#3F8FD8" }, { "sky_horizon", "#CDEBF5" },
   { "sky_bottom", "#9AA79A" },
-  { "sun_height", 50 }, { "sun_turn", 30 }, { "sun_color", "#FFF1D6" }, { "sun_size", 4 },
+  { "sun_height", 50 }, { "sun_turn", 120 }, { "sun_color", "#FFF1D6" }, { "sun_size", 4 },
   { "ambient_sky", "#93AFCF" }, { "ambient_ground", "#6A5D48" },
   { "fog", true }, { "fog_near", 30 }, { "fog_far", 90 },
   { "shadows", true }, { "shadow_distance", 30 },

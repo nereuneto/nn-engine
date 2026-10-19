@@ -398,5 +398,8 @@ fn cena_visual_3d_roda_no_jogo() {
     lua.load("cena.objects['Câmera'].y = 5.5").exec().unwrap();
     h.run_frames(1);
     let p = pixel(&h, 32, 32);
-    assert!(p[0] > p[1] && p[1] > p[2] && p[0] > 90, "madeira do caixote: {p:?}");
+    assert!(
+        p[0] > p[1] && p[1] > p[2] && p[0] > 90,
+        "madeira do caixote: {p:?}"
+    );
 }
