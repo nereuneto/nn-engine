@@ -437,6 +437,11 @@ pub const API_DOCS: &[ApiDoc] = &[
     ),
     d("nn.window.mouse_captured", "()", "O mouse está preso?"),
     d(
+        "nn.window.title",
+        "()",
+        "O título do jogo (o title do config.lua).",
+    ),
+    d(
         "nn.window.set_fullscreen",
         "(sim)",
         "Liga ou desliga a tela cheia.",

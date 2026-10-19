@@ -478,9 +478,9 @@ pub(crate) fn ray_distance(
     max: f32,
     ignore: Option<&AnyUserData>,
 ) -> Result<Option<f32>> {
-    let w = world.borrow::<LWorld3>().map_err(|_| {
-        err("o mundo deve ser um nn.physics3d.world")
-    })?;
+    let w = world
+        .borrow::<LWorld3>()
+        .map_err(|_| err("o mundo deve ser um nn.physics3d.world"))?;
     let ignore = match ignore {
         Some(ud) => Some(
             ud.borrow::<LBody3>()

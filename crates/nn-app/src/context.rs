@@ -45,6 +45,8 @@ pub struct Context {
     /// Tamanho fixo do jogo e como ajustar.
     pub(crate) fixed: Option<(UVec2, nn_render::ScaleMode)>,
     pub(crate) exit_requested: bool,
+    /// O título do jogo (do config).
+    pub(crate) title: String,
 }
 
 impl Context {
@@ -79,6 +81,7 @@ impl Context {
                 .resolution
                 .map(|(w, h)| (UVec2::new(w, h), config.scale_mode)),
             exit_requested: false,
+            title: config.title.clone(),
         };
         ctx.set_window_size(viewport);
         ctx
@@ -161,10 +164,14 @@ impl Context {
         self.mouse_captured = captured;
     }
 
+    /// O título do jogo (o `title` do config.lua).
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
     pub fn mouse_captured(&self) -> bool {
         self.mouse_captured
     }
-
 }
 
 /// Um jogo (ou qualquer aplicação) rodando na nn-engine.

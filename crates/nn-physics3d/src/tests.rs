@@ -344,7 +344,10 @@ fn personagem_vai_junto_com_a_plataforma() {
     let px = w.position(plataforma).unwrap().x;
     let pos = w.position(p).unwrap();
     assert!((px - 2.0).abs() < 0.1, "a plataforma andou: {px}");
-    assert!((pos.x - px).abs() < 0.15, "o personagem foi junto: {pos} / {px}");
+    assert!(
+        (pos.x - px).abs() < 0.15,
+        "o personagem foi junto: {pos} / {px}"
+    );
     assert!((pos.y - 2.2).abs() < 0.1, "em cima dela: {pos}");
     // Subindo também.
     w.set_velocity(plataforma, Vec3::new(0.0, 1.0, 0.0));
@@ -353,5 +356,3 @@ fn personagem_vai_junto_com_a_plataforma() {
     assert!((pos.y - 3.2).abs() < 0.15, "subiu junto: {pos}");
     assert!(w.on_ground(p));
 }
-
-

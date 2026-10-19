@@ -574,6 +574,10 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         })?,
     )?;
     window.set(
+        "title",
+        lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.title().to_string())))?,
+    )?;
+    window.set(
         "capture_mouse",
         lua.create_function(|lua, on: Option<bool>| {
             with_ctx(lua, |c| {

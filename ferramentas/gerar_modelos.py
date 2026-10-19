@@ -7,7 +7,8 @@ várias partes com materiais, nós com posição/rotação/escala e uma textura.
 
     python3 ferramentas/gerar_modelos.py
 
-Escreve em jogos/cubos3d/modelos/ e crates/nn-render/tests/modelos/.
+Escreve em jogos/cubos3d/modelos/, jogos/estrelas3d/modelos/ e
+crates/nn-render/tests/modelos/.
 """
 
 import json
@@ -303,6 +304,55 @@ def heroi():
     return m
 
 
+def estrela():
+    """Estrela de 5 pontas, gorda (como as de jogo de plataforma), de pé."""
+    m = Modelo()
+    p = Parte("#FFD93D")
+    pontas, r_fora, r_dentro, esp = 5, 0.5, 0.22, 0.14
+    contorno = []
+    for i in range(pontas * 2):
+        a = math.pi / 2 + i * math.pi / pontas
+        r = r_fora if i % 2 == 0 else r_dentro
+        contorno.append((math.cos(a) * r, math.sin(a) * r))
+    frente, tras = (0.0, 0.0, esp), (0.0, 0.0, -esp)
+    n = len(contorno)
+    for i in range(n):
+        (x0, y0), (x1, y1) = contorno[i], contorno[(i + 1) % n]
+        a, b = (x0, y0, 0.0), (x1, y1, 0.0)
+        p.tri(frente, a, b)   # frente (sentido anti-horário visto de +Z)
+        p.tri(tras, b, a)     # trás
+    olhos = Parte("#3A2E1F")
+    olhos.caixa(-0.07, 0.05, 0.11, 0.05, 0.1, 0.04)
+    olhos.caixa(0.07, 0.05, 0.11, 0.05, 0.1, 0.04)
+    m.no("estrela", m.malha("estrela", [p, olhos]), raiz=True, translation=[0, 0.5, 0])
+    return m
+
+
+def moeda():
+    """Moeda em pé (gira em volta de Y no jogo)."""
+    m = Modelo()
+    borda = Parte("#F4B400")
+    borda.prisma(10, 0.3, -0.05, 0.05)
+    meio = Parte("#FFE066")
+    meio.caixa(0, 0, 0.0, 0.12, 0.3, 0.12)
+    # O prisma é deitado de lado: gira 90° em X para ficar em pé.
+    a = math.radians(90) / 2
+    m.no("moeda", m.malha("moeda", [borda, meio]), raiz=True,
+         rotation=[math.sin(a), 0.0, 0.0, math.cos(a)], translation=[0, 0.4, 0])
+    return m
+
+
+def plataforma():
+    """Bloco de chão 1 × 1 × 1 com grama em cima (estique com escala)."""
+    m = Modelo()
+    terra = Parte("#9C6B43")
+    terra.caixa(0, -0.55, 0, 1.0, 0.9, 1.0)
+    grama = Parte("#6CC24A")
+    grama.caixa(0, -0.05, 0, 1.04, 0.1, 1.04)
+    m.no("plataforma", m.malha("plataforma", [terra, grama]), raiz=True)
+    return m
+
+
 def caixote(uri=None):
     m = Modelo()
     m.com_textura(madeira(), uri)
@@ -320,6 +370,14 @@ def main():
     for nome, fazer in [("arvore", arvore), ("casa", casa), ("pedra", pedra),
                         ("heroi", heroi), ("caixote", caixote)]:
         with open(os.path.join(destino, nome + ".glb"), "wb") as f:
+            f.write(fazer().glb())
+    # O jogo Ilha das Estrelas usa os mesmos e mais alguns.
+    estrelas = os.path.join(RAIZ, "jogos", "estrelas3d", "modelos")
+    os.makedirs(estrelas, exist_ok=True)
+    for nome, fazer in [("arvore", arvore), ("pedra", pedra), ("heroi", heroi),
+                        ("caixote", caixote), ("estrela", estrela), ("moeda", moeda),
+                        ("plataforma", plataforma)]:
+        with open(os.path.join(estrelas, nome + ".glb"), "wb") as f:
             f.write(fazer().glb())
     # Um .gltf com o .bin e a imagem em arquivos separados (para os testes).
     j, b = caixote("madeira.png").gltf("caixote.bin")

@@ -27,8 +27,8 @@
 //! corrigido é salvo.
 
 mod api;
-mod camera3d;
 pub mod api_docs;
+mod camera3d;
 mod convert;
 mod d3;
 mod errors;

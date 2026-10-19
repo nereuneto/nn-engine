@@ -133,9 +133,7 @@ impl UserData for LThirdPerson {
         });
         m.add_method_mut(
             "update",
-            |lua,
-             this,
-             (dt, x, y, z, opts): (f32, f32, f32, f32, Option<Table>)| {
+            |lua, this, (dt, x, y, z, opts): (f32, f32, f32, f32, Option<Table>)| {
                 let o = opts.as_ref();
                 let world: Option<AnyUserData> = match opt::<Value>(o, "world")? {
                     None | Some(Value::Nil) => None,
@@ -147,7 +145,8 @@ impl UserData for LThirdPerson {
                         )));
                     }
                 };
-                let ignore: Option<AnyUserData> = opt::<Option<AnyUserData>>(o, "ignore")?.flatten();
+                let ignore: Option<AnyUserData> =
+                    opt::<Option<AnyUserData>>(o, "ignore")?.flatten();
                 let control = opt::<bool>(o, "control")?.unwrap_or(true);
                 let dt = dt.clamp(0.0, 0.1);
 
@@ -192,8 +191,13 @@ impl UserData for LThirdPerson {
                 let dir = this.offset_dir();
                 let mut wanted = this.distance;
                 if let Some(w) = &world
-                    && let Some(d) =
-                        crate::physics3d::ray_distance(w, target, dir, this.distance, ignore.as_ref())?
+                    && let Some(d) = crate::physics3d::ray_distance(
+                        w,
+                        target,
+                        dir,
+                        this.distance,
+                        ignore.as_ref(),
+                    )?
                 {
                     wanted = (d - 0.3).max(0.3);
                 }
