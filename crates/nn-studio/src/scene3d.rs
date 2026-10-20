@@ -196,6 +196,12 @@ pub enum Drag3Kind {
     Pan {
         dist: f32,
     },
+    /// Arrastar objetos do HUD na tela do jogo: de onde o mouse saiu (no
+    /// mundo 2D do HUD) e onde cada um estava.
+    Screen {
+        from: (f64, f64),
+        starts: Vec<(u32, f64, f64)>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -214,10 +220,58 @@ impl SceneDoc {
         self.data.world_matrix3(id)
     }
 
-    /// O centro da seleção (o último selecionado) no mundo.
+    /// O centro da seleção (o último selecionado) no mundo. `None` também
+    /// quando ele é do HUD (não está no mundo 3D).
     fn selection_center3(&self) -> Option<Vec3> {
         let id = *self.selection.last()?;
+        if self.on_screen3(id) {
+            return None;
+        }
         Some(self.matrix3(id)?.transform_point3(Vec3::ZERO))
+    }
+
+    /// Preso à tela (HUD, menus): ele ou um dos pais. Na cena 3D, esses
+    /// objetos não estão no mundo; aparecem por cima da vista.
+    fn on_screen3(&self, id: u32) -> bool {
+        let mut cur = Some(id);
+        while let Some(i) = cur {
+            let Some(o) = self.data.find(i) else {
+                return false;
+            };
+            let parent = self.data.parent_of(i).flatten();
+            if o.is_hud() || (parent.is_none() && self.data.is_screen(o)) {
+                return true;
+            }
+            cur = parent;
+        }
+        false
+    }
+
+    /// A cena tem algo preso à tela?
+    fn has_screen3(&self) -> bool {
+        self.data.objects.iter().any(|o| self.data.is_screen(o))
+    }
+
+    /// A câmera 2D que põe a tela do jogo inteira dentro da vista (para o
+    /// HUD que aparece por cima do mundo).
+    fn hud_camera(&self, rect: Rect) -> super::ViewCamera {
+        let (cx, cy, zoom) = self.data.camera_start();
+        let (sw, sh) = scene_data::screen_size();
+        let fit = (f64::from(rect.width()) * zoom / sw).min(f64::from(rect.height()) * zoom / sh);
+        super::ViewCamera {
+            x: cx,
+            y: cy,
+            zoom: fit.max(1e-3),
+        }
+    }
+
+    /// O objeto do HUD debaixo do mouse (com o HUD à mostra).
+    fn hit_screen3(&self, env: &mut SceneEnv, rect: Rect, p: Pos2) -> Option<u32> {
+        if !self.show_hud3 {
+            return None;
+        }
+        let list = scene_render::screen_order(&self.data);
+        self.hit_among(env, rect, p, &list)
     }
 
     /// Para onde girar e aproximar: a seleção ou um ponto à frente.
@@ -304,6 +358,7 @@ impl SceneDoc {
                 ids.push(obj.id);
             }
         });
+        ids.retain(|id| !self.on_screen3(*id));
         for id in ids {
             // Invisível por causa de um pai: não acerta.
             let mut shown = true;
@@ -343,6 +398,8 @@ impl SceneDoc {
         } else {
             self.selection.clone()
         };
+        // O HUD não está no mundo 3D (as posições dele são pixels da tela).
+        let ids: Vec<u32> = ids.into_iter().filter(|id| !self.on_screen3(*id)).collect();
         let mut lo = Vec3::splat(f32::MAX);
         let mut hi = Vec3::splat(f32::MIN);
         for id in ids {
@@ -368,6 +425,12 @@ impl SceneDoc {
         let center = (lo + hi) / 2.0;
         let radius = ((hi - lo).length() / 2.0).max(0.5);
         let dist = radius * 1.6 + 1.0;
+        // De longe, a névoa da cena esconderia tudo: a vista desliga a dela
+        // (o botão Névoa liga de novo).
+        let far = self.data.env("fog_far").num() as f32;
+        if self.data.env("fog").bool() && dist + radius * 0.5 > far {
+            self.show_fog3 = false;
+        }
         let dir = if self.cam3.forward().y > -0.2 {
             Vec3::new(-0.55, -0.45, -0.7).normalize()
         } else {
@@ -376,6 +439,53 @@ impl SceneDoc {
         let speed = self.cam3.speed;
         self.cam3.look_at(center - dir * dist, center);
         self.cam3.speed = speed;
+    }
+
+    /// Põe na cena um objeto do menu ➕: os do mundo onde a câmera olha (em
+    /// pé no chão), os do HUD no meio da tela do jogo.
+    pub fn add_from_menu3(&mut self, o: Object) -> u32 {
+        if self.data.is_screen(&o) {
+            let (x, y) = self.view_center();
+            return self.add_prepared(o, x, y);
+        }
+        let p = self.spawn_point3();
+        // Formas em pé no chão (a origem delas é o meio).
+        let lift = if o
+            .component("shape3d")
+            .is_some_and(|c| c.str("shape") != "plane")
+        {
+            0.5 * o.scale_y as f32
+        } else if o.component("text3d").is_some() {
+            1.5
+        } else {
+            0.0
+        };
+        self.add_object3(o, p + Vec3::Y * lift)
+    }
+
+    /// Ao abrir a cena: olha para o Jogador 3D de perto, como no começo do
+    /// jogo (numa cena grande, enquadrar tudo deixaria tudo pequeno e na
+    /// névoa). Devolve `false` se a cena não tem Jogador 3D.
+    fn frame_player3(&mut self) -> bool {
+        let mut player = None;
+        scene_data::visit(&self.data.objects, &mut |o| {
+            if player.is_none()
+                && o.components
+                    .iter()
+                    .any(|c| c.is_behavior() && c.str("script") == "nn:jogador3d")
+            {
+                player = Some(o.id);
+            }
+        });
+        let Some(m) = player.and_then(|id| self.matrix3(id)) else {
+            return false;
+        };
+        let center = m.transform_point3(Vec3::ZERO) + Vec3::Y;
+        let dir = Vec3::new(-0.55, -0.45, -0.7).normalize();
+        let speed = self.cam3.speed;
+        self.cam3.look_at(center - dir * 12.0, center);
+        self.cam3.speed = speed;
+        true
     }
 
     /// Cria um objeto 3D em `pos` (na raiz, ou dentro do prefab) e seleciona.
@@ -474,10 +584,12 @@ impl SceneDoc {
             egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Vista da cena 3D")
         });
         self.view_rect = Some(rect);
+        // A câmera 2D do HUD (para desenhar, clicar e arrastar o HUD).
+        self.camera = self.hud_camera(rect);
         crate::tutorial::anchor(ui.ctx(), "cena", rect);
         if !self.framed {
             self.framed = true;
-            if !self.cam3_set {
+            if !self.cam3_set && !self.frame_player3() {
                 self.frame3(env.root, env.sizes);
             }
         }
@@ -517,6 +629,15 @@ impl SceneDoc {
                     },
                     time: ui.input(|i| i.time) as f32,
                     bursts: std::mem::take(&mut self.burst_requests),
+                    fog: self.show_fog3,
+                    hud: (self.show_hud3 && self.has_screen3()).then(|| {
+                        let mut c = nn_render::Camera2D::new(Vec2::new(
+                            self.camera.x as f32,
+                            self.camera.y as f32,
+                        ));
+                        c.zoom = self.camera.zoom as f32 * ppp;
+                        c
+                    }),
                 };
                 let tex = renderer.render3d(&self.rel, env.root, &self.data, &view);
                 painter.image(
@@ -703,19 +824,20 @@ impl SceneDoc {
             ui.checkbox(&mut self.show_grid3, "Grade");
             ui.checkbox(&mut self.show_colliders, "Colisões")
                 .on_hover_text("Mostra os Corpos 3D (verde) e o Jogador 3D (azul)");
+            if self.data.env("fog").bool() {
+                ui.checkbox(&mut self.show_fog3, "Névoa").on_hover_text(
+                    "A névoa da cena, só aqui na vista (no jogo ela continua). Desligue para ver a cena toda de longe.",
+                );
+            }
+            if self.has_screen3() {
+                ui.checkbox(&mut self.show_hud3, "HUD").on_hover_text(
+                    "Mostra por cima da vista o que fica preso à tela (placar, corações, menus), na moldura da tela do jogo. Dá para clicar e arrastar.",
+                );
+            }
             ui.separator();
             let menu = ui.menu_button("➕ Objeto", |ui| {
-                if let Some(o) = add_object3_menu(ui) {
-                    let p = self.spawn_point3();
-                    // Formas em pé no chão (a origem delas é o meio).
-                    let lift = if o.component("shape3d").is_some_and(|c| c.str("shape") != "plane") {
-                        0.5 * o.scale_y as f32
-                    } else if o.component("text3d").is_some() {
-                        1.5
-                    } else {
-                        0.0
-                    };
-                    self.add_object3(o, p + Vec3::Y * lift);
+                if let Some(o) = add_menu3(ui) {
+                    self.add_from_menu3(o);
                     ui.close();
                 }
             });
@@ -965,6 +1087,30 @@ impl SceneDoc {
                 });
             } else if let Some(kind) = self.gizmo_hit3(rect, p) {
                 self.start_drag3(kind, p);
+            } else if let Some(id) = self.hit_screen3(env, rect, p) {
+                // Um objeto do HUD: seleciona e arrasta na tela do jogo.
+                if !self.selection.contains(&id) {
+                    self.selection = vec![id];
+                }
+                let starts = self
+                    .selection_roots()
+                    .into_iter()
+                    .filter(|id| self.on_screen3(*id))
+                    .filter_map(|id| {
+                        let t = self.data.world_transform(id)?;
+                        Some((id, t.x, t.y))
+                    })
+                    .collect();
+                self.drag3 = Some(Drag3 {
+                    kind: Drag3Kind::Screen {
+                        from: self.camera.to_world(rect, p),
+                        starts,
+                    },
+                    start: p,
+                    objects: Vec::new(),
+                    center: Vec3::ZERO,
+                    recorded: false,
+                });
             } else {
                 // Arrastar um objeto: seleciona e move no chão.
                 let (o, d) = ray(&self.cam3, rect, p);
@@ -996,7 +1142,11 @@ impl SceneDoc {
             && let Some(p) = response.interact_pointer_pos()
         {
             let (o, d) = ray(&self.cam3, rect, p);
-            match self.pick3(env.root, env.sizes, o, d) {
+            let hit = match self.hit_screen3(env, rect, p) {
+                Some(id) => Some((id, 0.0)),
+                None => self.pick3(env.root, env.sizes, o, d),
+            };
+            match hit {
                 Some((id, _)) if mods.shift || mods.command => {
                     if let Some(i) = self.selection.iter().position(|s| *s == id) {
                         self.selection.remove(i);
@@ -1011,6 +1161,9 @@ impl SceneDoc {
         }
         // Passando o mouse por cima: destaca.
         self.hover = response.hover_pos().and_then(|p| {
+            if let Some(id) = self.hit_screen3(env, rect, p) {
+                return Some(id);
+            }
             let (o, d) = ray(&self.cam3, rect, p);
             self.pick3(env.root, env.sizes, o, d).map(|(id, _)| id)
         });
@@ -1031,6 +1184,17 @@ impl SceneDoc {
         };
         match drag.kind.clone() {
             Drag3Kind::Look => {}
+            Drag3Kind::Screen { from, starts } => {
+                let (wx, wy) = self.camera.to_world(rect, p);
+                let (dx, dy) = (wx - from.0, wy - from.1);
+                if dx.abs() + dy.abs() < 1e-9 && !drag.recorded {
+                    return;
+                }
+                record(self, drag);
+                for (id, x0, y0) in starts {
+                    self.set_world_position(id, (x0 + dx).round(), (y0 + dy).round());
+                }
+            }
             Drag3Kind::Pan { dist } => {
                 let delta = p - drag.start;
                 drag.start = p;
@@ -1232,7 +1396,31 @@ impl SceneDoc {
         {
             boxes.push((h, Color32::from_white_alpha(120)));
         }
+        // A moldura da tela do jogo, com o HUD à mostra.
+        let hud = self.show_hud3 && self.has_screen3();
+        if hud {
+            let (cx, cy, zoom) = self.data.camera_start();
+            let (sw, sh) = scene_data::screen_size();
+            let (hw, hh) = (sw / zoom / 2.0, sh / zoom / 2.0);
+            let a = self.camera.to_screen(rect, cx - hw, cy + hh);
+            let b = self.camera.to_screen(rect, cx + hw, cy - hh);
+            painter.rect_stroke(
+                Rect::from_two_pos(a, b),
+                0.0,
+                Stroke::new(1.0, Color32::from_white_alpha(70)),
+                egui::StrokeKind::Inside,
+            );
+        }
         for (id, color) in boxes {
+            if self.on_screen3(id) {
+                // Do HUD: o contorno na tela do jogo.
+                if hud && let Some((corners, _, _)) = self.screen_corners(env, rect, id) {
+                    let mut pts = corners.to_vec();
+                    pts.push(corners[0]);
+                    painter.add(egui::Shape::line(pts, Stroke::new(1.5, color)));
+                }
+                continue;
+            }
             let (Some(o), Some(m)) = (self.data.find(id), self.matrix3(id)) else {
                 continue;
             };
@@ -1370,6 +1558,33 @@ fn arrow(painter: &egui::Painter, from: Pos2, to: Pos2, color: Color32) {
 }
 
 /// Itens do menu "➕ Objeto" de uma cena 3D.
+/// O menu ➕ da cena 3D: os objetos do mundo e, num submenu, os da tela
+/// (HUD e menus, que ficam por cima do mundo).
+pub fn add_menu3(ui: &mut egui::Ui) -> Option<Object> {
+    let mut out = add_object3_menu(ui);
+    ui.separator();
+    let r = ui.menu_button("Na tela (HUD)", |ui| {
+        let r = ui
+            .button("Texto na tela")
+            .on_hover_text("Um texto preso à tela: placar, dicas, avisos");
+        if r.clicked() {
+            let mut o = Object::new(0, "texto");
+            let mut c = Component::new("text");
+            c.set("hud", Prop::Bool(true));
+            o.components.push(c);
+            out = Some(o);
+            ui.close();
+        }
+        ui.separator();
+        if let Some(o) = super::interface_menu(ui) {
+            out = Some(o);
+            ui.close();
+        }
+    });
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:hud", r.response.rect);
+    out
+}
+
 pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
     let mut out = None;
     let shape = |name: &str, shape: &str, color: &str| {

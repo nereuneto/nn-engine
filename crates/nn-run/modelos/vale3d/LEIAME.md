@@ -8,9 +8,11 @@ Tudo está montado nas cenas visuais:
   - **Terreno**: os morros, o lago, a trilha e as cores são um componente **Terreno**. Selecione e clique em **✏ Pintar terreno** na barra da vista para mudar: subir, descer, alisar, aplainar, ruído, pintar as quatro cores e espalhar árvores. A água é do próprio terreno (Inspetor > Água).
   - **Herói**: modelo animado com o **Jogador 3D**. Se cair no lago, volta para a margem (e um evento toca um som).
   - **arvore** e **pedra**: espalhadas, com **Corpo 3D** parado.
+  - **Besouro**: três besouros com o **Inimigo 3D**, que perseguem o herói. Encostar tira vida; pular em cima derrota. O herói tem **Vida**, e os **Corações** mostram quanto resta.
   - **estrela** e **moeda**: prefabs (`prefabs/`) com **Coletável** e **Girar e flutuar**.
   - **Fogueira**: fogo, fumaça e o estalar (som 3D). **Lago**: o barulho da água.
   - **Placa**: na entrada da trilha, com o **Letreiro** (um **Texto 3D** preso como placa) e o **Poste** como filhos.
+  - **Placar**, **Corações** e **Dica**: o HUD, preso à tela. Na vista 3D do editor, aparece por cima da cena, na moldura da tela do jogo (**HUD**, na barra, mostra ou esconde).
   - **Eventos** da cena: zerar as variáveis, esconder a dica e ir para o fim com as 5 estrelas.
 - `cenas/fim.cena`: a tela de fim, com botões.
 

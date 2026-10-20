@@ -49,6 +49,14 @@ impl Template {
         Template::Minimo,
     ];
 
+    /// Cria um jogo 3D?
+    pub fn is_3d(self) -> bool {
+        matches!(
+            self,
+            Template::TresD | Template::Visual3D | Template::Vazio3D | Template::Vale3D
+        )
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Template::Padrao => "padrao",

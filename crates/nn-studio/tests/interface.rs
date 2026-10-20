@@ -196,6 +196,47 @@ fn gerenciador_cria_projeto_novo() {
     tela(&mut h, "projeto-novo");
 }
 
+/// As boas-vindas têm um caminho 3D; os tutoriais ficam em 2D e 3D; os
+/// modelos aparecem em dois grupos.
+#[test]
+fn gerenciador_com_caminho_3d() {
+    let dir = temp("gerenciador-3d");
+    let mut h = studio(&dir, None);
+    // Boas-vindas: 3D troca os três cartões.
+    h.get_by_label_contains("Seu primeiro jogo: uma fase de plataforma");
+    h.get_by_label("3D").click();
+    h.run();
+    h.get_by_label_contains("Seu primeiro mundo 3D");
+    h.get_by_label_contains("A ilha 3D, completa e sem código");
+    tela(&mut h, "gerenciador-3d");
+    // Tutoriais: na aba do 3D (escolhido nas boas-vindas), só os de 3D.
+    h.get_by_label("🎓 Tutoriais").click();
+    h.run();
+    h.get_by_label("Uma conversa");
+    assert!(h.query_by_label("Seu primeiro jogo").is_none());
+    let p = h.get_by_label("Jogos 2D (6)").rect().center();
+    h.hover_at(p);
+    h.run();
+    h.drag_at(p);
+    h.run();
+    h.drop_at(p);
+    h.run();
+    h.get_by_label("Seu primeiro jogo");
+    assert!(h.query_by_label("Uma conversa").is_none());
+    tela(&mut h, "tutoriais");
+    h.get_by_label("Fechar").click();
+    h.run();
+    // "Abrir um jogo pronto" já vem com o modelo 3D (a ilha).
+    h.get_by_label_contains("🎮 Abrir um jogo pronto").click();
+    h.run();
+    h.get_by_label("Jogos 2D");
+    h.get_by_label("Jogos 3D");
+    tela(&mut h, "novo-projeto-3d");
+    h.get_by_label_contains("A ilha das estrelas montada no editor");
+    h.get_by_label("Cancelar").click();
+    h.run();
+}
+
 #[test]
 fn pasta_que_nao_e_projeto_mostra_erro() {
     let dir = temp("invalido");
@@ -3760,4 +3801,120 @@ fn cena_3d_comportamentos_com_padroes_do_3d() {
     h.run();
     assert!(h.query_by_label("Some ao sair da tela").is_none());
     tela(&mut h, "cena-3d-inimigos");
+}
+
+/// Numa cena 3D com HUD (o Vale 3D): a vista abre perto do herói, o HUD
+/// aparece por cima do mundo e dá para clicar e arrastar ele; Enquadrar não
+/// conta o HUD; ➕ Objeto > Na tela (HUD) põe um texto no meio da tela.
+#[test]
+fn cena_3d_com_hud_por_cima() {
+    let dir = temp("cena-3d-hud");
+    let proj = dir.join("jogo");
+    nn_run::create_project(&nn_run::NewOptions {
+        dir: proj.clone(),
+        title: None,
+        template: nn_run::Template::Vale3D,
+    })
+    .unwrap();
+    // (Os ajudantes daqui leem a cena teste.cena.)
+    std::fs::copy(proj.join("cenas/vale.cena"), proj.join("cenas/teste.cena")).unwrap();
+    // (A cena tem animações: a tela redesenha sempre; nada de `run`.)
+    let options = StudioOptions {
+        settings_path: Some(dir.join("preferencias.json")),
+        open: Some(proj.clone()),
+        exe: Some(fake_game(&dir)),
+        check_updates: false,
+    };
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .wgpu()
+        .build_eframe(move |cc| {
+            let mut app = StudioApp::new(&cc.egui_ctx, options);
+            app.set_render_state(cc.wgpu_render_state.clone());
+            app
+        });
+    h.run_steps(4);
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("cenas/teste.cena", None);
+    h.run_steps(4);
+    let passo = |h: &mut Harness<'_, StudioApp>| h.run_steps(2);
+
+    // Abre olhando para o herói de perto (não para a cena toda, de longe).
+    let heroi = objeto(&h, "Herói").clone();
+    let pos = glam::Vec3::new(heroi.x as f32, heroi.y as f32, heroi.z as f32);
+    let dist = (cena(&h).cam3.pos - pos).length();
+    assert!(dist < 20.0, "a câmera ficou a {dist} m do herói");
+    assert!(cena(&h).show_fog3);
+    h.get_by_label("HUD");
+    h.get_by_label("Névoa");
+    tela(&mut h, "cena-3d-hud");
+
+    // O texto da dica, no HUD: um clique seleciona.
+    let dica = objeto(&h, "Dica").clone();
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let w = cena(&h).data.world_transform(dica.id).unwrap();
+    let p = cena(&h).camera.to_screen(rect, w.x, w.y);
+    assert!(
+        rect.contains(p),
+        "a dica fica dentro da vista: {p:?} {rect:?}"
+    );
+    h.hover_at(p);
+    passo(&mut h);
+    h.drag_at(p);
+    passo(&mut h);
+    h.drop_at(p);
+    passo(&mut h);
+    assert_eq!(cena(&h).selection, vec![dica.id]);
+
+    // Arrastar leva a dica pela tela do jogo (direita e para baixo).
+    let q = p + egui::vec2(60.0, 30.0);
+    h.hover_at(p);
+    passo(&mut h);
+    h.drag_at(p);
+    passo(&mut h);
+    for k in 1..=4 {
+        h.hover_at(p + (q - p) * (k as f32 / 4.0));
+        passo(&mut h);
+    }
+    h.drop_at(q);
+    passo(&mut h);
+    let movida = objeto(&h, "Dica").clone();
+    assert!(movida.x > dica.x + 20.0, "x {} → {}", dica.x, movida.x);
+    assert!(movida.y < dica.y - 10.0, "y {} → {}", dica.y, movida.y);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    passo(&mut h);
+    assert_eq!(objeto(&h, "Dica").x, dica.x);
+
+    // Enquadrar a cena toda: o HUD (em pixels) não conta, e de longe a
+    // vista desliga a névoa para dar para ver.
+    h.key_press(Key::Escape);
+    passo(&mut h);
+    cena_mut(&mut h).selection.clear();
+    h.get_by_label("⛶ Enquadrar").click();
+    passo(&mut h);
+    let cam = cena(&h).cam3.clone();
+    let alvo = cam.pos + cam.forward() * cam.pos.length();
+    assert!(alvo.y > -10.0 && alvo.y < 20.0, "olhando para {alvo}");
+    assert!(!cena(&h).show_fog3);
+
+    // ➕ Objeto > Na tela (HUD) > Texto na tela.
+    h.get_by_label("➕ Objeto").click();
+    passo(&mut h);
+    h.get_by(|n| n.label().is_some_and(|l| l.starts_with("Na tela (HUD)")))
+        .hover();
+    h.run_steps(3);
+    h.get_by_label("Texto na tela").click();
+    passo(&mut h);
+    let texto = objeto(&h, "texto").clone();
+    assert!(texto.component("text").unwrap().bool("hud"));
+    assert_eq!(cena(&h).selection, vec![texto.id]);
+    let t = cena(&h).data.world_transform(texto.id).unwrap();
+    let c = cena(&h).camera.to_screen(rect, t.x, t.y);
+    assert!(
+        (c - rect.center()).length() < 4.0,
+        "{c:?} {:?}",
+        rect.center()
+    );
 }

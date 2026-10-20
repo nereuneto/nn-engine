@@ -656,6 +656,23 @@ uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
   em graus: **Y** vira para os lados, **X** inclina para a frente e para
   trás, **Z** rola.
 
+### HUD e menus no 3D
+
+O que fica preso à tela (placar, corações, avisos, menus) não está no mundo
+3D: aparece **por cima da vista**, dentro de uma moldura com o tamanho da
+tela do jogo, do jeito que fica no jogo. Clique para selecionar e arraste
+para mudar o lugar (as posições são em pixels, a partir do ponto da tela em
+que o objeto está preso). **HUD**, na barra da cena, mostra ou esconde.
+
+Para criar: **➕ Objeto > Na tela (HUD)** tem **Texto na tela** e os
+componentes de interface (painel, botão, barra, ícones e o menu com botões).
+O mesmo menu está no **➕** da Hierarquia.
+
+Ao abrir a cena, a vista olha para o **Jogador 3D** de perto. **⛶ Enquadrar**
+(F) sem nada selecionado mostra a cena toda; de longe, a **Névoa** da vista
+desliga sozinha (marque de novo para ver como fica no jogo; no jogo, a névoa
+continua).
+
 ### Ambiente
 
 | Campo | O que faz |
@@ -687,7 +704,7 @@ entra (para zonas e portas com eventos). No modo Completo aparecem o atrito,
 a massa, "não gira" e o multiplicador da gravidade.
 
 **Colisões**, na barra da cena, mostra os corpos em verde e o Jogador 3D em
-azul.
+azul (no 3D, começa desligado).
 
 ### Jogador 3D
 
@@ -790,8 +807,9 @@ o rangido). O **Coletável** solta um brilho 3D ao ser pego.
   quando elas acabam, a cena começa de novo (ou volta ao checkpoint, ou vai
   para outra cena). Num inimigo, **Quando acabar: some** e **Barra de vida em
   cima** mostram quanto falta.
-- **Corações na tela:** um objeto com **Interface > Ícones**, a imagem
-  `coracao.png` e a variável **vidas** (os modelos 3D já trazem).
+- **Corações na tela:** **➕ Objeto > Na tela (HUD) > Ícones**, com a imagem
+  `coracao.png` e a variável **vidas** (os modelos 3D já trazem; veja
+  [HUD e menus no 3D](#hud-e-menus-no-3d)).
 - **Inimigo 3D** (Inimigos): anda **indo e voltando** (até o X e o Z que
   você escolher, a partir de onde ele começa), **sem rumo** por perto ou
   fica **parado**; quando o herói chega a menos que **Vê o jogador a**,

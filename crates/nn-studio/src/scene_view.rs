@@ -217,6 +217,8 @@ pub struct SceneDoc {
     pub snap: bool,
     pub grid: f64,
     pub show_colliders: bool,
+    /// 3D: mostra o HUD (o que fica preso à tela) por cima da vista.
+    pub show_hud3: bool,
     /// Erro ao ler o arquivo (a cena fica só para leitura).
     pub error: Option<String>,
     /// O arquivo mudou no disco enquanto havia alterações aqui.
@@ -251,6 +253,8 @@ pub struct SceneDoc {
     drag3: Option<scene3d::Drag3>,
     pub grid3: f64,
     pub show_grid3: bool,
+    /// 3D: a névoa da cena na vista (desligue para ver a cena toda de longe).
+    pub show_fog3: bool,
 }
 
 /// O que a aba pede ao espaço de trabalho.
@@ -466,6 +470,7 @@ impl SceneDoc {
             Ok(d) => (d, None),
             Err(e) => (SceneData::default(), Some(e)),
         };
+        let three_d = data.three_d;
         Self {
             rel: rel.to_string(),
             saved: data.clone(),
@@ -476,7 +481,10 @@ impl SceneDoc {
             tool: Tool::Move,
             snap: false,
             grid: 16.0,
-            show_colliders: true,
+            // No 3D, as caixas dos corpos cobririam a cena: ficam desligadas
+            // até pedir (Colisões, na barra).
+            show_colliders: !three_d,
+            show_hud3: true,
             error,
             external_change: false,
             live: Vec::new(),
@@ -498,6 +506,7 @@ impl SceneDoc {
             drag3: None,
             grid3: 1.0,
             show_grid3: true,
+            show_fog3: true,
         }
     }
 
@@ -790,9 +799,20 @@ impl SceneDoc {
     }
 
     fn hit(&self, env: &mut SceneEnv, rect: Rect, p: Pos2) -> Option<u32> {
+        self.hit_among(env, rect, p, &scene_render::draw_order(&self.data))
+    }
+
+    /// O objeto de `list` (em ordem de desenho) debaixo de `p`.
+    fn hit_among(
+        &self,
+        env: &mut SceneEnv,
+        rect: Rect,
+        p: Pos2,
+        list: &[scene_render::Placed<'_>],
+    ) -> Option<u32> {
         let (wx, wy) = self.camera.to_world(rect, p);
         let icon = scene_render::ICON_SIZE / self.camera.zoom;
-        for placed in scene_render::draw_order(&self.data).iter().rev() {
+        for placed in list.iter().rev() {
             let o = placed.object;
             let owner_locked =
                 !placed.is_own() && self.data.find(placed.owner).is_some_and(|w| w.locked);

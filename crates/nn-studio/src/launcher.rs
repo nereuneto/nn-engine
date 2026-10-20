@@ -129,6 +129,11 @@ pub struct Launcher {
     thumbs: Vec<(Template, egui::TextureHandle)>,
     /// Janela com a lista dos tutoriais.
     tutorials: bool,
+    /// 3D escolhido nas boas-vindas (senão, 2D).
+    three_d: bool,
+    /// A aba aberta na lista de tutoriais (começa na escolha das
+    /// boas-vindas).
+    tutorials_3d: bool,
 }
 
 impl std::fmt::Debug for Launcher {
@@ -205,6 +210,7 @@ impl Launcher {
     /// Mostra a lista de tutoriais.
     pub fn show_tutorials(&mut self) {
         self.tutorials = true;
+        self.tutorials_3d = self.three_d;
     }
 
     fn tutorials_dialog(
@@ -218,31 +224,66 @@ impl Launcher {
         let mut action = None;
         let mut close = false;
         let r = egui::Modal::new(egui::Id::new("tutoriais")).show(ctx, |ui| {
-            ui.set_width(480.0);
+            ui.set_width(520.0);
             ui.heading("🎓 Tutoriais");
             ui.weak(format!(
                 "Cada tutorial cria um projeto novo em {} e mostra o que fazer, passo a passo.",
                 settings::display_path(&settings.default_projects_dir())
             ));
-            ui.add_space(8.0);
-            for t in crate::tutorial::all() {
-                egui::Frame::group(ui.style()).show(ui, |ui| {
-                    ui.set_width(ui.available_width());
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new(t.title).size(17.0).strong());
-                        ui.weak(format!("cerca de {} minutos", t.minutes));
-                    });
-                    ui.label(t.summary);
+            ui.add_space(6.0);
+            let count = |three_d: bool| {
+                crate::tutorial::all()
+                    .iter()
+                    .filter(|t| t.template.is_3d() == three_d)
+                    .count()
+            };
+            ui.horizontal(|ui| {
+                for (three_d, label) in [(false, "Jogos 2D"), (true, "Jogos 3D")] {
+                    let text = format!("{label} ({})", count(three_d));
                     if ui
-                        .add(egui::Button::new("Começar").fill(theme::ACCENT.gamma_multiply(0.75)))
+                        .selectable_label(self.tutorials_3d == three_d, text)
                         .clicked()
                     {
-                        action = Some(LauncherAction::StartTutorial(t.id));
-                        close = true;
+                        self.tutorials_3d = three_d;
+                    }
+                }
+            });
+            ui.add_space(6.0);
+            // A lista rola: são muitos para caber numa tela pequena.
+            // (Sempre da mesma altura: a janela não muda de tamanho nem de
+            // lugar ao trocar de aba.)
+            let max = (ctx.content_rect().height() - 210.0).clamp(160.0, 560.0);
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .max_height(max)
+                .min_scrolled_height(max)
+                .show(ui, |ui| {
+                    for t in crate::tutorial::all()
+                        .iter()
+                        .filter(|t| t.template.is_3d() == self.tutorials_3d)
+                    {
+                        egui::Frame::group(ui.style()).show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new(t.title).size(17.0).strong());
+                                ui.weak(format!("cerca de {} minutos", t.minutes));
+                            });
+                            ui.label(t.summary);
+                            if ui
+                                .add(
+                                    egui::Button::new("Começar")
+                                        .fill(theme::ACCENT.gamma_multiply(0.75)),
+                                )
+                                .on_hover_text(t.title)
+                                .clicked()
+                            {
+                                action = Some(LauncherAction::StartTutorial(t.id));
+                                close = true;
+                            }
+                        });
+                        ui.add_space(4.0);
                     }
                 });
-                ui.add_space(4.0);
-            }
             ui.add_space(4.0);
             if ui.button("Fechar").clicked() {
                 close = true;
@@ -318,7 +359,7 @@ impl Launcher {
                             .on_hover_text("Aprenda fazendo: um passo de cada vez")
                             .clicked()
                         {
-                            self.tutorials = true;
+                            self.show_tutorials();
                         }
                         ui.add_space(28.0);
                         ui.separator();
@@ -376,8 +417,18 @@ impl Launcher {
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width().min(760.0));
                                 ui.label(RichText::new("Bem-vindo ao NN Studio!").size(20.0).strong());
-                                ui.label("Por onde você quer começar?");
+                                ui.horizontal(|ui| {
+                                    ui.label("Por onde você quer começar? Um jogo");
+                                    for (three_d, label) in [(false, "2D"), (true, "3D")] {
+                                        let r = ui.selectable_label(self.three_d == three_d, label);
+                                        crate::tutorial::anchor_in(ui, &format!("boas-vindas:{label}"), r.rect);
+                                        if r.clicked() {
+                                            self.three_d = three_d;
+                                        }
+                                    }
+                                });
                                 ui.add_space(8.0);
+                                let three_d = self.three_d;
                                 let w = ((ui.available_width() - 16.0) / 3.0).clamp(150.0, 240.0);
                                 ui.horizontal_top(|ui| {
                                     let card = |ui: &mut egui::Ui, title: &str, text: &str, accent: bool| {
@@ -394,33 +445,37 @@ impl Launcher {
                                         };
                                         ui.add_sized(egui::vec2(w, 116.0), b)
                                     };
-                                    let r = card(
-                                        ui,
-                                        "🎓 Fazer o tutorial",
-                                        "Seu primeiro jogo: uma fase de plataforma em uns 15 minutos, com o editor mostrando cada passo.",
-                                        true,
-                                    );
+                                    let (tutorial, tutorial_text, ready, ready_text, empty, empty_text) = if three_d {
+                                        (
+                                            "primeiro-mundo-3d",
+                                            "Seu primeiro mundo 3D: um herói que anda e pula, árvores, uma estrela e um evento de vitória, em uns 15 minutos.",
+                                            Template::Visual3D,
+                                            "A ilha 3D, completa e sem código: estrelas, plataformas, um cofre trancado e um pescador que conversa.",
+                                            Template::Vazio3D,
+                                            "Um mundo 3D com chão e câmera, e um pacote de modelos e sons para montar do seu jeito.",
+                                        )
+                                    } else {
+                                        (
+                                            "primeiro-jogo",
+                                            "Seu primeiro jogo: uma fase de plataforma em uns 15 minutos, com o editor mostrando cada passo.",
+                                            Template::Visual,
+                                            "O modelo Plataforma, completo e sem código, para ver como é feito e mudar o que quiser.",
+                                            Template::Vazio,
+                                            "Uma cena vazia e um pacote de imagens e sons para montar do seu jeito.",
+                                        )
+                                    };
+                                    let r = card(ui, "🎓 Fazer o tutorial", tutorial_text, true);
                                     crate::tutorial::anchor_in(ui, "boas-vindas:tutorial", r.rect);
                                     if r.clicked() {
-                                        action = Some(LauncherAction::StartTutorial("primeiro-jogo"));
+                                        action = Some(LauncherAction::StartTutorial(tutorial));
                                     }
-                                    let r = card(
-                                        ui,
-                                        "🎮 Abrir um jogo pronto",
-                                        "O modelo Plataforma, completo e sem código, para ver como é feito e mudar o que quiser.",
-                                        false,
-                                    );
+                                    let r = card(ui, "🎮 Abrir um jogo pronto", ready_text, false);
                                     if r.clicked() {
-                                        self.open_new_project_with(settings, Template::Visual, "Meu jogo");
+                                        self.open_new_project_with(settings, ready, "Meu jogo");
                                     }
-                                    let r = card(
-                                        ui,
-                                        "📄 Começar do zero",
-                                        "Uma cena vazia e um pacote de imagens e sons para montar do seu jeito.",
-                                        false,
-                                    );
+                                    let r = card(ui, "📄 Começar do zero", empty_text, false);
                                     if r.clicked() {
-                                        self.open_new_project_with(settings, Template::Vazio, "Meu jogo");
+                                        self.open_new_project_with(settings, empty, "Meu jogo");
                                     }
                                 });
                             });
@@ -546,26 +601,43 @@ impl Launcher {
                     }
                 }
             }
-            // Cartões: miniatura, nome e (embaixo) o que o escolhido traz.
-            egui::Grid::new("modelos")
-                .num_columns(4)
-                .spacing([8.0, 8.0])
+            // Cartões: miniatura, nome e (embaixo) o que o escolhido traz. Os
+            // jogos 2D e os 3D em grupos separados.
+            // (Uma altura fixa: numa janela que se ajusta ao conteúdo, a
+            // área cresceria um pouco a cada quadro.)
+            let max = (ui.ctx().content_rect().height() - 330.0).clamp(140.0, 420.0);
+            egui::ScrollArea::vertical()
+                .max_height(max)
+                .min_scrolled_height(max)
                 .show(ui, |ui| {
-                    for (i, t) in Template::ALL.into_iter().enumerate() {
-                        let (name, desc) = template_info(t);
-                        let selected = form.template == t;
-                        let thumb = self.thumbs.iter().find(|(x, _)| *x == t).map(|(_, h)| h);
-                        let r = template_card(ui, name, thumb, selected).on_hover_text(desc);
-                        if r.clicked() {
-                            form.template = t;
-                        }
-                        if r.double_clicked() {
-                            form.template = t;
-                            form.submit = true;
-                        }
-                        if i % 4 == 3 {
-                            ui.end_row();
-                        }
+                    for (three_d, label) in [(false, "Jogos 2D"), (true, "Jogos 3D")] {
+                        ui.label(RichText::new(label).weak());
+                        egui::Grid::new(("modelos", three_d))
+                            .num_columns(4)
+                            .spacing([8.0, 8.0])
+                            .show(ui, |ui| {
+                                let list =
+                                    Template::ALL.into_iter().filter(|t| t.is_3d() == three_d);
+                                for (i, t) in list.enumerate() {
+                                    let (name, desc) = template_info(t);
+                                    let selected = form.template == t;
+                                    let thumb =
+                                        self.thumbs.iter().find(|(x, _)| *x == t).map(|(_, h)| h);
+                                    let r = template_card(ui, name, thumb, selected)
+                                        .on_hover_text(desc);
+                                    if r.clicked() {
+                                        form.template = t;
+                                    }
+                                    if r.double_clicked() {
+                                        form.template = t;
+                                        form.submit = true;
+                                    }
+                                    if i % 4 == 3 {
+                                        ui.end_row();
+                                    }
+                                }
+                            });
+                        ui.add_space(4.0);
                     }
                 });
             let (name, desc) = template_info(form.template);

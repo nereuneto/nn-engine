@@ -164,3 +164,30 @@ fn cena_grande_quadros_por_segundo() {
     let ms = start.elapsed().as_secs_f64() * 1000.0 / n as f64;
     eprintln!("cena grande: {ms:.1} ms por quadro");
 }
+
+/// Os diálogos do gerenciador (tutoriais, projeto novo, exemplos) e as
+/// boas-vindas no 3D.
+#[test]
+#[ignore]
+fn dialogos_do_gerenciador() {
+    let size = egui::vec2(1280.0, 720.0);
+    for (label, name) in [
+        ("🎓 Tutoriais", "tutoriais"),
+        ("✨ Novo projeto", "novo"),
+        ("🎮 Exemplos", "exemplos"),
+    ] {
+        let dir = temp(&format!("gerenciador-{name}"));
+        let mut h = studio(&dir, None, size);
+        h.get_by_label(label).click();
+        passos(&mut h);
+        tela(&mut h, &format!("gerenciador-{name}"));
+    }
+    let dir = temp("gerenciador-3d");
+    let mut h = studio(&dir, None, size);
+    h.get_by_label("3D").click();
+    passos(&mut h);
+    tela(&mut h, "gerenciador-boas-vindas-3d");
+    h.get_by_label("🎓 Tutoriais").click();
+    passos(&mut h);
+    tela(&mut h, "gerenciador-tutoriais-3d");
+}
