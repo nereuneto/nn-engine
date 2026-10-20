@@ -800,3 +800,72 @@ fn terreno_desenha_morro_e_agua_transparente() {
     let p = pixel(&img, 32, 32);
     assert!(p[0] > 90 && p[2] > 90, "vermelho e azul misturados: {p:?}");
 }
+
+// --- Desempenho (Sprint 32) ------------------------------------------------
+
+#[test]
+fn so_o_que_a_camera_ve_vai_para_a_gpu() {
+    let Some(mut h) = Harness::new() else { return };
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 2.0, 10.0), Vec3::ZERO));
+    h.renderer.set_shadows3d(Shadows {
+        enabled: true,
+        distance: 6.0,
+        ..Shadows::default()
+    });
+    // Uma fila de cubos de -100 a 100 em X (só os do meio aparecem) e outros
+    // atrás da câmera.
+    for i in -50..=50 {
+        h.renderer.draw_mesh(
+            cube,
+            Mat4::from_translation(Vec3::new(i as f32 * 2.0, 0.0, 0.0)),
+            Color::RED,
+        );
+    }
+    for i in 0..20 {
+        h.renderer.draw_mesh(
+            cube,
+            Mat4::from_translation(Vec3::new(i as f32, 0.0, 40.0)),
+            Color::RED,
+        );
+    }
+    let img = h.render(Color::BLACK);
+    let s = h.renderer.last_stats3();
+    assert_eq!(s.meshes, 121);
+    assert_eq!(h.renderer.last_mesh_count(), 121);
+    assert!(
+        (4..=12).contains(&s.visible),
+        "só os da frente da câmera: {s:?}"
+    );
+    // Sombras: só os perto de onde a câmera olha (6 m para cada lado).
+    assert!((3..=10).contains(&s.shadow), "sombras: {s:?}");
+    // Uma chamada para os vistos e uma para as sombras (a mesma malha).
+    assert_eq!(s.draw_calls, 2, "{s:?}");
+    assert_color(
+        pixel(&img, 32, 32),
+        [255, 0, 0, 255],
+        "o cubo do meio aparece",
+    );
+    // Uma barra comprida, com o centro fora da tela mas a ponta dentro,
+    // aparece.
+    h.renderer.draw_mesh(
+        cube,
+        Mat4::from_scale_rotation_translation(
+            Vec3::new(24.0, 1.0, 1.0),
+            glam::Quat::IDENTITY,
+            Vec3::new(14.0, 0.0, 0.0),
+        ),
+        Color::GREEN,
+    );
+    let img = h.render(Color::BLACK);
+    assert_eq!(h.renderer.last_stats3().visible, 1);
+    let p = Camera3D::looking_at(Vec3::new(0.0, 2.0, 10.0), Vec3::ZERO)
+        .screen_point(Vec3::new(4.0, 0.0, 0.5), SIZE.as_vec2())
+        .unwrap();
+    assert_color(
+        pixel(&img, p.x as u32, p.y as u32),
+        [0, 255, 0, 255],
+        "a ponta da barra",
+    );
+}

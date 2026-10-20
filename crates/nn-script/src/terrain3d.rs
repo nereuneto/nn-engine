@@ -24,11 +24,18 @@ pub(crate) struct LTerrain {
 impl LTerrain {
     /// A malha atual (refeita se o terreno mudou).
     pub(crate) fn mesh(&mut self, lua: &Lua) -> Result<LMesh> {
-        let mesh = self.data.mesh(&self.colors);
+        // A malha só é montada de novo quando o terreno muda (não a cada
+        // quadro).
         match &mut self.mesh {
-            Some(m) if self.dirty => crate::d3::reupload(lua, m, &mesh)?,
+            Some(m) if self.dirty => {
+                let mesh = self.data.mesh(&self.colors);
+                crate::d3::reupload(lua, m, &mesh)?;
+            }
             Some(_) => {}
-            None => self.mesh = Some(crate::d3::upload(lua, &mesh)?),
+            None => {
+                let mesh = self.data.mesh(&self.colors);
+                self.mesh = Some(crate::d3::upload(lua, &mesh)?);
+            }
         }
         self.dirty = false;
         Ok(self.mesh.expect("malha"))

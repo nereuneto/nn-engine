@@ -1275,12 +1275,19 @@ impl Renderer {
         self.d3.shadows
     }
 
-    /// Quantas malhas foram desenhadas no último frame.
+    /// Quantas malhas foram pedidas no último frame (as fora da câmera
+    /// contam, mas não vão para a GPU; veja [`Renderer::last_stats3`]).
     pub fn last_mesh_count(&self) -> u32 {
         self.d3.last_count
     }
 
     /// Números do último [`Renderer::render`].
+    /// O que o último frame 3D desenhou: malhas pedidas, as que estavam na
+    /// frente da câmera, as do mapa de sombras e as chamadas de desenho.
+    pub fn last_stats3(&self) -> crate::d3::Stats3 {
+        self.d3.last_stats
+    }
+
     pub fn last_stats(&self) -> RenderStats {
         self.last_stats
     }

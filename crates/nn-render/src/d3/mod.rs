@@ -28,6 +28,7 @@ mod terrain;
 use glam::{Mat4, Quat, Vec2, Vec3};
 use nn_core::Color;
 
+pub use gpu::Stats3;
 pub(crate) use gpu::{Quad3, Renderer3D};
 pub use mesh::{Mesh, Vertex3};
 pub use model::{CollisionMesh, Model, ModelData, ModelError, ModelImage, ModelPart};
