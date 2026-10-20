@@ -917,3 +917,53 @@ fn portas_chaves_zonas_interagir_e_texto_no_3d() {
     assert_eq!(lua::<i64>(&rt, "nn.inventory.count('mapa')"), 1);
     assert_eq!(h.game.0.error(), None);
 }
+
+#[test]
+fn arquivos_que_faltam_viram_avisos_e_o_jogo_continua() {
+    let dir = projeto(
+        "faltam",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            ("modelos/quebrado.glb", "isto não é um glb"),
+            (
+                "cenas/mundo.cena",
+                &mundo(
+                    r#"{ id = 2, name = "Sumido", y = 1, components = { { type = "model", file = "modelos/nao.glb" } } },
+    { id = 3, name = "Quebrado", x = 2, y = 1, components = { { type = "model", file = "modelos/quebrado.glb" } } },
+    { id = 4, name = "Mudo", components = { { type = "sound", sound = "sons/nao.wav" } } },
+    { id = 5, name = "Ana", components = { { type = "behavior", script = "nn:dialogo", arquivo = "dialogos/nao.dialogo", comecar = "cena" } } },"#,
+                ),
+            ),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    h.run_frames(5);
+    assert_eq!(h.game.0.error(), None);
+    let avisos: Vec<String> = rt
+        .lua()
+        .named_registry_value::<mlua::Table>("nn.cena")
+        .unwrap()
+        .get::<Vec<String>>("warnings")
+        .unwrap();
+    let tem = |s: &str| avisos.iter().any(|a| a.contains(s));
+    assert!(
+        tem(
+            "objeto \"Sumido\" (Modelo 3D): o arquivo modelos/nao.glb não existe; no lugar dele aparece um cubo rosa"
+        ),
+        "{avisos:?}"
+    );
+    assert!(tem("objeto \"Quebrado\" (Modelo 3D)"), "{avisos:?}");
+    assert!(
+        tem("objeto \"Mudo\" (Som): o arquivo sons/nao.wav não existe"),
+        "{avisos:?}"
+    );
+    assert!(
+        tem("conversa dialogos/nao.dialogo: o arquivo dialogos/nao.dialogo não existe"),
+        "{avisos:?}"
+    );
+    // Os dois cubos rosa (e o chão) são desenhados.
+    assert_eq!(h.ctx.renderer.last_mesh_count(), 3);
+    assert!(lua::<bool>(&rt, "C:dialogue() == nil"));
+}

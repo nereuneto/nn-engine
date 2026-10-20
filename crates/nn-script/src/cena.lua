@@ -189,6 +189,26 @@ local function themed(value, key)
 end
 M.themed = themed
 
+-- Avisos no console (cada um uma vez só): o jogo continua.
+local warned = {}
+M.warnings = {}
+function M.warn(msg)
+  if warned[msg] then return end
+  warned[msg] = true
+  table.insert(M.warnings, msg)
+  if nn._warn then nn._warn(msg) else print("aviso: " .. msg) end
+end
+
+-- A mensagem de um erro de arquivo, curta: "o arquivo x não existe".
+local function file_error(file, e)
+  e = tostring(e):match("^[^\n]*") or tostring(e)
+  if e:find("não encontrado", 1, true) then
+    return ("o arquivo %s não existe"):format(file)
+  end
+  return e
+end
+M.file_error = file_error
+
 -- Fontes lidas uma vez (o caminho vazio usa a do tema, ou a padrão).
 local fonts = {}
 function M.font(path)
@@ -453,11 +473,23 @@ function Object:matrix3d(alpha)
   if alpha and p then
     x, y, z = p[1] + (x - p[1]) * alpha, p[2] + (y - p[2]) * alpha, p[3] + (z - p[3]) * alpha
   end
-  local m = nn.d3.matrix({
-    x = x, y = y, z = z, rx = self.rx, ry = self.ry, rz = self.rz,
-    sx = self.scale_x, sy = self.scale_y, sz = self.scale_z,
-  })
-  if self.parent then return self.parent:matrix3d(alpha) * m end
+  local pm = self.parent and self.parent:matrix3d(alpha) or false
+  -- A última matriz fica guardada: o que não se mexeu (a maioria das coisas
+  -- de uma cena) não monta outra a cada quadro.
+  local c = self._m3
+  local rx, ry, rz, sx, sy, sz = self.rx, self.ry, self.rz, self.scale_x, self.scale_y, self.scale_z
+  if c and c[1] == x and c[2] == y and c[3] == z and c[4] == rx and c[5] == ry and c[6] == rz
+      and c[7] == sx and c[8] == sy and c[9] == sz and c[10] == pm then
+    return c.m
+  end
+  local m = nn.d3.matrix({ x = x, y = y, z = z, rx = rx, ry = ry, rz = rz, sx = sx, sy = sy, sz = sz })
+  if pm then m = pm * m end
+  if not c then
+    c = {}
+    self._m3 = c
+  end
+  c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10] = x, y, z, rx, ry, rz, sx, sy, sz, pm
+  c.m = m
   return m
 end
 
@@ -1319,8 +1351,15 @@ end
 local function sync_bodies3_after(scene)
   for _, o in ipairs(scene.object_list) do
     local b = o.body
-    if o.alive and o._s3 and b and b.alive then
-      o._p3 = { o.x, o.y, o.z }
+    local s3 = o._s3
+    if o.alive and s3 and b and b.alive and not o._char3 and b.type == "static" then
+      -- Parado: nada a interpolar (e nada a alocar a cada passo).
+      o._p3 = nil
+      s3[1], s3[2], s3[3], s3[4], s3[5], s3[6] = o.x, o.y, o.z, o.rx, o.ry, o.rz
+    elseif o.alive and s3 and b and b.alive then
+      local p3 = o._p3 or {}
+      p3[1], p3[2], p3[3] = o.x, o.y, o.z
+      o._p3 = p3
       if o._char3 or b.type ~= "static" then
         local x, y, z = b.x, b.y, b.z
         local rx, ry, rz
@@ -1340,7 +1379,7 @@ local function sync_bodies3_after(scene)
         o.x, o.y, o.z = x, y, z
         if rx then o.rx, o.ry, o.rz = rx, ry, rz end
       end
-      o._s3 = { o.x, o.y, o.z, o.rx, o.ry, o.rz }
+      s3[1], s3[2], s3[3], s3[4], s3[5], s3[6] = o.x, o.y, o.z, o.rx, o.ry, o.rz
     end
   end
 end
@@ -1830,8 +1869,13 @@ function M.prepare(scene, o, c, live)
   elseif t == "sound" then
     o.sound = nil
     if c.sound ~= "" then
-      o.sound = nn.assets.sound(c.sound)
-      if c.autoplay and not live then
+      local ok, snd = pcall(nn.assets.sound, c.sound)
+      if ok then
+        o.sound = snd
+      else
+        M.warn(("objeto \"%s\" (Som): %s; ele fica sem som"):format(o.name, file_error(c.sound, snd)))
+      end
+      if o.sound and c.autoplay and not live then
         local opts = { loop = c.loop, volume = c.volume, channel = c.channel }
         if scene._3d and c.spatial then
           opts.x, opts.y, opts.z = o:position3d()
@@ -1850,11 +1894,20 @@ function M.prepare(scene, o, c, live)
   elseif t == "camera" then
     scene._camera = scene._camera or o
   elseif t == "model" then
-    c._model, c._anim = nil, nil
+    c._model, c._anim, c._missing = nil, nil, nil
     if c.file ~= "" then
-      c._model = nn.assets.model(c.file, { flat = c.flat })
-      -- Modelo animado: cada objeto toca as animações dele.
-      if #c._model:animations() > 0 then c._anim = c._model:animator() end
+      local ok, model = pcall(nn.assets.model, c.file, { flat = c.flat })
+      if ok then
+        c._model = model
+        -- Modelo animado: cada objeto toca as animações dele.
+        if #c._model:animations() > 0 then c._anim = c._model:animator() end
+      else
+        -- O jogo continua: no lugar do modelo, um cubo rosa.
+        M.warn(("objeto \"%s\" (Modelo 3D): %s; no lugar dele aparece um cubo rosa"):format(
+          o.name, file_error(c.file, model)))
+        M._missing_mesh = M._missing_mesh or nn.d3.cube()
+        c._missing = M._missing_mesh
+      end
     end
     local a = o:component("anim3d")
     if live and a then M.prepare(scene, o, a, true) end
@@ -2442,13 +2495,30 @@ local function draw_ui(o, c, hud, at, sx, sy)
   end
 end
 
+-- Componentes que o draw_object desenha só na parte 3D (ou que não
+-- desenham nada).
+local ONLY_3D = {
+  model = true, shape3d = true, terrain = true, text3d = true, camera3d = true, body3d = true,
+  anim3d = true, behavior = true, sound = true, body = true, camera = true, layout = true,
+}
+
 local function draw_object(o, alpha)
   -- 3D: modelos e formas, com a posição, a rotação e a escala 3D.
   local m3
   for _, c in ipairs(o.components) do
-    if (c.type == "model" and c._model) or (c.type == "shape3d" and c._mesh) then
+    if c.type == "model" and c._missing then
       m3 = m3 or o:matrix3d(alpha)
-      nn.d3.draw(c._model or c._mesh, { matrix = m3, color = c.color, shadow = c.shadow, animator = c._anim })
+      nn.d3.draw(c._missing, { matrix = m3, color = "#FF3EC8" })
+    elseif (c.type == "model" and c._model) or (c.type == "shape3d" and c._mesh) then
+      m3 = m3 or o:matrix3d(alpha)
+      -- As opções ficam no componente (sem uma tabela nova a cada quadro).
+      local d = c._draw
+      if not d then
+        d = {}
+        c._draw = d
+      end
+      d.matrix, d.color, d.shadow, d.animator = m3, c.color, c.shadow, c._anim
+      nn.d3.draw(c._model or c._mesh, d)
     elseif c.type == "text3d" and o.scene and o.scene._3d then
       m3 = m3 or o:matrix3d(alpha)
       nn.d3.text(c.text, {
@@ -2467,6 +2537,15 @@ local function draw_object(o, alpha)
       end
     end
   end
+  -- Só o que é 3D (a maioria dos objetos de uma cena 3D): acabou.
+  local more = false
+  for _, c in ipairs(o.components) do
+    if not ONLY_3D[c.type] then
+      more = true
+      break
+    end
+  end
+  if not more then return end
   local x, y, rot, sx, sy = o:world_transform()
   if o.body and o._px and not o.parent then
     x = o._px + (o.x - o._px) * alpha

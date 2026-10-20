@@ -97,6 +97,8 @@ struct GpuMesh {
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     count: u32,
+    /// A caixa da malha (para não desenhar o que está fora da câmera).
+    bounds: Option<(Vec3, Vec3)>,
     /// Os ossos de cada vértice (malhas de modelos animados).
     skin: Option<wgpu::Buffer>,
 }
@@ -107,6 +109,8 @@ struct Draw3 {
     texture: TextureId,
     cast_shadow: bool,
     instance: Instance3,
+    /// A caixa no mundo (None: desenha sempre).
+    bounds: Option<(Vec3, Vec3)>,
     /// Malha com ossos: onde estão as matrizes dela em `joint_data`.
     joints: Option<u32>,
 }
@@ -155,6 +159,59 @@ pub(crate) struct Renderer3D {
     pub shadows: Shadows,
     /// Quantas malhas foram desenhadas no último frame.
     pub last_count: u32,
+    /// O que o último frame desenhou de fato (veja [`Stats3`]).
+    pub last_stats: Stats3,
+}
+
+/// Números do último frame 3D (para medir o desempenho).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Stats3 {
+    /// Malhas pedidas (cada parte de um modelo conta uma).
+    pub meshes: u32,
+    /// Malhas que estavam na frente da câmera (as outras não foram
+    /// desenhadas).
+    pub visible: u32,
+    /// Malhas desenhadas no mapa de sombras (as perto da câmera).
+    pub shadow: u32,
+    /// Chamadas de desenho enviadas à GPU (sombras incluídas).
+    pub draw_calls: u32,
+}
+
+/// Os seis planos de uma câmera (ou da luz): x · n + d ≥ 0 é dentro.
+#[derive(Debug, Clone, Copy)]
+struct Frustum([glam::Vec4; 6]);
+
+impl Frustum {
+    /// Planos de uma matriz de projeção × vista (profundidade de 0 a 1).
+    fn of(m: Mat4) -> Self {
+        let (r0, r1, r2, r3) = (m.row(0), m.row(1), m.row(2), m.row(3));
+        let planes = [r3 + r0, r3 - r0, r3 + r1, r3 - r1, r2, r3 - r2].map(|p| {
+            let n = p.truncate().length();
+            if n > 0.0 { p / n } else { p }
+        });
+        Self(planes)
+    }
+
+    /// A caixa encosta (ou está dentro)?
+    fn touches(&self, (min, max): (Vec3, Vec3)) -> bool {
+        self.0.iter().all(|p| {
+            let n = p.truncate();
+            let far = Vec3::select(n.cmpge(Vec3::ZERO), max, min);
+            n.dot(far) + p.w >= 0.0
+        })
+    }
+}
+
+/// A caixa `bounds` (do espaço da malha) vista no mundo pela matriz `m`.
+fn world_bounds(m: &Mat4, (min, max): (Vec3, Vec3)) -> (Vec3, Vec3) {
+    let c = m.transform_point3((min + max) * 0.5);
+    let e = (max - min) * 0.5;
+    let ext = Vec3::new(
+        m.x_axis.x.abs() * e.x + m.y_axis.x.abs() * e.y + m.z_axis.x.abs() * e.z,
+        m.x_axis.y.abs() * e.x + m.y_axis.y.abs() * e.y + m.z_axis.y.abs() * e.z,
+        m.x_axis.z.abs() * e.x + m.y_axis.z.abs() * e.y + m.z_axis.z.abs() * e.z,
+    );
+    (c - ext, c + ext)
 }
 
 impl std::fmt::Debug for Renderer3D {
@@ -592,6 +649,7 @@ impl Renderer3D {
             shadow_sampler,
             shadow_map,
             meshes: Vec::new(),
+            last_stats: Stats3::default(),
             draws: Vec::new(),
             instances,
             capacity,
@@ -798,6 +856,24 @@ impl Renderer3D {
                 wgpu::BufferUsages::INDEX,
             ),
             count: indices.len() as u32,
+            bounds: vertices
+                .iter()
+                .map(|v| Vec3::from_array(v.position))
+                .fold(None, |acc: Option<(Vec3, Vec3)>, p| {
+                    Some(match acc {
+                        Some((a, b)) => (a.min(p), b.max(p)),
+                        None => (p, p),
+                    })
+                })
+                .map(|(a, b)| {
+                    if skin.is_some() {
+                        // Animada: os ossos mexem os vértices; uma folga.
+                        let pad = (b - a) * 0.5 + Vec3::splat(0.5);
+                        (a - pad, b + pad)
+                    } else {
+                        (a, b)
+                    }
+                }),
             skin: skin.map(|s| {
                 make(
                     "nn 3d skin",
@@ -820,12 +896,13 @@ impl Renderer3D {
         cast_shadow: bool,
         srgb: bool,
     ) {
-        if (mesh.0 as usize) < self.meshes.len() {
+        if let Some(m) = self.meshes.get(mesh.0 as usize) {
             let draw = Draw3 {
                 mesh,
                 texture,
                 cast_shadow,
                 instance: Instance3::new(model, color, srgb),
+                bounds: m.bounds.map(|b| world_bounds(&model, b)),
                 joints: None,
             };
             if color.a < 0.999 {
@@ -864,11 +941,13 @@ impl Renderer3D {
             let j = joints.get(i).copied().unwrap_or(Mat4::IDENTITY);
             self.joint_data.push(j.to_cols_array());
         }
+        let bounds = m.bounds.map(|b| world_bounds(&model, b));
         self.draws.push(Draw3 {
             mesh,
             texture,
             cast_shadow,
             instance: Instance3::new(model, color, srgb),
+            bounds,
             joints: Some(slot),
         });
     }
@@ -1021,11 +1100,6 @@ impl Renderer3D {
         // ossos vão no fim, um por chamada.
         self.draws
             .sort_by_key(|d| (d.joints.is_some(), d.mesh, d.texture.0, !d.cast_shadow));
-        let skinned_from = self
-            .draws
-            .iter()
-            .position(|d| d.joints.is_some())
-            .unwrap_or(self.draws.len());
         if !self.joint_data.is_empty() {
             let slots = (self.joint_data.len() / MAX_JOINTS) as u64;
             if slots > self.joint_capacity {
@@ -1040,6 +1114,21 @@ impl Renderer3D {
                 bytemuck::cast_slice(&self.joint_data),
             );
         }
+        // Só o que a câmera vê (e, para as sombras, o que está na caixa do
+        // sol) vai para a GPU.
+        let camera = Frustum::of(view_proj);
+        let sun = Frustum::of(light_view_proj);
+        let seen = |f: &Frustum, d: &Draw3| d.bounds.is_none_or(|b| f.touches(b));
+        let visible: Vec<usize> = (0..self.draws.len())
+            .filter(|&i| seen(&camera, &self.draws[i]))
+            .collect();
+        let shadow: Vec<usize> = if shadows_on {
+            (0..self.draws.len())
+                .filter(|&i| self.draws[i].cast_shadow && seen(&sun, &self.draws[i]))
+                .collect()
+        } else {
+            Vec::new()
+        };
         // As transparentes vão depois de todas, de trás para a frente.
         let eye3 = self.camera.position;
         let center = |d: &Draw3| {
@@ -1049,39 +1138,53 @@ impl Renderer3D {
                 d.instance.model[3][2],
             )
         };
+        let before = self.transparent.len();
+        self.transparent
+            .retain(|d| d.bounds.is_none_or(|b| camera.touches(b)));
+        let culled_transparent = (before - self.transparent.len()) as u32;
         self.transparent.sort_by(|a, b| {
             center(b)
                 .distance_squared(eye3)
                 .total_cmp(&center(a).distance_squared(eye3))
         });
-        let total = self.draws.len() + self.transparent.len();
+        // As instâncias: as vistas, as das sombras e as transparentes.
+        let total = visible.len() + shadow.len() + self.transparent.len();
         if total > self.capacity {
             self.capacity = total.next_power_of_two();
             self.instances = Self::instance_buffer(device, self.capacity);
         }
-        let data: Vec<Instance3> = self
-            .draws
+        let data: Vec<Instance3> = visible
             .iter()
-            .chain(&self.transparent)
-            .map(|d| d.instance)
+            .chain(&shadow)
+            .map(|&i| self.draws[i].instance)
+            .chain(self.transparent.iter().map(|d| d.instance))
             .collect();
         queue.write_buffer(&self.instances, 0, bytemuck::cast_slice(&data));
-        let mut groups = Vec::new();
-        let mut i = 0;
-        while i < skinned_from {
-            let d = &self.draws[i];
-            let key = (d.mesh, d.texture, d.cast_shadow);
-            let mut j = i + 1;
-            while j < skinned_from {
-                let e = &self.draws[j];
-                if (e.mesh, e.texture, e.cast_shadow) != key {
-                    break;
+        // Grupos (malha, textura, sombra) seguidos numa lista; `base` é onde
+        // a lista começa nas instâncias. Os com ossos ficam de fora (um por
+        // chamada).
+        type Group = ((MeshId, TextureId, bool), std::ops::Range<u32>);
+        let group = |list: &[usize], base: u32| -> (Vec<Group>, Vec<(usize, u32)>) {
+            let mut groups: Vec<Group> = Vec::new();
+            let mut skinned = Vec::new();
+            for (k, &i) in list.iter().enumerate() {
+                let d = &self.draws[i];
+                let at = base + k as u32;
+                if d.joints.is_some() {
+                    skinned.push((i, at));
+                    continue;
                 }
-                j += 1;
+                let key = (d.mesh, d.texture, d.cast_shadow);
+                match groups.last_mut() {
+                    Some((k2, r)) if *k2 == key && r.end == at => r.end = at + 1,
+                    _ => groups.push((key, at..at + 1)),
+                }
             }
-            groups.push((key, i as u32..j as u32));
-            i = j;
-        }
+            (groups, skinned)
+        };
+        let (groups, skinned) = group(&visible, 0);
+        let (shadow_groups, shadow_skinned) = group(&shadow, visible.len() as u32);
+        let mut calls = 0u32;
 
         // As partículas: as transparentes de trás para a frente, depois as
         // que somam luz (a ordem não importa), agrupadas por imagem.
@@ -1126,18 +1229,20 @@ impl Renderer3D {
             pass.set_pipeline(&self.shadow_pipeline);
             pass.set_bind_group(0, &self.view_group, &[]);
             pass.set_vertex_buffer(1, self.instances.slice(..));
-            for ((mesh, _, cast), range) in &groups {
+            for ((mesh, _, _), range) in &shadow_groups {
                 let m = &self.meshes[mesh.0 as usize];
-                if *cast && m.count > 0 {
+                if m.count > 0 {
                     pass.set_vertex_buffer(0, m.vertices.slice(..));
                     pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
                     pass.draw_indexed(0..m.count, 0, range.clone());
+                    calls += 1;
                 }
             }
             pass.set_pipeline(&self.skinned_shadow_pipeline);
-            for (k, d) in self.draws.iter().enumerate().skip(skinned_from) {
+            for &(i, at) in &shadow_skinned {
+                let d = &self.draws[i];
                 let m = &self.meshes[d.mesh.0 as usize];
-                if let (true, Some(slot), Some(skin)) = (d.cast_shadow, d.joints, &m.skin)
+                if let (Some(slot), Some(skin)) = (d.joints, &m.skin)
                     && m.count > 0
                 {
                     let offset = (slot as u64 * JOINT_SLOT) as u32;
@@ -1145,7 +1250,8 @@ impl Renderer3D {
                     pass.set_vertex_buffer(0, m.vertices.slice(..));
                     pass.set_vertex_buffer(2, skin.slice(..));
                     pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..m.count, 0, k as u32..k as u32 + 1);
+                    pass.draw_indexed(0..m.count, 0, at..at + 1);
+                    calls += 1;
                 }
             }
         }
@@ -1193,11 +1299,13 @@ impl Renderer3D {
                     pass.set_vertex_buffer(0, m.vertices.slice(..));
                     pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
                     pass.draw_indexed(0..m.count, 0, range.clone());
+                    calls += 1;
                 }
             }
-            if skinned_from < self.draws.len() {
+            if !skinned.is_empty() {
                 pass.set_pipeline(&self.skinned_pipeline);
-                for (k, d) in self.draws.iter().enumerate().skip(skinned_from) {
+                for &(i, at) in &skinned {
+                    let d = &self.draws[i];
                     let m = &self.meshes[d.mesh.0 as usize];
                     if let (Some(slot), Some(skin)) = (d.joints, &m.skin)
                         && m.count > 0
@@ -1208,7 +1316,8 @@ impl Renderer3D {
                         pass.set_vertex_buffer(0, m.vertices.slice(..));
                         pass.set_vertex_buffer(2, skin.slice(..));
                         pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
-                        pass.draw_indexed(0..m.count, 0, k as u32..k as u32 + 1);
+                        pass.draw_indexed(0..m.count, 0, at..at + 1);
+                        calls += 1;
                     }
                 }
             }
@@ -1216,7 +1325,7 @@ impl Renderer3D {
             if !self.transparent.is_empty() {
                 pass.set_pipeline(&self.transparent_pipeline);
                 pass.set_vertex_buffer(1, self.instances.slice(..));
-                let base = self.draws.len() as u32;
+                let base = (visible.len() + shadow.len()) as u32;
                 for (k, d) in self.transparent.iter().enumerate() {
                     let m = &self.meshes[d.mesh.0 as usize];
                     if m.count > 0 {
@@ -1251,7 +1360,13 @@ impl Renderer3D {
             }
         }
         drop(pass);
-        self.last_count = (self.draws.len() + self.transparent.len()) as u32;
+        self.last_count = (self.draws.len() + self.transparent.len()) as u32 + culled_transparent;
+        self.last_stats = Stats3 {
+            meshes: self.last_count,
+            visible: (visible.len() + self.transparent.len()) as u32,
+            shadow: shadow.len() as u32,
+            draw_calls: calls + self.transparent.len() as u32,
+        };
         self.draws.clear();
         self.joint_data.clear();
         self.billboards.clear();

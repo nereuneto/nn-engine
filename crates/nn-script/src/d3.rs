@@ -709,6 +709,18 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
         "count",
         lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.renderer.last_mesh_count())))?,
     )?;
+    t.set(
+        "stats",
+        lua.create_function(|lua, ()| {
+            let s = with_ctx(lua, |c| Ok(c.renderer.last_stats3()))?;
+            let t = lua.create_table()?;
+            t.set("meshes", s.meshes)?;
+            t.set("visible", s.visible)?;
+            t.set("shadow", s.shadow)?;
+            t.set("draw_calls", s.draw_calls)?;
+            Ok(t)
+        })?,
+    )?;
 
     Ok(t)
 }

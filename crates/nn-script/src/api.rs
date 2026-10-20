@@ -853,6 +853,16 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         Ok(())
     })?;
     lua.globals().set("print", print)?;
+    // Avisos da engine (um arquivo que falta...): o jogo continua, e o NN
+    // Studio mostra no Console como aviso.
+    let nn: Table = lua.globals().get("nn")?;
+    nn.set(
+        "_warn",
+        lua.create_function(|_, msg: String| {
+            log::warn!("{msg}");
+            Ok(())
+        })?,
+    )?;
     Ok(())
 }
 

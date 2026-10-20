@@ -119,7 +119,12 @@ end
 --- mensagens conversa_comecou, escolheu e conversa_terminou).
 function D.start(scene, path, owner)
   if scene._dlg then return false end
-  local data = D.load(path)
+  local ok, data = pcall(D.load, path)
+  if not ok then
+    -- Um aviso no console; o jogo continua (sem a conversa).
+    cena.warn(("conversa %s: %s"):format(path, cena.file_error(path, data)))
+    return false
+  end
   local d = { scene = scene, data = data, path = path, owner = owner, armed = false, t = 0 }
   scene._dlg = d
   send(d, "conversa_comecou", path)

@@ -1080,6 +1080,9 @@ O campo de tile tem um **…** para escolher no tileset. No Lua:
   erros. Erros aparecem em português, e cada `arquivo.lua:12` é um link: clique
   para abrir o arquivo nessa linha. Se o console estiver escondido quando
   chegar um erro, ele aparece sozinho.
+- Um arquivo que falta numa cena (um modelo, um som, uma conversa) não fecha o
+  jogo: vira um aviso no console com o objeto e o arquivo, e um modelo que
+  falta aparece como um cubo rosa.
 - Filtros do console: **Erros**, **Avisos** e **Mensagens** (e **Engine**, no
   modo Completo). **Limpar ao jogar** começa cada partida com o console limpo.
 

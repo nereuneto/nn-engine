@@ -17,7 +17,7 @@ use nn_render::{
     Rect as UvRect, Renderer, Sprite, Text, TextureId, TextureOptions,
 };
 
-use crate::scene_data::{Component, Object, SceneData, Transform};
+use crate::scene_data::{Component, Object, Prop, SceneData, Transform};
 
 /// Lê um modelo 3D do projeto (com o .bin e as imagens ao lado, se for
 /// .gltf).
@@ -715,6 +715,9 @@ struct Preview {
     next: f32,
 }
 
+/// Um terreno já na GPU: os campos com que a malha foi montada e a malha.
+type TerrainMesh = (Vec<(String, Prop)>, nn_render::d3::MeshId);
+
 pub struct SceneRenderer {
     device: wgpu::Device,
     egui: Arc<egui::mutex::RwLock<egui_wgpu::Renderer>>,
@@ -732,8 +735,9 @@ pub struct SceneRenderer {
     previews: HashMap<(String, u32, usize), Preview>,
     /// O mesmo, nas cenas 3D.
     previews3: HashMap<(String, u32, usize), Preview3>,
-    /// Terrenos na GPU: (aba, objeto, componente) → (os campos, a malha).
-    terrains: HashMap<(String, u32, usize), (String, nn_render::d3::MeshId)>,
+    /// Terrenos na GPU: (aba, objeto, componente) → (os campos com que a
+    /// malha foi montada, a malha).
+    terrains: HashMap<(String, u32, usize), TerrainMesh>,
     /// 3D: as formas prontas já na GPU.
     meshes3: HashMap<&'static str, nn_render::d3::MeshId>,
     /// 3D: modelos (arquivo, achatado) → modelo na GPU (`None` se não abriu).
@@ -918,9 +922,10 @@ impl SceneRenderer {
                     // Só a posição do objeto conta (sem giro nem escala).
                     let pos = m.transform_point3(Vec3::ZERO);
                     let k = (key.to_string(), id, ci);
-                    let sig = format!("{:?}", c.props);
+                    // (Comparar os campos é barato; formatar os dados do
+                    // terreno a cada quadro, não.)
                     let mesh = match self.terrains.get(&k) {
-                        Some((old, mesh)) if *old == sig => *mesh,
+                        Some((old, mesh)) if *old == c.props => *mesh,
                         found => {
                             let found = found.map(|f| f.1);
                             let t = crate::terrain_tool::terrain_of(&c);
@@ -932,7 +937,7 @@ impl SceneRenderer {
                                 }
                                 None => self.renderer.create_mesh(&data),
                             };
-                            self.terrains.insert(k, (sig, mesh));
+                            self.terrains.insert(k, (c.props.clone(), mesh));
                             mesh
                         }
                     };

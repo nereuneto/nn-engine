@@ -622,7 +622,12 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.count",
         "()",
-        "Quantas malhas foram desenhadas no último quadro.",
+        "Quantas malhas foram pedidas no último quadro.",
+    ),
+    d(
+        "nn.d3.stats",
+        "()",
+        "O que o último quadro 3D desenhou: { meshes = pedidas, visible = na frente da câmera (as outras nem vão para a GPU), shadow = no mapa de sombras, draw_calls = chamadas de desenho }.",
     ),
     d(
         "nn.d3.matrix",

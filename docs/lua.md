@@ -1080,6 +1080,8 @@ local piramide = nn.d3.mesh({
 
 `nn.assets.model(caminho, opts)` carrega um modelo glTF 2.0: o `.glb` (um arquivo só, o mais prático) ou o `.gltf` com o `.bin` e as imagens ao lado. Vêm junto as partes, as posições, rotações e escalas dos objetos, a cor de cada material, as cores dos vértices e a imagem de cor (*base color*) dos materiais. Carregar o mesmo arquivo de novo não gasta memória.
 
+Numa [cena 3D](#cenas-3d), um arquivo que falta ou não abre não para o jogo: um modelo vira um cubo rosa no lugar, um som fica mudo e uma conversa não abre. Cada caso vira um aviso (uma vez só) no console, dizendo o objeto, o componente e o arquivo, por exemplo `objeto "Casa" (Modelo 3D): o arquivo modelos/casa.glb não existe; no lugar dele aparece um cubo rosa`. Já `nn.assets.model` no seu código continua dando erro, para você ver na hora.
+
 | Opção | Descrição |
 |---|---|
 | `flat` | `true`: cada face com um tom só (o visual low-poly), mesmo que o modelo tenha sombreado suave. |
@@ -1242,7 +1244,10 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | `nn.d3.to_screen(x, y, z)` | Onde o ponto aparece na tela (`x, y`), ou `nil` se estiver atrás da câmera. Bom para nomes e barras de vida em cima de coisas 3D. |
 | `nn.d3.ground_point(x, y, altura)` | Onde o ponto da tela toca o chão na `altura` dada (padrão 0): `x, y, z`, ou `nil` se olhar para o céu. |
 | `nn.d3.ray(x, y)` | O raio que sai da câmera pelo ponto da tela: origem e direção (seis números). |
-| `nn.d3.count()` | Quantas malhas foram desenhadas no último quadro. |
+| `nn.d3.count()` | Quantas malhas foram pedidas no último quadro (com as que ficaram fora da tela). |
+| `nn.d3.stats()` | O que o último quadro 3D desenhou: `meshes` (pedidas), `visible` (na frente da câmera), `shadow` (no mapa de sombras) e `draw_calls` (chamadas de desenho). |
+
+O que fica fora da vista da câmera nem vai para a GPU, e o mapa de sombras só recebe o que o sol "vê" perto da câmera: dá para pedir milhares de coisas por quadro e pagar só pelas que aparecem. Cópias da mesma malha (mil árvores iguais) viram uma chamada de desenho só. Para conferir, mostre `nn.d3.stats()` na tela.
 
 Para montar o mundo com o mouse, use uma [cena 3D](#cenas-3d) no NN Studio.
 
