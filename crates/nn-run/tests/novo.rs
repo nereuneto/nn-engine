@@ -350,6 +350,70 @@ fn lua<T: mlua::FromLua>(rt: &ScriptRuntime, code: &str) -> T {
     rt.lua().load(code).eval().unwrap()
 }
 
+/// Roda a cena inicial e todas as cenas visuais do projeto por uns quadros:
+/// nenhuma pode dar erro nem aviso (arquivo que falta). `false` sem GPU.
+fn roda_todas_as_cenas(dir: &Path, nome: &str) -> bool {
+    assert!(
+        ScriptRuntime::new(dir).unwrap().check_syntax().is_empty(),
+        "{nome}"
+    );
+    // A cena inicial e todas as cenas visuais (as cenas em código podem
+    // depender do que a anterior preparou).
+    let mut scenes = vec![Project::open(dir).unwrap().start];
+    if let Ok(list) = std::fs::read_dir(dir.join("cenas")) {
+        for e in list.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            let rel = format!("cenas/{name}");
+            if name.ends_with(".cena") && !scenes.contains(&rel) {
+                scenes.push(rel);
+            }
+        }
+    }
+    assert!(!scenes.is_empty(), "{nome}");
+    for s in scenes {
+        let Some((mut h, rt)) = cena_do_modelo(dir, &s) else {
+            return false;
+        };
+        h.run_frames(90);
+        assert_eq!(h.game.0.error(), None, "{nome} {s}");
+        let avisos: Vec<String> = rt
+            .lua()
+            .named_registry_value::<mlua::Table>("nn.cena")
+            .ok()
+            .and_then(|m| m.get::<Vec<String>>("warnings").ok())
+            .unwrap_or_default();
+        assert!(avisos.is_empty(), "{nome} {s}: {avisos:?}");
+    }
+    true
+}
+
+/// Ferramenta: um projeto feito em outra versão (por exemplo, com o `nn` da
+/// v0.1.0) roda nesta: `NN_PROJETO=<pasta> cargo test -p nn-run --test novo
+/// projeto_de_fora -- --ignored`. O projeto é copiado antes (nada muda nele).
+#[test]
+#[ignore]
+fn projeto_de_fora_roda_todas_as_cenas() {
+    let Some(src) = std::env::var_os("NN_PROJETO") else {
+        return;
+    };
+    let src = PathBuf::from(src);
+    let dir = temp("de-fora");
+    fn copiar(a: &Path, b: &Path) {
+        std::fs::create_dir_all(b).unwrap();
+        for e in std::fs::read_dir(a).unwrap().flatten() {
+            let to = b.join(e.file_name());
+            if e.file_type().unwrap().is_dir() {
+                copiar(&e.path(), &to);
+            } else {
+                std::fs::copy(e.path(), to).unwrap();
+            }
+        }
+    }
+    copiar(&src, &dir);
+    roda_todas_as_cenas(&dir, &src.display().to_string());
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 #[test]
 fn todos_os_modelos_rodam_todas_as_cenas() {
     for template in Template::ALL {
@@ -360,30 +424,8 @@ fn todos_os_modelos_rodam_todas_as_cenas() {
             template,
         })
         .unwrap();
-        assert!(
-            ScriptRuntime::new(&dir).unwrap().check_syntax().is_empty(),
-            "{}",
-            template.name()
-        );
-        // A cena inicial e todas as cenas visuais (as cenas em código podem
-        // depender do que a anterior preparou).
-        let mut scenes = vec![Project::open(&dir).unwrap().start];
-        if let Ok(list) = std::fs::read_dir(dir.join("cenas")) {
-            for e in list.flatten() {
-                let name = e.file_name().to_string_lossy().to_string();
-                let rel = format!("cenas/{name}");
-                if name.ends_with(".cena") && !scenes.contains(&rel) {
-                    scenes.push(rel);
-                }
-            }
-        }
-        assert!(!scenes.is_empty(), "{}", template.name());
-        for s in scenes {
-            let Some((mut h, _rt)) = cena_do_modelo(&dir, &s) else {
-                return;
-            };
-            h.run_frames(90);
-            assert_eq!(h.game.0.error(), None, "{} {s}", template.name());
+        if !roda_todas_as_cenas(&dir, template.name()) {
+            return;
         }
         // O título vai para dentro das cenas também.
         if template == Template::Aventura {

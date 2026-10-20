@@ -1,6 +1,6 @@
 ; Instalador do NN Studio para Windows (Inno Setup 6).
 ; Gerado pelo workflow de release:
-;   iscc /DAppVersion=0.1.0 empacotar\windows\nn-studio.iss
+;   iscc /DAppVersion=0.2.0 empacotar\windows\nn-studio.iss
 ; Instala só para o usuário (sem pedir administrador), em
 ; %LOCALAPPDATA%\Programs\NN Studio, com atalho no menu Iniciar e, se quiser,
 ; na área de trabalho. Desinstala por "Aplicativos instalados".
@@ -50,7 +50,7 @@ Source: "..\..\LICENSE-APACHE"; DestDir: "{app}"; DestName: "LICENSE-APACHE.txt"
 Source: "..\..\CHANGELOG.md"; DestDir: "{app}"
 
 [Icons]
-Name: "{autoprograms}\NN Studio"; Filename: "{app}\nn-studio.exe"; Comment: "Crie jogos 2D com a nn-engine"
+Name: "{autoprograms}\NN Studio"; Filename: "{app}\nn-studio.exe"; Comment: "Crie jogos 2D e 3D com a nn-engine"
 Name: "{autodesktop}\NN Studio"; Filename: "{app}\nn-studio.exe"; Tasks: desktopicon
 
 [Run]

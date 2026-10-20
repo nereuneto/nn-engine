@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=NN Studio
-Comment=Crie jogos 2D com a nn-engine
+Comment=Crie jogos 2D e 3D com a nn-engine
 Exec=nn-studio %F
 Icon=nn-studio
 Categories=Development;IDE;Game;

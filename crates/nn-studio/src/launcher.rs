@@ -32,20 +32,27 @@ struct NewProjectForm {
 
 /// Aviso de versão nova (se a última consulta achou uma mais nova que esta
 /// e a pessoa não pediu para esquecer dela).
-fn update_banner(ui: &mut egui::Ui, settings: &mut Settings) {
-    let Some(latest) = settings.latest_version.clone() else {
-        return;
-    };
+/// Uma versão nova para avisar: o número e a página dela (`None` se não há,
+/// se o aviso está desligado ou se ela foi dispensada com "Agora não").
+pub fn update_available(settings: &Settings) -> Option<(String, String)> {
+    let latest = settings.latest_version.clone()?;
     if !settings.check_updates
         || !crate::update::is_newer(&latest, env!("CARGO_PKG_VERSION"))
         || settings.skipped_version.as_deref() == Some(latest.as_str())
     {
-        return;
+        return None;
     }
     let url = settings
         .latest_url
         .clone()
         .unwrap_or_else(|| crate::update::RELEASES_PAGE.to_string());
+    Some((latest, url))
+}
+
+fn update_banner(ui: &mut egui::Ui, settings: &mut Settings) {
+    let Some((latest, url)) = update_available(settings) else {
+        return;
+    };
     egui::Frame::new()
         .fill(theme::PLAY.gamma_multiply(0.25))
         .inner_margin(10.0)
