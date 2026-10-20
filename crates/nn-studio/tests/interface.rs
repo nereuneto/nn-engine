@@ -3603,7 +3603,7 @@ fn tutorial_uma_conversa_e_o_editor_de_conversa() {
     h.run_steps(2);
     h.get_by_label("💬 Diálogo (conversa)").click();
     h.run_steps(2);
-    h.get_by_label("Criar").click();
+    h.key_press(Key::Enter);
     espera(&mut h, 2);
     assert!(projeto.join("dialogos/conversa.dialogo").is_file());
     assert_eq!(conversa(&mut h).data.nodes.len(), 3);
@@ -3619,7 +3619,7 @@ fn tutorial_uma_conversa_e_o_editor_de_conversa() {
     let saida = nn_studio::tutorial::anchor_rect(&h.ctx, "dialogo.saida:3")
         .unwrap()
         .center();
-    let destino = saida + egui::vec2(120.0, 150.0);
+    let destino = saida + egui::vec2(-60.0, 130.0);
     h.hover_at(saida);
     h.run_steps(1);
     h.drag_at(saida);

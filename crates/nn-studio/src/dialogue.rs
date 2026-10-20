@@ -148,8 +148,8 @@ pub fn template() -> String {
         nodes: vec![
             Node {
                 id: 1,
-                x: 40.0,
-                y: 60.0,
+                x: 30.0,
+                y: 30.0,
                 who: "Ana".into(),
                 text: "Olá! Que bom te ver por aqui.".into(),
                 next: 2,
@@ -157,8 +157,8 @@ pub fn template() -> String {
             },
             Node {
                 id: 2,
-                x: 340.0,
-                y: 60.0,
+                x: 300.0,
+                y: 30.0,
                 who: "Ana".into(),
                 text: "Posso te ajudar?".into(),
                 choices: vec![
@@ -177,8 +177,8 @@ pub fn template() -> String {
             },
             Node {
                 id: 3,
-                x: 640.0,
-                y: 40.0,
+                x: 300.0,
+                y: 200.0,
                 who: "Ana".into(),
                 text: "Procure a chave perto da fogueira.".into(),
                 ..Node::default()
@@ -408,6 +408,10 @@ pub struct DialogueDoc {
     redo: Vec<DialogueData>,
     pub selected: Option<u32>,
     pan: Vec2,
+    /// Zoom da tela (1 = tamanho normal).
+    zoom: f32,
+    /// Enquadrar no próximo quadro (ao abrir e no botão).
+    frame_next: bool,
     drag: Option<Drag>,
     /// O que está sendo editado (mudanças seguidas do mesmo campo viram um
     /// passo só de desfazer).
@@ -449,6 +453,8 @@ impl DialogueDoc {
             redo: Vec::new(),
             selected: None,
             pan: Vec2::ZERO,
+            zoom: 1.0,
+            frame_next: true,
             drag: None,
             group: None,
         }
@@ -507,7 +513,7 @@ impl DialogueDoc {
 
     /// Cria uma fala nova no meio do que está à mostra (e escolhe ela).
     pub fn add_node_at_view(&mut self, view: Rect) -> u32 {
-        let c = view.center() - view.min - self.pan;
+        let c = (view.center() - view.min) / self.zoom - self.pan;
         // Não em cima de outra.
         let (mut x, mut y) = (c.x - CARD_W / 2.0, c.y - 40.0);
         while self
@@ -567,33 +573,41 @@ impl DialogueDoc {
                 .on_hover_text("Mostra todas as falas")
                 .clicked()
             {
-                self.frame_all();
+                self.frame_next = true;
             }
             ui.separator();
             ui.weak("Arraste da bolinha de uma fala até outra para ligar; solte no vazio para criar uma fala.");
         });
 
-        egui::Panel::right(Id::new(("dialogo-painel", &self.rel)))
-            .resizable(true)
-            .default_size(320.0)
-            .min_size(240.0)
-            .show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    crate::tutorial::anchor(ui.ctx(), "dialogo.painel", ui.max_rect());
-                    if let Some(id) = self.selected {
-                        self.node_panel(ui, id, env, &mut group);
-                    } else {
-                        self.conversation_panel(ui, env, &mut group);
-                    }
-                });
+        // A tela das falas à esquerda e o painel da fala à direita.
+        let full = ui.available_rect_before_wrap().intersect(ui.clip_rect());
+        let panel_w = 300.0f32.min(full.width() * 0.45);
+        let view = Rect::from_min_max(full.min, Pos2::new(full.right() - panel_w, full.bottom()));
+        let side = Rect::from_min_max(Pos2::new(view.right(), full.top()), full.max);
+        ui.painter().rect_filled(side, 0.0, ui.visuals().panel_fill);
+        let mut side_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .max_rect(side.shrink2(Vec2::new(8.0, 4.0)))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+        );
+        side_ui.set_clip_rect(side);
+        egui::ScrollArea::vertical()
+            .id_salt(("dialogo-painel", &self.rel))
+            .show(&mut side_ui, |ui| {
+                crate::tutorial::anchor(ui.ctx(), "dialogo.painel", side);
+                if let Some(id) = self.selected {
+                    self.node_panel(ui, id, env, &mut group);
+                } else {
+                    self.conversation_panel(ui, env, &mut group);
+                }
             });
-        egui::CentralPanel::no_frame().show(ui, |ui| {
-            let view = ui.max_rect();
-            if add_clicked {
-                self.add_node_at_view(view);
-            }
-            self.canvas(ui, view, &mut group);
-        });
+        if add_clicked {
+            self.add_node_at_view(view);
+        }
+        let mut canvas_ui = ui.new_child(egui::UiBuilder::new().max_rect(view));
+        canvas_ui.set_clip_rect(view);
+        self.canvas(&mut canvas_ui, view, &mut group);
+        ui.allocate_rect(full, Sense::hover());
 
         // Desfazer: mudanças seguidas no mesmo campo (ou arrastando o mesmo
         // cartão) viram um passo só.
@@ -610,37 +624,75 @@ impl DialogueDoc {
         actions
     }
 
-    fn frame_all(&mut self) {
-        if let Some(min) = self
+    /// Todas as falas à mostra (o zoom diminui se precisar, até 1).
+    fn frame_all(&mut self, view: Rect) {
+        let Some((min, max)) = self
             .data
             .nodes
             .iter()
-            .map(|n| Vec2::new(n.x, n.y))
-            .reduce(|a, b| a.min(b))
-        {
-            self.pan = Vec2::new(30.0, 30.0) - min;
-        }
+            .map(|n| {
+                let h = 60.0 + n.choices.len() as f32 * CHOICE_H + HEADER_H + 30.0;
+                (Vec2::new(n.x, n.y), Vec2::new(n.x + CARD_W, n.y + h))
+            })
+            .reduce(|a, b| (a.0.min(b.0), a.1.max(b.1)))
+        else {
+            self.pan = Vec2::ZERO;
+            self.zoom = 1.0;
+            return;
+        };
+        let size = max - min + Vec2::splat(60.0);
+        let z = (view.width() / size.x)
+            .min(view.height() / size.y)
+            .clamp(0.6, 1.0);
+        self.zoom = z;
+        self.pan = Vec2::splat(30.0) - min;
     }
 
     /// A altura do cartão (o texto quebra em até 4 linhas).
     fn card_rect(&self, origin: Pos2, n: &Node, text_h: f32) -> Rect {
+        let z = self.zoom;
         let rows = if n.choices.is_empty() {
             0.0
         } else {
             n.choices.len() as f32 * CHOICE_H + 6.0
         };
         Rect::from_min_size(
-            origin + Vec2::new(n.x, n.y) + self.pan,
-            Vec2::new(CARD_W, HEADER_H + text_h + 14.0 + rows),
+            origin + (Vec2::new(n.x, n.y) + self.pan) * z,
+            Vec2::new(CARD_W * z, (HEADER_H + 14.0 + rows) * z + text_h),
         )
     }
 
     fn canvas(&mut self, ui: &mut egui::Ui, view: Rect, group: &mut Option<Id>) {
+        if self.frame_next {
+            self.frame_next = false;
+            self.frame_all(view);
+        }
+        // Rodinha do mouse: zoom em volta do ponteiro.
+        if ui.rect_contains_pointer(view) {
+            let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+            if scroll != 0.0
+                && let Some(p) = ui.input(|i| i.pointer.hover_pos())
+            {
+                let old = self.zoom;
+                let new = (old * (1.0 + scroll * 0.002)).clamp(0.3, 2.0);
+                // O ponto embaixo do mouse fica no lugar.
+                let w = (p - view.min) / old - self.pan;
+                self.zoom = new;
+                self.pan = (p - view.min) / new - w;
+            }
+        }
+        let z = self.zoom;
+        let card_w = CARD_W * z;
+        let header_h = HEADER_H * z;
+        let choice_h = CHOICE_H * z;
         let painter = ui.painter_at(view);
         painter.rect_filled(view, 0.0, ui.visuals().extreme_bg_color);
         // Pontinhos de fundo (andam com o arrastar).
-        let step = 24.0;
-        let off = Vec2::new(self.pan.x.rem_euclid(step), self.pan.y.rem_euclid(step));
+        let step = 24.0 * z;
+        let off = Vec2::new(
+            (self.pan.x * z).rem_euclid(step),
+            (self.pan.y * z).rem_euclid(step),
+        );
         let dot = ui.visuals().weak_text_color().gamma_multiply(0.25);
         let mut y = view.top() + off.y;
         while y < view.bottom() {
@@ -660,7 +712,7 @@ impl DialogueDoc {
 
         // Medidas de cada cartão.
         let origin = view.min;
-        let font = egui::FontId::proportional(13.0);
+        let font = egui::FontId::proportional(13.0 * z);
         let text_color = ui.visuals().text_color();
         struct Card {
             id: u32,
@@ -677,7 +729,7 @@ impl DialogueDoc {
                     t = "(sem texto)".into();
                 }
                 let mut job =
-                    egui::text::LayoutJob::simple(t, font.clone(), text_color, CARD_W - 20.0);
+                    egui::text::LayoutJob::simple(t, font.clone(), text_color, (card_w - 20.0) * z);
                 job.wrap.max_rows = 4;
                 let galley = ui.fonts_mut(|f| f.layout_job(job));
                 let rect = self.card_rect(origin, n, galley.size().y);
@@ -696,15 +748,15 @@ impl DialogueDoc {
                 ports.push((
                     n.id,
                     None,
-                    Pos2::new(card.rect.right(), card.rect.top() + HEADER_H / 2.0),
+                    Pos2::new(card.rect.right(), card.rect.top() + header_h / 2.0),
                 ));
             } else {
-                let top = card.rect.bottom() - n.choices.len() as f32 * CHOICE_H - 3.0;
+                let top = card.rect.bottom() - n.choices.len() as f32 * choice_h - 3.0;
                 for i in 0..n.choices.len() {
                     ports.push((
                         n.id,
                         Some(i),
-                        Pos2::new(card.rect.right(), top + (i as f32 + 0.5) * CHOICE_H),
+                        Pos2::new(card.rect.right(), top + (i as f32 + 0.5) * choice_h),
                     ));
                 }
             }
@@ -725,7 +777,7 @@ impl DialogueDoc {
                 continue;
             }
             if let Some(r) = rect_of(next) {
-                let q = Pos2::new(r.left(), r.top() + HEADER_H / 2.0);
+                let q = Pos2::new(r.left(), r.top() + header_h / 2.0);
                 let sel = self.selected == Some(id) || self.selected == Some(next);
                 draw_link(&painter, p, q, if sel { accent } else { link_color });
             }
@@ -753,8 +805,8 @@ impl DialogueDoc {
             if self.drag == Some(Drag::Node { id: n.id }) && resp.dragged() {
                 let d = resp.drag_delta();
                 if let Some(m) = self.data.node_mut(n.id) {
-                    m.x += d.x;
-                    m.y += d.y;
+                    m.x += d.x / z;
+                    m.y += d.y / z;
                 }
                 *group = Some(Id::new(("dialogo-arrastar", n.id)));
             }
@@ -777,7 +829,7 @@ impl DialogueDoc {
                 .character(&n.who)
                 .map(|c| hex_color(&c.color))
                 .unwrap_or(Color32::from_gray(140));
-            let head = Rect::from_min_size(card.rect.min, Vec2::new(CARD_W, HEADER_H));
+            let head = Rect::from_min_size(card.rect.min, Vec2::new(card_w, header_h));
             painter.rect_filled(
                 head.shrink(1.0),
                 egui::CornerRadius {
@@ -798,7 +850,7 @@ impl DialogueDoc {
                 head.left_center() + Vec2::new(22.0, 0.0),
                 egui::Align2::LEFT_CENTER,
                 format!("{}  ·  {who}", n.id),
-                egui::FontId::proportional(13.0),
+                egui::FontId::proportional(13.0 * z),
                 text_color,
             );
             if start {
@@ -806,7 +858,7 @@ impl DialogueDoc {
                     head.right_center() - Vec2::new(10.0, 0.0),
                     egui::Align2::RIGHT_CENTER,
                     "Início",
-                    egui::FontId::proportional(11.0),
+                    egui::FontId::proportional(11.0 * z),
                     Color32::from_rgb(90, 200, 120),
                 );
             } else if n.choices.is_empty() && n.next == 0 {
@@ -814,7 +866,7 @@ impl DialogueDoc {
                     head.right_center() - Vec2::new(14.0, 0.0),
                     egui::Align2::RIGHT_CENTER,
                     "fim",
-                    egui::FontId::proportional(11.0),
+                    egui::FontId::proportional(11.0 * z),
                     ui.visuals().weak_text_color(),
                 );
             }
@@ -826,13 +878,13 @@ impl DialogueDoc {
             );
             // O texto.
             painter.galley(
-                card.rect.min + Vec2::new(10.0, HEADER_H + 6.0),
+                card.rect.min + Vec2::new(10.0 * z, header_h + 6.0 * z),
                 card.text.clone(),
                 text_color,
             );
             // As escolhas.
             if !n.choices.is_empty() {
-                let top = card.rect.bottom() - n.choices.len() as f32 * CHOICE_H - 3.0;
+                let top = card.rect.bottom() - n.choices.len() as f32 * choice_h - 3.0;
                 painter.line_segment(
                     [
                         Pos2::new(card.rect.left() + 6.0, top - 2.0),
@@ -841,7 +893,7 @@ impl DialogueDoc {
                     Stroke::new(1.0, ui.visuals().widgets.noninteractive.bg_stroke.color),
                 );
                 for (i, c) in n.choices.iter().enumerate() {
-                    let y = top + (i as f32 + 0.5) * CHOICE_H;
+                    let y = top + (i as f32 + 0.5) * choice_h;
                     let mut t = format!("{}. {}", i + 1, c.text);
                     if t.chars().count() > 30 {
                         t = t.chars().take(29).collect::<String>() + "…";
@@ -850,7 +902,7 @@ impl DialogueDoc {
                         Pos2::new(card.rect.left() + 12.0, y),
                         egui::Align2::LEFT_CENTER,
                         t,
-                        egui::FontId::proportional(12.5),
+                        egui::FontId::proportional(12.5 * z),
                         accent,
                     );
                 }
@@ -904,7 +956,7 @@ impl DialogueDoc {
                                 .node(from)
                                 .map(|n| n.who.clone())
                                 .unwrap_or_default();
-                            let at = p - origin - self.pan;
+                            let at = (p - origin) / z - self.pan;
                             self.data.add_node(at.x, at.y - HEADER_H / 2.0, &who)
                         }
                     };
@@ -929,7 +981,7 @@ impl DialogueDoc {
             self.drag = Some(Drag::Pan);
         }
         if self.drag == Some(Drag::Pan) {
-            self.pan += bg.drag_delta();
+            self.pan += bg.drag_delta() / z;
         }
         if bg.clicked() && !clicked_card {
             self.selected = None;

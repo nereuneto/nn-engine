@@ -579,12 +579,13 @@ pub fn image_dir(tree: &FileTree, chosen: &str) -> String {
         .unwrap_or_default()
 }
 
-/// Pasta sugerida para diálogos novos: a escolhida, ou `dialogos`.
+/// Pasta sugerida para diálogos novos: `dialogos` (ou uma pasta dentro
+/// dela, se for a escolhida).
 fn dialogue_dir(chosen: &str) -> String {
-    if chosen.is_empty() {
-        "dialogos".into()
-    } else {
+    if chosen == "dialogos" || chosen.starts_with("dialogos/") {
         chosen.to_string()
+    } else {
+        "dialogos".into()
     }
 }
 
