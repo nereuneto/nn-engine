@@ -300,7 +300,7 @@ com explicação ao passar o mouse.
 | Jogador | Jogador top-down | Anda em todas as direções (jogo visto de cima). |
 | Jogador | Vida | Pontos de vida. Quando acabam: reinicia a cena, volta ao checkpoint, vai para outra cena ou o objeto some. |
 | Inimigos | Patrulha | Anda até bater numa parede (ou chegar na beirada) e volta. |
-| Inimigos | Perseguir | Vai atrás do jogador (ou de outro objeto) quando ele chega perto; andando ou voando. |
+| Inimigos | Perseguir | Vai atrás do jogador (ou de outro objeto) quando ele chega perto; andando ou voando. Voando (também num jogo visto de cima), **Contorna paredes**: dá a volta nas paredes e nos tiles sólidos em vez de ficar preso. |
 | Inimigos | Perigo | Espinho, lava, inimigo: tira vida, manda de volta ao checkpoint ou reinicia. Com **Pisar derrota**, pular em cima destrói o inimigo. |
 | Itens | Coletável | Some quando o jogador encosta e soma numa variável do jogo (com som e brilho). |
 | Fases | Checkpoint | Ao passar, o jogador volta para cá quando perder. |
@@ -547,6 +547,8 @@ E o caminho de volta, do jogo para o editor:
   selecionado, o Inspetor mostra as variáveis do jogo agora.
 - **Pausar / Continuar / Avançar 1 quadro**, na barra da cena, congelam o
   jogo para olhar com calma.
+- **🧭 Caminhos** mostra no jogo por onde os inimigos podem andar (a grade de
+  caminhos, azulada) e o caminho que cada um está seguindo (pontos amarelos).
 - **Ctrl+clique** num objeto, na janela do jogo, seleciona ele no editor.
 - **Eventos ao vivo:** o que você muda nas regras também vale na hora, e cada
   regra **acende** no painel Eventos quando dispara no jogo. Ótimo para
@@ -820,7 +822,15 @@ o rangido). O **Coletável** solta um brilho 3D ao ser pego.
   persegue (e desiste se ele fugir para longe). Quem encosta perde uma vida e
   é empurrado; **pular em cima** derrota o inimigo (com Vida, tira uma vida
   dele a cada pisão). Num modelo animado, como o `bicho.glb`, ele toca
-  *parado* e *andar* sozinho, e preso numa parede, troca de rumo.
+  *parado* e *andar* sozinho.
+- **Contorna paredes e buracos** (ligado): o Inimigo 3D acha um caminho em
+  volta de paredes, árvores e cenário, e não entra em buracos, barrancos nem
+  na água de um Terreno. O caminho vem da **grade de caminhos** da cena,
+  montada sozinha a partir dos Corpos 3D parados e dos terrenos. Para ver a
+  grade, abra o jogo com **▶ Testar daqui** e ligue **🧭 Caminhos** na barra
+  da cena: no jogo, o chão andável fica azulado e cada inimigo mostra os
+  pontos do caminho que segue. Portas e plataformas que andam não entram na
+  grade (desviar delas é com a física).
 - **Perigo** (Inimigos): lava, espinhos, um tiro. Machuca e empurra quem
   encosta.
 - **Atirar** (Ações): no 3D, o tiro (um prefab) sai da frente do objeto,

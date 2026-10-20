@@ -1159,6 +1159,18 @@ fn jogo_conta_onde_estao_os_objetos_e_o_editor_pausa() {
         assert!(start.elapsed().as_secs() < 10, "não chegou: {t}");
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    // Caminhos pede para o jogo mostrar a grade dos caminhos.
+    h.get_by_label("🧭 Caminhos").click();
+    h.run_steps(3);
+    let start = std::time::Instant::now();
+    loop {
+        let t = std::fs::read_to_string(&arquivo).unwrap_or_default();
+        if t.contains(r#"{"cmd":"show_paths"}"#) {
+            break;
+        }
+        assert!(start.elapsed().as_secs() < 10, "não chegou: {t}");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     h.key_press_modifiers(Modifiers::SHIFT, Key::F5);
     h.run_steps(3);
 }

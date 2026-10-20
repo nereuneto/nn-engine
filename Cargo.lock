@@ -2837,10 +2837,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "nn-nav"
+version = "0.2.0"
+dependencies = [
+ "glam 0.34.1",
+]
+
+[[package]]
 name = "nn-physics"
 version = "0.2.0"
 dependencies = [
  "glam 0.34.1",
+ "nn-nav",
 ]
 
 [[package]]
@@ -2848,6 +2856,7 @@ name = "nn-physics3d"
 version = "0.2.0"
 dependencies = [
  "glam 0.34.1",
+ "nn-nav",
  "rapier3d",
 ]
 
@@ -2892,6 +2901,7 @@ dependencies = [
  "nn-audio",
  "nn-core",
  "nn-input",
+ "nn-nav",
  "nn-physics",
  "nn-physics3d",
  "nn-render",

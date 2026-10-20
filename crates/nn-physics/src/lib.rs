@@ -9,6 +9,8 @@
 //! - [`CollisionGrid`]: tiles sólidos e plataformas de mão única.
 //! - Sensores: não colidem, mas geram [`Event::Enter`] / [`Event::Exit`].
 //! - Consultas: [`World::raycast`], [`World::query_point`], [`World::query_aabb`].
+//! - Caminhos: [`World::nav_grid`] monta a grade por onde dá para andar
+//!   (para inimigos que contornam paredes num jogo visto de cima).
 
 mod grid;
 mod shape;
@@ -18,6 +20,7 @@ use std::collections::{HashMap, HashSet};
 use glam::Vec2;
 
 pub use grid::{Cell, CollisionGrid};
+pub use nn_nav::{NavGrid, Path as NavPath};
 pub use shape::{Aabb, Shape};
 
 use shape::{EPS, overlap, raycast_circle, separation};
@@ -742,6 +745,61 @@ impl World {
             })
             .map(|(oid, _)| oid)
             .collect()
+    }
+
+    /// A grade de caminhos: as células onde cabe alguém de raio `radius`
+    /// sem encostar em corpos parados (sólidos, não sensores) nem em tiles
+    /// sólidos. Plataformas de mão única e corpos que se movem não bloqueiam.
+    /// `area`: o pedaço do mundo coberto (sem ela, o que cobre os corpos
+    /// parados e as grades, com uma folga).
+    pub fn nav_grid(&self, area: Option<Aabb>, cell: f32, radius: f32) -> NavGrid {
+        let cell = cell.max(1.0);
+        let r = radius.max(0.0);
+        let walls = || {
+            self.bodies()
+                .map(|(_, b)| b)
+                .filter(|b| b.kind == BodyKind::Static && !b.sensor && !b.one_way)
+        };
+        let area = area.unwrap_or_else(|| {
+            let mut lo = Vec2::splat(f32::MAX);
+            let mut hi = Vec2::splat(f32::MIN);
+            for b in walls() {
+                let a = b.aabb();
+                lo = lo.min(a.min);
+                hi = hi.max(a.max);
+            }
+            for g in self.grids() {
+                let size = g.cell_size() * Vec2::new(g.width() as f32, g.height() as f32);
+                lo = lo.min(g.origin);
+                hi = hi.max(g.origin + size);
+            }
+            if lo.x > hi.x {
+                lo = Vec2::splat(-512.0);
+                hi = Vec2::splat(512.0);
+            }
+            Aabb::new(lo - cell * 2.0, hi + cell * 2.0)
+        });
+        let mut nav = NavGrid::new(area.min, area.max, cell);
+        for b in walls() {
+            match b.shape {
+                Shape::Circle { radius } => nav.block_circle(b.position, radius + r),
+                Shape::Rect { .. } => {
+                    let a = b.aabb();
+                    nav.block_rect(a.min - r, a.max + r);
+                }
+            }
+        }
+        for g in self.grids() {
+            for row in 0..g.height() as i32 {
+                for col in 0..g.width() as i32 {
+                    if g.get(col, row) == Cell::Solid {
+                        let a = g.cell_aabb(col, row);
+                        nav.block_rect(a.min - r, a.max + r);
+                    }
+                }
+            }
+        }
+        nav
     }
 
     /// Lança um raio de `origin` na direção `dir` até `max_distance`.

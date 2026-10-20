@@ -594,6 +594,7 @@ function Object:destroy()
     M.events.signal(self.scene, { kind = "destruido", obj = self })
   end
   self.alive = false
+  if self._nav_static and self.scene then self.scene._nav_dirty = true end
   if self.body and self.body.alive then
     if self._s3 and self.scene and self.scene._by_body3 then
       self.scene._by_body3[self.body.id] = nil
@@ -1232,6 +1233,10 @@ local function make_body(scene, o, c)
   end
   o.body = scene.world:body(opts)
   scene._by_body[o.body.id] = o
+  if c.body == "static" and not c.sensor then
+    o._nav_static = true
+    scene._nav_dirty = true
+  end
   o._sx, o._sy, o._px, o._py = o.x, o.y, o.x, o.y
 end
 
@@ -1327,6 +1332,10 @@ local function make_body3(scene, o, c)
   }
   body3_shape(o, c, opts)
   M.attach_body3(scene, o, world:body(opts))
+  if c.body == "static" and not c.sensor then
+    o._nav_static = true
+    scene._nav_dirty = true
+  end
 end
 
 -- Antes do passo: o que o jogo mudou à mão (x, y, z, rotação) vai para o corpo.
@@ -1388,6 +1397,9 @@ local function step3(scene, dt)
   if not scene._world3 then return {} end
   sync_bodies3_before(scene)
   local events = scene._world3:step(dt)
+  -- (As consultas da física, como a grade de caminhos, valem depois do
+  -- primeiro passo.)
+  scene._stepped3 = true
   sync_bodies3_after(scene)
   for _, e in ipairs(events) do
     e.object_a = e.a and scene._by_body3[e.a.id] or nil
@@ -1975,6 +1987,168 @@ function M.water_level(scene, x, z)
   end
   return nil
 end
+
+-- Caminhos -------------------------------------------------------------------
+
+--- A grade de caminhos da cena (montada na primeira vez que alguém pede, e
+--- de novo quando um corpo parado aparece ou some). No 3D, a água dos
+--- terrenos também bloqueia. nil se a cena não tem física.
+function M.nav(scene)
+  if scene._nav and not scene._nav_dirty then return scene._nav end
+  scene._nav_dirty = false
+  local nav
+  if scene._3d then
+    if not (scene._world3 and scene._stepped3) then
+      scene._nav_dirty = true
+      return nil
+    end
+    local opts = {}
+    for k, v in pairs(scene._nav_opts or {}) do opts[k] = v end
+    -- A água dos terrenos: o chão debaixo dela não vale (uma ponte vale).
+    local water = {}
+    for _, o in ipairs(scene._terrains or {}) do
+      local c = o.alive and o:component("terrain")
+      if c and c.water then
+        local x, y, z = o:position3d()
+        water[#water + 1] = { x - c.width / 2, z - c.depth / 2, x + c.width / 2, z + c.depth / 2,
+          y + c.water_level - 0.2 }
+      end
+    end
+    for _, w in ipairs(opts.water or {}) do water[#water + 1] = w end
+    opts.water = water
+    nav = scene._world3:nav(opts)
+  else
+    if not scene.world then return nil end
+    local opts = {}
+    for k, v in pairs(scene._nav_opts or {}) do opts[k] = v end
+    if not opts.area then
+      -- A cena toda: os corpos parados e os tiles (o padrão) e também onde
+      -- estão os objetos, com uma folga.
+      local x0, y0, x1, y1
+      for _, o in ipairs(scene.object_list) do
+        if o.alive and not M.is_hud(o) then
+          local x, y = o:world_transform()
+          x0, y0 = math.min(x0 or x, x), math.min(y0 or y, y)
+          x1, y1 = math.max(x1 or x, x), math.max(y1 or y, y)
+        end
+      end
+      if x0 then
+        -- (Uma grade grossa só para saber onde ficam as paredes.)
+        local gx0, gy0, gx1, gy1 = scene.world:nav({ cell = 64, radius = 0 }):bounds()
+        local m = 256
+        opts.area = { math.min(x0 - m, gx0), math.min(y0 - m, gy0),
+          math.max(x1 + m, gx1), math.max(y1 + m, gy1) }
+      end
+    end
+    nav = scene.world:nav(opts)
+  end
+  scene._nav = nav
+  return nav
+end
+
+-- Um objeto ou um ponto ({x, y} no 2D, {x, z} no 3D) no chão da grade.
+local function nav_point(scene, p)
+  if type(p) == "table" and p.alive ~= nil and p.position3d then
+    if scene._3d then
+      local x, _, z = p:position3d()
+      return x, z
+    end
+    local x, y = p:world_transform()
+    return x, y
+  end
+  if scene._3d then return p.x or p[1], p.z or p[3] or p[2] end
+  return p.x or p[1], p.y or p[2]
+end
+
+--- Um caminho de `a` até `b` (objetos ou pontos): a lista de pontos e se
+--- chega mesmo lá. nil se a cena não tem física ou se `a` está longe de
+--- qualquer lugar andável.
+function M.path(scene, a, b)
+  local nav = M.nav(scene)
+  if not nav then return nil, false end
+  local ax, ay = nav_point(scene, a)
+  local bx, by = nav_point(scene, b)
+  return nav:path(ax, ay, bx, by)
+end
+
+--- Para os comportamentos: a próxima parada de quem está em (x, y) indo para
+--- (tx, ty), contornando o que bloqueia. `st` guarda o caminho entre um
+--- quadro e outro (uma tabela do comportamento). Devolve o ponto para onde
+--- andar agora (o próprio destino, se dá para ir reto).
+function M.steer(scene, st, x, y, tx, ty, dt)
+  local nav = M.nav(scene)
+  if not nav then return tx, ty end
+  st.t = (st.t or 0) + (dt or 1 / 60)
+  local reach = nav.cell * 0.6
+  -- Reto, se nada no meio.
+  if nav:sight(x, y, tx, ty) then
+    st.path = nil
+    return tx, ty
+  end
+  local moved = st.tx and ((st.tx - tx) ^ 2 + (st.ty - ty) ^ 2) > (nav.cell * 2) ^ 2
+  if not st.path or moved or st.t > 0.5 then
+    st.t = 0
+    st.tx, st.ty = tx, ty
+    local p = nav:path(x, y, tx, ty)
+    st.path, st.i = p, 2
+  end
+  local p = st.path
+  if not p or not p[st.i] then return tx, ty end
+  local q = p[st.i]
+  local qy = scene._3d and q.z or q.y
+  -- Chegou nesta parada: vai para a próxima (ou pula, se já dá para ver).
+  while p[st.i + 1] do
+    local n = p[st.i + 1]
+    local ny = scene._3d and n.z or n.y
+    local near = ((q.x - x) ^ 2 + (qy - y) ^ 2) < reach * reach
+    if near or nav:sight(x, y, n.x, ny) then
+      st.i = st.i + 1
+      q, qy = n, ny
+    else
+      break
+    end
+  end
+  return q.x, qy
+end
+
+-- Mostra a grade e os caminhos (botão Caminhos do NN Studio, NN_CAMINHOS=1).
+local function draw_paths(scene)
+  if not (nn._show_paths and nn._show_paths()) then return end
+  local nav = M.nav(scene)
+  if not nav then return end
+  if scene._3d then
+    nn.d3.draw(nav:mesh(), { color = "#3CC8FF8C", shadow = false })
+    scene._nav_dot = scene._nav_dot or nn.d3.sphere(1)
+    for _, o in ipairs(scene.object_list) do
+      local st = o.alive and o._nav_state
+      if st and st.path then
+        for i = (st.i or 2), #st.path do
+          local q = st.path[i]
+          nn.d3.draw(scene._nav_dot, { x = q.x, y = q.y + 0.25, z = q.z, scale = 0.18,
+            color = "#FFD166", shadow = false })
+        end
+      end
+    end
+  else
+    if not scene._nav_cells or scene._nav_cells_of ~= nav then
+      scene._nav_cells, scene._nav_cells_of = nav:cells(), nav
+    end
+    local s = nav.cell * 0.7
+    for _, c in ipairs(scene._nav_cells) do
+      nn.draw.rect(c.x, c.y, s, s, "#3CC8FF80")
+    end
+    for _, o in ipairs(scene.object_list) do
+      local st = o.alive and o._nav_state
+      if st and st.path then
+        for i = (st.i or 2), #st.path do
+          local q = st.path[i]
+          nn.draw.circle(q.x, q.y, 4, "#FFD166")
+        end
+      end
+    end
+  end
+end
+M.draw_paths = draw_paths
 
 --- Aplica o ambiente de uma cena 3D (céu, sol, luz, névoa e sombras) e
 --- devolve os valores usados.
@@ -2630,6 +2804,7 @@ function M.draw(scene)
   end
   for _, fx in pairs(scene._fx or {}) do fx:draw() end
   each_behavior(scene, "draw")
+  M.draw_paths(scene)
   draw_prompt(scene)
   if M.dialogue then M.dialogue.draw(scene) end
 end
@@ -2891,6 +3066,26 @@ function M.new(data, path)
   function scene:checkpoint()
     local c = M.checkpoints[path]
     if c then return c.x, c.y, c.z end
+  end
+
+  --- A grade de caminhos da cena (nav:path, nav:walkable, nav:sight...).
+  --- Montada na primeira vez; nil se a cena não tem física.
+  function scene:nav()
+    return M.nav(self)
+  end
+
+  --- Um caminho de `a` até `b` (objetos ou pontos {x, y}; no 3D, {x, z}):
+  --- os pontos ({x, y}, ou {x, y, z} no 3D) e se chega mesmo lá.
+  function scene:path(a, b)
+    return M.path(self, a, b)
+  end
+
+  --- Para os comportamentos: a próxima parada de quem está em (x, y) indo
+  --- para (tx, ty) contornando paredes (no 3D, x e z). `st` é uma tabela
+  --- do comportamento, que guarda o caminho de um quadro para o outro; `dt`
+  --- o tempo do passo (o caminho é refeito a cada meio segundo).
+  function scene:steer(st, x, y, tx, ty, dt)
+    return M.steer(self, st, x, y, tx, ty, dt)
   end
 
   --- O mundo da física 3D da cena (nn.physics3d), criado na primeira vez.

@@ -353,9 +353,9 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:topdown` | Jogador visto de cima: anda nas 4 direções. | `velocidade` (260) |
 | `nn:vida` | (2D e 3D) Pontos de vida; recebe `dano(n)` e `curar(n)`. | `vidas` (3), `variavel` ("vidas": espelha numa variável do jogo), `invencivel` (1 s), `ao_acabar` ("reiniciar", "checkpoint", "cena", "destruir", "nada"), `cena`, `piscar` (true), `barra` (false: uma barra de vida flutuando em cima), `cor_barra` |
 | `nn:patrulha` | Anda até uma parede (ou a beirada) e volta. Precisa de corpo. | `velocidade` (120), `direcao` ("direita"), `beirada` (true), `espelhar` (true) |
-| `nn:perseguir` | Vai atrás do alvo quando ele chega perto. | `alvo` ("" = jogador), `velocidade` (150), `visao` (320), `voar` (false), `espelhar` (true) |
+| `nn:perseguir` | Vai atrás do alvo quando ele chega perto. Voando (ou num jogo visto de cima), contorna as paredes pelos [caminhos](#caminhos-inimigos-que-contornam-paredes). | `alvo` ("" = jogador), `velocidade` (150), `visao` (320), `voar` (false), `contornar` (true, só voando), `espelhar` (true) |
 | `nn:perigo` | (2D e 3D) Machuca quem encosta. | `quem` (""), `acao` ("dano", "checkpoint", "reiniciar"), `dano` (1), `pisar` (false: pular em cima destrói), `some` (false), `empurrao` (520; no 3D, 7 m/s) |
-| `nn:inimigo3d` | (3D) Anda sozinho, persegue o jogador quando ele chega perto e machuca quem encosta. Cria o próprio corpo (como o Jogador 3D) e, num modelo animado, toca parado e andar. Pisado: manda `dano` para a Vida dele (sem Vida, some) e `derrotado`. | `andar` ("patrulha": de onde começa até `x`, `z` e volta; "vagar": sem rumo até `raio` m; "parado"), `x` (6), `z` (0), `raio` (6), `velocidade` (2), `perseguir` (true), `visao` (8 m; desiste a 1,6 × isso), `correr` (3.5), `dano` (1), `empurrao` (7), `pisar` (true), `virar` (true), `animar` (true), `anim_parado`, `anim_andar` |
+| `nn:inimigo3d` | (3D) Anda sozinho, persegue o jogador quando ele chega perto e machuca quem encosta. Cria o próprio corpo (como o Jogador 3D) e, num modelo animado, toca parado e andar. Pisado: manda `dano` para a Vida dele (sem Vida, some) e `derrotado`. | `andar` ("patrulha": de onde começa até `x`, `z` e volta; "vagar": sem rumo até `raio` m; "parado"), `x` (6), `z` (0), `raio` (6), `velocidade` (2), `perseguir` (true), `visao` (8 m; desiste a 1,6 × isso), `correr` (3.5), `contornar` (true: acha um [caminho](#caminhos-inimigos-que-contornam-paredes) em volta de paredes, árvores, buracos e água), `dano` (1), `empurrao` (7), `pisar` (true), `virar` (true), `animar` (true), `anim_parado`, `anim_andar` |
 | `nn:coletavel` | Some ao ser tocado e soma numa variável; pode guardar um item no [inventário](#inventário-nninventory). | `quem` (""), `variavel` ("moedas"; "" = não soma), `valor` (1), `item` ("": o nome do item que vai para o inventário, como "chave"), `icone` (a imagem do item; vazio = a do objeto, no 2D), `som`, `brilho` (true), `cor_brilho` |
 | `nn:gatilho` | (2D e 3D) Zona de gatilho: avisa quando alguém entra ou sai dela (pela caixa do objeto) e some no jogo. Manda `entrou` e `saiu` (com quem) para a própria zona e a mensagem escolhida para os objetos `alvo`. | `quem` (""), `alvo` (""), `mensagem` ("abrir"), `mensagem_saida` (""), `uma_vez` (false), `som`, `invisivel` (true) |
 | `nn:interagir` | (2D e 3D) Perto do objeto aparece "E  usar"; apertando E (ou o Y do controle) ele manda `interagiu` (com quem) e a `mensagem` para os objetos `alvo`. Pode pedir um item do inventário (sem ele, o aviso diz o que falta e manda `falta_item`). Só o objeto mais perto do jogador mostra o aviso. | `texto` ("usar"), `distancia` (24 px; no 3D, 1.2 m, da borda), `quem` (""), `alvo` (""), `mensagem` ("abrir"), `item` (""), `gastar` (true), `texto_sem_item` ("Precisa de: {item}"), `uma_vez` (false), `som` |
@@ -477,6 +477,31 @@ No script da cena, `self:start_dialogue("dialogos/ana.dialogo", ana)` abre uma c
 ### Interações ("E para abrir")
 
 O Interagir e a Porta 3D usam o mesmo aviso: perto do objeto aparece a tecla (E, ou Y se o controle foi o último usado) e o que ela faz. De tudo o que está perto, só o mais perto do jogador mostra o aviso e responde à tecla. Um comportamento seu pode usar o mesmo sistema: chame `self.scene:interaction(self, quem, distancia, texto, trancado)` no `update`; ele devolve o objeto que apertou a tecla (ou `nil`). `self.scene:gap(a, b)` é a distância entre as caixas de dois objetos (0 se encostam).
+
+### Caminhos (inimigos que contornam paredes)
+
+Cada cena com física tem uma **grade de caminhos**: o chão dividido em quadradinhos, cada um marcado como andável ou não. Ela é montada sozinha na primeira vez que alguém pede (e de novo quando um corpo parado aparece ou some):
+
+- **No 3D**, células de 0,5 m. Um raio procura o chão de cada uma (os corpos parados: chão, terreno, cenário) e confere se cabe alguém em pé ali. Debaixo de uma plataforma no ar vale o chão; uma ponte por cima da água vale. Não é andável: paredes, árvores, o que não tem chão (buracos), a água dos terrenos e um desnível maior que um degrau (45 cm) entre duas células (barrancos).
+- **No 2D** (jogos vistos de cima), células de 16 unidades. Bloqueiam os corpos parados (menos sensores e plataformas de mão única) e os tiles sólidos, com uma folga de 12.
+- Corpos que se movem (portas, plataformas que andam, caixas) não entram na grade: quem anda desvia deles pela física.
+
+O Inimigo 3D e o Perseguir (voando) usam a grade com **Contorna paredes** ligado: vão em linha reta quando dá e, quando não dá, seguem o caminho, refeito a cada meio segundo. No NN Studio, com o jogo aberto, **🧭 Caminhos** (na barra da cena) mostra no jogo as células andáveis e o caminho de cada inimigo; `NN_CAMINHOS=1` faz o mesmo ao abrir o jogo pelo terminal.
+
+No Lua:
+
+| Função | O que faz |
+|---|---|
+| `scene:path(a, b)` | Um caminho de `a` até `b` (objetos ou pontos `{x, y}`; no 3D, `{x, z}`): a lista de pontos (`{x, y}`, ou `{x, y, z}` no 3D, com o y do chão) e `true` se chega mesmo lá (`false`: leva ao lugar mais perto). |
+| `scene:steer(estado, x, y, tx, ty, dt)` | Para um comportamento seu: para onde andar agora, indo de (x, y) para (tx, ty) e contornando o que bloqueia (no 3D, x e z). `estado` é uma tabela sua, que guarda o caminho entre um quadro e outro. Guarde-a também em `self.obj._nav_state` para o botão Caminhos mostrar. |
+| `scene:nav()` | A grade da cena (ou `nil` sem física). |
+| `nav:path(x1, y1, x2, y2)` | Como `scene:path`, com números. |
+| `nav:walkable(x, y)`, `nav:sight(x1, y1, x2, y2)` | Dá para andar ali? Dá para ir reto de um ponto ao outro? |
+| `nav:floor(x, z)` | A altura do chão (3D). |
+| `nav:block(x1, y1, x2, y2)`, `nav:unblock(...)` | Bloqueia ou libera um retângulo (uma ponte que caiu, uma porta trancada). |
+| `nav.cell`, `nav.columns`, `nav.rows`, `nav.walkable_count`, `nav:bounds()` | O tamanho das células, da grade e o pedaço coberto. |
+
+Para montar uma grade com outras medidas, ponha antes `scene._nav_opts = { cell = 0.25, radius = 0.3, height = 1.8, step = 0.3 }` e marque `scene._nav_dirty = true`. Fora das cenas visuais, `mundo:nav(opts)` (de [`nn.physics`](#nnphysics) ou [`nn.physics3d`](#nnphysics3d-física-3d)) devolve uma grade nova; no 3D, chame depois de um `mundo:step`.
 
 ### Eventos: "Quando... Então..."
 
@@ -824,7 +849,7 @@ end
 
 O jogo de plataforma (`jogos/plataforma/lib/inimigos.lua`) tem uma lesma que patrulha (vira na parede com `touching_left`/`touching_right` e na beirada com `mapa:solid`) e um morcego que persegue o jogador quando ele chega perto.
 
-O mundo tem `:step(dt)` (chame em `fixed_update`), `:body(opts)`, `:add_tilemap(mapa)`, `:raycast(x, y, dx, dy, distancia, mascara)` (devolve `{ x, y, nx, ny, distance, body }` ou `nil`), `:query_point(x, y)`, `:query_rect(x, y, w, h)`, `:bodies(tag)`, `:debug_draw()` e os campos `gravity_x`, `gravity_y` e `count`.
+O mundo tem `:step(dt)` (chame em `fixed_update`), `:body(opts)`, `:add_tilemap(mapa)`, `:raycast(x, y, dx, dy, distancia, mascara)` (devolve `{ x, y, nx, ny, distance, body }` ou `nil`), `:query_point(x, y)`, `:query_rect(x, y, w, h)`, `:bodies(tag)`, `:debug_draw()`, `:nav({ cell = 16, radius = 12, area = { x1, y1, x2, y2 } })` (a [grade de caminhos](#caminhos-inimigos-que-contornam-paredes)) e os campos `gravity_x`, `gravity_y` e `count`.
 
 Os eventos de `step` são tabelas `{ type = "enter" | "exit", a = corpo, b = corpo }`. Pelo menos um dos dois é sensor; se só um for, ele vem em `a`.
 
@@ -1428,6 +1453,7 @@ A gravidade do mundo cuida da queda. Ele empurra os corpos dinâmicos e entra no
 
 Outros métodos do mundo:
 - `:raycast(x, y, z, dx, dy, dz, distancia, ignorar)`: devolve `{ x, y, z, nx, ny, nz, distance, body }` ou `nil`. Ignora os sensores e o corpo `ignorar` (quem atira). Com `nn.d3.ray(mx, my)`, diz o que está embaixo do mouse.
+- `:nav({ cell = 0.5, radius = 0.35, height = 1, step = 0.45, slope = 50, area = { x1, z1, x2, z2 }, water = { { x1, z1, x2, z2, nível }, ... } })`: a [grade de caminhos](#caminhos-inimigos-que-contornam-paredes) do chão (depois de um `:step`).
 - `:query_sphere(x, y, z, raio)`: os corpos dentro da esfera.
 - `:bodies(tag)`: os corpos com esse rótulo, ou todos.
 - `:debug_draw()`.

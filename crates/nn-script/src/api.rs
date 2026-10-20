@@ -863,6 +863,12 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
             Ok(())
         })?,
     )?;
+    // Mostrar os caminhos dos inimigos (botão Caminhos do NN Studio, ou
+    // NN_CAMINHOS=1 ao abrir o jogo).
+    nn.set(
+        "_show_paths",
+        lua.create_function(|_, ()| Ok(crate::live::show_paths()))?,
+    )?;
     Ok(())
 }
 

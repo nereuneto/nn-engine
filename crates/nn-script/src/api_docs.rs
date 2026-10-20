@@ -436,12 +436,12 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.physics3d.world",
         "(opts)",
-        "Cria um mundo 3D ({ gravity = -9.81 }): :body(opts), :character(opts), :step(dt), :raycast(...), :debug_draw().",
+        "Cria um mundo 3D ({ gravity = -9.81 }): :body(opts), :character(opts), :step(dt), :raycast(...), :nav(opts) (grade de caminhos), :debug_draw().",
     ),
     d(
         "nn.physics.world",
         "(opts)",
-        "Cria um mundo físico ({ gravity = -1800 }): :body(opts), :step(dt), :raycast(...).",
+        "Cria um mundo físico ({ gravity = -1800 }): :body(opts), :step(dt), :raycast(...), :nav(opts) (grade de caminhos).",
     ),
     // Mapas
     d("nn.tilemap", "", "Mapas de tiles (Tiled)."),

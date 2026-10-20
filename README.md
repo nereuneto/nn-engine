@@ -186,6 +186,7 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-app` | Janela, loop principal, trait `Game`, cenas, assets, interface (menus), dados salvos, leitura dos controles ([gilrs](https://gitlab.com/gilrs-project/gilrs)) e modo sem janela (`Headless`) para testes |
 | `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, camadas, raycast |
 | `nn-physics3d` | Física 3D sobre o [rapier](https://rapier.rs): corpos que caem e empilham, personagem que anda e pula, sensores, raios |
+| `nn-nav` | Caminhos: grade de lugares por onde dá para andar e A*, para os inimigos contornarem paredes, buracos e água (2D e 3D) |
 | `nn-tilemap` | Tilemaps com camadas, tilesets e objetos; importação do editor Tiled (JSON) |
 | `nn-script` | Scripting em Lua: API `nn.*` (com a documentação de cada função em `api_docs`), cenas em Lua e cenas visuais (`.cena`), comportamentos prontos, eventos "Quando... Então...", prefabs, variáveis do jogo, recarga ao salvar, canal ao vivo com o editor, tela de erro |
 | `nn-run` | Ferramenta `nn` (cria, roda e exporta projetos Lua, com os modelos de `nn novo`) e `nn-jogo`, o executável dos jogos exportados |

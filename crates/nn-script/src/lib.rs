@@ -35,6 +35,7 @@ mod d3;
 mod errors;
 mod input;
 pub mod live;
+mod nav;
 mod particles;
 mod physics;
 mod physics3d;
@@ -763,6 +764,7 @@ impl LuaScene {
                         mlua::LuaSerdeExt::from_value::<serde_json::Value>(&lua, state)
                 {
                     json["paused"] = serde_json::Value::Bool(live::paused());
+                    json["paths"] = serde_json::Value::Bool(live::show_paths());
                     live::report(&json);
                 }
                 if let Some(id) = picked {

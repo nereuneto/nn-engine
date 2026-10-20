@@ -18,6 +18,8 @@ local B = {
     { "visao", 8, label = "Vê o jogador a", min = 0, show_if = { "perseguir", true },
       help = "Metros. Longe assim e mais um pouco, ele desiste e volta." },
     { "correr", 3.5, label = "Velocidade perseguindo", min = 0, show_if = { "perseguir", true } },
+    { "contornar", true, label = "Contorna paredes e buracos",
+      help = "Acha um caminho em volta de paredes, árvores, buracos e água, em vez de ir reto e ficar preso." },
     { "dano", 1, label = "Dano", min = 0, help = "Vida que tira do jogador (comportamento Vida)." },
     { "empurrao", 7, label = "Empurrão", min = 0, advanced = true },
     { "pisar", true, label = "Morre se pisarem em cima",
@@ -60,6 +62,9 @@ function B:start()
   self.ultimo = { x, z }
   self.alvo = nil
   self.caca = nil
+  -- O caminho em volta do que bloqueia (scene:steer guarda aqui).
+  self.rota = {}
+  o._nav_state = self.rota
 end
 
 -- O jogador mais perto (e a distância no chão).
@@ -127,6 +132,11 @@ function B:fixed_update(dt)
     local tx, tz, v = self:destino(dt)
     if tx then
       local x, _, z = o:position3d()
+      if self.contornar then
+        tx, tz = self.scene:steer(self.rota, x, z, tx, tz, dt)
+      else
+        self.rota.path = nil
+      end
       local dx, dz = tx - x, tz - z
       local n = math.sqrt(dx * dx + dz * dz)
       if n > 0.05 then vx, vz = dx / n * v, dz / n * v end
