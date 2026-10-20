@@ -1505,8 +1505,19 @@ function E.step(scene, dt)
     local sx, sy = nn.input.mouse()
     for _, o in ipairs(scene.object_list) do
       -- Itens de menu avisam o clique ao soltar o botão (como "clicou").
-      if o.alive and not o._ui and o:shown() and E.hit(o, wx, wy, sx, sy) then
+      -- No 3D, o mundo é pelo raio do mouse (abaixo); aqui só o HUD.
+      if o.alive and not o._ui and o:shown() and (not scene._3d or is_hud(o))
+        and E.hit(o, wx, wy, sx, sy) then
         scene._clicked[o] = true
+      end
+    end
+    if scene._3d and sx then
+      -- 3D: o objeto do mundo mais perto que o mouse aponta (e os pais dele:
+      -- clicar no modelo de um personagem é clicar nele).
+      local o = M.pick3d(scene, sx, sy, function(x) return not x._ui end)
+      while o do
+        scene._clicked[o] = true
+        o = o.parent
       end
     end
   end

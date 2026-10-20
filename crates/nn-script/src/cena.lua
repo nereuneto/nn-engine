@@ -692,7 +692,13 @@ end
 --- houver, senão da imagem, da forma, do texto ou do componente de interface.
 function Object:bounds()
   local b = self.body
-  if b and b.alive then
+  if self.scene and self.scene._3d and not M.is_hud(self) then
+    -- 3D: a caixa no mundo (em metros), em X e Y. (O corpo 3D não tem
+    -- largura e altura como o 2D.)
+    local x0, y0, _, x1, y1 = self:bounds3d()
+    return (x1 - x0) / 2, (y1 - y0) / 2
+  end
+  if b and b.alive and b.width then
     if b.radius and b.radius > 0 then return b.radius, b.radius end
     return b.width / 2, b.height / 2
   end
@@ -2753,6 +2759,34 @@ function M.state(scene)
   return { scene = scene._path, objects = objects, vars = vars, fired = M.events.take_fired(scene) }
 end
 
+--- No 3D: o objeto do mundo mais perto da câmera cuja caixa o raio que sai
+--- do ponto (sx, sy) da tela acerta (ou nil).
+function M.pick3d(scene, sx, sy, filter)
+  local ox, oy, oz, dx, dy, dz = nn.d3.ray(sx, sy)
+  if not ox then return nil end
+  local best, best_t
+  for _, o in ipairs(scene.object_list) do
+    if o.alive and o:shown() and not M.is_hud(o) and (not filter or filter(o)) then
+      local b = { o:bounds3d() }
+      -- Raio contra a caixa (método das fatias).
+      local t0, t1 = 0, math.huge
+      local p, d = { ox, oy, oz }, { dx, dy, dz }
+      for k = 1, 3 do
+        local lo, hi = b[k], b[k + 3]
+        if math.abs(d[k]) < 1e-9 then
+          if p[k] < lo or p[k] > hi then t0 = math.huge break end
+        else
+          local a, c = (lo - p[k]) / d[k], (hi - p[k]) / d[k]
+          if a > c then a, c = c, a end
+          t0, t1 = math.max(t0, a), math.min(t1, c)
+        end
+      end
+      if t0 <= t1 and (not best_t or t0 < best_t) then best, best_t = o, t0 end
+    end
+  end
+  return best
+end
+
 --- O objeto da cena (do arquivo) sob o ponto x, y do mundo.
 function M.pick(scene, x, y)
   local list = scene._draw_list or {}
@@ -2976,8 +3010,17 @@ function M.new(data, path)
     end
     local picked
     if nn.input.down("ctrl") and nn.input.mouse_pressed("left") then
-      local x, y = nn.input.mouse_world()
-      if x then picked = M.pick(self, x, y) end
+      if self._3d then
+        -- 3D: o que o raio do mouse acerta primeiro (o dono que está no
+        -- arquivo, se for parte de um prefab).
+        local sx, sy = nn.input.mouse()
+        local o = sx and M.pick3d(self, sx, sy)
+        while o and o.id <= 0 do o = o.parent end
+        if o then picked = o.id end
+      else
+        local x, y = nn.input.mouse_world()
+        if x then picked = M.pick(self, x, y) end
+      end
     end
     return state, picked
   end
