@@ -376,6 +376,13 @@ fn roda_todas_as_cenas(dir: &Path, nome: &str) -> bool {
         };
         h.run_frames(90);
         assert_eq!(h.game.0.error(), None, "{nome} {s}");
+        // Um clique no meio da tela (no 3D, é o que prende o mouse no jogo).
+        h.ctx.input.set_cursor(Some(glam::Vec2::new(160.0, 90.0)));
+        h.ctx.input.press_mouse(nn_input::MouseButton::Left);
+        h.run_frames(1);
+        h.ctx.input.release_mouse(nn_input::MouseButton::Left);
+        h.run_frames(2);
+        assert_eq!(h.game.0.error(), None, "{nome} {s}, depois de um clique");
         let avisos: Vec<String> = rt
             .lua()
             .named_registry_value::<mlua::Table>("nn.cena")

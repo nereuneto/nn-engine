@@ -967,3 +967,79 @@ fn arquivos_que_faltam_viram_avisos_e_o_jogo_continua() {
     assert_eq!(h.ctx.renderer.last_mesh_count(), 3);
     assert!(lua::<bool>(&rt, "C:dialogue() == nil"));
 }
+
+/// Um clique do mouse numa cena 3D com corpos (como para prender o mouse no
+/// jogo) não dá erro, e "Clique no objeto" acerta o que o mouse aponta.
+#[test]
+fn clique_do_mouse_no_3d_acerta_o_objeto_e_nao_da_erro() {
+    let dir = projeto(
+        "clique",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            (
+                "cenas/mundo.cena",
+                &mundo(
+                    r#"{ id = 2, name = "Cubo", y = 0.5,
+      components = { { type = "shape3d", shape = "cube" }, { type = "body3d", body = "static" } } },
+    { id = 3, name = "Placar", components = { { type = "text", text = "oi", hud = true } } },"#,
+                )
+                .replace(
+                    "objects = {",
+                    r#"events = {
+    { when = { { cond = "clicar", quem = "Cubo" } },
+      actions = { { act = "variavel", var = "clicou", op = "somar", valor = 1 } } },
+    { when = { { cond = "clicar", quem = "Chão" } },
+      actions = { { act = "variavel", var = "chao", op = "somar", valor = 1 } } },
+  },
+  objects = {"#,
+                ),
+            ),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    let clicar = |h: &mut Headless<Uma>, x: f32, y: f32| {
+        h.ctx.input.set_cursor(Some(glam::Vec2::new(x, y)));
+        h.ctx.input.press_mouse(nn_input::MouseButton::Left);
+        h.run_frames(1);
+        h.ctx.input.release_mouse(nn_input::MouseButton::Left);
+        h.run_frames(2);
+    };
+    h.run_frames(3);
+    // O mouse no meio da tela: a câmera padrão olha para o centro, o cubo.
+    clicar(&mut h, 32.0, 32.0);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(lua::<i64>(&rt, "nn.vars.clicou or 0"), 1);
+    assert_eq!(
+        lua::<i64>(&rt, "nn.vars.chao or 0"),
+        0,
+        "o cubo está na frente"
+    );
+    // Embaixo, só o chão.
+    clicar(&mut h, 32.0, 62.0);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(lua::<i64>(&rt, "nn.vars.clicou or 0"), 1);
+    assert_eq!(lua::<i64>(&rt, "nn.vars.chao or 0"), 1);
+    // No céu, nada (e nada de erro).
+    clicar(&mut h, 32.0, 1.0);
+    assert_eq!(h.game.0.error(), None);
+    // A caixa 2D de um objeto 3D (bounds) vem da caixa 3D.
+    let (w, hh): (f64, f64) = rt
+        .lua()
+        .load("return C.objects.Cubo:bounds()")
+        .eval()
+        .unwrap();
+    assert!(
+        (w - 0.5).abs() < 0.01 && (hh - 0.5).abs() < 0.01,
+        "{w} {hh}"
+    );
+    // Ctrl+clique (aberto pelo editor, para selecionar lá): o cubo, sem erro.
+    nn_script::live::enable();
+    h.ctx.input.press_key(KeyCode::ControlLeft);
+    clicar(&mut h, 32.0, 32.0);
+    h.ctx.input.release_key(KeyCode::ControlLeft);
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
