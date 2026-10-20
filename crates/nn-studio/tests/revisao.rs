@@ -250,3 +250,52 @@ fn capturas_do_3d_para_a_documentacao() {
         .open_file("dialogos/pescador.dialogo", None);
     gravar(&mut h, "nn-studio-conversa.png");
 }
+
+/// Ferramenta: um projeto feito em outra versão (por exemplo, com o `nn` da
+/// v0.1.0) abre no NN Studio, e cada cena e prefab é gravado de novo pelo
+/// editor numa cópia: `NN_PROJETO=<pasta> NN_SAIDA=<pasta nova> cargo test
+/// -p nn-studio --test revisao projeto_de_fora -- --ignored`. Depois, o
+/// teste `projeto_de_fora` do nn-run confere que a cópia ainda roda.
+#[test]
+#[ignore]
+fn projeto_de_fora_abre_e_grava_no_editor() {
+    let (Some(src), Some(out)) = (std::env::var_os("NN_PROJETO"), std::env::var_os("NN_SAIDA"))
+    else {
+        return;
+    };
+    let (src, out) = (PathBuf::from(src), PathBuf::from(out));
+    fn copiar(a: &Path, b: &Path) {
+        std::fs::create_dir_all(b).unwrap();
+        for e in std::fs::read_dir(a).unwrap().flatten() {
+            let to = b.join(e.file_name());
+            if e.file_type().unwrap().is_dir() {
+                copiar(&e.path(), &to);
+            } else {
+                std::fs::copy(e.path(), to).unwrap();
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&out);
+    copiar(&src, &out);
+    let dir = temp("de-fora");
+    let mut h = studio(&dir, Some(out.clone()), egui::vec2(1280.0, 720.0));
+    let files: Vec<String> = h
+        .state()
+        .project()
+        .unwrap()
+        .files
+        .entries()
+        .iter()
+        .filter(|e| e.rel.ends_with(".cena") || e.rel.ends_with(".prefab"))
+        .map(|e| e.rel.clone())
+        .collect();
+    for rel in &files {
+        h.state_mut().project_mut().unwrap().open_file(rel, None);
+        passos(&mut h);
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut(rel.as_str()).expect("abriu");
+        assert_eq!(doc.error, None, "{rel}");
+        doc.save(&out).unwrap();
+        eprintln!("gravado: {rel}");
+    }
+}

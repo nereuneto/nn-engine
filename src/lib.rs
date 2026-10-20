@@ -1,6 +1,6 @@
 //! # nn-engine
 //!
-//! Engine de jogos 2D em Rust.
+//! Engine de jogos 2D e 3D em Rust.
 //!
 //! ```no_run
 //! use nn_engine::prelude::*;

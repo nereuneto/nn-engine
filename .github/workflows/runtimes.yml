@@ -6,7 +6,7 @@ name: Release
 #
 # - Rodando à mão (Actions > Release > Run workflow): só gera os arquivos,
 #   para baixar e conferir (aba Summary > Artifacts). Não publica nada.
-# - Com uma tag `v*` (ex.: `git tag v0.1.0 && git push origin v0.1.0`):
+# - Com uma tag `v*` (ex.: `git tag v0.2.0 && git push origin v0.2.0`):
 #   publica a release com os arquivos e as notas do CHANGELOG.md. A tag
 #   precisa ser igual à versão do Cargo.toml.
 on:
@@ -164,6 +164,10 @@ jobs:
           VERSAO="${GITHUB_REF_NAME#v}"
           awk -v v="## $VERSAO" '$0 == v {on=1; next} /^## / {on=0} on' CHANGELOG.md > notas.md
           test -s notas.md || { echo "::error::O CHANGELOG.md não tem a seção ## $VERSAO"; exit 1; }
+          # Links relativos (docs/3d.md, README.md#baixar) viram links para
+          # os arquivos desta versão no GitHub.
+          B="https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}"
+          sed -i -E "s#\]\((docs/|README\.md|CHANGELOG\.md|LICENSE)#](${B}/\1#g" notas.md
           cat >> notas.md <<'FIM'
 
           ### Baixar

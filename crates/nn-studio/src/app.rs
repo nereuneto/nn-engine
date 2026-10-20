@@ -630,6 +630,18 @@ impl StudioApp {
                     .on_hover_text("Mostra todas as opções");
                 ui.selectable_value(&mut self.settings.mode, Mode::Simples, "Simples")
                     .on_hover_text("Mostra só o essencial");
+                // Versão nova: o aviso também aparece com um projeto aberto.
+                if let Some((latest, url)) = crate::launcher::update_available(&self.settings) {
+                    ui.separator();
+                    ui.hyperlink_to(
+                        RichText::new(format!("🎉 Versão {latest}")).color(theme::PLAY),
+                        url,
+                    )
+                    .on_hover_text(format!(
+                        "Saiu o NN Studio {latest} (você tem a {}). Clique para ver o que mudou e baixar.",
+                        env!("CARGO_PKG_VERSION")
+                    ));
+                }
             });
         });
         out
@@ -852,10 +864,17 @@ impl StudioApp {
                     });
                 });
                 ui.add_space(6.0);
-                ui.label("O editor da nn-engine, para criar jogos 2D: cenas montadas com o mouse, eventos sem código e Lua para quem quiser programar.");
+                ui.label("O editor da nn-engine, para criar jogos 2D e 3D: cenas montadas com o mouse, eventos sem código e Lua para quem quiser programar.");
                 ui.hyperlink_to(
                     "github.com/nereuneto/nn-engine",
                     "https://github.com/nereuneto/nn-engine",
+                );
+                ui.hyperlink_to(
+                    format!("Novidades da versão {}", env!("CARGO_PKG_VERSION")),
+                    format!(
+                        "https://github.com/nereuneto/nn-engine/releases/tag/v{}",
+                        env!("CARGO_PKG_VERSION")
+                    ),
                 );
                 ui.weak(format!(
                     "{} {} · licença MIT ou Apache-2.0",

@@ -2571,6 +2571,37 @@ fn aviso_de_versao_nova_no_gerenciador() {
     assert!(h.query_by_label_contains("Saiu o NN Studio").is_none());
 }
 
+/// Com um projeto aberto, a versão nova aparece na barra de cima; o Sobre
+/// leva às novidades da versão instalada.
+#[test]
+fn aviso_de_versao_nova_com_projeto_aberto() {
+    let dir = temp("versao-projeto");
+    std::fs::write(
+        dir.join("preferencias.json"),
+        r#"{ "latest_version": "9.0.0", "latest_url": "https://example.com/v9", "last_update_check": 1 }"#,
+    )
+    .unwrap();
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj));
+    h.get_by_label("🎉 Versão 9.0.0");
+    tela(&mut h, "versao-nova-projeto");
+    // Dispensada no gerenciador ("Agora não"), some daqui também.
+    h.state_mut().settings.skipped_version = Some("9.0.0".into());
+    h.run();
+    assert!(h.query_by_label("🎉 Versão 9.0.0").is_none());
+    // Uma versão igual ou mais velha não aparece.
+    h.state_mut().settings.skipped_version = None;
+    h.state_mut().settings.latest_version = Some(env!("CARGO_PKG_VERSION").into());
+    h.run();
+    assert!(h.query_by_label_contains("🎉 Versão").is_none());
+    // Ajuda > Sobre: o link das novidades desta versão.
+    paleta(&mut h, "Sobre");
+    h.get_by_label(&format!(
+        "Novidades da versão {}",
+        env!("CARGO_PKG_VERSION")
+    ));
+}
+
 // Cenas 3D ---------------------------------------------------------------
 
 fn com_cena3d(h: &mut Harness<'_, StudioApp>, proj: &Path) {
