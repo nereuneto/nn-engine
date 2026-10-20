@@ -834,7 +834,7 @@ fn inimigos_3d() -> Tutorial {
             },
             Step {
                 title: "Corações na tela",
-                text: "➕ Objeto > Vazio. No Inspetor: ➕ Adicionar componente > Interface > Ícones. Em Imagem, escolha assets/imagens/coracao.png e, em Variável, vidas: um coração por vida, preso no canto da tela.",
+                text: "➕ Objeto > Na tela (HUD) > Ícones. O que é da tela aparece por cima da cena, na moldura da tela do jogo: arraste os ícones para o canto de cima. No Inspetor, em Imagem, escolha assets/imagens/coracao.png e, em Variável, vidas: um coração por vida.",
                 target: Some("cena.objeto"),
                 show: Some(Tab::Inspector),
                 done: Some(|ws, _| {

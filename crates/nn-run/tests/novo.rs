@@ -824,3 +824,47 @@ fn miniaturas_dos_modelos() {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
+
+/// Ferramenta: grava as imagens dos jogos 3D do README e do guia "Comece aqui
+/// no 3D" (`cargo test -p nn-run --test novo capturas -- --ignored`).
+#[test]
+#[ignore]
+fn capturas_dos_jogos_3d() {
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/imagens");
+    for (template, file, frente) in [
+        (Template::Visual3D, "jogo-ilha-3d.png", 25),
+        (Template::Vale3D, "jogo-vale-3d.png", 45),
+    ] {
+        let dir = temp(&format!("captura-{}", template.name()));
+        create_project(&NewOptions {
+            dir: dir.clone(),
+            title: Some("Meu jogo".into()),
+            template,
+        })
+        .unwrap();
+        let project = Project::open(&dir).unwrap();
+        let scene = project.start.clone();
+        let rt = ScriptRuntime::new(&dir).unwrap();
+        let config = project
+            .config
+            .clone()
+            .size(1280, 720)
+            .save_dir(dir.join("dados"))
+            .hot_reload(false);
+        let Ok(mut h) = Headless::new(config, move |ctx| {
+            let mut s = rt.scene(scene);
+            s.enter(ctx);
+            Uma(s)
+        }) else {
+            return;
+        };
+        // A dica do começo some depois de 4 segundos; depois, anda um pouco.
+        h.run_frames(260);
+        h.ctx.input.press_key(KeyCode::KeyW);
+        h.run_frames(frente);
+        h.ctx.input.release_key(KeyCode::KeyW);
+        h.run_frames(40);
+        h.save_png(out.join(file)).unwrap();
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}

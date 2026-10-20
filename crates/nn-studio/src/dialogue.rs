@@ -550,7 +550,7 @@ impl DialogueDoc {
 
         // Barra de cima.
         let mut add_clicked = false;
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             let r = ui
                 .button("➕ Fala")
                 .on_hover_text("Uma fala nova (ou arraste da bolinha de uma fala para o vazio)");
@@ -624,7 +624,7 @@ impl DialogueDoc {
         actions
     }
 
-    /// Todas as falas à mostra (o zoom diminui se precisar, até 1).
+    /// Todas as falas à mostra (o zoom diminui se precisar, até 0,45).
     fn frame_all(&mut self, view: Rect) {
         let Some((min, max)) = self
             .data
@@ -643,7 +643,7 @@ impl DialogueDoc {
         let size = max - min + Vec2::splat(60.0);
         let z = (view.width() / size.x)
             .min(view.height() / size.y)
-            .clamp(0.6, 1.0);
+            .clamp(0.45, 1.0);
         self.zoom = z;
         self.pan = Vec2::splat(30.0) - min;
     }

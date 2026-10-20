@@ -977,6 +977,8 @@ As opções são as do 2D, com estas diferenças: `direction` é `{x, y, z}` (pa
 
 ### nn.d3 (3D)
 
+> Começando no 3D? O guia [Comece aqui no 3D](3d.md) mostra os caminhos (sem código no NN Studio ou em Lua), os tutoriais e onde está cada peça.
+
 O mundo 3D é desenhado **antes** de todo o 2D: sprites, `nn.screen` e menus ficam por cima, então o HUD de um jogo 3D é feito como sempre. O visual é *low-poly*: cada face recebe um tom só de luz, vindo do sol (que faz sombras) e de uma luz ambiente do céu e do chão. As coordenadas usam **Y para cima** e a unidade é livre (pense em metros: o cubo pronto tem 1 de lado).
 
 #### Seu primeiro mundo 3D, passo a passo
@@ -1255,7 +1257,7 @@ Para montar o mundo com o mouse, use uma [cena 3D](#cenas-3d) no NN Studio.
 
 O modelo `3d` cria um jogo de plataforma 3D em terceira pessoa, já jogando: a **Ilha das Estrelas**. São 5 estrelas escondidas, moedas, plataformas que andam, cronômetro, pausa com opções da câmera e recorde salvo. Este guia mostra como transformá-lo no seu jogo.
 
-**1. Crie e jogue.** No NN Studio, escolha **Novo projeto > 3D**, ou pelo terminal:
+**1. Crie e jogue.** No NN Studio, escolha **Novo projeto > Jogos 3D > 3D em código**, ou pelo terminal:
 
 ```sh
 cargo nn novo ../minha-ilha --modelo 3d

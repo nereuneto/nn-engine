@@ -555,6 +555,21 @@ impl Placed<'_> {
 /// Objetos visíveis em ordem de desenho (camada, depois a ordem da árvore),
 /// como a engine faz. Inclui os filhos que vêm dos prefabs.
 pub fn draw_order(scene: &SceneData) -> Vec<Placed<'_>> {
+    draw_order_where(scene, |_| true)
+}
+
+/// Só o que fica preso à tela (HUD e menus), em ordem de desenho: numa cena
+/// 3D, é o que aparece por cima do mundo.
+pub fn screen_order(scene: &SceneData) -> Vec<Placed<'_>> {
+    draw_order_where(scene, |o| scene.is_screen(o))
+}
+
+/// Como [`draw_order`], só com os objetos da raiz que passam em `keep` (e os
+/// filhos deles).
+pub fn draw_order_where<'a>(
+    scene: &'a SceneData,
+    keep: impl Fn(&Object) -> bool,
+) -> Vec<Placed<'a>> {
     fn walk<'a>(
         scene: &SceneData,
         list: &'a [Object],
@@ -593,7 +608,9 @@ pub fn draw_order(scene: &SceneData) -> Vec<Placed<'_>> {
         }
     }
     let mut out = Vec::new();
-    walk(scene, &scene.objects, None, None, &mut out, 0);
+    for o in scene.objects.iter().filter(|o| keep(o)) {
+        walk(scene, std::slice::from_ref(o), None, None, &mut out, 0);
+    }
     out.sort_by_key(|p| p.object.layer);
     out
 }
@@ -698,7 +715,7 @@ pub fn particle_config3(
 
 /// Prévia de um emissor 3D na cena do editor.
 struct Preview3 {
-    props: String,
+    props: Vec<(String, Prop)>,
     emitter: nn_render::d3::ParticleEmitter3,
     time: f32,
     next: f32,
@@ -707,7 +724,7 @@ struct Preview3 {
 /// Prévia de um emissor na cena do editor.
 struct Preview {
     /// Os campos do componente quando o emissor foi feito.
-    props: String,
+    props: Vec<(String, Prop)>,
     emitter: ParticleEmitter,
     /// Último relógio visto.
     time: f32,
@@ -753,6 +770,11 @@ pub struct View3 {
     pub background: Color,
     /// Passo da grade no chão (0 = sem grade).
     pub grid: f32,
+    /// A câmera 2D que põe a tela do jogo dentro da vista: com ela, o HUD
+    /// (e os menus) aparecem por cima do mundo, como no jogo.
+    pub hud: Option<Camera2D>,
+    /// Usa a névoa da cena (o editor pode desligar para ver de longe).
+    pub fog: bool,
     /// Segundos desde que a vista abriu (para a prévia das animações e das
     /// partículas).
     pub time: f32,
@@ -877,7 +899,7 @@ impl SceneRenderer {
             sun_color: col("sun_color"),
             sky: col("ambient_sky"),
             ground: col("ambient_ground"),
-            fog: on("fog").then(|| Fog {
+            fog: (view.fog && on("fog")).then(|| Fog {
                 color: None,
                 near: num("fog_near"),
                 far: num("fog_far"),
@@ -1105,13 +1127,28 @@ impl SceneRenderer {
             }
         }
 
+        // O HUD por cima, na tela do jogo.
+        let camera2d = match view.hud {
+            Some(camera) => {
+                let hud = RenderView {
+                    camera,
+                    size,
+                    background: view.background,
+                    time: view.time,
+                    particles: true,
+                    bursts: view.bursts.clone(),
+                };
+                let mut seen = Vec::new();
+                self.draw_placed(key, root, &screen_order(scene), &hud, &mut seen);
+                self.previews.retain(|k, _| k.0 != key || seen.contains(k));
+                camera
+            }
+            None => Camera2D::default(),
+        };
+
         let target = &self.targets[key];
-        self.renderer.render(
-            &target.view,
-            size,
-            &Camera2D::default(),
-            Some(view.background),
-        );
+        self.renderer
+            .render(&target.view, size, &camera2d, Some(view.background));
         target.id
     }
 
@@ -1145,19 +1182,18 @@ impl SceneRenderer {
         };
         let k = (key.to_string(), id, ci);
         seen.push(k.clone());
-        let props = format!("{:?}", c.props);
         let burst = c.str("mode") == "explosao";
         let amount = c.num("amount").max(0.0) as u32;
         let time = view.time;
         let p = self.previews.entry(k).or_insert_with(|| Preview {
-            props: String::new(),
+            props: Vec::new(),
             emitter: ParticleEmitter::new(ParticleConfig::default()),
             time,
             next: time,
         });
-        if p.props != props {
+        if p.props != c.props {
             // Mudou no Inspetor: o emissor começa de novo.
-            p.props = props;
+            p.props = c.props.clone();
             p.emitter = ParticleEmitter::new(particle_config(c, image));
             p.emitter.position = pos;
             p.emitter.emitting = !burst && c.bool("emitting");
@@ -1217,18 +1253,17 @@ impl SceneRenderer {
         let up = m.transform_vector3(glam::Vec3::Y);
         let k = (key.to_string(), id, ci);
         seen.push(k.clone());
-        let props = format!("{:?}", c.props);
         let burst = c.str("mode") == "explosao";
         let amount = c.num("amount").max(0.0) as u32;
         let time = view.time;
         let p = self.previews3.entry(k).or_insert_with(|| Preview3 {
-            props: String::new(),
+            props: Vec::new(),
             emitter: nn_render::d3::ParticleEmitter3::new(Default::default()),
             time,
             next: time,
         });
-        if p.props != props {
-            p.props = props;
+        if p.props != c.props {
+            p.props = c.props.clone();
             p.emitter = nn_render::d3::ParticleEmitter3::new(particle_config3(c, image, up));
             p.emitter.emitting = !burst && c.bool("emitting");
             p.next = time;
@@ -1766,31 +1801,42 @@ impl SceneRenderer {
             camera,
             size,
             background,
-            time,
             ..
         } = view;
-        let (camera, background, time) = (camera, *background, *time);
+        let (camera, background) = (camera, *background);
         let size = size.max(UVec2::ONE);
         self.ensure_target(key, size);
 
-        let viewport = size.as_vec2();
         let mut seen = Vec::new();
-        for placed in draw_order(scene) {
+        self.draw_placed(key, root, &draw_order(scene), view, &mut seen);
+        // Emissores que sumiram desta aba (objeto apagado, componente tirado).
+        self.previews.retain(|k, _| k.0 != key || seen.contains(k));
+        let target = &self.targets[key];
+        self.renderer
+            .render(&target.view, size, camera, Some(background));
+        target.id
+    }
+
+    /// Desenha objetos 2D já postos no mundo (a cena 2D, ou o HUD por cima
+    /// da vista 3D).
+    fn draw_placed(
+        &mut self,
+        key: &str,
+        root: &Path,
+        list: &[Placed<'_>],
+        view: &RenderView,
+        seen: &mut Vec<(String, u32, usize)>,
+    ) {
+        let camera = &view.camera;
+        let time = view.time;
+        let viewport = view.size.max(UVec2::ONE).as_vec2();
+        for placed in list {
             let w = placed.world;
             let pos = Vec2::new(w.x as f32, w.y as f32);
             for (ci, c) in placed.object.components.iter().enumerate() {
                 match c.kind.as_str() {
                     "particles" => {
-                        self.draw_particles(
-                            key,
-                            root,
-                            placed.object.id,
-                            ci,
-                            c,
-                            pos,
-                            view,
-                            &mut seen,
-                        );
+                        self.draw_particles(key, root, placed.object.id, ci, c, pos, view, seen);
                     }
                     "sprite" => {
                         let pixel_art = c.bool("pixel_art");
@@ -1894,12 +1940,6 @@ impl SceneRenderer {
                 }
             }
         }
-        // Emissores que sumiram desta aba (objeto apagado, componente tirado).
-        self.previews.retain(|k, _| k.0 != key || seen.contains(k));
-        let target = &self.targets[key];
-        self.renderer
-            .render(&target.view, size, camera, Some(background));
-        target.id
     }
 
     fn ensure_target(&mut self, key: &str, size: UVec2) {

@@ -585,6 +585,10 @@ sombras, desenhada pela engine do jeito que vai aparecer no jogo.
 
 ![Cena 3D aberta no NN Studio](imagens/nn-studio-3d.png)
 
+Primeira vez no 3D? O guia **[Comece aqui no 3D](3d.md)** mostra por onde
+começar, a ordem dos tutoriais, as peças prontas e o que fazer quando algo
+dá errado.
+
 Para aprender fazendo, o tutorial guiado **Seu primeiro mundo 3D** (em
 [Tutoriais](#tutoriais)) monta um mundo com herói, árvores, uma caixa que cai,
 uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
@@ -656,6 +660,23 @@ uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
   em graus: **Y** vira para os lados, **X** inclina para a frente e para
   trás, **Z** rola.
 
+### HUD e menus no 3D
+
+O que fica preso à tela (placar, corações, avisos, menus) não está no mundo
+3D: aparece **por cima da vista**, dentro de uma moldura com o tamanho da
+tela do jogo, do jeito que fica no jogo. Clique para selecionar e arraste
+para mudar o lugar (as posições são em pixels, a partir do ponto da tela em
+que o objeto está preso). **HUD**, na barra da cena, mostra ou esconde.
+
+Para criar: **➕ Objeto > Na tela (HUD)** tem **Texto na tela** e os
+componentes de interface (painel, botão, barra, ícones e o menu com botões).
+O mesmo menu está no **➕** da Hierarquia.
+
+Ao abrir a cena, a vista olha para o **Jogador 3D** de perto. **⛶ Enquadrar**
+(F) sem nada selecionado mostra a cena toda; de longe, a **Névoa** da vista
+desliga sozinha (marque de novo para ver como fica no jogo; no jogo, a névoa
+continua).
+
 ### Ambiente
 
 | Campo | O que faz |
@@ -687,7 +708,7 @@ entra (para zonas e portas com eventos). No modo Completo aparecem o atrito,
 a massa, "não gira" e o multiplicador da gravidade.
 
 **Colisões**, na barra da cena, mostra os corpos em verde e o Jogador 3D em
-azul.
+azul (no 3D, começa desligado).
 
 ### Jogador 3D
 
@@ -790,8 +811,9 @@ o rangido). O **Coletável** solta um brilho 3D ao ser pego.
   quando elas acabam, a cena começa de novo (ou volta ao checkpoint, ou vai
   para outra cena). Num inimigo, **Quando acabar: some** e **Barra de vida em
   cima** mostram quanto falta.
-- **Corações na tela:** um objeto com **Interface > Ícones**, a imagem
-  `coracao.png` e a variável **vidas** (os modelos 3D já trazem).
+- **Corações na tela:** **➕ Objeto > Na tela (HUD) > Ícones**, com a imagem
+  `coracao.png` e a variável **vidas** (os modelos 3D já trazem; veja
+  [HUD e menus no 3D](#hud-e-menus-no-3d)).
 - **Inimigo 3D** (Inimigos): anda **indo e voltando** (até o X e o Z que
   você escolher, a partir de onde ele começa), **sem rumo** por perto ou
   fica **parado**; quando o herói chega a menos que **Vê o jogador a**,
@@ -1216,5 +1238,15 @@ quase não usa o processador.
 
 ## O que vem depois
 
-A próxima etapa é a **v0.1**: acabamento, revisão dos tutoriais e dos
-modelos, e o NN Studio pronto para instalar.
+A **v0.2** traz o 3D: cenas 3D no NN Studio, física, personagens animados,
+terreno, som e partículas no mundo, inimigos, portas e chaves, conversas e
+o HUD por cima da vista (veja o [CHANGELOG](../CHANGELOG.md)).
+
+Ainda não tem, e são ideias para as próximas versões:
+
+- luzes além do sol (lâmpadas, tochas que iluminam em volta);
+- inimigos que desviam de paredes para achar o caminho até o herói;
+- exportar para a web e para outros sistemas além de Windows e Linux;
+- assinatura digital do instalador do Windows.
+
+Sugestões e problemas: [issues do repositório](https://github.com/nereuneto/nn-engine/issues).

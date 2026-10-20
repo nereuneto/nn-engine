@@ -102,6 +102,14 @@ impl HierarchyPanel {
         }
         ui.horizontal(|ui| {
             ui.menu_button("➕", |ui| {
+                if doc.data.three_d {
+                    // Na cena 3D, o mesmo menu do ➕ Objeto da vista.
+                    if let Some(o) = crate::scene_view::scene3d::add_menu3(ui) {
+                        doc.add_from_menu3(o);
+                        ui.close();
+                    }
+                    return;
+                }
                 if let Some(o) = add_object_menu(ui) {
                     let (x, y) = doc.view_center();
                     doc.add_prepared(o, x, y);
