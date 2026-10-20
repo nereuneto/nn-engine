@@ -2838,7 +2838,7 @@ dependencies = [
 
 [[package]]
 name = "nn-nav"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "glam 0.34.1",
 ]

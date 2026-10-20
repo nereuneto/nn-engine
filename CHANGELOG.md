@@ -2,6 +2,17 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### Caminhos
+
+- **Inimigos que contornam paredes:** o Inimigo 3D e o Perseguir (voando, ou num jogo visto de cima) acham um caminho em volta de paredes, árvores, cenário e tiles sólidos, em vez de ir reto e ficar presos. No 3D, também não entram em buracos, barrancos nem na água dos terrenos. A opção **Contorna paredes** vem ligada (desligue para o jeito de antes).
+- **Grade de caminhos** de cada cena, montada sozinha a partir dos corpos parados (e dos terrenos, no 3D) na primeira vez que alguém pede, e de novo quando um corpo parado aparece ou some. No 3D, vale o chão debaixo de uma plataforma no ar e uma ponte por cima da água.
+- **🧭 Caminhos** no NN Studio (na barra da cena, com o jogo aberto): mostra no jogo o chão por onde dá para andar e o caminho que cada inimigo segue. Pelo terminal, `NN_CAMINHOS=1`.
+- **No Lua:** `scene:path(a, b)`, `scene:steer(...)` (para comportamentos seus), `scene:nav()` com `nav:path`, `nav:walkable`, `nav:sight`, `nav:floor`, `nav:block` e `nav:unblock`, e `mundo:nav(opts)` no `nn.physics` e no `nn.physics3d`.
+- No modelo **Aventura**, as lesmas (que perseguem voando) contornam o lago e a parede de tijolos; no **Vale 3D**, os besouros não entram mais no lago, e na **ilha**, não caem no mar.
+- Crate novo `nn-nav` (a grade e o A*, sem depender do resto da engine).
+
 ## 0.2.1
 
 Correção da 0.2.0.
