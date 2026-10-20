@@ -128,6 +128,9 @@ function B:update(dt)
     end
   end
   local ix, iy = nn.input.move()
+  -- Numa conversa, fica parado.
+  local conversa = self.scene._dlg ~= nil
+  if conversa then ix, iy = 0, 0 end
   local vx, vz = self:direcao(ix, iy)
   if (o.empurrado or 0) > 0 then
     -- Levou um empurrão: o controle volta daqui a pouco.
@@ -142,7 +145,7 @@ function B:update(dt)
     o.ry = o.ry + diff * math.min(1, dt * 12)
     if o._s3 then o._s3[5] = o.ry end
   end
-  if apertou_pulo() then self.pedido = 0.12 end
+  if apertou_pulo() and not conversa and not self.scene._dlg_closed then self.pedido = 0.12 end
   self:animar_modelo(vx, vz)
   self:seguir(dt)
 end

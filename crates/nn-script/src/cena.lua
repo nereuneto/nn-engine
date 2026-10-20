@@ -1081,6 +1081,8 @@ end
 -- Candidata `owner` (um comportamento) a ser usado por quem está a até
 -- `dist` dele. Devolve quem apertou a tecla, se ele foi o escolhido.
 function M.interact(scene, owner, who, dist, text, locked)
+  -- Numa conversa (ou no quadro em que ela fechou), ninguém interage.
+  if scene._dlg or scene._dlg_closed then return nil end
   local o = owner.obj
   local best, near
   for _, p in ipairs(M.targets(scene, who)) do
@@ -1105,7 +1107,7 @@ end
 -- O aviso do escolhido: a tecla e o que ela faz, em cima do objeto.
 local function draw_prompt(scene)
   local ia = scene._ia
-  if not (ia and ia.obj.alive) or ia.text == nil or ia.text == "" then return end
+  if scene._dlg or not (ia and ia.obj.alive) or ia.text == nil or ia.text == "" then return end
   local o = ia.obj
   local key = M.interact_key()
   local font = M.font("")
@@ -1120,6 +1122,13 @@ local function draw_prompt(scene)
   local tcolor = ia.locked and "#FF9A9A" or M.theme("text")
   if scene._3d then
     local x0, _, z0, x1, y1, z1 = o:bounds3d()
+    -- Acima dos filhos também (um nome em cima da cabeça).
+    for _, ch in ipairs(o.children) do
+      if ch.alive and ch:shown() then
+        local _, _, _, _, cy1 = ch:bounds3d()
+        y1 = math.max(y1, cy1)
+      end
+    end
     local sx, sy = nn.d3.to_screen((x0 + x1) / 2, y1 + 0.3, (z0 + z1) / 2)
     if not sx then return end
     local left, top = sx - w / 2, sy - h
@@ -2204,6 +2213,8 @@ function M.update(scene, dt)
   if M.ui then M.ui.update(scene, dt) end
   -- Interações: o escolhido no quadro anterior responde à tecla neste.
   scene._ia_last, scene._ia, scene._ia_used = scene._ia, nil, false
+  -- A conversa aberta vem antes: os jogadores sabem que devem ficar parados.
+  if M.dialogue then M.dialogue.update(scene, dt) end
   each_behavior(scene, "update", dt)
   refresh_list(scene)
   M.events.step(scene, dt)
@@ -2541,6 +2552,7 @@ function M.draw(scene)
   for _, fx in pairs(scene._fx or {}) do fx:draw() end
   each_behavior(scene, "draw")
   draw_prompt(scene)
+  if M.dialogue then M.dialogue.draw(scene) end
 end
 
 --- Ajuste ao vivo vindo do editor: muda um campo de um objeto ou componente.
@@ -2821,6 +2833,23 @@ function M.new(data, path)
   --- Distância entre as caixas de dois objetos (0 se encostam).
   function scene:gap(a, b)
     return M.gap(a, b)
+  end
+
+  --- Começa a conversa do arquivo `.dialogo` (`quem_fala`, um objeto, recebe
+  --- as mensagens conversa_comecou, escolheu e conversa_terminou). Devolve
+  --- false se já houver uma conversa aberta.
+  function scene:start_dialogue(path, quem_fala)
+    return M.dialogue.start(self, path, quem_fala)
+  end
+
+  --- Fecha a conversa aberta.
+  function scene:stop_dialogue()
+    M.dialogue.stop(self, false)
+  end
+
+  --- O arquivo da conversa aberta (nil se não houver).
+  function scene:dialogue()
+    return self._dlg and self._dlg.path or nil
   end
 
   --- Reinicia a cena (com `checkpoint = true`, o jogador volta ao último

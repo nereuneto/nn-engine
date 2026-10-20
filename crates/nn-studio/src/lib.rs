@@ -15,6 +15,7 @@ pub mod complete;
 pub mod config_lua;
 pub mod console;
 pub mod crash;
+pub mod dialogue;
 pub mod events;
 pub mod events_view;
 pub mod examples;

@@ -457,6 +457,54 @@ E.CONDITIONS = {
       return out
     end,
   },
+  -- Conversas
+  {
+    id = "conversa_comecou", name = "Começar uma conversa", category = "Conversas", trigger = true,
+    text = "começar a conversa de {quem}",
+    help = "Uma conversa (.dialogo) abriu: pelo comportamento Diálogo ou pela ação Começar conversa.",
+    props = { who("quem", "", "Quem fala", { allow_empty = "qualquer um" }) },
+    lua = "function B:conversa_comecou(arquivo) ... end",
+    test = function(ctx, p, st, b)
+      local set = p.quem ~= "" and set_of(resolve(ctx.scene, p.quem, b, true)) or nil
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "conversa_comecou")) do
+        if set == nil or (s.obj and set[s.obj]) then table.insert(out, { este = s.obj }) end
+      end
+      return out
+    end,
+  },
+  {
+    id = "conversa_terminou", name = "Terminar uma conversa", category = "Conversas", trigger = true,
+    text = "terminar a conversa de {quem}",
+    props = { who("quem", "", "Quem fala", { allow_empty = "qualquer um" }) },
+    lua = "function B:conversa_terminou(arquivo) ... end",
+    test = function(ctx, p, st, b)
+      local set = p.quem ~= "" and set_of(resolve(ctx.scene, p.quem, b, true)) or nil
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "conversa_terminou")) do
+        if set == nil or (s.obj and set[s.obj]) then table.insert(out, { este = s.obj }) end
+      end
+      return out
+    end,
+  },
+  {
+    id = "escolheu", name = "Escolher numa conversa", category = "Conversas", trigger = true,
+    text = "o jogador escolher {opcao} na conversa de {quem}",
+    help = "O texto da escolha, como está no editor de conversa. Vazio = qualquer uma.",
+    props = { { "opcao", "", label = "Escolha", allow_empty = "qualquer coisa" },
+      who("quem", "", "Quem fala", { allow_empty = "qualquer um" }) },
+    lua = "function B:escolheu(texto) ... end",
+    test = function(ctx, p, st, b)
+      local set = p.quem ~= "" and set_of(resolve(ctx.scene, p.quem, b, true)) or nil
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "escolheu")) do
+        if (set == nil or (s.obj and set[s.obj])) and (p.opcao == "" or s.arg == fill(p.opcao)) then
+          table.insert(out, { este = s.obj })
+        end
+      end
+      return out
+    end,
+  },
   -- Itens
   {
     id = "tem_item", name = "Ter um item", category = "Itens",
@@ -746,6 +794,18 @@ E.ACTIONS = {
       elseif p.op == "subtrair" then nn.vars[p.var] = a - n
       elseif p.op == "maior" then nn.vars[p.var] = math.max(a, n)
       elseif p.op == "menor" then nn.vars[p.var] = math.min(a, n) end
+    end,
+  },
+  {
+    id = "conversa", name = "Começar conversa", category = "Conversas",
+    text = "começar a conversa {arquivo} com {quem}",
+    help = "Abre a caixa de fala com um arquivo .dialogo. Quem fala recebe as mensagens da conversa.",
+    props = { { "arquivo", "", type = "dialogue", label = "Conversa" }, who("quem", "@este", "Quem fala") },
+    lua = "self:start_dialogue(\"{arquivo}\", {quem})",
+    run = function(ctx, p, b)
+      if p.arquivo == "" then return end
+      local owner = resolve(ctx.scene, p.quem, b)[1]
+      ctx.scene:start_dialogue(p.arquivo, owner)
     end,
   },
   {

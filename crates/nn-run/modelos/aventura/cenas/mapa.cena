@@ -69,6 +69,16 @@ return {
       },
     },
     {
+      id = 23, name = "velho",
+      x = -380, y = -110, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 2,
+      components = {
+        { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#B8E0FF", flip_x = true, flip_y = false, pixel_art = true, fill = "stretch", animation = "parado", hud = false },
+        { type = "body", body = "static", shape = "box", w = 40, h = 56, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "behavior", script = "nn:dialogo", arquivo = "dialogos/velho.dialogo", comecar = "tecla", distancia = 24, texto = "falar", uma_vez = false },
+      },
+    },
+    {
       id = 10, name = "lesma",
       x = -160, y = 160, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 1,

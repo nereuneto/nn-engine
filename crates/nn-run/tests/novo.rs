@@ -423,6 +423,37 @@ fn modelo_aventura_chave_abre_a_porta_e_o_bau_termina() {
         "parou na parede de tiles: x = {x}"
     );
     assert_eq!(lua::<i64>(&rt, "return nn.vars.chaves"), 0);
+    // O velho conversa: E perto dele abre a conversa; a escolha "E a
+    // chave?" leva à dica, e a conversa termina.
+    rt.lua()
+        .load("cena.objects.heroi:move_to(-380, -160)")
+        .exec()
+        .unwrap();
+    h.run_frames(3);
+    assert_eq!(lua::<String>(&rt, "return cena._ia.text"), "falar");
+    let tecla = |h: &mut Headless<Uma>, k: KeyCode| {
+        h.ctx.input.press_key(k);
+        h.run_frames(1);
+        h.ctx.input.release_key(k);
+        h.run_frames(2);
+    };
+    tecla(&mut h, KeyCode::KeyE);
+    assert_eq!(
+        lua::<String>(&rt, "return cena:dialogue()"),
+        "dialogos/velho.dialogo"
+    );
+    // Enter mostra o texto todo; Enter de novo passa.
+    for _ in 0..2 {
+        tecla(&mut h, KeyCode::Enter);
+    }
+    assert_eq!(lua::<i64>(&rt, "return cena._dlg.node.id"), 2);
+    tecla(&mut h, KeyCode::Enter);
+    tecla(&mut h, KeyCode::Digit1);
+    assert_eq!(lua::<i64>(&rt, "return cena._dlg.node.id"), 3);
+    tecla(&mut h, KeyCode::Enter);
+    tecla(&mut h, KeyCode::Enter);
+    assert!(lua::<bool>(&rt, "return cena:dialogue() == nil"));
+    assert_eq!(h.game.0.error(), None);
     // Sem chave, a porta avisa.
     rt.lua()
         .load("cena.objects.heroi:move_to(60, 0)")
@@ -587,6 +618,37 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     let ry: f64 = lua(&rt, "return cena.objects['Porta do cofre'].ry");
     assert!((ry + 90.0).abs() > 80.0, "a porta abriu: {ry}");
     assert_eq!(lua::<i64>(&rt, "return nn.inventory.count('chave')"), 0);
+    // O pescador conversa: "Vim sim!" leva às dicas, e a última muda a
+    // variável dica.
+    rt.lua()
+        .load("cena.objects['Herói']:move_to(1.7, 0.1, 6.2)")
+        .exec()
+        .unwrap();
+    h.run_frames(5);
+    assert_eq!(lua::<String>(&rt, "return cena._ia.text"), "falar");
+    let tecla = |h: &mut Headless<Uma>, k: KeyCode| {
+        h.ctx.input.press_key(k);
+        h.run_frames(1);
+        h.ctx.input.release_key(k);
+        h.run_frames(2);
+    };
+    tecla(&mut h, KeyCode::KeyE);
+    assert_eq!(
+        lua::<String>(&rt, "return cena:dialogue()"),
+        "dialogos/pescador.dialogo"
+    );
+    for k in [
+        KeyCode::Enter,
+        KeyCode::Digit1,
+        KeyCode::Enter,
+        KeyCode::Enter,
+        KeyCode::Enter,
+        KeyCode::Enter,
+    ] {
+        tecla(&mut h, k);
+    }
+    assert!(lua::<bool>(&rt, "return cena:dialogue() == nil"));
+    assert_eq!(lua::<f64>(&rt, "return nn.vars.dica"), 1.0);
     // Leva o herói até cada estrela: pega as 5 e o evento de vitória
     // dispara (o som e a espera vêm antes de ir para o fim).
     let estrelas: Vec<(f64, f64, f64)> = rt

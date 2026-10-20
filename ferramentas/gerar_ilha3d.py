@@ -151,6 +151,17 @@ c.obj('Chave', [
     comp('behavior', script='nn:girar3d', velocidade=120, eixo='y', altura=0.15, duracao=2),
 ], x=-8, y=2.1, z=-2, scale_x=1.6, scale_y=1.6, scale_z=1.6)
 
+# O pescador: conversa com o herói (comportamento Diálogo, dialogos/pescador.dialogo).
+c.obj('Pescador', [
+    comp('model', file='modelos/heroi.glb', color='#9FD3FF', flat=False, shadow=True),
+    comp('anim3d', animation='parado', speed=1, loop=True),
+    comp('body3d', body='static'),
+    comp('behavior', script='nn:dialogo', arquivo='dialogos/pescador.dialogo', comecar='tecla',
+         texto='falar', distancia=1.5, uma_vez=False, olhar=True),
+], x=1.8, z=4.8, ry=-23,
+   children=[c.child('Nome', [comp('text3d', text='Pescador', size=0.22, color='#FFFFFF', facing='camera',
+                                    outline='#000000B0', background='', font='')], y=2.15)])
+
 c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
                  comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 5     Moedas {moedas}')],
       x=40, y=-44, anchor='top_left')

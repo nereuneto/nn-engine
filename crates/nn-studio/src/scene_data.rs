@@ -2038,7 +2038,10 @@ mod tests {
                 let p = e.unwrap().path();
                 if p.is_dir() {
                     walk(&p, out);
-                } else if p.extension().is_some_and(|x| x == "cena" || x == "prefab") {
+                } else if p
+                    .extension()
+                    .is_some_and(|x| x == "cena" || x == "prefab" || x == "dialogo")
+                {
                     out.push(p);
                 }
             }
@@ -2051,6 +2054,8 @@ mod tests {
             let name = p.to_string_lossy().to_string();
             let written = if name.ends_with(".prefab") {
                 write_prefab(&read_prefab(&text, &name).unwrap())
+            } else if name.ends_with(".dialogo") {
+                crate::dialogue::write(&crate::dialogue::read(&text, &name).unwrap())
             } else {
                 let mut scene = read(&text, &name).unwrap();
                 let dir = p.parent().and_then(|d| d.parent()).unwrap();

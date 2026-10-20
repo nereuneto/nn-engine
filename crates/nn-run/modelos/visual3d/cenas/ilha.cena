@@ -632,7 +632,29 @@ return {
       },
     },
     {
-      id = 66, name = "Placar",
+      id = 67, name = "Pescador",
+      x = 1.8, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 4.8, rx = 0, ry = -23, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/heroi.glb", color = "#9FD3FF", flat = false, shadow = true },
+        { type = "anim3d", animation = "parado", speed = 1, loop = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+        { type = "behavior", script = "nn:dialogo", arquivo = "dialogos/pescador.dialogo", comecar = "tecla", distancia = 1.5, olhar = true, texto = "falar", uma_vez = false },
+      },
+      children = {
+        {
+          id = 66, name = "Nome",
+          x = 0, y = 2.15, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "text3d", text = "Pescador", size = 0.22, color = "#FFFFFF", facing = "camera", outline = "#000000B0", background = "", font = "" },
+          },
+        },
+      },
+    },
+    {
+      id = 68, name = "Placar",
       x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -641,7 +663,7 @@ return {
       },
     },
     {
-      id = 67, name = "Dica",
+      id = 69, name = "Dica",
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top",
       components = {
@@ -649,7 +671,7 @@ return {
       },
     },
     {
-      id = 68, name = "Corações",
+      id = 70, name = "Corações",
       x = 40, y = -90, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -657,7 +679,7 @@ return {
       },
     },
     {
-      id = 69, name = "Inventário",
+      id = 71, name = "Inventário",
       x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
@@ -665,7 +687,7 @@ return {
       },
     },
     {
-      id = 70, name = "Besouro",
+      id = 72, name = "Besouro",
       x = -9, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -676,7 +698,7 @@ return {
       },
     },
     {
-      id = 71, name = "Besouro",
+      id = 73, name = "Besouro",
       x = 6, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,

@@ -337,7 +337,7 @@ end
 return B
 ```
 
-- **Propriedades** (`props`): lista de `{ "nome", padrão, ... }`. Cada uma vira `self.<nome>`, com o valor que o objeto tem no `.cena` (ou o padrão). Opções: `label`, `help`, `min`, `max`, `integer = true`, `options = { { valor, "texto" }, ... }` (escolha), `advanced = true` (só no modo Completo), `show_if = { "outra", valores... }` (só aparece quando outra propriedade tem um desses valores) e `type`, que normalmente é deduzido do padrão (número, sim/não, cor `"#RRGGBB"`, texto). Para o Inspetor mostrar a lista certa, `type` pode ser `"object"` (nome de um objeto da cena), `"scene"`, `"prefab"`, `"sound"`, `"image"`, `"color"` ou `"choice"`. Também vale um mapa simples: `props = { velocidade = 90 }`.
+- **Propriedades** (`props`): lista de `{ "nome", padrão, ... }`. Cada uma vira `self.<nome>`, com o valor que o objeto tem no `.cena` (ou o padrão). Opções: `label`, `help`, `min`, `max`, `integer = true`, `options = { { valor, "texto" }, ... }` (escolha), `advanced = true` (só no modo Completo), `show_if = { "outra", valores... }` (só aparece quando outra propriedade tem um desses valores) e `type`, que normalmente é deduzido do padrão (número, sim/não, cor `"#RRGGBB"`, texto). Para o Inspetor mostrar a lista certa, `type` pode ser `"object"` (nome de um objeto da cena), `"scene"`, `"prefab"`, `"sound"`, `"image"`, `"dialogue"` (um `.dialogo`), `"color"` ou `"choice"`. Também vale um mapa simples: `props = { velocidade = 90 }`.
 - **Callbacks** (todos opcionais): `start()`, `update(dt)`, `fixed_update(dt)`, `draw()` (depois dos objetos), `contact(outro, e)` (o corpo do objeto tocou o de `outro`; `e` é o evento da física) e `destroyed()`.
 - **Campos:** `self.obj` (o objeto), `self.scene` (a cena: `self.scene:find`, `self.scene:spawn`...), `self.enabled` (`false` para de rodar) e `self.component` (o componente, com os valores do arquivo).
 - `player = true` marca um comportamento de jogador: é quem os outros procuram quando "Quem" ou "Alvo" fica vazio.
@@ -360,6 +360,7 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:gatilho` | (2D e 3D) Zona de gatilho: avisa quando alguém entra ou sai dela (pela caixa do objeto) e some no jogo. Manda `entrou` e `saiu` (com quem) para a própria zona e a mensagem escolhida para os objetos `alvo`. | `quem` (""), `alvo` (""), `mensagem` ("abrir"), `mensagem_saida` (""), `uma_vez` (false), `som`, `invisivel` (true) |
 | `nn:interagir` | (2D e 3D) Perto do objeto aparece "E  usar"; apertando E (ou o Y do controle) ele manda `interagiu` (com quem) e a `mensagem` para os objetos `alvo`. Pode pedir um item do inventário (sem ele, o aviso diz o que falta e manda `falta_item`). Só o objeto mais perto do jogador mostra o aviso. | `texto` ("usar"), `distancia` (24 px; no 3D, 1.2 m, da borda), `quem` (""), `alvo` (""), `mensagem` ("abrir"), `item` (""), `gastar` (true), `texto_sem_item` ("Precisa de: {item}"), `uma_vez` (false), `som` |
 | `nn:porta3d` | (3D) Porta: abre girando na dobradiça (para longe de quem abre), subindo, descendo ou deslizando. Abre com E perto dela, sozinha quando o jogador chega ou só por mensagem. Pode pedir uma chave do inventário (mensagens abrem mesmo trancada). Precisa de um `body3d` kinematic (que bloqueia a passagem). Recebe `abrir`, `fechar`, `alternar` e `destrancar`; manda `abriu`, `fechou` e `trancada`. | `abre` ("girando", "subindo", "descendo", "deslizando"), `lado` ("esquerda", "direita"), `angulo` (100), `tempo` (0.6 s), `abrir_com` ("tecla", "chegar", "mensagem"), `distancia` (1.2 m), `chave` (""), `gastar_chave` (true), `fechar_depois` (0 s = fica aberta), `texto` ("abrir"), `texto_fechar` ("fechar"; vazio = não fecha com a tecla), `texto_trancada`, `som`, `som_trancada` |
+| `nn:dialogo` | (2D e 3D) Um personagem que conversa: abre um [diálogo](#diálogos-dialogo) numa caixa de fala. Com `comecar = "tecla"`, perto dele aparece "E  falar" (o mesmo aviso do Interagir). Também começa com a mensagem `conversar`. | `arquivo` (o `.dialogo`), `comecar` ("tecla", "chegar": quando o jogador chega perto, "cena": quando a cena começa, "mensagem"), `texto` ("falar"), `distancia` (24 px; no 3D, 1.5 m), `uma_vez` (false), `olhar` (3D, true: vira para quem fala com ele) |
 | `nn:inventario` | (2D e 3D) Mostra os itens do inventário num canto da tela, com quantos tem de cada (sem ícone, a primeira letra). | `canto` ("baixo_esquerda", "baixo_direita", "cima_esquerda", "cima_direita"), `tamanho` (48), `margem` (20), `fundo` (true) |
 | `nn:checkpoint` | Ponto de reinício. | `quem` ("") |
 | `nn:ir_para_cena` | Leva para outra cena. | `cena`, `quem` (""), `tecla` (false: precisa apertar para cima / Enter), `escurecer` (0.5 s) |
@@ -440,6 +441,39 @@ if nn.inventory.has("chave") then
 end
 ```
 
+### Diálogos (.dialogo)
+
+Conversas com falas, escolhas e personagens ficam em arquivos `.dialogo`, montados no [editor de conversa](studio.md#editor-de-conversa) do NN Studio. Uma conversa abre numa **caixa de fala** no pé da tela, com o tema do projeto (`theme` do `config.lua`: painel, borda, texto, destaque, fonte e som): o nome de quem fala numa etiqueta da cor do personagem, o retrato (se houver) e o texto aparecendo letra por letra. **E**, Enter, espaço, o A do controle ou um clique mostram o texto todo e passam para a próxima fala; as setas (ou W e S), os números e o mouse escolhem. Enquanto ela está aberta, os jogadores prontos (Jogador 3D, de plataforma e top-down) ficam parados e o Interagir e as portas não respondem.
+
+```lua
+return {
+  format = 1,
+  start = 1,        -- a primeira fala
+  speed = 40,       -- letras por segundo (0 = o texto todo de uma vez)
+  characters = {
+    { name = "Ana", color = "#FFD166", image = "assets/imagens/ana.png", sound = "assets/sons/voz.wav" },
+  },
+  nodes = {
+    { id = 1, x = 40, y = 60, who = "Ana", text = "Oi, {nome}! Viu minha chave?", next = 2 },
+    { id = 2, x = 340, y = 60, who = "", text = "Ela parece preocupada.",
+      choices = {
+        { text = "Vi sim", next = 3, var = "ajudou", value = 1 },
+        { text = "Não", next = 0 },
+        { text = "Toma, achei", next = 3, need = "chave" },
+      } },
+    { id = 3, x = 640, y = 60, who = "Ana", text = "Obrigada!", item = "moeda rara", next = 0 },
+  },
+}
+```
+
+- **Falas** (`nodes`): `who` é o nome de um personagem (vazio = narrador, sem etiqueta), `text` aceita `{variavel}`, `next` é a próxima fala (0 = termina) e `x`, `y` são a posição do cartão no editor.
+- **Escolhas** (`choices`): o jogador escolhe uma; cada uma leva a uma fala (`next`), pode mudar uma variável (`var`, `value`) e só aparece para quem tem um item no [inventário](#inventário-nninventory) (`need`).
+- **Ao aparecer**, uma fala pode mudar uma variável (`var`, `value`) e dar um item (`item`).
+- **Personagens**: `color` é a cor da etiqueta do nome, `image` o retrato e `sound` um som curto que toca enquanto o texto aparece.
+- **Mensagens** para quem fala (o objeto com o Diálogo): `conversa_comecou` e `conversa_terminou` (com o arquivo), `escolheu` (com o texto da escolha) e `fala` (com o id). Nos [eventos](#eventos-quando-então): `conversa_comecou`, `conversa_terminou` e `escolheu`.
+
+No script da cena, `self:start_dialogue("dialogos/ana.dialogo", ana)` abre uma conversa (`ana`, quem fala, é opcional; devolve `false` se já houver uma aberta), `self:stop_dialogue()` fecha e `self:dialogue()` é o arquivo da conversa aberta (ou `nil`). Num comportamento, `self.scene:start_dialogue(...)`.
+
 ### Interações ("E para abrir")
 
 O Interagir e a Porta 3D usam o mesmo aviso: perto do objeto aparece a tecla (E, ou Y se o controle foi o último usado) e o que ela faz. De tudo o que está perto, só o mais perto do jogador mostra o aviso e responde à tecla. Um comportamento seu pode usar o mesmo sistema: chame `self.scene:interaction(self, quem, distancia, texto, trancado)` no `update`; ele devolve o objeto que apertou a tecla (ou `nil`). `self.scene:gap(a, b)` é a distância entre as caixas de dois objetos (0 se encostam).
@@ -495,6 +529,8 @@ Condições (`cond`):
 | `entrar_zona` / `sair_zona` | `quem` (a zona, com o comportamento Zona de gatilho), `por` (quem entra ou sai; "@outro" nas ações) |
 | `interagir` | `quem` (o objeto com Interagir), `por` (quem apertou E) |
 | `tem_item` | `item`, `qtd` (o jogador tem pelo menos isso no [inventário](#inventário-nninventory)) |
+| `conversa_comecou` / `conversa_terminou` | `quem` (quem fala; "" = qualquer um) |
+| `escolheu` | `opcao` (o texto da escolha; "" = qualquer uma), `quem` |
 | `mudou` | `quem` (um deslizador, caixa de marcar ou campo de texto mudou pelo jogador) |
 
 Ações (`act`):
@@ -526,6 +562,7 @@ Ações (`act`):
 | `volume` | `canal` ("musica", "efeitos", "geral"), `valor` (%; fica guardado) |
 | `comportamento` | `acao` ("ligar", "desligar"), `nome` (ex.: "plataforma"), `alvo` |
 | `mensagem` | `msg`, `alvo` |
+| `conversa` | `arquivo` (um `.dialogo`), `quem` (quem fala) |
 | `dar_item` / `tirar_item` | `item`, `qtd`, `icone` (só no `dar_item`): guarda no inventário / gasta (se não tiver tudo, não tira nada) |
 | `esperar` | `segundos` |
 | `console` | `texto` |

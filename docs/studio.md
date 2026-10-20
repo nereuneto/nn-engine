@@ -102,6 +102,10 @@ projeto continua aberto.
   porta que abre com E, trancada até o herói achar a chave, os itens na
   tela, uma placa de Texto 3D e uma zona que fecha a porta atrás de você
   ([portas, chaves e zonas](#portas-chaves-e-zonas)).
+- **Uma conversa** (uns 12 minutos), a partir do modelo Vazio 3D: uma
+  conversa com falas, escolhas e um personagem novo no editor de conversa,
+  um personagem que fala na cena e um evento para a escolha do jogador
+  ([editor de conversa](#editor-de-conversa)).
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -847,7 +851,7 @@ Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
 - **Atirar** e **Destruir depois** (Ações);
 - **Coletável** (Itens): some quando o jogador encosta, soma numa variável e
   pode guardar um item no inventário; **Mostrar inventário** (Itens);
-- **Porta 3D**, **Zona de gatilho** e **Interagir** (Fases);
+- **Porta 3D**, **Zona de gatilho**, **Interagir** e **Diálogo** (Fases);
 - **Girar e flutuar** (Movimento): gira em volta de um eixo e sobe e desce
   devagar (estrelas, moedas);
 - **Plataforma que anda** (Movimento): vai e volta em X, Y e Z, com espera
@@ -875,6 +879,45 @@ Para o que os prontos não cobrem, o código da cena (Inspetor > **Script**)
 encontra os objetos em `self.objects`, com `obj.body` (o corpo 3D),
 `obj:position3d()` e `self:world3()` (o mundo da física). Veja o
 [guia do Lua](lua.md#cenas-3d).
+
+## Editor de conversa
+
+Arquivos **`.dialogo`** abrem no **editor de conversa**. Crie um em
+**Arquivos > ➕ Novo > 💬 Diálogo**: ele já vem com um exemplo (falas, duas
+escolhas e um personagem).
+
+- **Falas:** cada cartão é uma fala, com quem fala (a cor do personagem) e
+  o texto. A borda verde marca o **Início**; *fim* marca as que terminam a
+  conversa. Arraste os cartões para arrumar; arraste o fundo para andar
+  pela conversa; **Enquadrar** mostra tudo.
+- **Ligar:** arraste da **bolinha** à direita de uma fala até outra fala.
+  Soltar no vazio cria uma fala nova ali, já ligada. **➕ Fala** cria uma
+  solta.
+- **O painel da direita** edita a fala escolhida: **Quem fala** (um
+  personagem ou o narrador, sem nome), o **Texto** (com `{variavel}`) e
+  **Depois** (a próxima fala ou o fim).
+- **Escolhas:** **➕ Escolha** troca o "Depois" por respostas do jogador,
+  cada uma com o texto e para onde **vai**. Em **Mais**, a escolha pode
+  mudar uma variável e só aparecer para quem tem um item.
+- **Ao aparecer:** a fala pode mudar uma variável e dar um item.
+- **A conversa** (clique no vazio da tela): a **velocidade** do texto e os
+  **personagens**, com nome, cor, **retrato** (uma imagem) e **voz** (um som
+  curto que toca enquanto o texto aparece). Mudar o nome de um personagem
+  muda nas falas dele também.
+- **Ctrl+S** salva, **Ctrl+Z** desfaz; **Del** apaga a fala escolhida.
+
+Na cena, o comportamento **Diálogo** (Fases) abre a conversa: perto do
+personagem aparece **E falar** (ou ela começa quando o jogador chega perto,
+quando a cena começa ou com a mensagem *conversar*). No 3D, **➕ Objeto >
+Portas e itens > Personagem que fala** já vem pronto, e o botão
+**💬 Editar a conversa** do Inspetor abre o arquivo. A conversa aparece numa
+caixa de fala no pé da tela, com as cores e a fonte do **tema** do projeto;
+enquanto ela está aberta, o herói fica parado.
+
+Nos eventos (**Conversas**): **Começar uma conversa**, **Terminar uma
+conversa** e **Escolher numa conversa** (pelo texto da escolha), e a ação
+**Começar conversa**. O modelo **3D** tem um pescador que dá dicas, e o
+**Aventura**, um velho que conta onde está a chave.
 
 ## Editor de pixel art
 

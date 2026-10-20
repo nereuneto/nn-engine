@@ -37,6 +37,8 @@ end
 function B:update(dt)
   -- O aperto fica guardado um pouquinho: apertar logo antes de tocar o chão
   -- também pula.
+  -- Numa conversa, fica parado.
+  if self.scene._dlg or self.scene._dlg_closed then return end
   if apertou() then self.pedido = 0.12 end
   if self.pulo_variavel and soltou() then self.cortar = true end
 end
@@ -50,6 +52,7 @@ function B:fixed_update(dt)
     o.empurrado = o.empurrado - dt
   else
     local dx = nn.input.move()
+    if self.scene._dlg then dx = 0 end
     corpo.vx = dx * self.velocidade
   end
   if corpo.on_ground then

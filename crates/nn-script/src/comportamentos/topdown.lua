@@ -17,6 +17,8 @@ end
 function B:fixed_update(dt)
   local o = self.obj
   local dx, dy = nn.input.move()
+  -- Numa conversa, fica parado.
+  if self.scene._dlg then dx, dy = 0, 0 end
   if (o.empurrado or 0) > 0 then
     o.empurrado = o.empurrado - dt
     return

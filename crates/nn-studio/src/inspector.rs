@@ -1875,6 +1875,7 @@ fn behavior_spec(info: &BehaviorInfo, p: &behaviors::PropSpec) -> Spec {
         PropType::Prefab => Wd::File(FileKind::Prefab),
         PropType::Sound => Wd::File(FileKind::Sound),
         PropType::Image => Wd::File(FileKind::Image),
+        PropType::Dialogue => Wd::File(FileKind::Dialogue),
         PropType::Anim => Wd::Anim,
         PropType::Tile => Wd::Int {
             min: 0.0,
@@ -2740,6 +2741,21 @@ impl Inspector {
             });
         if info.props.is_empty() && info.error.is_none() {
             ui.weak("Este comportamento não tem propriedades.");
+        }
+        // O Diálogo: abrir a conversa no editor.
+        let conversa = value("arquivo");
+        if info.script == "nn:dialogo"
+            && let Prop::Str(rel) = &conversa
+            && !rel.is_empty()
+        {
+            let r = ui
+                .button("💬 Editar a conversa")
+                .on_hover_text(format!("Abre {rel} no editor de conversa"));
+            crate::tutorial::anchor(ui.ctx(), "inspetor.editar_conversa", r.rect);
+            if r.clicked() {
+                self.actions_out
+                    .push(InspectorAction::OpenFile(rel.clone()));
+            }
         }
         // Valores guardados de propriedades que o script não tem mais.
         let stale: Vec<String> = comp
