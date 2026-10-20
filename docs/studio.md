@@ -585,6 +585,10 @@ sombras, desenhada pela engine do jeito que vai aparecer no jogo.
 
 ![Cena 3D aberta no NN Studio](imagens/nn-studio-3d.png)
 
+Primeira vez no 3D? O guia **[Comece aqui no 3D](3d.md)** mostra por onde
+começar, a ordem dos tutoriais, as peças prontas e o que fazer quando algo
+dá errado.
+
 Para aprender fazendo, o tutorial guiado **Seu primeiro mundo 3D** (em
 [Tutoriais](#tutoriais)) monta um mundo com herói, árvores, uma caixa que cai,
 uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
@@ -1234,5 +1238,15 @@ quase não usa o processador.
 
 ## O que vem depois
 
-A próxima etapa é a **v0.1**: acabamento, revisão dos tutoriais e dos
-modelos, e o NN Studio pronto para instalar.
+A **v0.2** traz o 3D: cenas 3D no NN Studio, física, personagens animados,
+terreno, som e partículas no mundo, inimigos, portas e chaves, conversas e
+o HUD por cima da vista (veja o [CHANGELOG](../CHANGELOG.md)).
+
+Ainda não tem, e são ideias para as próximas versões:
+
+- luzes além do sol (lâmpadas, tochas que iluminam em volta);
+- inimigos que desviam de paredes para achar o caminho até o herói;
+- exportar para a web e para outros sistemas além de Windows e Linux;
+- assinatura digital do instalador do Windows.
+
+Sugestões e problemas: [issues do repositório](https://github.com/nereuneto/nn-engine/issues).

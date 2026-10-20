@@ -1118,6 +1118,9 @@ impl SceneDoc {
             ui.separator();
             ui.checkbox(&mut self.snap, "Encaixar")
                 .on_hover_text("Encaixa na grade ao mover. Segurar Ctrl também encaixa.");
+            if ui.available_size_before_wrap().x < 70.0 {
+                ui.end_row();
+            }
             egui::ComboBox::from_id_salt(("grade", &self.rel))
                 .width(56.0)
                 .selected_text(format!("{}", self.grid))
@@ -1168,7 +1171,12 @@ impl SceneDoc {
                 }
             });
             crate::tutorial::anchor(ui.ctx(), "cena.objeto", menu.response.rect);
-            // Ver o HUD em telas de outras proporções.
+            // Ver o HUD em telas de outras proporções. (A caixa de escolha
+            // não pula sozinha para a linha de baixo: sem espaço, ela ficaria
+            // cortada na beirada.)
+            if ui.available_size_before_wrap().x < 130.0 {
+                ui.end_row();
+            }
             let ratio = scene_data::preview();
             let current = scene_data::PREVIEWS
                 .iter()

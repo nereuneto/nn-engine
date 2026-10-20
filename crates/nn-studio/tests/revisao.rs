@@ -191,3 +191,62 @@ fn dialogos_do_gerenciador() {
     passos(&mut h);
     tela(&mut h, "gerenciador-tutoriais-3d");
 }
+
+/// Ferramenta: grava as imagens do NN Studio no 3D usadas no README e nos
+/// guias (`cargo test -p nn-studio --test revisao capturas -- --ignored`).
+#[test]
+#[ignore]
+fn capturas_do_3d_para_a_documentacao() {
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/imagens");
+    let size = egui::vec2(1280.0, 800.0);
+    let abrir = |t: Template, name: &str| {
+        let dir = temp(&format!("captura-{name}"));
+        let proj = dir.join("jogo");
+        create_project(&NewOptions {
+            dir: proj.clone(),
+            title: Some("Meu jogo".into()),
+            template: t,
+        })
+        .unwrap();
+        let h = studio(&dir, Some(proj), size);
+        (h, dir)
+    };
+    let selecionar = |h: &mut Harness<'_, StudioApp>, cena: &str, nome: &str| {
+        let doc = h
+            .state_mut()
+            .project_mut()
+            .unwrap()
+            .scenes
+            .get_mut(cena)
+            .unwrap();
+        let id = doc.data.objects.iter().find(|o| o.name == nome).unwrap().id;
+        doc.selection = vec![id];
+    };
+    let gravar = |h: &mut Harness<'_, StudioApp>, file: &str| {
+        passos(h);
+        let img = h.render().expect("imagem");
+        img.save(out.join(file)).unwrap();
+    };
+
+    // A ilha, com o herói selecionado (o Jogador 3D no Inspetor).
+    let (mut h, _d) = abrir(Template::Visual3D, "ilha");
+    selecionar(&mut h, "cenas/ilha.cena", "Herói");
+    gravar(&mut h, "nn-studio-3d.png");
+    drop(h);
+
+    // O vale, com o pincel do terreno.
+    let (mut h, _d) = abrir(Template::Vale3D, "vale");
+    selecionar(&mut h, "cenas/vale.cena", "Terreno");
+    passos(&mut h);
+    h.get_by_label("✏ Pintar terreno").click();
+    gravar(&mut h, "nn-studio-terreno.png");
+    drop(h);
+
+    // O editor de conversa, com a conversa do pescador.
+    let (mut h, _d) = abrir(Template::Visual3D, "conversa");
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("dialogos/pescador.dialogo", None);
+    gravar(&mut h, "nn-studio-conversa.png");
+}

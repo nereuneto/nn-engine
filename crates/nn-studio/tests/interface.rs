@@ -3894,7 +3894,7 @@ fn cena_3d_com_hud_por_cima() {
     cena_mut(&mut h).selection.clear();
     h.get_by_label("⛶ Enquadrar").click();
     passo(&mut h);
-    let cam = cena(&h).cam3.clone();
+    let cam = cena(&h).cam3;
     let alvo = cam.pos + cam.forward() * cam.pos.length();
     assert!(alvo.y > -10.0 && alvo.y < 20.0, "olhando para {alvo}");
     assert!(!cena(&h).show_fog3);

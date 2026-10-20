@@ -701,21 +701,32 @@ impl SceneDoc {
                 }
             }
             ui.separator();
-            ui.label("Tamanho");
-            ui.add(
-                egui::DragValue::new(&mut self.terrain_tool.radius)
-                    .range(0.5..=60.0)
-                    .speed(0.1)
-                    .suffix(" m"),
-            )
-            .on_hover_text("O raio do pincel");
-            ui.label("Força");
-            ui.add(
-                egui::DragValue::new(&mut self.terrain_tool.strength)
-                    .range(0.1..=30.0)
-                    .speed(0.05),
-            )
-            .on_hover_text("Quanto muda por segundo (Ctrl faz o contrário)");
+            // Cada nome junto do seu valor (não quebram a linha no meio).
+            if ui.available_size_before_wrap().x < 120.0 {
+                ui.end_row();
+            }
+            ui.horizontal(|ui| {
+                ui.label("Tamanho");
+                ui.add(
+                    egui::DragValue::new(&mut self.terrain_tool.radius)
+                        .range(0.5..=60.0)
+                        .speed(0.1)
+                        .suffix(" m"),
+                )
+                .on_hover_text("O raio do pincel");
+            });
+            if ui.available_size_before_wrap().x < 100.0 {
+                ui.end_row();
+            }
+            ui.horizontal(|ui| {
+                ui.label("Força");
+                ui.add(
+                    egui::DragValue::new(&mut self.terrain_tool.strength)
+                        .range(0.1..=30.0)
+                        .speed(0.05),
+                )
+                .on_hover_text("Quanto muda por segundo (Ctrl faz o contrário)");
+            });
             match self.terrain_tool.brush {
                 TerrainBrush::Paint => {
                     ui.separator();
@@ -811,6 +822,9 @@ impl SceneDoc {
             ui.checkbox(&mut self.snap, "Encaixar").on_hover_text(
                 "Encaixa na grade ao mover, de 15 em 15 graus ao girar e de 0,1 em 0,1 ao escalar. Segurar Ctrl troca.",
             );
+            if ui.available_size_before_wrap().x < 70.0 {
+                ui.end_row();
+            }
             egui::ComboBox::from_id_salt(("grade3d", &self.rel))
                 .width(56.0)
                 .selected_text(scene_data::format_num(self.grid3))
