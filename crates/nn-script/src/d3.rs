@@ -397,15 +397,29 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             let glow = opt::<f32>(o, "glow")?.unwrap_or(0.0).max(0.0);
             // emissive = false apaga o brilho que o modelo já traz no arquivo.
             let emissive = opt::<bool>(o, "emissive")?.unwrap_or(true);
+            let water = match opt::<String>(o, "material")?.as_deref() {
+                None | Some("" | "normal") => false,
+                Some("water" | "agua" | "água") => true,
+                Some(other) => {
+                    return Err(err(format!(
+                        "\"material\": use \"normal\" ou \"water\", recebeu \"{other}\""
+                    )));
+                }
+            };
+            let sway = opt::<f32>(o, "sway")?.unwrap_or(0.0).max(0.0);
             with_ctx(lua, |c| {
                 match thing {
-                    Thing::Mesh(mesh) => c.renderer.draw_mesh_glow(
+                    Thing::Mesh(mesh) => c.renderer.draw_mesh_material(
                         mesh.id,
                         model,
                         col,
                         image,
                         shadow,
-                        d3::Glow::own(glow),
+                        d3::Material3D {
+                            glow: d3::Glow::own(glow),
+                            water,
+                            sway,
+                        },
                     ),
                     Thing::Model(key) => {
                         let g = d3::Glow {
@@ -416,7 +430,12 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                                 nn_core::Color::BLACK
                             },
                         };
-                        c.draw_model_key_glow(&key, model, col, shadow, g, joints.as_deref());
+                        let m = d3::Material3D {
+                            glow: g,
+                            water,
+                            sway,
+                        };
+                        c.draw_model_key_material(&key, model, col, shadow, m, joints.as_deref());
                     }
                 }
                 Ok(())
@@ -632,6 +651,65 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             with_ctx(lua, |c| {
                 c.renderer.add_lamp3d(lamp);
                 Ok(())
+            })
+        })?,
+    )?;
+
+    t.set(
+        "bloom",
+        lua.create_function(|lua, v: Value| {
+            with_ctx(lua, |c| {
+                let mut b = c.renderer.bloom3d();
+                match &v {
+                    Value::Nil => {}
+                    Value::Boolean(on) => b.enabled = *on,
+                    Value::Table(t) => {
+                        let o = Some(t);
+                        if let Some(k) = opt::<f32>(o, "strength")? {
+                            b.strength = k.clamp(0.0, 4.0);
+                        }
+                        if let Some(on) = opt::<bool>(o, "enabled")? {
+                            b.enabled = on;
+                        }
+                    }
+                    other => {
+                        return Err(err(format!(
+                            "nn.d3.bloom: use true, false ou {{strength =, enabled =}}, recebeu {}",
+                            other.type_name()
+                        )));
+                    }
+                }
+                c.renderer.set_bloom3d(b);
+                Ok(b.enabled)
+            })
+        })?,
+    )?;
+
+    t.set(
+        "wind",
+        lua.create_function(|lua, opts: Option<Table>| {
+            with_ctx(lua, |c| {
+                let mut w = c.renderer.wind3d();
+                if let Some(o) = opts.as_ref() {
+                    let o = Some(o);
+                    if let Some(k) = opt::<f32>(o, "strength")? {
+                        w.strength = k.max(0.0);
+                    }
+                    if let Some(t) = opt::<f32>(o, "turn")? {
+                        // Graus: 0 = para -Z (a frente do mundo), 90 = para +X.
+                        let r = t.to_radians();
+                        w.direction = Vec2::new(r.sin(), -r.cos());
+                    }
+                    if let Some(d) = opt_vec3(o, "direction")? {
+                        w.direction = Vec2::new(d.x, d.z);
+                    }
+                }
+                c.renderer.set_wind3d(w);
+                let out = lua.create_table()?;
+                out.set("strength", w.strength)?;
+                out.set("x", w.direction.x)?;
+                out.set("z", w.direction.y)?;
+                Ok(out)
             })
         })?,
     )?;

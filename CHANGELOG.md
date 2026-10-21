@@ -4,6 +4,18 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Água, vento e brilho (Sprint 41)
+
+- **Água:** na Forma 3D, **Material: Água**, com ondinhas que se mexem, o céu refletido (mais forte olhando de lado) e o brilho do sol batendo. **➕ Objeto > Água (lago)** traz um plano assim. A água dos **Terrenos** também ganhou ondas e reflexo.
+- **Vento** (☀ Ambiente): a força e o lado para onde sopra. O que tem **Balança com o vento** (na Forma 3D e no Modelo 3D) balança com rajadas: embaixo parado, em cima mais. As **partículas** no 3D são levadas pelo vento (**Levadas pelo vento**, no Inspetor delas).
+- **Halo do brilho** (☀ Ambiente): um halo suave em volta do que brilha (o Brilho, as partes que brilham nos `.glb`, o fogo, o sol e a lua). Vem ligado; 0 tira.
+- Os **Ambientes prontos** não mexem mais no Dia e noite, no Vento nem no Halo.
+- **Modelo novo:** `grama.glb` (um tufo), nos modelos de projeto 3D.
+- **A ilha (modelo 3D):** o mar tem ondas e reflete o céu; árvores e grama balançam com o vento, e há uma bandeira na arena. **No Vale 3D:** o lago tem ondas, e a grama balança. Na caverna, tochas e cristais ganham o halo.
+- **Tutorial guiado novo: Um lago com vida** (10 minutos).
+- **No Lua:** `nn.d3.wind(opts)`, `nn.d3.bloom(v)`, as opções `material = "water"` e `sway` do `nn.d3.draw`, `emissor:set_wind(x, y, z)`, os campos `wind`, `wind_turn` e `bloom` do `environment`, `material` e `sway` nas formas e modelos e `wind` nas partículas.
+- **No Rust:** `Wind3D`, `Bloom` e `Material3D` no `nn-render`, com `Renderer::set_wind3d`, `set_bloom3d`, `draw_mesh_material` e `draw_model_material`.
+
 ### Dia e noite (Sprint 40)
 
 - **Dia e noite** (☀ Ambiente): a hora anda no jogo. O sol nasce a leste às 6h, cruza o céu e se põe a oeste às 18h; de noite, a lua dá uma luz azulada fraca, e aparecem estrelas. As cores passam pelo amanhecer, pelo dia (as cores da cena), pelo entardecer e pela noite. **Um dia dura** quantos minutos, e **Começa às**, a hora do começo. No NN Studio, a vista mostra a cena nessa hora.

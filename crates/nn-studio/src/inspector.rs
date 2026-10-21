@@ -500,6 +500,10 @@ const PARTICLES_FIELDS: &[F] = &[
         adv("follow", "Acompanham o objeto", W::Bool),
         "Ligado, as partículas andam junto com o objeto (jato de uma nave). Desligado, ficam onde nasceram (rastro).",
     ),
+    help(
+        adv("wind", "Levadas pelo vento", FRACTION),
+        "No 3D, com Vento (☀ Ambiente): quanto o vento leva as partículas (0 = nada, 1 = tudo).",
+    ),
     section("Aparência"),
     f("size_start", "Tamanho inicial", SIZE),
     f("size_end", "Tamanho final", SIZE),
@@ -950,6 +954,19 @@ const MODEL_FIELDS: &[F] = &[
         f("glow_night", "Brilha só à noite", W::Bool),
         "Com Dia e noite (☀ Ambiente), o brilho acende ao anoitecer e apaga ao amanhecer: janelas, postes. Sem o ciclo, vale num ambiente escuro (Noite, Caverna).",
     ),
+    help(
+        f(
+            "sway",
+            "Balança com o vento",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 2.0,
+                suffix: "",
+            },
+        ),
+        "Com Vento (☀ Ambiente): embaixo fica parado e em cima balança (1 = uma árvore; 0 = nada). Bom para árvores, grama, bandeiras.",
+    ),
 ];
 
 const SHAPE3D_FIELDS: &[F] = &[
@@ -983,6 +1000,27 @@ const SHAPE3D_FIELDS: &[F] = &[
     help(
         f("glow_night", "Brilha só à noite", W::Bool),
         "Com Dia e noite (☀ Ambiente), o brilho acende ao anoitecer e apaga ao amanhecer: janelas, postes. Sem o ciclo, vale num ambiente escuro (Noite, Caverna).",
+    ),
+    help(
+        f(
+            "material",
+            "Material",
+            W::Choice(&[("normal", "Normal"), ("agua", "Água (ondas e reflexo)")]),
+        ),
+        "Água: ondinhas que se mexem, o céu refletido (mais forte olhando de lado) e o brilho do sol. Use num Plano com uma cor um pouco transparente.",
+    ),
+    help(
+        f(
+            "sway",
+            "Balança com o vento",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 2.0,
+                suffix: "",
+            },
+        ),
+        "Com Vento (☀ Ambiente): embaixo fica parado e em cima balança (1 = uma árvore; 0 = nada). Bom para árvores, grama, bandeiras.",
     ),
 ];
 
@@ -1366,15 +1404,20 @@ fn environment_ui(ui: &mut egui::Ui, doc: &mut SceneDoc) {
             // Os prontos: tudo de uma vez (céu, sol, luz ambiente, névoa).
             ui.horizontal_wrapped(|ui| {
                 ui.label("Pronto:").on_hover_text(
-                    "Troca o céu, o sol, a luz ambiente e a névoa de uma vez (Ctrl+Z desfaz). Na Noite e na Caverna, as Luzes (➕ Objeto > Luz) aparecem bem.",
+                    "Troca o céu, o sol, a luz ambiente e a névoa de uma vez (Ctrl+Z desfaz). O Dia e noite, o Vento e o Halo ficam como estão. Na Noite e na Caverna, as Luzes (➕ Objeto > Luz) aparecem bem.",
                 );
                 for (id, name, values) in &crate::scene_data::schema().environment_presets {
                     let r = ui.small_button(name.as_str());
                     crate::tutorial::anchor_in(ui, &format!("inspetor:ambiente:{id}"), r.rect);
                     if r.clicked() {
                         doc.record(None);
+                        // (O tempo, o vento e o halo ficam como estão.)
+                        const KEEP: [&str; 6] =
+                            ["cycle", "day_length", "start_hour", "wind", "wind_turn", "bloom"];
                         for (k, v) in values {
-                            doc.data.set_env(k, v.clone());
+                            if !KEEP.contains(&k.as_str()) {
+                                doc.data.set_env(k, v.clone());
+                            }
                         }
                         // Sem céu (a caverna), o fundo também fica escuro.
                         if doc.data.env("sky").num() == 0.0 {
@@ -1439,6 +1482,43 @@ fn environment_ui(ui: &mut egui::Ui, doc: &mut SceneDoc) {
                     ui.horizontal(|ui| {
                         if check(ui, doc, "shadows", "") {
                             num(ui, doc, "shadow_distance", 5.0..=200.0, " m");
+                        }
+                    });
+                    ui.end_row();
+
+                    let r = ui.label("Vento:");
+                    crate::tutorial::anchor_in(ui, "inspetor:ambiente:vento", r.rect);
+                    r.on_hover_text(
+                        "O que tem \"Balança com o vento\" (árvores, grama, bandeiras) balança, com rajadas, e as partículas são levadas. 0 = parado, 1 = brisa, 3 = ventania. O lado é para onde ele sopra (0° = para -Z, 90° = para +X).",
+                    );
+                    ui.horizontal(|ui| {
+                        let mut v = doc.data.env("wind").num();
+                        if ui
+                            .add(egui::DragValue::new(&mut v).range(0.0..=5.0).speed(0.05))
+                            .changed()
+                        {
+                            doc.record(Some("ambiente:wind"));
+                            doc.data.set_env("wind", Prop::Num(v));
+                        }
+                        if v > 0.0 {
+                            num(ui, doc, "wind_turn", -360.0..=360.0, "° lado");
+                        }
+                    });
+                    ui.end_row();
+
+                    let r = ui.label("Halo do brilho:");
+                    crate::tutorial::anchor_in(ui, "inspetor:ambiente:halo", r.rect);
+                    r.on_hover_text(
+                        "O que brilha (Brilho, a chama das tochas, o fogo, o sol e a lua) ganha um halo suave em volta. 0 = sem halo, 1 = o normal.",
+                    );
+                    ui.horizontal(|ui| {
+                        let mut v = doc.data.env("bloom").num();
+                        if ui
+                            .add(egui::DragValue::new(&mut v).range(0.0..=3.0).speed(0.02))
+                            .changed()
+                        {
+                            doc.record(Some("ambiente:bloom"));
+                            doc.data.set_env("bloom", Prop::Num(v));
                         }
                     });
                     ui.end_row();
@@ -3139,6 +3219,10 @@ impl Inspector {
                         continue;
                     }
                     if particles3d && spec.key == "direction" {
+                        continue;
+                    }
+                    // O vento só existe no 3D.
+                    if comp.kind == "particles" && spec.key == "wind" && !doc.data.three_d {
                         continue;
                     }
                     if spec.key.is_empty() {

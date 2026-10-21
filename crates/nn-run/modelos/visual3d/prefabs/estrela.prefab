@@ -7,7 +7,7 @@ return {
     x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
     visible = true, layer = 0,
     components = {
-      { type = "model", file = "modelos/estrela.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+      { type = "model", file = "modelos/estrela.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
       { type = "behavior", script = "nn:coletavel", brilho = true, cor_brilho = "#FFD166", quem = "", som = "assets/sons/vitoria.wav", valor = 1, variavel = "estrelas" },
       { type = "behavior", script = "nn:girar3d", altura = 0.15, duracao = 3, eixo = "y", velocidade = 90 },
     },

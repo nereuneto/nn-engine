@@ -3,7 +3,10 @@
 
 use glam::{Mat4, UVec2, Vec2, Vec3};
 use nn_core::Color;
-use nn_render::d3::{Camera3D, Cone3D, Fog, Glow, Lamp3D, Light3D, MAX_LAMPS, Transform3, shapes};
+use nn_render::d3::{
+    Bloom, Camera3D, Cone3D, Fog, Glow, Lamp3D, Light3D, MAX_LAMPS, Material3D, Transform3, Wind3D,
+    shapes,
+};
 use nn_render::{Camera2D, GpuContext, OffscreenTarget, Presentation, Renderer, ScaleMode};
 
 const SIZE: UVec2 = UVec2::new(64, 64);
@@ -1059,6 +1062,11 @@ fn modelos_que_brilham_trazem_a_cor_da_emissao_e_aparecem_no_escuro() {
     let Some(mut h) = Harness::new() else { return };
     let data = modelo_ilha("tocha.glb");
     let tocha = h.renderer.create_model(&data);
+    // (Sem o halo, para ver só a emissão.)
+    h.renderer.set_bloom3d(Bloom {
+        enabled: false,
+        ..Bloom::default()
+    });
     h.renderer.set_light3d(Light3D {
         sun_color: Color::BLACK,
         sky: Color::BLACK,
@@ -1094,4 +1102,148 @@ fn modelos_que_brilham_trazem_a_cor_da_emissao_e_aparecem_no_escuro() {
     }
     assert!(chama > 10, "chama: {chama}");
     assert_eq!(cabo, 0, "o cabo no escuro");
+}
+
+// --- Água e vento ------------------------------------------------------------
+
+#[test]
+fn agua_mexe_com_o_tempo_e_reflete_o_ceu_de_lado() {
+    let Some(mut h) = Harness::new() else { return };
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    h.renderer.set_sky3d(Some(Sky3D {
+        top: Color::rgb(0.2, 0.4, 1.0),
+        horizon: Color::rgb(1.0, 1.0, 1.0),
+        bottom: Color::rgb(0.2, 0.4, 1.0),
+        sun_size: 0.0,
+        stars: 0.0,
+    }));
+    h.renderer.set_light3d(Light3D {
+        sun_color: Color::rgb(0.6, 0.6, 0.6),
+        sky: Color::rgb(0.3, 0.3, 0.3),
+        ground: Color::rgb(0.3, 0.3, 0.3),
+        ..Light3D::default()
+    });
+    // Baixinho, olhando a água até o horizonte.
+    h.renderer.set_camera3d(Camera3D::looking_at(
+        Vec3::new(0.0, 1.5, 10.0),
+        Vec3::new(0.0, 0.0, -10.0),
+    ));
+    let desenha = |h: &mut Harness, t: f32, water: bool| {
+        h.renderer.set_time3d(Some(t));
+        h.renderer.draw_mesh_material(
+            plane,
+            Mat4::from_scale(Vec3::splat(200.0)),
+            Color::rgb(0.05, 0.2, 0.3),
+            None,
+            false,
+            Material3D {
+                water,
+                ..Material3D::default()
+            },
+        );
+        h.render(Color::BLACK)
+    };
+    let a = desenha(&mut h, 0.0, true);
+    let b = desenha(&mut h, 1.5, true);
+    let diferentes = (0..64 * 64)
+        .filter(|i| a[i * 4..i * 4 + 3] != b[i * 4..i * 4 + 3])
+        .count();
+    assert!(diferentes > 200, "as ondas mexem: {diferentes} pixels");
+    // Longe (olhando de lado), a água fica mais clara: o céu refletido.
+    let perto = brightness(pixel(&a, 32, 62));
+    let longe = brightness(pixel(&a, 32, 36));
+    assert!(longe > perto + 60, "longe {longe}, perto {perto}");
+    // Sem o material de água, a mesma cor em todo canto (sem céu).
+    let c = desenha(&mut h, 0.0, false);
+    let (p, l) = (brightness(pixel(&c, 32, 62)), brightness(pixel(&c, 32, 36)));
+    assert!(p.abs_diff(l) < 10, "{p} {l}");
+}
+
+#[test]
+fn vento_balanca_o_alto_e_a_base_fica_parada() {
+    let Some(mut h) = Harness::new() else { return };
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    h.renderer.set_camera3d(Camera3D::looking_at(
+        Vec3::new(0.0, 2.0, 9.0),
+        Vec3::new(0.0, 2.0, 0.0),
+    ));
+    // Um poste alto (a base no chão, a origem do objeto no pé).
+    let poste = Mat4::from_translation(Vec3::ZERO)
+        * Mat4::from_scale(Vec3::new(0.6, 4.0, 0.6))
+        * Mat4::from_translation(Vec3::new(0.0, 0.5, 0.0));
+    let desenha = |h: &mut Harness, forca: f32| {
+        h.renderer.set_time3d(Some(0.3));
+        h.renderer.set_wind3d(Wind3D {
+            direction: glam::Vec2::new(1.0, 0.0),
+            strength: forca,
+        });
+        h.renderer.draw_mesh_material(
+            cube,
+            poste,
+            Color::RED,
+            None,
+            false,
+            Material3D {
+                sway: 1.0,
+                ..Material3D::default()
+            },
+        );
+        h.render(Color::BLACK)
+    };
+    let parado = desenha(&mut h, 0.0);
+    let ventando = desenha(&mut h, 3.0);
+    let linha = |img: &[u8], y: u32| -> Vec<u32> {
+        (0..64).filter(|&x| pixel(img, x, y)[0] > 100).collect()
+    };
+    // No alto, a ponta foi para a direita (+X, para onde o vento sopra).
+    let (a, b) = (linha(&parado, 21), linha(&ventando, 21));
+    assert!(!a.is_empty() && !b.is_empty());
+    assert!(b[0] >= a[0] + 2, "o alto balançou: {a:?} → {b:?}");
+    // Embaixo, no pé, igual.
+    assert!(!linha(&parado, 43).is_empty());
+    assert_eq!(linha(&parado, 43), linha(&ventando, 43));
+}
+
+#[test]
+fn halo_so_em_volta_do_que_brilha() {
+    let Some(mut h) = Harness::new() else { return };
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.0, 6.0), Vec3::ZERO));
+    let desenha = |h: &mut Harness, glow: f32, sol: bool, halo: bool| {
+        h.renderer.set_bloom3d(Bloom {
+            enabled: halo,
+            strength: 1.0,
+        });
+        h.renderer.set_light3d(Light3D {
+            sun_direction: Vec3::new(0.0, 0.0, -1.0),
+            sun_color: if sol { Color::WHITE } else { Color::BLACK },
+            sky: Color::BLACK,
+            ground: Color::BLACK,
+            ..Light3D::default()
+        });
+        h.renderer.draw_mesh_glow(
+            cube,
+            Mat4::IDENTITY,
+            Color::rgb(1.0, 0.8, 0.2),
+            None,
+            false,
+            Glow::own(glow),
+        );
+        h.render(Color::BLACK)
+    };
+    // O cubo ocupa o meio (uns 18 pixels); 4 pixels para fora da borda.
+    let fora = |img: &[u8]| brightness(pixel(img, 32, 19)) + brightness(pixel(img, 19, 32));
+    let com_halo = desenha(&mut h, 1.0, false, true);
+    let sem_halo = desenha(&mut h, 1.0, false, false);
+    assert!(
+        brightness(pixel(&com_halo, 32, 32)) > 400,
+        "o cubo brilhando"
+    );
+    assert_eq!(fora(&sem_halo), 0, "sem halo, fora fica preto");
+    assert!(fora(&com_halo) > 20, "o halo em volta: {}", fora(&com_halo));
+    // Um cubo claro só pela luz do sol (sem brilho próprio): sem halo.
+    let claro = desenha(&mut h, 0.0, true, true);
+    assert!(brightness(pixel(&claro, 32, 32)) > 400, "aceso pelo sol");
+    assert_eq!(fora(&claro), 0, "o que não brilha não ganha halo");
 }

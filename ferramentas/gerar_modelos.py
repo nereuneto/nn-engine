@@ -777,6 +777,21 @@ def cristal():
     return m
 
 
+def grama():
+    """Um tufo de grama: folhas finas de alturas diferentes (para espalhar e
+    balançar com o vento). A base na origem; ~0,45 m."""
+    m = Modelo()
+    clara = Parte("#8FD16E")
+    escura = Parte("#5FA84A")
+    folhas = [(0.0, 0.0, 0.42, clara), (0.07, 0.04, 0.33, escura), (-0.06, 0.05, 0.37, escura),
+              (0.03, -0.07, 0.3, clara), (-0.05, -0.04, 0.45, clara), (0.09, -0.03, 0.26, escura),
+              (-0.1, 0.0, 0.28, clara)]
+    for i, (x, z, h, parte) in enumerate(folhas):
+        parte.prisma(3, 0.03, 0.0, h, raio_topo=0.0, giro=i * 0.7, centro=(x, z))
+    m.no("grama", m.malha("grama", [clara, escura]), raiz=True)
+    return m
+
+
 def estrela():
     """Estrela de 5 pontas, gorda (como as de jogo de plataforma), de pé."""
     m = Modelo()
@@ -915,7 +930,7 @@ def main():
                         ("plataforma", plataforma), ("bicho", bicho), ("chave", chave),
                         ("porta", porta), ("espada", espada), ("cajado", cajado),
                         ("besourao", besourao), ("tocha", tocha), ("lampiao", lampiao),
-                        ("cristal", cristal)]:
+                        ("cristal", cristal), ("grama", grama)]:
         with open(os.path.join(estrelas, nome + ".glb"), "wb") as f:
             f.write(fazer().glb())
     with open(os.path.join(testes, "roda.glb"), "wb") as f:

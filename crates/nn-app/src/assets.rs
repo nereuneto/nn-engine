@@ -251,10 +251,37 @@ impl Context {
         glow: nn_render::d3::Glow,
         joints: Option<&[glam::Mat4]>,
     ) -> bool {
+        self.draw_model_key_material(
+            key,
+            matrix,
+            color,
+            cast_shadow,
+            nn_render::d3::Material3D::glow(glow),
+            joints,
+        )
+    }
+
+    /// Como [`Context::draw_model_key`], com o material inteiro (brilho,
+    /// água, balançar com o vento).
+    pub fn draw_model_key_material(
+        &mut self,
+        key: &str,
+        matrix: glam::Mat4,
+        color: nn_core::Color,
+        cast_shadow: bool,
+        material: nn_render::d3::Material3D,
+        joints: Option<&[glam::Mat4]>,
+    ) -> bool {
         match self.assets.models.get(key) {
             Some((model, _)) => {
-                self.renderer
-                    .draw_model_glow(model, matrix, color, cast_shadow, glow, joints);
+                self.renderer.draw_model_material(
+                    model,
+                    matrix,
+                    color,
+                    cast_shadow,
+                    material,
+                    joints,
+                );
                 true
             }
             None => false,

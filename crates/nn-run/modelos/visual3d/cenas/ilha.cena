@@ -4,7 +4,7 @@ return {
   format = 1,
   gravity = -20,
   mode = "3d",
-  environment = { sky = true, sky_top = "#3F8FD8", sky_horizon = "#CDEBF5", sky_bottom = "#2E6F9E", sun_height = 53, sun_turn = 48, sun_color = "#FFF1D6", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 35, fog_far = 90, shadows = true, shadow_distance = 25, cycle = true, day_length = 4, start_hour = 9 },
+  environment = { sky = true, sky_top = "#3F8FD8", sky_horizon = "#CDEBF5", sky_bottom = "#2E6F9E", sun_height = 53, sun_turn = 48, sun_color = "#FFF1D6", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 35, fog_far = 90, shadows = true, shadow_distance = 25, cycle = true, day_length = 4, start_hour = 9, wind = 1, wind_turn = 60, bloom = 1 },
   events = {
     { comment = "Começo: zera as estrelas e as moedas; a dica some depois de 4 segundos." },
     { when = {
@@ -67,7 +67,7 @@ return {
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 400,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "plane", color = "#3FA7D6", shadow = false, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "plane", color = "#2E86C1", shadow = false, glow = 0, glow_night = false, material = "agua", sway = 0 },
       },
     },
     {
@@ -76,7 +76,7 @@ return {
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 29.5,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cylinder", color = "#F2D49B", shadow = false, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cylinder", color = "#F2D49B", shadow = false, glow = 0, glow_night = false, material = "normal", sway = 0 },
       },
     },
     {
@@ -85,7 +85,7 @@ return {
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 28,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cylinder", color = "#7BC86C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cylinder", color = "#7BC86C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -95,7 +95,7 @@ return {
       z = 9, rx = 0, ry = 180, rz = 0, scale_z = 1.1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "behavior", script = "nn:jogador3d", altura = 0, camera = "atras", distancia = 7, inverter_y = false, prender_mouse = true, pulo = 8, pulos_no_ar = 0, queda = -3, raio = 0, sensibilidade = 0.15, velocidade = 6, virar = true },
         { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, tremer = 6, variavel = "vidas", vidas = 3 },
         { type = "behavior", script = "nn:golpe", acerto = 0.22, alcance = 1.7, alvo = "", angulo = 120, animacao = "golpe", dano = 1, empurrao = 6, intervalo = 0.45, quando = "tecla", som = "assets/sons/golpe.wav", som_acerto = "assets/sons/acerto.wav", tecla = "clique", todos = true },
@@ -120,7 +120,7 @@ return {
           z = 0, rx = 20, ry = 0, rz = 0, scale_z = 1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/espada.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+            { type = "model", file = "modelos/espada.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
             { type = "bone", bone = "mao_d" },
           },
         },
@@ -129,7 +129,7 @@ return {
           x = 0, y = 0.05, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 14, on_start = false, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 0.8, speed_max = 2, direction = 90, spread = 200, gravity = 0.5, drag = 4, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.35, size_end = 0.6, size_var = 0, color_start = "#E8DCC4CC", color_mid = "", color_end = "#C8B89800", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500 },
+            { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 14, on_start = false, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 0.8, speed_max = 2, direction = 90, spread = 200, gravity = 0.5, drag = 4, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.35, size_end = 0.6, size_var = 0, color_start = "#E8DCC4CC", color_mid = "", color_end = "#C8B89800", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500, wind = 1 },
           },
         },
       },
@@ -140,7 +140,7 @@ return {
       z = 6.5, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cylinder", color = "#5B3A29", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cylinder", color = "#5B3A29", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
         { type = "sound", sound = "assets/sons/fogueira.wav", autoplay = true, loop = true, volume = 1, channel = "effects", spatial = true, distance = 14 },
       },
@@ -150,7 +150,7 @@ return {
           x = 0, y = 6, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "continuo", rate = 60, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.8, lifetime_var = 0.4, speed_min = 0.6, speed_max = 1.6, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.25, size_start = 0.5, size_end = 0.1, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+            { type = "particles", mode = "continuo", rate = 60, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.8, lifetime_var = 0.4, speed_min = 0.6, speed_max = 1.6, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.25, size_start = 0.5, size_end = 0.1, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1 },
             { type = "light3d", kind = "point", color = "#FF9A3C", intensity = 1.6, range = 8, angle = 30, soft = 0.3, flicker = 0.6, on = true, night = false },
           },
         },
@@ -159,7 +159,7 @@ return {
           x = 0, y = 8, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "continuo", rate = 8, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 3, lifetime_var = 0.3, speed_min = 0.5, speed_max = 1, direction = 90, spread = 30, gravity = 0.4, drag = 0.3, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.2, size_start = 0.4, size_end = 1.8, size_var = 0, color_start = "#9A9A9AAA", color_mid = "", color_end = "#5A5A5A00", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 30, blend = "alpha", follow = false, max = 500 },
+            { type = "particles", mode = "continuo", rate = 8, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 3, lifetime_var = 0.3, speed_min = 0.5, speed_max = 1, direction = 90, spread = 30, gravity = 0.4, drag = 0.3, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.2, size_start = 0.4, size_end = 1.8, size_var = 0, color_start = "#9A9A9AAA", color_mid = "", color_end = "#5A5A5A00", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 30, blend = "alpha", follow = false, max = 500, wind = 1 },
           },
         },
       },
@@ -176,7 +176,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.12,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -186,7 +186,7 @@ return {
           z = 0.25, rx = 0, ry = 0, rz = 0, scale_z = 0.55,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
           },
         },
         {
@@ -195,7 +195,7 @@ return {
           z = 0.48, rx = 0, ry = 0, rz = 0, scale_z = 1.1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true },
+            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true, sway = 0 },
           },
           children = {
             {
@@ -222,7 +222,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.12,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -232,7 +232,7 @@ return {
           z = 0.25, rx = 0, ry = 0, rz = 0, scale_z = 0.55,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
           },
         },
         {
@@ -241,7 +241,7 @@ return {
           z = 0.48, rx = 0, ry = 0, rz = 0, scale_z = 1.1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true },
+            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true, sway = 0 },
           },
           children = {
             {
@@ -268,7 +268,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.12,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -278,7 +278,7 @@ return {
           z = 0.25, rx = 0, ry = 0, rz = 0, scale_z = 0.55,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
           },
         },
         {
@@ -287,7 +287,7 @@ return {
           z = 0.48, rx = 0, ry = 0, rz = 0, scale_z = 1.1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true },
+            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true, sway = 0 },
           },
           children = {
             {
@@ -314,7 +314,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.12,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -324,7 +324,7 @@ return {
           z = 0.25, rx = 0, ry = 0, rz = 0, scale_z = 0.55,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
           },
         },
         {
@@ -333,7 +333,7 @@ return {
           z = 0.48, rx = 0, ry = 0, rz = 0, scale_z = 1.1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true },
+            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true, sway = 0 },
           },
           children = {
             {
@@ -360,7 +360,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.12,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -370,7 +370,7 @@ return {
           z = 0.25, rx = 0, ry = 0, rz = 0, scale_z = 0.55,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
           },
         },
         {
@@ -379,7 +379,7 @@ return {
           z = 0.48, rx = 0, ry = 0, rz = 0, scale_z = 1.1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true },
+            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true, sway = 0 },
           },
           children = {
             {
@@ -406,7 +406,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.12,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -416,7 +416,7 @@ return {
           z = 0.25, rx = 0, ry = 0, rz = 0, scale_z = 0.55,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
           },
         },
         {
@@ -425,7 +425,7 @@ return {
           z = 0.48, rx = 0, ry = 0, rz = 0, scale_z = 1.1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true },
+            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true, sway = 0 },
           },
           children = {
             {
@@ -452,7 +452,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.12,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cylinder", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -462,7 +462,7 @@ return {
           z = 0.25, rx = 0, ry = 0, rz = 0, scale_z = 0.55,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#3A3A42", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
           },
         },
         {
@@ -471,7 +471,7 @@ return {
           z = 0.48, rx = 0, ry = 0, rz = 0, scale_z = 1.1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true },
+            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true, sway = 0 },
           },
           children = {
             {
@@ -519,7 +519,7 @@ return {
       z = 2, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -529,7 +529,7 @@ return {
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -539,7 +539,7 @@ return {
       z = -7, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -549,7 +549,7 @@ return {
       z = -10, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -559,7 +559,7 @@ return {
       z = -5.5, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -569,7 +569,7 @@ return {
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -579,7 +579,7 @@ return {
       z = 1.5, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -589,7 +589,7 @@ return {
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 4,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -599,7 +599,7 @@ return {
       z = -10, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFE6B0", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFE6B0", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "kinematic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
         { type = "behavior", script = "nn:plataforma3d", duracao = 3.75, espera = 0.5, x = 6, y = 0, z = 0 },
       },
@@ -610,7 +610,7 @@ return {
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#FFE6B0", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#FFE6B0", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "kinematic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
         { type = "behavior", script = "nn:plataforma3d", duracao = 5.8, espera = 1, x = 0, y = 7.6, z = 0 },
       },
@@ -621,7 +621,7 @@ return {
       z = -6, rx = 0, ry = 20, rz = 0, scale_z = 1.3,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -631,7 +631,7 @@ return {
       z = 3, rx = 0, ry = 80, rz = 0, scale_z = 1.1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -641,7 +641,7 @@ return {
       z = 9, rx = 0, ry = 140, rz = 0, scale_z = 1.4,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -651,7 +651,7 @@ return {
       z = -5, rx = 0, ry = 200, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -661,7 +661,7 @@ return {
       z = 4, rx = 0, ry = 260, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -671,7 +671,7 @@ return {
       z = -11, rx = 0, ry = 300, rz = 0, scale_z = 1.5,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -681,7 +681,7 @@ return {
       z = -2, rx = 0, ry = 40, rz = 0, scale_z = 1.3,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -691,544 +691,1193 @@ return {
       z = -2, rx = 0, ry = 110, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 66, name = "Pedra",
+      id = 66, name = "Grama",
+      x = -8.02, y = 0, rotation = 0, scale_x = 1.46, scale_y = 1.46,
+      z = -7.81, rx = 0, ry = 333, rz = 0, scale_z = 1.46,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 67, name = "Grama",
+      x = 1.96, y = 0, rotation = 0, scale_x = 1.23, scale_y = 1.23,
+      z = -1.04, rx = 0, ry = 127, rz = 0, scale_z = 1.23,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 68, name = "Grama",
+      x = -7.32, y = 0, rotation = 0, scale_x = 0.98, scale_y = 0.98,
+      z = -9.94, rx = 0, ry = 240, rz = 0, scale_z = 0.98,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 69, name = "Grama",
+      x = 5.43, y = 0, rotation = 0, scale_x = 0.97, scale_y = 0.97,
+      z = -5.9, rx = 0, ry = 127, rz = 0, scale_z = 0.97,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 70, name = "Grama",
+      x = 6.03, y = 0, rotation = 0, scale_x = 1.1, scale_y = 1.1,
+      z = 0.5, rx = 0, ry = 199, rz = 0, scale_z = 1.1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 71, name = "Grama",
+      x = 0.38, y = 0, rotation = 0, scale_x = 1.51, scale_y = 1.51,
+      z = 0.39, rx = 0, ry = 107, rz = 0, scale_z = 1.51,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 72, name = "Grama",
+      x = 1.88, y = 0, rotation = 0, scale_x = 1.02, scale_y = 1.02,
+      z = -12.6, rx = 0, ry = 85, rz = 0, scale_z = 1.02,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 73, name = "Grama",
+      x = -3.12, y = 0, rotation = 0, scale_x = 1.28, scale_y = 1.28,
+      z = 12.36, rx = 0, ry = 347, rz = 0, scale_z = 1.28,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 74, name = "Grama",
+      x = -3.9, y = 0, rotation = 0, scale_x = 1.58, scale_y = 1.58,
+      z = -3.94, rx = 0, ry = 100, rz = 0, scale_z = 1.58,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 75, name = "Grama",
+      x = 12.02, y = 0, rotation = 0, scale_x = 1.11, scale_y = 1.11,
+      z = -2.56, rx = 0, ry = 184, rz = 0, scale_z = 1.11,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 76, name = "Grama",
+      x = -10.82, y = 0, rotation = 0, scale_x = 1.08, scale_y = 1.08,
+      z = 6.41, rx = 0, ry = 169, rz = 0, scale_z = 1.08,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 77, name = "Grama",
+      x = -3.2, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.9,
+      z = 9.57, rx = 0, ry = 347, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 78, name = "Grama",
+      x = -0.88, y = 0, rotation = 0, scale_x = 1.15, scale_y = 1.15,
+      z = -3.22, rx = 0, ry = 156, rz = 0, scale_z = 1.15,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 79, name = "Grama",
+      x = -7.25, y = 0, rotation = 0, scale_x = 1.24, scale_y = 1.24,
+      z = 0.88, rx = 0, ry = 90, rz = 0, scale_z = 1.24,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 80, name = "Grama",
+      x = 12.02, y = 0, rotation = 0, scale_x = 0.92, scale_y = 0.92,
+      z = 4.5, rx = 0, ry = 183, rz = 0, scale_z = 0.92,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 81, name = "Grama",
+      x = 0.98, y = 0, rotation = 0, scale_x = 1.45, scale_y = 1.45,
+      z = -1.45, rx = 0, ry = 187, rz = 0, scale_z = 1.45,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 82, name = "Grama",
+      x = -8.5, y = 0, rotation = 0, scale_x = 1.22, scale_y = 1.22,
+      z = 8.36, rx = 0, ry = 92, rz = 0, scale_z = 1.22,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 83, name = "Grama",
+      x = -9.05, y = 0, rotation = 0, scale_x = 0.98, scale_y = 0.98,
+      z = -8.91, rx = 0, ry = 125, rz = 0, scale_z = 0.98,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 84, name = "Grama",
+      x = 11.41, y = 0, rotation = 0, scale_x = 1.14, scale_y = 1.14,
+      z = -5.4, rx = 0, ry = 181, rz = 0, scale_z = 1.14,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 85, name = "Grama",
+      x = 5.09, y = 0, rotation = 0, scale_x = 1.22, scale_y = 1.22,
+      z = -4.06, rx = 0, ry = 301, rz = 0, scale_z = 1.22,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 86, name = "Grama",
+      x = -0.12, y = 0, rotation = 0, scale_x = 1.5, scale_y = 1.5,
+      z = -11.61, rx = 0, ry = 18, rz = 0, scale_z = 1.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 87, name = "Grama",
+      x = -11.74, y = 0, rotation = 0, scale_x = 1.05, scale_y = 1.05,
+      z = 5.26, rx = 0, ry = 262, rz = 0, scale_z = 1.05,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 88, name = "Grama",
+      x = -9.56, y = 0, rotation = 0, scale_x = 1.14, scale_y = 1.14,
+      z = -7.99, rx = 0, ry = 359, rz = 0, scale_z = 1.14,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 89, name = "Grama",
+      x = -6.98, y = 0, rotation = 0, scale_x = 1.12, scale_y = 1.12,
+      z = -2.03, rx = 0, ry = 90, rz = 0, scale_z = 1.12,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 90, name = "Grama",
+      x = 3.1, y = 0, rotation = 0, scale_x = 1.4, scale_y = 1.4,
+      z = -9.81, rx = 0, ry = 158, rz = 0, scale_z = 1.4,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 91, name = "Grama",
+      x = 5.22, y = 0, rotation = 0, scale_x = 0.93, scale_y = 0.93,
+      z = -0.11, rx = 0, ry = 307, rz = 0, scale_z = 0.93,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 92, name = "Grama",
+      x = -8.1, y = 0, rotation = 0, scale_x = 1.07, scale_y = 1.07,
+      z = -1.73, rx = 0, ry = 304, rz = 0, scale_z = 1.07,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 93, name = "Grama",
+      x = -2.89, y = 0, rotation = 0, scale_x = 1.59, scale_y = 1.59,
+      z = -4.03, rx = 0, ry = 326, rz = 0, scale_z = 1.59,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 94, name = "Grama",
+      x = 8.94, y = 0, rotation = 0, scale_x = 1.49, scale_y = 1.49,
+      z = 1.86, rx = 0, ry = 66, rz = 0, scale_z = 1.49,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 95, name = "Grama",
+      x = 9.7, y = 0, rotation = 0, scale_x = 0.99, scale_y = 0.99,
+      z = -1.14, rx = 0, ry = 211, rz = 0, scale_z = 0.99,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 96, name = "Grama",
+      x = -2.43, y = 0, rotation = 0, scale_x = 1.6, scale_y = 1.6,
+      z = 8.41, rx = 0, ry = 86, rz = 0, scale_z = 1.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 97, name = "Grama",
+      x = 8.66, y = 0, rotation = 0, scale_x = 1.24, scale_y = 1.24,
+      z = -1.31, rx = 0, ry = 162, rz = 0, scale_z = 1.24,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 98, name = "Grama",
+      x = -6.95, y = 0, rotation = 0, scale_x = 1.18, scale_y = 1.18,
+      z = 0.92, rx = 0, ry = 75, rz = 0, scale_z = 1.18,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 99, name = "Grama",
+      x = -5.4, y = 0, rotation = 0, scale_x = 1.56, scale_y = 1.56,
+      z = -1.09, rx = 0, ry = 173, rz = 0, scale_z = 1.56,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 100, name = "Grama",
+      x = 3.88, y = 0, rotation = 0, scale_x = 1.26, scale_y = 1.26,
+      z = 8.25, rx = 0, ry = 280, rz = 0, scale_z = 1.26,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 101, name = "Grama",
+      x = 5.26, y = 0, rotation = 0, scale_x = 1.45, scale_y = 1.45,
+      z = -5.78, rx = 0, ry = 182, rz = 0, scale_z = 1.45,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 102, name = "Grama",
+      x = -3.61, y = 0, rotation = 0, scale_x = 1.43, scale_y = 1.43,
+      z = -9.96, rx = 0, ry = 186, rz = 0, scale_z = 1.43,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 103, name = "Grama",
+      x = -9.9, y = 0, rotation = 0, scale_x = 1.48, scale_y = 1.48,
+      z = -3.87, rx = 0, ry = 135, rz = 0, scale_z = 1.48,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 104, name = "Grama",
+      x = 1.34, y = 0, rotation = 0, scale_x = 1.11, scale_y = 1.11,
+      z = -10.72, rx = 0, ry = 174, rz = 0, scale_z = 1.11,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 105, name = "Grama",
+      x = -5.84, y = 0, rotation = 0, scale_x = 0.91, scale_y = 0.91,
+      z = -8, rx = 0, ry = 280, rz = 0, scale_z = 0.91,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 106, name = "Grama",
+      x = 1.1, y = 0, rotation = 0, scale_x = 1.09, scale_y = 1.09,
+      z = -7.34, rx = 0, ry = 147, rz = 0, scale_z = 1.09,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 107, name = "Grama",
+      x = 4.26, y = 0, rotation = 0, scale_x = 1.46, scale_y = 1.46,
+      z = -9.56, rx = 0, ry = 178, rz = 0, scale_z = 1.46,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 108, name = "Grama",
+      x = -1.14, y = 0, rotation = 0, scale_x = 1.56, scale_y = 1.56,
+      z = 7.56, rx = 0, ry = 209, rz = 0, scale_z = 1.56,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 109, name = "Grama",
+      x = -7.02, y = 0, rotation = 0, scale_x = 1.51, scale_y = 1.51,
+      z = 9.65, rx = 0, ry = 352, rz = 0, scale_z = 1.51,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 110, name = "Grama",
+      x = -7.46, y = 0, rotation = 0, scale_x = 1.13, scale_y = 1.13,
+      z = 2.43, rx = 0, ry = 72, rz = 0, scale_z = 1.13,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 111, name = "Grama",
+      x = -5.21, y = 0, rotation = 0, scale_x = 1.49, scale_y = 1.49,
+      z = -0.97, rx = 0, ry = 244, rz = 0, scale_z = 1.49,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 112, name = "Grama",
+      x = -0.75, y = 0, rotation = 0, scale_x = 1.37, scale_y = 1.37,
+      z = 3.57, rx = 0, ry = 213, rz = 0, scale_z = 1.37,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 113, name = "Grama",
+      x = 5.42, y = 0, rotation = 0, scale_x = 1.31, scale_y = 1.31,
+      z = 10.13, rx = 0, ry = 340, rz = 0, scale_z = 1.31,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 114, name = "Grama",
+      x = 6.59, y = 0, rotation = 0, scale_x = 1.29, scale_y = 1.29,
+      z = -2.78, rx = 0, ry = 326, rz = 0, scale_z = 1.29,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 115, name = "Grama",
+      x = -1.68, y = 0, rotation = 0, scale_x = 1.04, scale_y = 1.04,
+      z = 12.86, rx = 0, ry = 300, rz = 0, scale_z = 1.04,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 116, name = "Grama",
+      x = -9.77, y = 0, rotation = 0, scale_x = 1.05, scale_y = 1.05,
+      z = 3.79, rx = 0, ry = 351, rz = 0, scale_z = 1.05,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 117, name = "Grama",
+      x = 4.66, y = 0, rotation = 0, scale_x = 1.59, scale_y = 1.59,
+      z = 9.99, rx = 0, ry = 115, rz = 0, scale_z = 1.59,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 118, name = "Grama",
+      x = 6.2, y = 0, rotation = 0, scale_x = 0.98, scale_y = 0.98,
+      z = 10.6, rx = 0, ry = 92, rz = 0, scale_z = 0.98,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 119, name = "Grama",
+      x = -9.57, y = 0, rotation = 0, scale_x = 1.19, scale_y = 1.19,
+      z = 1.05, rx = 0, ry = 179, rz = 0, scale_z = 1.19,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 120, name = "Grama",
+      x = -7.43, y = 0, rotation = 0, scale_x = 1.31, scale_y = 1.31,
+      z = 6.95, rx = 0, ry = 121, rz = 0, scale_z = 1.31,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 121, name = "Grama",
+      x = -1.59, y = 0, rotation = 0, scale_x = 1.15, scale_y = 1.15,
+      z = -7.79, rx = 0, ry = 142, rz = 0, scale_z = 1.15,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 122, name = "Grama",
+      x = 7.47, y = 0, rotation = 0, scale_x = 1.38, scale_y = 1.38,
+      z = -9.52, rx = 0, ry = 280, rz = 0, scale_z = 1.38,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 123, name = "Grama",
+      x = -1.73, y = 0, rotation = 0, scale_x = 1.33, scale_y = 1.33,
+      z = 1.76, rx = 0, ry = 48, rz = 0, scale_z = 1.33,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 124, name = "Grama",
+      x = -2.61, y = 0, rotation = 0, scale_x = 1.57, scale_y = 1.57,
+      z = 8.93, rx = 0, ry = 150, rz = 0, scale_z = 1.57,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 125, name = "Grama",
+      x = 11.36, y = 0, rotation = 0, scale_x = 1.19, scale_y = 1.19,
+      z = -3.05, rx = 0, ry = 288, rz = 0, scale_z = 1.19,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 126, name = "Grama",
+      x = -4.95, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -6.16, rx = 0, ry = 305, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 127, name = "Grama",
+      x = -6.65, y = 0, rotation = 0, scale_x = 1.04, scale_y = 1.04,
+      z = 6.03, rx = 0, ry = 68, rz = 0, scale_z = 1.04,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 128, name = "Grama",
+      x = -5.98, y = 0, rotation = 0, scale_x = 1.53, scale_y = 1.53,
+      z = -4.86, rx = 0, ry = 0, rz = 0, scale_z = 1.53,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 129, name = "Grama",
+      x = -5.47, y = 0, rotation = 0, scale_x = 1.54, scale_y = 1.54,
+      z = 5.02, rx = 0, ry = 276, rz = 0, scale_z = 1.54,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 130, name = "Grama",
+      x = 6.18, y = 0, rotation = 0, scale_x = 1.2, scale_y = 1.2,
+      z = -5.03, rx = 0, ry = 115, rz = 0, scale_z = 1.2,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 131, name = "Grama",
+      x = -8.99, y = 0, rotation = 0, scale_x = 1.4, scale_y = 1.4,
+      z = 0.37, rx = 0, ry = 196, rz = 0, scale_z = 1.4,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 132, name = "Grama",
+      x = 12.06, y = 0, rotation = 0, scale_x = 1.32, scale_y = 1.32,
+      z = -3, rx = 0, ry = 133, rz = 0, scale_z = 1.32,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 133, name = "Grama",
+      x = -0.4, y = 0, rotation = 0, scale_x = 1.08, scale_y = 1.08,
+      z = -7.12, rx = 0, ry = 10, rz = 0, scale_z = 1.08,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 134, name = "Grama",
+      x = -5.43, y = 0, rotation = 0, scale_x = 1.24, scale_y = 1.24,
+      z = 11.7, rx = 0, ry = 146, rz = 0, scale_z = 1.24,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 135, name = "Grama",
+      x = 1.25, y = 0, rotation = 0, scale_x = 1.36, scale_y = 1.36,
+      z = 1.57, rx = 0, ry = 227, rz = 0, scale_z = 1.36,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 136, name = "Pedra",
       x = -7, y = 0.468, rotation = 0, scale_x = 1.8, scale_y = 1.8,
       z = 6, rx = 0, ry = 30, rz = 0, scale_z = 1.8,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 67, name = "Pedra",
+      id = 137, name = "Pedra",
       x = 3.5, y = 0.39, rotation = 0, scale_x = 1.5, scale_y = 1.5,
       z = 11.5, rx = 0, ry = 90, rz = 0, scale_z = 1.5,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 68, name = "Pedra",
+      id = 138, name = "Pedra",
       x = 11.5, y = 0.572, rotation = 0, scale_x = 2.2, scale_y = 2.2,
       z = 3, rx = 0, ry = 150, rz = 0, scale_z = 2.2,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 69, name = "Pedra",
+      id = 139, name = "Pedra",
       x = -10, y = 0.442, rotation = 0, scale_x = 1.7, scale_y = 1.7,
       z = -9, rx = 0, ry = 220, rz = 0, scale_z = 1.7,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 70, name = "Caixote",
+      id = 140, name = "Caixote",
       x = -2, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "dynamic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 8, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 71, name = "Caixote",
+      id = 141, name = "Caixote",
       x = -0.8, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5.2, rx = 0, ry = 15, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "dynamic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 8, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 72, name = "Caixote",
+      id = 142, name = "Caixote",
       x = -1.4, y = 1, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5.1, rx = 0, ry = 40, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/caixote.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "dynamic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 8, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 73, name = "moeda",
+      id = 143, name = "moeda",
       x = -8.457, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -3.078, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 74, name = "moeda",
+      id = 144, name = "moeda",
       x = -7.092, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -5.541, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 75, name = "moeda",
+      id = 145, name = "moeda",
       x = -5.033, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7.461, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 76, name = "moeda",
+      id = 146, name = "moeda",
       x = -2.481, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -8.651, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 77, name = "moeda",
+      id = 147, name = "moeda",
       x = 0.314, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -8.995, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 78, name = "moeda",
+      id = 148, name = "moeda",
       x = 3.078, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -8.457, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 79, name = "moeda",
+      id = 149, name = "moeda",
       x = 5.541, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7.092, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 80, name = "moeda",
+      id = 150, name = "moeda",
       x = 7.461, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -5.033, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 81, name = "moeda",
+      id = 151, name = "moeda",
       x = -4, y = 1.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 82, name = "moeda",
+      id = 152, name = "moeda",
       x = 11, y = 6.4, rotation = 0, scale_x = 1, scale_y = 1,
       z = -5.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 83, name = "moeda",
+      id = 153, name = "moeda",
       x = 8, y = 7.8, rotation = 0, scale_x = 1, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 84, name = "moeda",
+      id = 154, name = "moeda",
       x = 1.5, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 8.6, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 85, name = "moeda",
+      id = 155, name = "moeda",
       x = 2.8, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 8.3, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 86, name = "moeda",
+      id = 156, name = "moeda",
       x = 4.1, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 8, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 87, name = "estrela",
+      id = 157, name = "estrela",
       x = -6, y = 3.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 88, name = "estrela",
+      id = 158, name = "estrela",
       x = 10, y = 4.9, rotation = 0, scale_x = 1, scale_y = 1,
       z = -10, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 89, name = "estrela",
+      id = 159, name = "estrela",
       x = 10.5, y = 8.9, rotation = 0, scale_x = 1, scale_y = 1,
       z = 1.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 90, name = "estrela",
+      id = 160, name = "estrela",
       x = 0, y = 8.4, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 91, name = "estrela",
+      id = 161, name = "estrela",
       x = 7.5, y = 0.5, rotation = 0, scale_x = 1, scale_y = 1,
       z = 7.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 92, name = "Areia da arena",
+      id = 162, name = "Areia da arena",
       x = -27, y = -0.55, rotation = 0, scale_x = 19.5, scale_y = 1,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 19.5,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cylinder", color = "#F2D49B", shadow = false, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cylinder", color = "#F2D49B", shadow = false, glow = 0, glow_night = false, material = "normal", sway = 0 },
       },
     },
     {
-      id = 93, name = "Arena",
+      id = 163, name = "Arena",
       x = -27, y = -2, rotation = 0, scale_x = 18, scale_y = 4,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 18,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cylinder", color = "#C9B48A", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cylinder", color = "#C9B48A", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 94, name = "Ponte",
+      id = 164, name = "Ponte",
       x = -14.6, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.5,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.6,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 95, name = "Ponte",
+      id = 165, name = "Ponte",
       x = -15.55, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.5,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.6,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 96, name = "Ponte",
+      id = 166, name = "Ponte",
       x = -16.5, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.5,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.6,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 97, name = "Ponte",
+      id = 167, name = "Ponte",
       x = -17.45, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.5,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.6,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 98, name = "Pilar",
+      id = 168, name = "Pilar",
       x = -19.34, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 3.69, rx = 0, ry = -25.7, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 99, name = "Pilar",
+      id = 169, name = "Pilar",
       x = -20.35, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 5.3, rx = 0, ry = -38.6, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 100, name = "Pilar",
+      id = 170, name = "Pilar",
       x = -21.7, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 6.65, rx = 0, ry = -51.4, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 101, name = "Pilar",
+      id = 171, name = "Pilar",
       x = -23.31, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 7.66, rx = 0, ry = -64.3, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 102, name = "Pilar",
+      id = 172, name = "Pilar",
       x = -25.11, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 8.29, rx = 0, ry = -77.1, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 103, name = "Pilar",
+      id = 173, name = "Pilar",
       x = -27, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 8.5, rx = 0, ry = -90, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 104, name = "Pilar",
+      id = 174, name = "Pilar",
       x = -28.89, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 8.29, rx = 0, ry = -102.9, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 105, name = "Pilar",
+      id = 175, name = "Pilar",
       x = -30.69, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 7.66, rx = 0, ry = -115.7, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 106, name = "Pilar",
+      id = 176, name = "Pilar",
       x = -32.3, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 6.65, rx = 0, ry = -128.6, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 107, name = "Pilar",
+      id = 177, name = "Pilar",
       x = -33.65, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 5.3, rx = 0, ry = -141.4, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 108, name = "Pilar",
+      id = 178, name = "Pilar",
       x = -34.66, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 3.69, rx = 0, ry = -154.3, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 109, name = "Pilar",
+      id = 179, name = "Pilar",
       x = -35.29, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 1.89, rx = 0, ry = -167.1, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 110, name = "Pilar",
+      id = 180, name = "Pilar",
       x = -35.5, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = 0, rx = 0, ry = -180, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 111, name = "Pilar",
+      id = 181, name = "Pilar",
       x = -35.29, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -1.89, rx = 0, ry = -192.9, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 112, name = "Pilar",
+      id = 182, name = "Pilar",
       x = -34.66, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -3.69, rx = 0, ry = -205.7, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 113, name = "Pilar",
+      id = 183, name = "Pilar",
       x = -33.65, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -5.3, rx = 0, ry = -218.6, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 114, name = "Pilar",
+      id = 184, name = "Pilar",
       x = -32.3, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -6.65, rx = 0, ry = -231.4, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 115, name = "Pilar",
+      id = 185, name = "Pilar",
       x = -30.69, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -7.66, rx = 0, ry = -244.3, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 116, name = "Pilar",
+      id = 186, name = "Pilar",
       x = -28.89, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -8.29, rx = 0, ry = -257.1, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 117, name = "Pilar",
+      id = 187, name = "Pilar",
       x = -27, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -8.5, rx = 0, ry = -270, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 118, name = "Pilar",
+      id = 188, name = "Pilar",
       x = -25.11, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -8.29, rx = 0, ry = -282.9, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 119, name = "Pilar",
+      id = 189, name = "Pilar",
       x = -23.31, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -7.66, rx = 0, ry = -295.7, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 120, name = "Pilar",
+      id = 190, name = "Pilar",
       x = -21.7, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -6.65, rx = 0, ry = -308.6, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 121, name = "Pilar",
+      id = 191, name = "Pilar",
       x = -20.35, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -5.3, rx = 0, ry = -321.4, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 122, name = "Pilar",
+      id = 192, name = "Pilar",
       x = -19.34, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
       z = -3.69, rx = 0, ry = -334.3, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 123, name = "Portão da arena",
+      id = 193, name = "Portão da arena",
       x = -18.5, y = 1.2, rotation = 0, scale_x = 0.5, scale_y = 2.4,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 3.4,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#6B4226", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#6B4226", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "kinematic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
         { type = "behavior", script = "nn:porta3d", abre = "descendo", abrir_com = "mensagem", angulo = 100, chave = "", distancia = 1.2, fechar_depois = 0, gastar_chave = true, lado = "esquerda", som = "assets/sons/porta.wav", som_trancada = "assets/sons/dano.wav", tempo = 0.8, texto = "abrir", texto_fechar = "fechar", texto_trancada = "Precisa de: {item}" },
       },
     },
     {
-      id = 124, name = "Zona da arena",
+      id = 194, name = "Zona da arena",
       x = -27, y = 1.5, rotation = 0, scale_x = 12, scale_y = 3,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 12,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#FFD16640", shadow = false, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#FFD16640", shadow = false, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "behavior", script = "nn:gatilho", alvo = "", invisivel = true, mensagem = "", mensagem_saida = "", quem = "", som = "", uma_vez = false },
       },
     },
     {
-      id = 129, name = "Ondas da arena",
+      id = 195, name = "Mastro",
+      x = -33, y = 2.5, rotation = 0, scale_x = 0.12, scale_y = 5,
+      z = -4, rx = 0, ry = 0, rz = 0, scale_z = 0.12,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cylinder", color = "#5A5462", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 196, name = "Bandeira",
+      x = -33, y = 4.55, rotation = 0, scale_x = 0.04, scale_y = 0.8,
+      z = -3.35, rx = 0, ry = 0, rz = 0, scale_z = 1.2,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#E63946", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 2 },
+      },
+    },
+    {
+      id = 201, name = "Ondas da arena",
       x = -27, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
@@ -1236,25 +1885,25 @@ return {
       },
       children = {
         {
-          id = 125, name = "Saída",
+          id = 197, name = "Saída",
           x = 3, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
           z = 5.2, rx = 0, ry = 0, rz = 0, scale_z = 1,
           visible = true, layer = 0,
         },
         {
-          id = 126, name = "Saída",
+          id = 198, name = "Saída",
           x = -3.86, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
           z = 4.6, rx = 0, ry = 0, rz = 0, scale_z = 1,
           visible = true, layer = 0,
         },
         {
-          id = 127, name = "Saída",
+          id = 199, name = "Saída",
           x = -3.86, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
           z = -4.6, rx = 0, ry = 0, rz = 0, scale_z = 1,
           visible = true, layer = 0,
         },
         {
-          id = 128, name = "Saída",
+          id = 200, name = "Saída",
           x = 3, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
           z = -5.2, rx = 0, ry = 0, rz = 0, scale_z = 1,
           visible = true, layer = 0,
@@ -1262,18 +1911,18 @@ return {
       },
     },
     {
-      id = 130, name = "Besouro-rei",
+      id = 202, name = "Besouro-rei",
       x = -31, y = 0, rotation = 0, scale_x = 1.5, scale_y = 1.5,
       z = 0, rx = 0, ry = 90, rz = 0, scale_z = 1.5,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/besourao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/besourao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "behavior", script = "nn:vida", ao_acabar = "nada", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.25, numeros = true, piscar = false, variavel = "", vidas = 14 },
         { type = "behavior", script = "nn:chefe", abertura = 70, ajudante = "prefabs/besouro.prefab", ajudantes = true, alcance = 3, aviso = 0.8, barra = true, cor_barra = "#FF5A5A", dano = 1, distancia = 10, furia = 50, golpe = true, investida = true, leque = true, nome = "Besouro-rei", pausa = 1.4, pulo = true, quando = "mensagem", quantos = 2, raio_impacto = 4.5, solta = "prefabs/estrela.prefab", som_aviso = "assets/sons/rugido.wav", som_impacto = "assets/sons/explosao.wav", tiro = "prefabs/magia.prefab", tiros = 5, tonto = 1.8, velocidade = 2.4, velocidade_investida = 11 },
       },
     },
     {
-      id = 131, name = "Placar da arena",
+      id = 203, name = "Placar da arena",
       x = -40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = false, layer = 0, anchor = "top_right",
       components = {
@@ -1282,88 +1931,88 @@ return {
       },
     },
     {
-      id = 132, name = "Parede",
+      id = 204, name = "Parede",
       x = 7.5, y = 1.3, rotation = 0, scale_x = 3.4, scale_y = 2.6,
       z = 5.95, rx = 0, ry = 0, rz = 0, scale_z = 0.3,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 133, name = "Parede",
+      id = 205, name = "Parede",
       x = 7.5, y = 1.3, rotation = 0, scale_x = 3.4, scale_y = 2.6,
       z = 9.05, rx = 0, ry = 0, rz = 0, scale_z = 0.3,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 134, name = "Parede",
+      id = 206, name = "Parede",
       x = 9.05, y = 1.3, rotation = 0, scale_x = 0.3, scale_y = 2.6,
       z = 7.5, rx = 0, ry = 0, rz = 0, scale_z = 2.8,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 135, name = "Parede",
+      id = 207, name = "Parede",
       x = 5.95, y = 1.3, rotation = 0, scale_x = 0.3, scale_y = 2.6,
       z = 6.5, rx = 0, ry = 0, rz = 0, scale_z = 0.8,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 136, name = "Parede",
+      id = 208, name = "Parede",
       x = 5.95, y = 1.3, rotation = 0, scale_x = 0.3, scale_y = 2.6,
       z = 8.5, rx = 0, ry = 0, rz = 0, scale_z = 0.8,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 137, name = "Parede",
+      id = 209, name = "Parede",
       x = 5.95, y = 2.4, rotation = 0, scale_x = 0.3, scale_y = 0.4,
       z = 7.5, rx = 0, ry = 0, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#A9AEB8", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 138, name = "Parede",
+      id = 210, name = "Parede",
       x = 7.5, y = 2.72, rotation = 0, scale_x = 3.8, scale_y = 0.25,
       z = 7.5, rx = 0, ry = 0, rz = 0, scale_z = 3.8,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#8B5A3C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#8B5A3C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 139, name = "Porta do cofre",
+      id = 211, name = "Porta do cofre",
       x = 5.95, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 7.5, rx = 0, ry = -90, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/porta.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/porta.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "kinematic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
         { type = "behavior", script = "nn:porta3d", abre = "girando", abrir_com = "tecla", angulo = 100, chave = "chave", distancia = 1.2, fechar_depois = 0, gastar_chave = true, lado = "esquerda", som = "assets/sons/porta.wav", som_trancada = "assets/sons/dano.wav", tempo = 0.6, texto = "abrir", texto_fechar = "fechar", texto_trancada = "Precisa de: {item}" },
       },
     },
     {
-      id = 140, name = "Placa do cofre",
+      id = 212, name = "Placa do cofre",
       x = 5.78, y = 2.4, rotation = 0, scale_x = 1, scale_y = 1,
       z = 7.5, rx = 0, ry = -90, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -1372,30 +2021,30 @@ return {
       },
     },
     {
-      id = 141, name = "Chave",
+      id = 213, name = "Chave",
       x = -8, y = 2.1, rotation = 0, scale_x = 1.6, scale_y = 1.6,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1.6,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/chave.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/chave.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "behavior", script = "nn:coletavel", brilho = true, cor_brilho = "#FFD166", icone = "assets/imagens/chave.png", item = "chave", quem = "", som = "assets/sons/chave.wav", valor = 1, variavel = "" },
         { type = "behavior", script = "nn:girar3d", altura = 0.15, duracao = 2, eixo = "y", velocidade = 120 },
       },
     },
     {
-      id = 145, name = "Pescador",
+      id = 217, name = "Pescador",
       x = 1.8, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 4.8, rx = 0, ry = -23, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/heroi.glb", color = "#9FD3FF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/heroi.glb", color = "#9FD3FF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "anim3d", animation = "parado", speed = 1, loop = true },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
         { type = "behavior", script = "nn:dialogo", arquivo = "dialogos/pescador.dialogo", comecar = "tecla", distancia = 1.5, olhar = true, texto = "falar", uma_vez = false },
       },
       children = {
         {
-          id = 142, name = "Nome",
+          id = 214, name = "Nome",
           x = 0, y = 2.15, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
@@ -1403,16 +2052,16 @@ return {
           },
         },
         {
-          id = 144, name = "Lampião do pescador",
+          id = 216, name = "Lampião do pescador",
           x = 0, y = -0.42, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true },
+            { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = true, sway = 0 },
             { type = "bone", bone = "mao_e" },
           },
           children = {
             {
-              id = 143, name = "Luz do lampião",
+              id = 215, name = "Luz do lampião",
               x = 0, y = 0.18, rotation = 0, scale_x = 1, scale_y = 1,
               visible = true, layer = 0,
               components = {
@@ -1424,7 +2073,7 @@ return {
       },
     },
     {
-      id = 146, name = "Placar",
+      id = 218, name = "Placar",
       x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -1433,7 +2082,7 @@ return {
       },
     },
     {
-      id = 147, name = "Dica",
+      id = 219, name = "Dica",
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top",
       components = {
@@ -1441,7 +2090,7 @@ return {
       },
     },
     {
-      id = 148, name = "Corações",
+      id = 220, name = "Corações",
       x = 40, y = -90, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -1449,7 +2098,7 @@ return {
       },
     },
     {
-      id = 149, name = "Inventário",
+      id = 221, name = "Inventário",
       x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
@@ -1457,23 +2106,23 @@ return {
       },
     },
     {
-      id = 150, name = "Besouro",
+      id = 222, name = "Besouro",
       x = -9, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "behavior", script = "nn:inimigo3d", andar = "patrulha", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 0, z = -5 },
         { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, piscar = true, variavel = "", vidas = 1 },
       },
     },
     {
-      id = 151, name = "Besouro",
+      id = 223, name = "Besouro",
       x = 6, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "behavior", script = "nn:inimigo3d", andar = "vagar", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 3, velocidade = 1.8, virar = true, visao = 6, x = 5, z = 0 },
         { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, piscar = true, variavel = "", vidas = 1 },
       },

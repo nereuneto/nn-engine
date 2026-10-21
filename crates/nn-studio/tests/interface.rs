@@ -3376,9 +3376,10 @@ fn cena_3d_terreno_pintado_com_o_mouse() {
     }
     h.run_steps(3);
     tela(&mut h, "cena-3d-terreno-agua");
-    // Salva: a cena tem o terreno com os dados.
-    atalho(&mut h, Modifiers::COMMAND, Key::S);
-    h.run_steps(2);
+    // Salva: a cena tem o terreno com os dados. (Com a água, a vista
+    // anima sem parar: passos contados, não `run`.)
+    h.key_press_modifiers(Modifiers::COMMAND, Key::S);
+    h.run_steps(3);
     let text = std::fs::read_to_string(proj.join("cenas/teste.cena")).unwrap();
     assert!(
         text.contains("type = \"terrain\"") && text.contains("data = \"t1:"),
@@ -4484,6 +4485,206 @@ fn tutorial_dia_e_noite_avanca_sozinho_ate_o_fim() {
     espera(&mut h, 8);
     h.get_by_label("▶ Testar daqui").click();
     espera(&mut h, 9);
+    h.get_by_label("Concluir").click();
+    h.run_steps(3);
+    assert!(h.state().tutorial.is_none());
+}
+
+/// Água, vento e halo no NN Studio: ➕ Objeto > Água (lago) traz um plano com
+/// o Material Água; o Ambiente tem Vento e Halo do brilho, e um pronto
+/// (Entardecer) não mexe neles nem no Dia e noite. Na vista, uma esfera que
+/// brilha no escuro tem um halo em volta, que some com o Halo em 0.
+#[test]
+fn cena_3d_agua_vento_e_halo() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let dir = temp("cena-3d-agua");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    h.get_by_label("➕ Objeto").click();
+    h.run_steps(2);
+    h.get_by_label("Água (lago)").click();
+    h.run_steps(4);
+    let lago = objeto(&h, "Lago").clone();
+    let f = lago.component("shape3d").unwrap();
+    assert_eq!(f.str("material"), "agua");
+    assert_eq!(f.str("shape"), "plane");
+    assert!(lago.component("body3d").is_none(), "dá para entrar no lago");
+    assert!(
+        (lago.y - 0.1).abs() < 0.01,
+        "um pouco acima do chão: {}",
+        lago.y
+    );
+    // O Inspetor da Forma 3D mostra o Material.
+    h.get_by_label("Material");
+    h.get_by_label("Balança com o vento");
+    // O Ambiente: Vento e Halo do brilho.
+    cena_mut(&mut h).selection.clear();
+    h.run_steps(3);
+    h.get_by_label("Vento:");
+    h.get_by_label("Halo do brilho:");
+    {
+        let doc = cena_mut(&mut h);
+        doc.data.set_env("wind", Prop::Num(1.5));
+        doc.data.set_env("cycle", Prop::Bool(true));
+        doc.data.set_env("bloom", Prop::Num(2.0));
+    }
+    h.run_steps(3);
+    h.get_by_label("Entardecer").click();
+    h.run_steps(3);
+    {
+        let doc = cena_mut(&mut h);
+        assert_eq!(doc.data.env("sky_horizon").str(), "#F7A35C");
+        assert_eq!(
+            doc.data.env("wind").num(),
+            1.5,
+            "o pronto não mexe no vento"
+        );
+        assert_eq!(doc.data.env("bloom").num(), 2.0, "nem no halo");
+        assert!(doc.data.env("cycle").bool(), "nem no Dia e noite");
+        // O lago de lado, contra o sol.
+        let l = glam::Vec3::new(lago.x as f32, lago.y as f32, lago.z as f32);
+        doc.cam3.look_at(l + glam::Vec3::new(-6.0, 2.0, 8.0), l);
+        doc.cam3_set = true;
+    }
+    h.run_steps(3);
+    tela(&mut h, "cena-3d-agua");
+    if !gpu {
+        return;
+    }
+    {
+        // No meio da vista, a água (azulada, com o céu), não o chão verde.
+        let rect = h.get_by_label("Vista da cena 3D").rect();
+        let img = h.render().expect("render");
+        let ppp = img.width() as f32 / 1280.0;
+        let c = rect.center();
+        let p = img.get_pixel((c.x * ppp) as u32, ((c.y + 20.0) * ppp) as u32);
+        assert!(p[2] > p[1], "a água no meio da vista: {p:?}");
+    }
+    // O halo: no escuro (Caverna), uma esfera que brilha, no meio da vista.
+    h.get_by_label("Caverna").click();
+    h.run_steps(3);
+    {
+        let doc = cena_mut(&mut h);
+        doc.data.objects.retain(|o| o.name != "Lago");
+        let mut esfera = Object::new(60, "Esfera");
+        let mut f = Component::new("shape3d");
+        f.set("shape", Prop::Str("sphere".into()));
+        f.set("color", Prop::Str("#FFD166".into()));
+        f.set("glow", Prop::Num(1.0));
+        esfera.components.push(f);
+        esfera.y = 3.0;
+        doc.data.objects.push(esfera);
+        doc.cam3.look_at(
+            glam::Vec3::new(0.0, 3.0, 6.0),
+            glam::Vec3::new(0.0, 3.0, 0.0),
+        );
+        doc.cam3_set = true;
+    }
+    // A linha do meio da vista, do centro para a direita (brilho de cada ponto).
+    let linha = |h: &mut Harness<'_, StudioApp>, halo: f64| -> Vec<u32> {
+        cena_mut(h).data.set_env("bloom", Prop::Num(halo));
+        h.run_steps(3);
+        let rect = h.get_by_label("Vista da cena 3D").rect();
+        let img = h.render().expect("render");
+        let ppp = img.width() as f32 / 1280.0;
+        let c = rect.center();
+        (0..(rect.width() * 0.45) as u32)
+            .map(|dx| {
+                let p = img.get_pixel(((c.x + dx as f32) * ppp) as u32, (c.y * ppp) as u32);
+                p[0] as u32 + p[1] as u32 + p[2] as u32
+            })
+            .collect()
+    };
+    let com = linha(&mut h, 1.5);
+    tela(&mut h, "cena-3d-halo");
+    let sem = linha(&mut h, 0.0);
+    assert!(sem[0] > 300, "a esfera brilha no meio: {}", sem[0]);
+    // A borda da esfera (sem halo) e, logo depois dela, o escuro.
+    let borda = sem
+        .iter()
+        .position(|&v| v < 120)
+        .expect("a borda da esfera");
+    let soma = |l: &[u32]| l[borda + 4..borda + 24].iter().sum::<u32>();
+    assert!(
+        soma(&com) > soma(&sem) + 300,
+        "o halo clareia em volta: {} (sem halo {})",
+        soma(&com),
+        soma(&sem)
+    );
+}
+
+#[test]
+fn tutorial_um_lago_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    let dir = temp("tutorial-lago");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("um-lago-com-vida");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/um-lago");
+    for f in ["modelos/arvore.glb", "modelos/grama.glb"] {
+        assert!(projeto.join(f).is_file(), "o modelo vazio3d traz {f}");
+    }
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    h.run_steps(4);
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/mundo.cena").unwrap()
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    fn modelo(id: u32, file: &str, sway: f64) -> Object {
+        let mut o = Object::new(id, file);
+        let mut m = Component::new("model");
+        m.set("file", Prop::Str(format!("modelos/{file}")));
+        m.set("sway", Prop::Num(sway));
+        o.components.push(m);
+        o
+    }
+    espera(&mut h, 1);
+    let mut lago = nn_studio::scene_view::scene3d::water();
+    lago.id = 40;
+    doc(&mut h).data.objects.push(lago);
+    espera(&mut h, 2);
+    doc(&mut h).data.set_env("wind", Prop::Num(1.0));
+    espera(&mut h, 3);
+    doc(&mut h).data.objects.push(modelo(41, "arvore.glb", 0.0));
+    espera(&mut h, 4);
+    doc(&mut h).data.objects.push(modelo(42, "arvore.glb", 1.0));
+    espera(&mut h, 5);
+    for id in 43..46 {
+        doc(&mut h).data.objects.push(modelo(id, "grama.glb", 1.5));
+    }
+    espera(&mut h, 6);
+    let mut fx = Object::new(46, "brilho");
+    fx.components.push(Component::new("particles"));
+    doc(&mut h).data.objects.push(fx);
+    espera(&mut h, 7);
+    // O pronto Entardecer, pelo botão do Inspetor da cena: o vento fica.
+    doc(&mut h).selection.clear();
+    h.run_steps(3);
+    h.get_by_label("Entardecer").click();
+    espera(&mut h, 8);
+    assert_eq!(doc(&mut h).data.env("wind").num(), 1.0);
+    doc(&mut h).data.set_env("bloom", Prop::Num(2.0));
+    espera(&mut h, 9);
+    let mut heroi = Object::new(47, "Jogador");
+    heroi
+        .components
+        .push(Component::behavior("nn:jogador3d", &[]));
+    doc(&mut h).data.objects.push(heroi);
+    espera(&mut h, 10);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 11);
     h.get_by_label("Concluir").click();
     h.run_steps(3);
     assert!(h.state().tutorial.is_none());

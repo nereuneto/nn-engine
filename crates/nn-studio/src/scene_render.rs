@@ -754,6 +754,7 @@ pub fn particle_config3(
         direction: up,
         spread: num("spread"),
         gravity: glam::Vec3::new(0.0, num("gravity"), 0.0),
+        wind: glam::Vec3::ZERO,
         drag: base.drag,
         size: base.size,
         size_variation: base.size_variation,
@@ -954,6 +955,19 @@ impl SceneRenderer {
             stars: num("stars"),
         }));
         let night = env.night;
+        // O vento (o que balança mexe também no editor).
+        {
+            let t = num("wind_turn").to_radians();
+            self.renderer.set_wind3d(nn_render::d3::Wind3D {
+                direction: glam::Vec2::new(t.sin(), -t.cos()),
+                strength: num("wind").max(0.0),
+            });
+            self.renderer.set_time3d(Some(view.time));
+            self.renderer.set_bloom3d(nn_render::d3::Bloom {
+                enabled: true,
+                strength: num("bloom").max(0.0),
+            });
+        }
         let (h, t) = (num("sun_height").to_radians(), num("sun_turn").to_radians());
         self.renderer.set_light3d(Light3D {
             sun_direction: Vec3::new(-h.cos() * t.sin(), -h.sin(), -h.cos() * t.cos()),
@@ -1079,7 +1093,7 @@ impl SceneRenderer {
                         .draw_mesh(mesh, Mat4::from_translation(pos), Color::WHITE);
                     if c.bool("water") {
                         let plane = self.mesh3("plane");
-                        self.renderer.draw_mesh_with(
+                        self.renderer.draw_mesh_material(
                             plane,
                             Mat4::from_scale_rotation_translation(
                                 Vec3::new(c.num("width") as f32, 1.0, c.num("depth") as f32),
@@ -1089,6 +1103,10 @@ impl SceneRenderer {
                             parse_color(c.str("water_color")),
                             None,
                             false,
+                            nn_render::d3::Material3D {
+                                water: true,
+                                ..Default::default()
+                            },
                         );
                     }
                 }
@@ -1102,18 +1120,22 @@ impl SceneRenderer {
                             let t = (view.time * speed).rem_euclid(d);
                             Some(s.joint_matrices(&s.pose(i, t)))
                         });
-                        self.renderer.draw_model_glow(
+                        self.renderer.draw_model_material(
                             &model,
                             m,
                             parse_color(c.str("color")),
                             c.bool("shadow"),
-                            nn_render::d3::Glow {
-                                amount: glow_of(&c, night),
-                                color: if c.bool("glow_night") && !night {
-                                    Color::BLACK
-                                } else {
-                                    Color::WHITE
+                            nn_render::d3::Material3D {
+                                glow: nn_render::d3::Glow {
+                                    amount: glow_of(&c, night),
+                                    color: if c.bool("glow_night") && !night {
+                                        Color::BLACK
+                                    } else {
+                                        Color::WHITE
+                                    },
                                 },
+                                water: false,
+                                sway: c.num("sway") as f32,
                             },
                             joints.as_deref(),
                         );
@@ -1121,13 +1143,17 @@ impl SceneRenderer {
                 }
                 "shape3d" => {
                     let mesh = self.mesh3(c.str("shape"));
-                    self.renderer.draw_mesh_glow(
+                    self.renderer.draw_mesh_material(
                         mesh,
                         m,
                         parse_color(c.str("color")),
                         None,
                         c.bool("shadow"),
-                        nn_render::d3::Glow::own(glow_of(&c, night)),
+                        nn_render::d3::Material3D {
+                            glow: nn_render::d3::Glow::own(glow_of(&c, night)),
+                            water: c.str("material") == "agua",
+                            sway: c.num("sway") as f32,
+                        },
                     );
                 }
                 "light3d" => {
