@@ -1840,6 +1840,9 @@ pub struct History {
     redo: Vec<SceneData>,
     /// Hora da última mudança guardada, para juntar mudanças seguidas.
     last: Option<std::time::Instant>,
+    /// Conta cada passo guardado, desfeito ou refeito (para saber se a cena
+    /// mudou depois de um aviso com Desfazer).
+    version: u64,
 }
 
 /// Mudanças com a mesma chave e com menos que isso de intervalo viram um
@@ -1852,7 +1855,13 @@ pub const MAX_HISTORY: usize = 300;
 impl History {
     /// Guarda `before` (a cena como estava) antes de uma mudança. Com a mesma
     /// `key` da mudança anterior, e logo em seguida, junta as duas.
+    /// O passo atual: muda a cada mudança guardada, desfeita ou refeita.
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
     pub fn record(&mut self, before: &SceneData, key: Option<&str>) {
+        self.version += 1;
         let now = std::time::Instant::now();
         let merge = key.is_some()
             && self.undo.last().and_then(|(_, k)| k.as_deref()) == key
@@ -1885,6 +1894,7 @@ impl History {
         let Some((prev, _)) = self.undo.pop() else {
             return false;
         };
+        self.version += 1;
         self.redo.push(std::mem::replace(scene, prev));
         self.last = None;
         true
@@ -1894,6 +1904,7 @@ impl History {
         let Some(next) = self.redo.pop() else {
             return false;
         };
+        self.version += 1;
         self.undo.push((std::mem::replace(scene, next), None));
         self.last = None;
         true

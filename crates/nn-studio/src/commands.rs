@@ -47,6 +47,7 @@ pub enum Command {
     Docs,
     Tutorials,
     Shortcuts,
+    Preferences,
     About,
     Quit,
 }
@@ -95,6 +96,7 @@ impl Command {
         Command::Docs,
         Command::Tutorials,
         Command::Shortcuts,
+        Command::Preferences,
         Command::About,
         Command::Quit,
     ];
@@ -143,6 +145,7 @@ impl Command {
             Command::QuickOpen => "Abrir arquivo do projeto...",
             Command::Docs => "Guia do Lua (documentação)",
             Command::Shortcuts => "Atalhos do teclado",
+            Command::Preferences => "Preferências...",
             Command::About => "Sobre o NN Studio",
             Command::Tutorials => "Tutoriais (passo a passo)",
             Command::Quit => "Sair",
@@ -175,6 +178,9 @@ impl Command {
             Command::QuickOpen => "arquivo ir",
             Command::Docs => "ajuda manual api funcoes",
             Command::Shortcuts => "teclas teclado",
+            Command::Preferences => {
+                "cor destaque sons animacoes comemorar tema configuracoes do studio"
+            }
             Command::ResetLayout => "paineis janelas abas",
             _ => "",
         }
@@ -225,6 +231,7 @@ impl Command {
                 | Command::Docs
                 | Command::Tutorials
                 | Command::Shortcuts
+                | Command::Preferences
                 | Command::About
                 | Command::Quit
         )

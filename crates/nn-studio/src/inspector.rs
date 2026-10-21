@@ -851,7 +851,7 @@ const CHECKBOX_FIELDS: &[F] = &[
     f("size", "Tamanho do texto", SIZE),
     f("box", "Tamanho da caixa", SIZE),
     f("color", "Cor da caixa", W::ThemeColor("button")),
-    f("check_color", "Cor do ✓", W::ThemeColor("accent")),
+    f("check_color", "Cor do ✔", W::ThemeColor("accent")),
     f("text_color", "Cor do texto", W::ThemeColor("text")),
     FONT,
     UI_HUD,

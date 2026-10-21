@@ -2,7 +2,7 @@
 
 use eframe::egui::{self, Color32, FontId, TextStyle};
 
-use crate::settings::ThemeChoice;
+use crate::settings::{Accent, ThemeChoice};
 
 /// Cor de destaque do NN Studio.
 pub const ACCENT: Color32 = Color32::from_rgb(0x3F, 0xA7, 0xD6);
@@ -14,24 +14,55 @@ pub const WARNING: Color32 = Color32::from_rgb(0xE8, 0xB3, 0x39);
 /// Tamanho base do texto do código.
 pub const CODE_SIZE: f32 = 14.0;
 
-pub fn apply(ctx: &egui::Context, theme: ThemeChoice, zoom: f32) {
+/// As cores de uma cor de destaque: (seleção no escuro, seleção no claro,
+/// link no escuro, link no claro).
+pub fn accent_colors(accent: Accent) -> [Color32; 4] {
+    let c = |r, g, b| Color32::from_rgb(r, g, b);
+    match accent {
+        Accent::Azul => [
+            c(0x2A, 0x6F, 0x92),
+            c(0xA8, 0xD8, 0xEE),
+            c(0x6C, 0xC4, 0xEE),
+            c(0x1A, 0x6E, 0x9A),
+        ],
+        Accent::Verde => [
+            c(0x2E, 0x7D, 0x4F),
+            c(0xB4, 0xE6, 0xC4),
+            c(0x6F, 0xD6, 0x96),
+            c(0x1E, 0x7A, 0x45),
+        ],
+        Accent::Roxo => [
+            c(0x5E, 0x4A, 0x9E),
+            c(0xD2, 0xC6, 0xF2),
+            c(0xA9, 0x93, 0xF0),
+            c(0x5B, 0x3F, 0xA8),
+        ],
+        Accent::Laranja => [
+            c(0xA0, 0x5A, 0x1E),
+            c(0xF8, 0xD2, 0xA8),
+            c(0xF4, 0xA2, 0x5A),
+            c(0xA8, 0x55, 0x10),
+        ],
+        Accent::Rosa => [
+            c(0x9C, 0x3B, 0x6E),
+            c(0xF4, 0xC4, 0xDC),
+            c(0xF0, 0x86, 0xBC),
+            c(0xA3, 0x2E, 0x6C),
+        ],
+    }
+}
+
+pub fn apply(ctx: &egui::Context, theme: ThemeChoice, zoom: f32, accent: Accent, animations: bool) {
     let dark = theme == ThemeChoice::Escuro;
     let mut visuals = if dark {
         egui::Visuals::dark()
     } else {
         egui::Visuals::light()
     };
-    visuals.selection.bg_fill = if dark {
-        Color32::from_rgb(0x2A, 0x6F, 0x92)
-    } else {
-        Color32::from_rgb(0xA8, 0xD8, 0xEE)
-    };
+    let [sel_dark, sel_light, link_dark, link_light] = accent_colors(accent);
+    visuals.selection.bg_fill = if dark { sel_dark } else { sel_light };
     visuals.selection.stroke.color = if dark { Color32::WHITE } else { Color32::BLACK };
-    visuals.hyperlink_color = if dark {
-        Color32::from_rgb(0x6C, 0xC4, 0xEE)
-    } else {
-        Color32::from_rgb(0x1A, 0x6E, 0x9A)
-    };
+    visuals.hyperlink_color = if dark { link_dark } else { link_light };
     if dark {
         visuals.panel_fill = Color32::from_rgb(0x1E, 0x21, 0x27);
         visuals.window_fill = Color32::from_rgb(0x25, 0x29, 0x30);
@@ -57,6 +88,8 @@ pub fn apply(ctx: &egui::Context, theme: ThemeChoice, zoom: f32) {
         style.spacing.item_spacing = egui::vec2(8.0, 5.0);
         style.spacing.button_padding = egui::vec2(8.0, 3.0);
         style.spacing.interact_size.y = 22.0;
+        // Sem animações: menus e painéis abrem na hora.
+        style.animation_time = if animations { 1.0 / 12.0 } else { 0.0 };
     });
     ctx.options_mut(|o| o.zoom_with_keyboard = false);
     if (ctx.zoom_factor() - zoom).abs() > 0.001 {

@@ -69,6 +69,8 @@ pub struct StudioApp {
     /// Consulta de versão nova em andamento.
     update_rx: Option<std::sync::mpsc::Receiver<Option<crate::update::Release>>>,
     shortcuts: bool,
+    /// A janela de Preferências aberta.
+    pub preferences: bool,
     logo: Option<egui::TextureHandle>,
     window_title: String,
     /// GPU do editor (as cenas visuais são desenhadas com ela).
@@ -158,12 +160,19 @@ impl StudioApp {
             crash: None,
             update_rx: None,
             shortcuts: false,
+            preferences: false,
             logo,
             window_title: String::new(),
             render_state: None,
             tutorial: None,
         };
-        theme::apply(ctx, app.settings.theme, app.settings.zoom);
+        theme::apply(
+            ctx,
+            app.settings.theme,
+            app.settings.zoom,
+            app.settings.accent,
+            app.settings.animations,
+        );
         app.crash = app
             .config_dir()
             .and_then(|d| crate::crash::take_last_crash(&d));
@@ -356,6 +365,7 @@ impl StudioApp {
             }
             Command::Docs => ctx.open_url(egui::OpenUrl::new_tab(project::DOCS_URL)),
             Command::Shortcuts => self.shortcuts = true,
+            Command::Preferences => self.preferences = true,
             Command::About => self.about = true,
             Command::Tutorials => {
                 // Os tutoriais criam um projeto novo: volta ao início.
@@ -556,6 +566,9 @@ impl StudioApp {
                     }
                 }
                 ui.separator();
+                if self.command_button(ui, Command::Preferences) {
+                    out.push(Command::Preferences);
+                }
                 if self.command_button(ui, Command::ResetLayout) {
                     out.push(Command::ResetLayout);
                 }
@@ -905,6 +918,110 @@ impl StudioApp {
                 self.about = false;
             }
         }
+        if self.preferences {
+            let mut close = false;
+            let r = egui::Modal::new(egui::Id::new("preferencias")).show(ctx, |ui| {
+                ui.set_width(440.0);
+                ui.heading("Preferências");
+                ui.weak("Do NN Studio, para todos os projetos.");
+                ui.add_space(8.0);
+                let s = &mut self.settings;
+                egui::Grid::new("grade-preferencias")
+                    .num_columns(2)
+                    .spacing([16.0, 10.0])
+                    .show(ui, |ui| {
+                        ui.label("Tema");
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut s.theme, ThemeChoice::Escuro, "🌙 Escuro");
+                            ui.radio_value(&mut s.theme, ThemeChoice::Claro, "☀ Claro");
+                        });
+                        ui.end_row();
+                        ui.label("Cor de destaque");
+                        ui.horizontal(|ui| {
+                            let dark = s.theme == ThemeChoice::Escuro;
+                            for a in crate::settings::Accent::ALL {
+                                let [sd, sl, ..] = theme::accent_colors(a);
+                                let color = if dark { sd } else { sl };
+                                let selected = s.accent == a;
+                                let (rect, resp) = ui.allocate_exact_size(
+                                    egui::vec2(26.0, 26.0),
+                                    egui::Sense::click(),
+                                );
+                                resp.widget_info(|| {
+                                    egui::WidgetInfo::selected(
+                                        egui::WidgetType::RadioButton,
+                                        true,
+                                        selected,
+                                        a.label(),
+                                    )
+                                });
+                                let p = ui.painter();
+                                p.circle_filled(rect.center(), 10.0, color);
+                                if selected {
+                                    p.circle_stroke(
+                                        rect.center(),
+                                        12.5,
+                                        egui::Stroke::new(2.0, ui.visuals().text_color()),
+                                    );
+                                }
+                                if resp.on_hover_text(a.label()).clicked() {
+                                    s.accent = a;
+                                }
+                            }
+                        });
+                        ui.end_row();
+                        ui.label("Modo");
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut s.mode, Mode::Simples, "Simples");
+                            ui.radio_value(&mut s.mode, Mode::Completo, "Completo");
+                        });
+                        ui.end_row();
+                        ui.label("Tamanho da interface");
+                        ui.add(
+                            egui::Slider::new(&mut s.zoom, 0.8..=1.75)
+                                .step_by(0.05)
+                                .custom_formatter(|v, _| format!("{:.0}%", v * 100.0)),
+                        );
+                        ui.end_row();
+                        ui.label("Animações");
+                        ui.checkbox(&mut s.animations, "Avisos que aparecem e somem, o brilho dos objetos novos")
+                            .on_hover_text("Desligadas, tudo aparece e some na hora, sem movimento.");
+                        ui.end_row();
+                        ui.label("Comemorações");
+                        ui.checkbox(&mut s.celebrations, "Na primeira vez que o jogo roda e na primeira exportação");
+                        ui.end_row();
+                        ui.label("Sons da interface");
+                        ui.checkbox(&mut s.ui_sounds, "Um \"plim\" ao salvar e exportar, um toque ao criar");
+                        ui.end_row();
+                        ui.label("Console");
+                        ui.checkbox(&mut s.clear_console_on_play, "Limpar ao jogar");
+                        ui.end_row();
+                        ui.label("Versões novas");
+                        ui.checkbox(&mut s.check_updates, "Avisar quando sair uma versão nova");
+                        ui.end_row();
+                    });
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Fechar").clicked() {
+                        close = true;
+                    }
+                    if ui
+                        .button("Voltar ao padrão")
+                        .on_hover_text("Tema, cor, modo, tamanho, animações, comemorações e sons como vêm no NN Studio")
+                        .clicked()
+                    {
+                        let d = crate::settings::Settings::default();
+                        let s = &mut self.settings;
+                        (s.theme, s.accent, s.mode, s.zoom) = (d.theme, d.accent, d.mode, d.zoom);
+                        (s.animations, s.celebrations, s.ui_sounds) =
+                            (d.animations, d.celebrations, d.ui_sounds);
+                    }
+                });
+            });
+            if close || r.should_close() {
+                self.preferences = false;
+            }
+        }
         if self.shortcuts {
             let r = egui::Modal::new(egui::Id::new("atalhos")).show(ctx, |ui| {
                 ui.set_width(420.0);
@@ -976,7 +1093,13 @@ impl StudioApp {
     /// Um quadro da interface (separado de `eframe::App` para os testes).
     pub fn frame(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
-        theme::apply(&ctx, self.settings.theme, self.settings.zoom);
+        theme::apply(
+            &ctx,
+            self.settings.theme,
+            self.settings.zoom,
+            self.settings.accent,
+            self.settings.animations,
+        );
 
         // Resposta da consulta de versão nova.
         if let Some(rx) = &self.update_rx

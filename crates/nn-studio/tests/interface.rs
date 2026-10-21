@@ -4984,10 +4984,14 @@ fn botao_direito_na_cena_2d_na_hierarquia_e_no_inspetor() {
     let pq = cena(&h).camera.to_screen(rect, q.x, q.y);
     clique_direito(&mut h, pq);
     h.get_by_label_contains("Excluir").click();
-    h.run();
+    // (O mouse parou em cima do aviso "apagado", que espera: sem h.run().)
+    h.run_steps(3);
     assert!(cena(&h).data.objects.iter().all(|o| o.name != "quadrado"));
-    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    h.run_steps(3);
     objeto(&h, "quadrado");
+    h.hover_at(rect.center());
+    h.run_steps(30);
 
     // Hierarquia: o botão direito no vazio cria (no meio da vista).
     let painel = nn_studio::tutorial::anchor_rect(&h.ctx, "hierarquia").expect("hierarquia");
@@ -5216,8 +5220,10 @@ fn copiar_recortar_e_colar_objetos() {
     let p2 = rect.center() + egui::vec2(-160.0, 100.0);
     clique_direito(&mut h, p2);
     h.get_by_label_contains("Colar aqui").click();
-    h.run();
+    h.run_steps(3);
     assert_eq!(quantos(&h, "quadrado"), 3);
+    h.hover_at(rect.center());
+    h.run_steps(30);
     // Em outra cena 2D: colado no mesmo lugar (pela Hierarquia não tem mouse).
     std::fs::write(
         proj.join("cenas/outra.cena"),
@@ -5426,4 +5432,188 @@ fn favoritos_do_projeto() {
     let fav = nn_studio::catalog::favorites(&proj);
     assert_eq!(fav.len(), 1);
     assert!(!fav[0].three_d);
+}
+
+// Amigável e divertido (S45) ----------------------------------------------------
+
+fn avisos(h: &Harness<'_, StudioApp>) -> Vec<String> {
+    h.state().project().unwrap().toasts.texts()
+}
+
+/// Apagar e colar mostram um aviso com Desfazer (que some se a cena mudar
+/// depois); salvar mostra o aviso e o ✓ na aba.
+#[test]
+fn avisos_rapidos_com_desfazer_e_o_salvo() {
+    let dir = temp("avisos");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena(&mut h, &proj);
+    let rect = h.get_by_label("Vista da cena").rect();
+    let q = objeto(&h, "quadrado").clone();
+    cena_mut(&mut h).selection = vec![q.id];
+    h.hover_at(rect.center());
+    h.run();
+    h.key_press(Key::Delete);
+    h.run_steps(3);
+    assert!(
+        avisos(&h).contains(&"1 objeto apagado".to_string()),
+        "{:?} {:?}",
+        avisos(&h),
+        cena(&h)
+            .data
+            .objects
+            .iter()
+            .map(|o| o.name.clone())
+            .collect::<Vec<_>>()
+    );
+    tela(&mut h, "aviso-apagado");
+    h.get_by_label("Desfazer").click();
+    h.run_steps(3);
+    objeto(&h, "quadrado");
+    assert!(avisos(&h).is_empty() || !avisos(&h).contains(&"1 objeto apagado".to_string()));
+    // Apagar e mexer em outra coisa: o Desfazer some (desfaria a outra).
+    cena_mut(&mut h).selection = vec![q.id];
+    h.hover_at(rect.center());
+    h.run();
+    h.key_press(Key::Delete);
+    h.run_steps(3);
+    let t = objeto(&h, "titulo").id;
+    cena_mut(&mut h).selection = vec![t];
+    h.hover_at(rect.center());
+    h.run();
+    h.key_press(Key::ArrowRight);
+    h.run_steps(3);
+    assert!(
+        h.query_by_label("Desfazer").is_none(),
+        "a cena mudou depois"
+    );
+    // Salvar: o aviso e o ✓ na aba. (Sem h.run(): ele roda até o aviso sumir.)
+    h.key_press_modifiers(Modifiers::COMMAND, Key::S);
+    h.run_steps(2);
+    assert!(
+        avisos(&h).iter().any(|a| a == "Salvo: teste.cena"),
+        "{:?}",
+        avisos(&h)
+    );
+    // (O ✓ na aba não aparece na árvore de acessibilidade: confira na tela.)
+    tela(&mut h, "aviso-salvo");
+}
+
+/// A cena vazia ensina a começar; o Console vazio tem ▶ Jogar; a primeira
+/// vez que o jogo roda é comemorada (só uma vez); o Início tem a dica do dia.
+#[test]
+fn cena_vazia_console_vazio_comemoracao_e_dica() {
+    let dir = temp("vazios");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena(&mut h, &proj);
+    cena_mut(&mut h).data.objects.clear();
+    h.run();
+    h.get_by_label("Sua cena está vazia");
+    tela(&mut h, "cena-vazia");
+    h.get_by_label("🔍 Buscar o que criar").click();
+    h.run();
+    assert!(cena(&h).quick_add.is_some());
+    digitar(&mut h, "retangulo");
+    h.key_press(Key::Enter);
+    h.run_steps(1);
+    tela(&mut h, "brilho-do-novo");
+    h.run_steps(3);
+    let r = objeto(&h, "retangulo").clone();
+    let (cx, cy) = cena(&h).view_center();
+    assert!(perto(r.x, cx, 1.0) && perto(r.y, cy, 1.0));
+    assert!(h.query_by_label("Sua cena está vazia").is_none());
+
+    // Console vazio: ▶ Jogar.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.console.clear();
+        ws.show_tab(Tab::Console);
+    }
+    h.run();
+    h.get_all_by_label("▶ Jogar")
+        .max_by(|a, b| a.rect().top().total_cmp(&b.rect().top()))
+        .unwrap()
+        .click();
+    h.run_steps(3);
+    assert_eq!(h.state().project().unwrap().plays, 1);
+    // A comemoração vem quando o jogo abre (o "jogo" falso só existe fora do
+    // Windows; lá o jogo não abre e não há o que comemorar).
+    if cfg!(unix) {
+        let festa = |h: &Harness<'_, StudioApp>| {
+            avisos(h)
+                .iter()
+                .filter(|a| a.contains("rodou pela primeira vez"))
+                .count()
+        };
+        assert_eq!(festa(&h), 1, "{:?}", avisos(&h));
+        tela(&mut h, "comemoracao");
+        assert!(
+            h.state()
+                .settings
+                .celebrated
+                .iter()
+                .any(|k| k.starts_with("jogar:"))
+        );
+        // De novo: sem festa.
+        h.state_mut().project_mut().unwrap().toasts = Default::default();
+        atalho(&mut h, Modifiers::NONE, Key::F5);
+        h.run_steps(3);
+        assert_eq!(festa(&h), 0);
+    } else {
+        assert!(
+            !avisos(&h)
+                .iter()
+                .any(|a| a.contains("rodou pela primeira vez")),
+            "sem jogo aberto, sem festa"
+        );
+    }
+
+    // A dica do dia, no Início.
+    h.state_mut().project_mut().unwrap().show_tab(Tab::Home);
+    h.run();
+    h.get_by_label("💡 Você sabia?");
+    tela(&mut h, "dica-do-dia");
+    let antes = nn_studio::tips::current(&h.ctx);
+    h.get_by_label("Próxima dica ⏵").click();
+    h.run();
+    assert_ne!(nn_studio::tips::current(&h.ctx), antes);
+}
+
+/// Preferências: a cor de destaque muda a seleção; sem animações, os menus
+/// abrem na hora; sons e comemorações ligam e desligam.
+#[test]
+fn preferencias_cor_animacoes_e_sons() {
+    let dir = temp("preferencias");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    paleta(&mut h, "preferencias");
+    h.get_by_label("Preferências");
+    tela(&mut h, "preferencias");
+    h.get_by_label("Roxo").click();
+    h.run();
+    assert_eq!(h.state().settings.accent, nn_studio::settings::Accent::Roxo);
+    let roxo = nn_studio::theme::accent_colors(nn_studio::settings::Accent::Roxo)[0];
+    assert_eq!(h.ctx.global_style().visuals.selection.bg_fill, roxo);
+    assert!(!h.state().settings.ui_sounds, "sons desligados por padrão");
+    h.get_by_label_contains("ao salvar e exportar").click();
+    h.run();
+    assert!(h.state().settings.ui_sounds);
+    h.get_by_label_contains("o brilho dos objetos novos")
+        .click();
+    h.run();
+    assert!(!h.state().settings.animations);
+    assert_eq!(h.ctx.global_style().animation_time, 0.0);
+    h.get_by_label("Voltar ao padrão").click();
+    h.run();
+    let s = &h.state().settings;
+    assert!(s.animations && !s.ui_sounds && s.accent == nn_studio::settings::Accent::Azul);
+    // As preferências ficam gravadas.
+    h.get_by_label("Fechar").click();
+    h.run();
+    let gravado = std::fs::read_to_string(dir.join("preferencias.json")).unwrap();
+    assert!(gravado.contains("\"accent\""), "{gravado}");
 }
