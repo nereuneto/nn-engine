@@ -3,7 +3,10 @@
 use glam::{Mat3, Mat4, UVec2, Vec3, Vec4};
 use nn_core::Color;
 
-use super::{Camera3D, Light3D, MAX_JOINTS, MeshId, Shadows, SkinVertex, Sky3D, Vertex3};
+use super::{
+    Camera3D, Glow, Lamp3D, Light3D, MAX_JOINTS, MAX_LAMPS, MeshId, Shadows, SkinVertex, Sky3D,
+    Vertex3,
+};
 use crate::TextureId;
 use crate::texture::GpuTexture;
 
@@ -33,6 +36,27 @@ struct ViewUniform3 {
     /// Direita e cima da câmera (para as partículas virarem para ela).
     cam_right: [f32; 4],
     cam_up: [f32; 4],
+}
+
+/// Uma lâmpada como o shader lê.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+struct LampGpu {
+    /// Posição e alcance.
+    pos_range: [f32; 4],
+    /// Cor × força.
+    color: [f32; 4],
+    /// Direção do holofote e o cosseno da borda de fora.
+    dir_cos: [f32; 4],
+    /// x = cosseno de onde começa a apagar, y = 1 num holofote.
+    cone: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+struct LampsUniform {
+    count: [u32; 4],
+    items: [LampGpu; MAX_LAMPS],
 }
 
 /// Uma partícula 3D (um quadrado virado para a câmera) ou um pedaço de
@@ -78,6 +102,8 @@ pub(crate) struct Instance3 {
     model: [[f32; 4]; 4],
     pub(crate) normal: [[f32; 4]; 3],
     color: [f32; 4],
+    /// Brilho: rgb = a cor que brilha por cima, a = quanto da própria cor.
+    glow: [f32; 4],
 }
 
 impl Instance3 {
@@ -89,7 +115,18 @@ impl Instance3 {
             model: model.to_cols_array_2d(),
             normal: [col(n.x_axis), col(n.y_axis), col(n.z_axis)],
             color: [color.r, color.g, color.b, color.a],
+            glow: [0.0; 4],
         }
+    }
+
+    pub(crate) fn with_glow(mut self, glow: Glow, srgb: bool) -> Self {
+        let c = if srgb {
+            glow.color.to_linear()
+        } else {
+            glow.color
+        };
+        self.glow = [c.r, c.g, c.b, glow.amount.max(0.0)];
+        self
     }
 }
 
@@ -144,7 +181,10 @@ pub(crate) struct Renderer3D {
     joint_capacity: u64,
     sky_pipeline: wgpu::RenderPipeline,
     view_buffer: wgpu::Buffer,
+    lamp_buffer: wgpu::Buffer,
     view_group: wgpu::BindGroup,
+    /// As lâmpadas deste frame.
+    lamps: Vec<Lamp3D>,
     shadow_layout: wgpu::BindGroupLayout,
     shadow_sampler: wgpu::Sampler,
     shadow_map: ShadowMap,
@@ -175,6 +215,9 @@ pub struct Stats3 {
     pub shadow: u32,
     /// Chamadas de desenho enviadas à GPU (sombras incluídas).
     pub draw_calls: u32,
+    /// Lâmpadas que valeram (as que a câmera pode ver, até
+    /// [`MAX_LAMPS`](super::MAX_LAMPS)).
+    pub lamps: u32,
 }
 
 /// Os seis planos de uma câmera (ou da luz): x · n + d ≥ 0 é dentro.
@@ -190,6 +233,13 @@ impl Frustum {
             if n > 0.0 { p / n } else { p }
         });
         Self(planes)
+    }
+
+    /// A esfera encosta (ou está dentro)?
+    fn touches_sphere(&self, center: Vec3, radius: f32) -> bool {
+        self.0
+            .iter()
+            .all(|p| p.truncate().dot(center) + p.w >= -radius)
     }
 
     /// A caixa encosta (ou está dentro)?
@@ -232,16 +282,28 @@ impl Renderer3D {
         let shader = device.create_shader_module(wgpu::include_wgsl!("mesh3d.wgsl"));
         let view_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nn 3d view"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
         });
         let shadow_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nn 3d shadow map"),
@@ -270,13 +332,25 @@ impl Renderer3D {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let lamp_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("nn 3d lamps"),
+            size: size_of::<LampsUniform>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let view_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nn 3d view"),
             layout: &view_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: view_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: view_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: lamp_buffer.as_entire_binding(),
+                },
+            ],
         });
 
         let vertex_attrs = wgpu::vertex_attr_array![
@@ -284,7 +358,8 @@ impl Renderer3D {
         ];
         let instance_attrs = wgpu::vertex_attr_array![
             4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4,
-            8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4
+            8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4,
+            14 => Float32x4
         ];
         let buffers = [
             Some(wgpu::VertexBufferLayout {
@@ -644,7 +719,9 @@ impl Renderer3D {
             joint_capacity,
             sky_pipeline,
             view_buffer,
+            lamp_buffer,
             view_group,
+            lamps: Vec::new(),
             shadow_layout,
             shadow_sampler,
             shadow_map,
@@ -895,13 +972,14 @@ impl Renderer3D {
         texture: TextureId,
         cast_shadow: bool,
         srgb: bool,
+        glow: Glow,
     ) {
         if let Some(m) = self.meshes.get(mesh.0 as usize) {
             let draw = Draw3 {
                 mesh,
                 texture,
                 cast_shadow,
-                instance: Instance3::new(model, color, srgb),
+                instance: Instance3::new(model, color, srgb).with_glow(glow, srgb),
                 bounds: m.bounds.map(|b| world_bounds(&model, b)),
                 joints: None,
             };
@@ -928,12 +1006,13 @@ impl Renderer3D {
         cast_shadow: bool,
         srgb: bool,
         joints: &[Mat4],
+        glow: Glow,
     ) {
         let Some(m) = self.meshes.get(mesh.0 as usize) else {
             return;
         };
         if m.skin.is_none() {
-            self.draw(mesh, model, color, texture, cast_shadow, srgb);
+            self.draw(mesh, model, color, texture, cast_shadow, srgb, glow);
             return;
         }
         let slot = (self.joint_data.len() / MAX_JOINTS) as u32;
@@ -946,10 +1025,59 @@ impl Renderer3D {
             mesh,
             texture,
             cast_shadow,
-            instance: Instance3::new(model, color, srgb),
+            instance: Instance3::new(model, color, srgb).with_glow(glow, srgb),
             bounds,
             joints: Some(slot),
         });
+    }
+
+    /// Uma lâmpada para este frame.
+    pub(crate) fn lamp(&mut self, lamp: Lamp3D) {
+        if lamp.range > 0.0 && lamp.intensity > 0.0 {
+            self.lamps.push(lamp);
+        }
+    }
+
+    /// As lâmpadas que vão para a GPU: as que a câmera pode ver (a esfera
+    /// do alcance encosta no que ela vê), as mais perto primeiro.
+    fn lamps_uniform(&self, camera: &Frustum, srgb: bool) -> LampsUniform {
+        let eye = self.camera.position;
+        let mut list: Vec<(f32, &Lamp3D)> = self
+            .lamps
+            .iter()
+            .filter(|l| camera.touches_sphere(l.position, l.range))
+            .map(|l| ((l.position.distance(eye) - l.range).max(0.0), l))
+            .collect();
+        list.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut out = LampsUniform {
+            count: [0; 4],
+            items: [LampGpu::default(); MAX_LAMPS],
+        };
+        for (slot, (_, l)) in out.items.iter_mut().zip(list.iter()) {
+            let c = if srgb { l.color.to_linear() } else { l.color };
+            let k = l.intensity.max(0.0);
+            let (dir, cos_out, cos_in, spot) = match l.cone {
+                Some(cone) => {
+                    let outer = cone.angle.clamp(1.0, 89.0).to_radians();
+                    let inner = outer * (1.0 - cone.softness.clamp(0.0, 1.0));
+                    (
+                        cone.direction.normalize_or(Vec3::NEG_Y),
+                        outer.cos(),
+                        inner.cos().max(outer.cos() + 1e-4),
+                        1.0,
+                    )
+                }
+                None => (Vec3::NEG_Y, -1.0, -1.0, 0.0),
+            };
+            *slot = LampGpu {
+                pos_range: l.position.extend(l.range.max(0.01)).to_array(),
+                color: [c.r * k, c.g * k, c.b * k, 1.0],
+                dir_cos: dir.extend(cos_out).to_array(),
+                cone: [cos_in, spot, 0.0, 0.0],
+            };
+        }
+        out.count[0] = list.len().min(MAX_LAMPS) as u32;
+        out
     }
 
     pub(crate) fn has_draws(&self) -> bool {
@@ -1095,6 +1223,8 @@ impl Renderer3D {
             cam_up: cam_up.extend(0.0).to_array(),
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&view));
+        let lamps = self.lamps_uniform(&Frustum::of(view_proj), srgb);
+        queue.write_buffer(&self.lamp_buffer, 0, bytemuck::bytes_of(&lamps));
 
         // Agrupa por malha, textura e sombra (uma chamada por grupo); os com
         // ossos vão no fim, um por chamada.
@@ -1366,10 +1496,12 @@ impl Renderer3D {
             visible: (visible.len() + self.transparent.len()) as u32,
             shadow: shadow.len() as u32,
             draw_calls: calls + self.transparent.len() as u32,
+            lamps: lamps.count[0],
         };
         self.draws.clear();
         self.joint_data.clear();
         self.billboards.clear();
         self.transparent.clear();
+        self.lamps.clear();
     }
 }

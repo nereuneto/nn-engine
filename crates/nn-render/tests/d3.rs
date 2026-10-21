@@ -3,7 +3,7 @@
 
 use glam::{Mat4, UVec2, Vec2, Vec3};
 use nn_core::Color;
-use nn_render::d3::{Camera3D, Fog, Light3D, Transform3, shapes};
+use nn_render::d3::{Camera3D, Cone3D, Fog, Glow, Lamp3D, Light3D, MAX_LAMPS, Transform3, shapes};
 use nn_render::{Camera2D, GpuContext, OffscreenTarget, Presentation, Renderer, ScaleMode};
 
 const SIZE: UVec2 = UVec2::new(64, 64);
@@ -896,4 +896,201 @@ fn so_o_que_a_camera_ve_vai_para_a_gpu() {
         [0, 255, 0, 255],
         "a ponta da barra",
     );
+}
+
+// --- Lâmpadas, holofotes e brilho -------------------------------------------
+
+/// Um chão grande no escuro (sem sol nem luz ambiente), visto de cima: a
+/// 10 m de altura, cada pixel tem uns 18 cm.
+fn chao_no_escuro(h: &mut Harness) {
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 10.0, 0.0), Vec3::ZERO));
+    h.renderer.set_light3d(Light3D {
+        sun_color: Color::BLACK,
+        sky: Color::BLACK,
+        ground: Color::BLACK,
+        ..Light3D::default()
+    });
+    h.renderer
+        .draw_mesh(plane, Mat4::from_scale(Vec3::splat(30.0)), Color::WHITE);
+}
+
+#[test]
+fn lampada_ilumina_em_volta_ate_o_alcance() {
+    let Some(mut h) = Harness::new() else { return };
+    chao_no_escuro(&mut h);
+    let mut lamp = Lamp3D::at(Vec3::new(0.0, 1.0, 0.0));
+    lamp.color = Color::rgb(1.0, 0.5, 0.0);
+    lamp.range = 4.0;
+    h.renderer.add_lamp3d(lamp);
+    let img = h.render(Color::BLACK);
+    let meio = pixel(&img, 32, 32);
+    // Embaixo da lâmpada: claro, com a cor dela (laranja).
+    assert!(meio[0] > 150 && meio[1] > 40 && meio[2] < 10, "{meio:?}");
+    // A 1,5 m: mais fraco que embaixo, mas aceso.
+    let perto = pixel(&img, 32 + 8, 32);
+    assert!(
+        brightness(perto) > 30 && brightness(perto) < brightness(meio),
+        "{perto:?}"
+    );
+    // Longe (mais que o alcance): escuro.
+    assert_color(pixel(&img, 2, 2), [0, 0, 0, 255], "longe da lâmpada");
+    assert_eq!(h.renderer.last_stats3().lamps, 1);
+    // No frame seguinte, sem pedir de novo, a lâmpada some.
+    chao_no_escuro(&mut h);
+    let img = h.render(Color::BLACK);
+    assert_color(pixel(&img, 32, 32), [0, 0, 0, 255], "sem lâmpada");
+}
+
+#[test]
+fn holofote_ilumina_so_dentro_do_cone() {
+    let Some(mut h) = Harness::new() else { return };
+    // Um holofote a 3 m, apontando para baixo, com 20° de abertura (meia):
+    // o círculo de luz no chão tem ~1,1 m de raio.
+    let holofote = |h: &mut Harness, cone: bool| {
+        chao_no_escuro(h);
+        let mut lamp = Lamp3D::at(Vec3::new(0.0, 3.0, 0.0));
+        lamp.range = 10.0;
+        lamp.intensity = 2.0;
+        if cone {
+            lamp.cone = Some(Cone3D {
+                direction: Vec3::NEG_Y,
+                angle: 20.0,
+                softness: 0.2,
+            });
+        }
+        h.renderer.add_lamp3d(lamp);
+        h.render(Color::BLACK)
+    };
+    let img = holofote(&mut h, true);
+    assert!(
+        brightness(pixel(&img, 32, 32)) > 300,
+        "{:?}",
+        pixel(&img, 32, 32)
+    );
+    // A 2,5 m do centro: fora do cone, escuro.
+    assert_color(pixel(&img, 32 + 14, 32), [0, 0, 0, 255], "fora do cone");
+    // A mesma luz sem cone acende ali.
+    let img = holofote(&mut h, false);
+    assert!(
+        brightness(pixel(&img, 32 + 14, 32)) > 60,
+        "{:?}",
+        pixel(&img, 32 + 14, 32)
+    );
+}
+
+#[test]
+fn brilho_aparece_no_escuro() {
+    let Some(mut h) = Harness::new() else { return };
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    let desenha = |h: &mut Harness, glow: Glow| {
+        chao_no_escuro(h);
+        h.renderer.draw_mesh_glow(
+            cube,
+            Mat4::from_translation(Vec3::new(0.0, 0.5, 0.0)),
+            Color::rgb(0.0, 1.0, 0.0),
+            None,
+            true,
+            glow,
+        );
+        h.render(Color::BLACK)
+    };
+    // Sem brilho, no escuro: preto.
+    let img = desenha(&mut h, Glow::NONE);
+    assert_color(pixel(&img, 32, 32), [0, 0, 0, 255], "sem brilho");
+    // Com a própria cor brilhando: verde, sem luz nenhuma.
+    let img = desenha(&mut h, Glow::own(1.0));
+    assert_color(pixel(&img, 32, 32), [0, 255, 0, 255], "brilho próprio");
+    // O chão em volta continua escuro (o brilho não ilumina).
+    assert_color(pixel(&img, 2, 2), [0, 0, 0, 255], "chão");
+    // Uma cor que brilha por cima (a emissão de um .glb).
+    let img = desenha(
+        &mut h,
+        Glow {
+            amount: 0.0,
+            color: Color::rgb(1.0, 0.0, 0.0),
+        },
+    );
+    assert_color(pixel(&img, 32, 32), [255, 0, 0, 255], "cor emitida");
+}
+
+#[test]
+fn com_muitas_lampadas_valem_as_mais_perto_que_a_camera_ve() {
+    let Some(mut h) = Harness::new() else { return };
+    chao_no_escuro(&mut h);
+    // 50 lâmpadas na frente da câmera e 10 bem longe, atrás dela.
+    for i in 0..50 {
+        let mut l = Lamp3D::at(Vec3::new((i % 10) as f32 - 4.5, 0.5, (i / 10) as f32 - 2.0));
+        l.range = 1.0;
+        h.renderer.add_lamp3d(l);
+    }
+    for i in 0..10 {
+        h.renderer
+            .add_lamp3d(Lamp3D::at(Vec3::new(i as f32, 0.5, 200.0)));
+    }
+    h.render(Color::BLACK);
+    assert_eq!(h.renderer.last_stats3().lamps, MAX_LAMPS as u32);
+    // Só as de trás: nenhuma vale.
+    chao_no_escuro(&mut h);
+    for i in 0..10 {
+        h.renderer
+            .add_lamp3d(Lamp3D::at(Vec3::new(i as f32, 0.5, 200.0)));
+    }
+    h.render(Color::BLACK);
+    assert_eq!(h.renderer.last_stats3().lamps, 0);
+}
+
+#[test]
+fn modelos_que_brilham_trazem_a_cor_da_emissao_e_aparecem_no_escuro() {
+    // A chama da tocha, o vidro do lampião e os cristais vêm do arquivo
+    // com emissão (o cabo e o ferro, sem).
+    for (nome, partes) in [("tocha.glb", 2), ("lampiao.glb", 1), ("cristal.glb", 2)] {
+        let m = modelo_ilha(nome);
+        let acesas = m
+            .parts
+            .iter()
+            .filter(|p| p.emissive != Color::BLACK)
+            .count();
+        assert_eq!(acesas, partes, "{nome}");
+        assert!(m.parts.iter().any(|p| p.emissive == Color::BLACK), "{nome}");
+    }
+    let Some(mut h) = Harness::new() else { return };
+    let data = modelo_ilha("tocha.glb");
+    let tocha = h.renderer.create_model(&data);
+    h.renderer.set_light3d(Light3D {
+        sun_color: Color::BLACK,
+        sky: Color::BLACK,
+        ground: Color::BLACK,
+        ..Light3D::default()
+    });
+    h.renderer.set_camera3d(Camera3D::looking_at(
+        Vec3::new(0.0, 0.7, 1.6),
+        Vec3::new(0.0, 0.7, 0.0),
+    ));
+    h.renderer
+        .draw_model(&tocha, Mat4::IDENTITY, Color::WHITE, true);
+    let img = h.render(Color::BLACK);
+    if let Some(d) = std::env::var_os("NN_TELAS") {
+        image::RgbaImage::from_raw(64, 64, img.clone())
+            .unwrap()
+            .save(std::path::Path::new(&d).join("tocha-no-escuro.png"))
+            .unwrap();
+    }
+    // A chama (em cima) acesa e laranja; o cabo (embaixo), preto.
+    let (mut chama, mut cabo) = (0, 0);
+    for y in 0..64 {
+        for x in 0..64 {
+            let p = pixel(&img, x, y);
+            if p[0] > 200 && p[1] > 80 && p[2] < 80 {
+                chama += 1;
+                assert!(y < 32, "a chama fica em cima: {x}, {y}");
+            }
+            if y > 40 && brightness(p) > 0 {
+                cabo += 1;
+            }
+        }
+    }
+    assert!(chama > 10, "chama: {chama}");
+    assert_eq!(cabo, 0, "o cabo no escuro");
 }

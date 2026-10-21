@@ -208,8 +208,9 @@ return {
 
 | `type` | Campos (padrão) |
 |---|---|
-| `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true) |
-| `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true) |
+| `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; as partes que o `.glb` faz brilhar, com `emissiveFactor`, brilham sempre) |
+| `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; não ilumina em volta) |
+| `light3d` | Uma luz: `kind` ("point": ilumina em volta; "spot": um holofote, num cone para a frente do objeto, −Z), `color`, `intensity` (1.5), `range` (8 m: até onde chega), `angle` (30°: metade da abertura do holofote), `soft` (0.3: a borda do cone que apaga aos poucos), `flicker` (0 a 1: tremula como fogo), `on` (true). Valem as 32 mais perto da câmera; só o sol faz sombra. `obj.light3d.on = false` apaga. |
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
 | `anim3d` | `animation` ("": nenhuma), `speed` (1), `loop` (true): a animação que o `model` do objeto toca desde o começo |
 | `bone` | `bone` (""): preso a um osso do modelo do pai (uma espada na mão do herói: o osso `mao_d`). O objeto acompanha o osso quando o pai anima; a posição, a rotação e a escala dele contam a partir do osso. Um osso que não existe dá um aviso com a lista dos que existem. |
@@ -600,10 +601,12 @@ Ações (`act`):
 | `variavel` | `var`, `op` ("somar", "subtrair", "definir", "maior", "menor"), `valor` |
 | `salvar` / `carregar` | `var` ("" = todas): grava no disco com [nn.save](#nnsave) (chave `vars.<nome>`) / lê de volta |
 | `zerar` | — (`nn.reset_vars()`) |
-| `ir_para_cena` | `cena`, `escurecer` (0.5 s) |
+| `ir_para_cena` | `cena`, `como` ("trocar"; "guardar": a cena de agora fica como está e `fechar_cena`, na outra, volta para ela), `escurecer` (0.5 s) |
 | `reiniciar` | `como` ("comeco", "checkpoint", "zerar": do começo, zerando as variáveis) |
 | `por_cima` | `cena` (abre por cima: a de baixo fica parada) |
-| `fechar_cena` | — (fecha a cena aberta por cima) |
+| `fechar_cena` | — (fecha a cena aberta por cima, ou aberta com `guardar`, e volta para a de antes) |
+| `luz` | `acao` ("acender", "apagar" ou "alternar"), `alvo` (precisa do componente `light3d`) |
+| `cor_luz` | `alvo`, `cor`, `forca` (0 = a mesma) |
 | `sair` | — (fecha o jogo) |
 | `criar` | `prefab`, `onde` (na posição de quem), `dx`, `dy`, `vx`, `vy` |
 | `destruir` | `alvo` |
@@ -1282,6 +1285,39 @@ Os campos `yaw`, `pitch`, `distance`, `shoulder`, `sensitivity` e `invert_y` pod
 | `sun_color` | Cor e força do sol (mais escuro = mais fraco; `"#000000"` desliga). |
 | `sky`, `ground` | Luz ambiente que vem de cima e de baixo: deixa as sombras coloridas, nunca pretas. |
 | `fog` | `{ near =, far =, color = }`: a névoa começa em `near` e cobre tudo em `far`. Sem `color`, usa a cor do horizonte do céu. `false` desliga. |
+
+#### Lâmpadas, holofotes e brilho
+
+Além do sol, até **32 luzes** iluminam o mundo em cada quadro (com mais, valem as mais perto da câmera). Elas não fazem sombra. Peça a luz **a cada quadro**, no `draw`, como os desenhos:
+
+```lua
+function cena:draw()
+  -- Uma tocha: laranja, até 7 m, tremulando.
+  local k = 1 + 0.3 * math.sin(nn.time.elapsed() * 13)
+  nn.d3.lamp({ x = 2, y = 1.3, z = 0, color = "#FFA347", intensity = 1.6 * k, range = 7 })
+  -- Um holofote apontando para baixo.
+  nn.d3.lamp({ x = 0, y = 6, z = -4, direction = { 0, -1, 0 }, angle = 18, intensity = 3, range = 9 })
+  -- Um cristal que brilha sozinho (aparece aceso mesmo no escuro).
+  nn.d3.draw(self.cristal, { x = -2, glow = 1 })
+end
+```
+
+| Opção de `nn.d3.lamp` | Descrição |
+|---|---|
+| `x`, `y`, `z` | Onde a luz está. |
+| `color`, `intensity` | A cor e a força (1 = como o sol bem perto da luz). |
+| `range` | Até onde a luz chega, em metros (padrão 8): ela some aos poucos até lá. |
+| `direction` | Com uma direção `{x, y, z}`, vira um **holofote**: só ilumina dentro do cone. |
+| `angle`, `soft` | No holofote: metade da abertura, em graus (padrão 30), e quanto da borda apaga aos poucos (0 a 1, padrão 0.25). |
+
+O `glow` do `nn.d3.draw` (de 0 a 1) faz a própria cor brilhar: a malha aparece acesa no escuro, mas não ilumina em volta (para isso, uma lâmpada). Um modelo `.glb` com emissão no material (`emissiveFactor`, e a extensão `KHR_materials_emissive_strength`) brilha sozinho nessas partes, como a chama da `tocha.glb` e os cristais da `cristal.glb`. Numa cena do NN Studio, use o componente `light3d` e o `glow` das formas e dos modelos; `nn.d3.stats().lamps` diz quantas luzes valeram no último quadro.
+
+Para escurecer o mundo, apague o sol e a luz ambiente (o ambiente pronto **Caverna** faz isso):
+
+```lua
+nn.d3.sky(false)
+nn.d3.light({ sun_color = "#000000", sky = "#1C1C26", ground = "#0C0B0A", fog = { near = 8, far = 35 } })
+```
 
 #### Céu
 

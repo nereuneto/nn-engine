@@ -217,6 +217,86 @@ impl Default for Sky3D {
     }
 }
 
+/// Uma luz no mundo 3D, além do sol: uma lâmpada (ilumina em volta) ou, com
+/// [`Lamp3D::cone`], um holofote (ilumina num cone). Vale para um frame
+/// (veja [`Renderer::add_lamp3d`](crate::Renderer::add_lamp3d)); com muitas,
+/// valem as [`MAX_LAMPS`] mais perto da câmera. As lâmpadas não fazem sombra.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Lamp3D {
+    pub position: Vec3,
+    pub color: Color,
+    /// Força (1 = como o sol num dia claro, bem perto da lâmpada).
+    pub intensity: f32,
+    /// Até onde a luz chega, em metros (some aos poucos até lá).
+    pub range: f32,
+    /// Holofote: ilumina só dentro do cone.
+    pub cone: Option<Cone3D>,
+}
+
+impl Lamp3D {
+    /// Uma lâmpada branca em `position`, com força 1 e alcance de 8 metros.
+    pub fn at(position: Vec3) -> Self {
+        Self {
+            position,
+            color: Color::WHITE,
+            intensity: 1.0,
+            range: 8.0,
+            cone: None,
+        }
+    }
+}
+
+/// O cone de um holofote.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Cone3D {
+    /// Para onde ele aponta.
+    pub direction: Vec3,
+    /// Metade da abertura, em graus (fora disso, nada de luz).
+    pub angle: f32,
+    /// Quanto da borda (0 a 1) vai apagando aos poucos.
+    pub softness: f32,
+}
+
+/// Quantas lâmpadas valem num frame (as mais perto da câmera).
+pub const MAX_LAMPS: usize = 32;
+
+/// O brilho próprio de uma malha: aparece acesa mesmo no escuro (sem halo
+/// em volta).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Glow {
+    /// Quanto da própria cor brilha (0 = nada, 1 = a cor inteira).
+    pub amount: f32,
+    /// Uma cor que brilha por cima (a emissão dos modelos `.glb`). Preto =
+    /// nada.
+    pub color: Color,
+}
+
+impl Default for Glow {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+impl Glow {
+    /// Sem brilho.
+    pub const NONE: Self = Self {
+        amount: 0.0,
+        color: Color::BLACK,
+    };
+
+    /// A própria cor brilhando `amount` (0 a 1).
+    pub fn own(amount: f32) -> Self {
+        Self {
+            amount,
+            ..Self::NONE
+        }
+    }
+
+    pub fn is_none(&self) -> bool {
+        self.amount <= 0.0 && self.color.r <= 0.0 && self.color.g <= 0.0 && self.color.b <= 0.0
+    }
+}
+
 /// Sombras do sol.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Shadows {

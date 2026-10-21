@@ -4147,3 +4147,194 @@ fn cena_3d_com_hud_por_cima() {
         rect.center()
     );
 }
+
+/// Luzes numa cena 3D: ➕ Objeto > Luz (Tocha e Holofote), o ambiente pronto
+/// Caverna, o Inspetor da Luz (a abertura só no holofote) e, na vista, o chão
+/// aceso em volta da tocha no escuro.
+#[test]
+fn cena_3d_luzes_e_ambiente_caverna() {
+    use nn_studio::scene_data::Prop;
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let dir = temp("cena-3d-luzes");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    let luz = |h: &mut Harness<'_, StudioApp>, item: &str| {
+        h.get_by_label("➕ Objeto").click();
+        h.run_steps(2);
+        h.get_by(|n| {
+            n.label()
+                .is_some_and(|l| l.starts_with("Luz") && l != "Luz")
+        })
+        .hover();
+        h.run_steps(3);
+        h.get_by(|n| n.role() == Role::Button && n.label().as_deref() == Some(item))
+            .click();
+        h.run_steps(4);
+    };
+    luz(&mut h, "Tocha");
+    let tocha = objeto(&h, "Tocha").clone();
+    // A tocha: o cabo e a chama (a luz tremulando e o fogo), com a brasa
+    // que brilha dentro.
+    let chama = tocha.children.iter().find(|c| c.name == "Chama").unwrap();
+    let l = chama.component("light3d").unwrap();
+    assert!(l.num("flicker") > 0.0);
+    assert!(chama.component("particles").is_some());
+    assert_eq!(
+        chama.children[0].component("shape3d").unwrap().num("glow"),
+        1.0
+    );
+    assert!(tocha.children.iter().any(|c| c.name == "Cabo"));
+    // O Inspetor da chama: uma lâmpada, sem a abertura do holofote.
+    cena_mut(&mut h).selection = vec![chama.id];
+    h.run_steps(3);
+    h.get_by_label("Tremular");
+    h.get_by_label("Alcance");
+    assert!(h.query_by_label("Abertura do cone").is_none());
+    luz(&mut h, "Holofote");
+    let holofote = objeto(&h, "Holofote").clone();
+    assert_eq!(holofote.component("light3d").unwrap().str("kind"), "spot");
+    assert_eq!(cena_mut(&mut h).selection, vec![holofote.id]);
+    h.get_by_label("Abertura do cone");
+    // O ambiente pronto Caverna: sem céu e sem sol, com o fundo escuro.
+    cena_mut(&mut h).selection.clear();
+    h.run_steps(3);
+    h.get_by_label("Caverna").click();
+    h.run_steps(3);
+    {
+        let doc = cena_mut(&mut h);
+        assert_eq!(doc.data.env("sky"), Prop::Bool(false));
+        assert_eq!(doc.data.env("sun_color").str(), "#000000");
+        assert_eq!(doc.data.background, "#0A0A0E");
+        // Só a tocha, no meio da vista.
+        doc.data.objects.retain(|o| o.name != "Holofote");
+        doc.cam3
+            .look_at(glam::Vec3::new(0.0, 6.0, 6.0), glam::Vec3::ZERO);
+        doc.cam3_set = true;
+    }
+    h.run_steps(4);
+    tela(&mut h, "cena-3d-luzes");
+    if !gpu {
+        return;
+    }
+    // Na vista: o chão perto da tocha aceso (laranja); longe, escuro.
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let img = h.render().expect("render");
+    let ppp = img.width() as f32 / 1280.0;
+    let px = |x: f32, y: f32| {
+        let p = img.get_pixel((x * ppp) as u32, (y * ppp) as u32);
+        (p[0] as u32, p[1] as u32, p[2] as u32)
+    };
+    let c = rect.center();
+    let perto = px(c.x + 30.0, c.y + 25.0);
+    let canto = px(rect.left() + 6.0, rect.bottom() - 30.0);
+    assert!(
+        perto.0 > 60 && perto.0 > perto.2 + 20,
+        "perto da tocha: {perto:?}"
+    );
+    assert!(canto.0 + canto.1 + canto.2 < 90, "longe, escuro: {canto:?}");
+}
+
+#[test]
+fn tutorial_uma_caverna_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, EventItem, Object, Prop, Rule};
+    let dir = temp("tutorial-caverna");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("uma-caverna");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/uma-caverna");
+    for f in [
+        "modelos/cristal.glb",
+        "modelos/tocha.glb",
+        "modelos/lampiao.glb",
+    ] {
+        assert!(projeto.join(f).is_file(), "o modelo vazio3d traz {f}");
+    }
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    h.run_steps(4);
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/mundo.cena").unwrap()
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    espera(&mut h, 1);
+    // O ambiente pronto Caverna, pelo botão do Inspetor da cena.
+    doc(&mut h).selection.clear();
+    h.run_steps(3);
+    h.get_by_label("Caverna").click();
+    espera(&mut h, 2);
+    // A tocha (como o ➕ Objeto > Luz > Tocha faz).
+    doc(&mut h).data.objects.push({
+        let mut t = nn_studio::scene_view::scene3d::torch();
+        t.id = 20;
+        for (k, c) in t.children.iter_mut().enumerate() {
+            c.id = 21 + k as u32;
+            for (j, g) in c.children.iter_mut().enumerate() {
+                g.id = 30 + j as u32;
+            }
+        }
+        t
+    });
+    espera(&mut h, 3);
+    let chama = doc(&mut h).data.find_mut(22).unwrap();
+    chama
+        .components
+        .iter_mut()
+        .find(|c| c.kind == "light3d")
+        .unwrap()
+        .set("range", Prop::Num(10.0));
+    espera(&mut h, 4);
+    let mut cristal = Object::new(40, "cristal");
+    let mut m = Component::new("model");
+    m.set("file", Prop::Str("modelos/cristal.glb".into()));
+    cristal.components.push(m);
+    doc(&mut h).data.objects.push(cristal);
+    espera(&mut h, 5);
+    let mut esfera = Object::new(41, "Esfera");
+    let mut f = Component::new("shape3d");
+    f.set("shape", Prop::Str("sphere".into()));
+    f.set("glow", Prop::Num(1.0));
+    esfera.components.push(f);
+    doc(&mut h).data.objects.push(esfera);
+    espera(&mut h, 6);
+    let mut holofote = Object::new(42, "Holofote");
+    let mut l = Component::new("light3d");
+    l.set("kind", Prop::Str("spot".into()));
+    holofote.components.push(l);
+    doc(&mut h).data.objects.push(holofote);
+    espera(&mut h, 7);
+    let mut heroi = Object::new(43, "Jogador");
+    heroi
+        .components
+        .push(Component::behavior("nn:jogador3d", &[]));
+    doc(&mut h).data.objects.push(heroi);
+    espera(&mut h, 8);
+    let item = |id: &str, props: &[(&str, &str)]| EventItem {
+        id: id.into(),
+        not: false,
+        props: props
+            .iter()
+            .map(|(k, v)| (k.to_string(), Prop::Str(v.to_string())))
+            .collect(),
+    };
+    doc(&mut h).data.find_mut(42).unwrap().events.push(Rule {
+        when: vec![item("tecla", &[("modo", "apertar"), ("tecla", "f")])],
+        actions: vec![item("luz", &[("acao", "alternar"), ("alvo", "@este")])],
+        ..Default::default()
+    });
+    espera(&mut h, 9);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 10);
+    h.get_by_label("Concluir").click();
+    h.run_steps(3);
+    assert!(h.state().tutorial.is_none());
+}

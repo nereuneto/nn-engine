@@ -567,7 +567,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.draw",
         "(malha, opts)",
-        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator()).",
+        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator(), glow = 0 a 1: a própria cor brilha, mesmo no escuro).",
     ),
     d(
         "nn.d3.text",
@@ -593,6 +593,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "nn.d3.light",
         "(opts)",
         "Luz (opts: sun = direção {x, y, z}, sun_color, sky, ground, fog = {near, far, color} ou false; sem color, a névoa tem a cor do horizonte).",
+    ),
+    d(
+        "nn.d3.lamp",
+        "(opts)",
+        "Uma lâmpada só neste quadro (chame no draw): x, y, z, color, intensity = 1, range = 8 (metros). Com direction = {x, y, z}, vira um holofote (angle = 30, meia abertura em graus; soft = 0.25, a borda que apaga aos poucos). Valem as 32 mais perto da câmera; não fazem sombra.",
     ),
     d(
         "nn.d3.sky",
@@ -627,7 +632,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.stats",
         "()",
-        "O que o último quadro 3D desenhou: { meshes = pedidas, visible = na frente da câmera (as outras nem vão para a GPU), shadow = no mapa de sombras, draw_calls = chamadas de desenho }.",
+        "O que o último quadro 3D desenhou: { meshes = pedidas, visible = na frente da câmera (as outras nem vão para a GPU), shadow = no mapa de sombras, draw_calls = chamadas de desenho, lamps = lâmpadas que valeram }.",
     ),
     d(
         "nn.d3.matrix",

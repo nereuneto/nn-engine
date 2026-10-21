@@ -33,9 +33,12 @@ def norm(a):
 class Parte:
     """Triângulos com uma cor (material) só; normais por face (low-poly)."""
 
-    def __init__(self, cor, textura=False):
+    def __init__(self, cor, textura=False, brilho=0.0):
         self.cor = cor
         self.textura = textura
+        # Brilho próprio (emissão): aparece aceso mesmo no escuro. Acima de
+        # 1, mais forte (a extensão KHR_materials_emissive_strength).
+        self.brilho = brilho
         self.pos, self.nor, self.uv, self.idx = [], [], [], []
         # Modelos com esqueleto: o osso de cada vértice (o atual vale para o
         # que for acrescentado depois).
@@ -195,6 +198,14 @@ class Modelo:
                    "pbrMetallicRoughness": {"baseColorFactor": cor(p.cor), "metallicFactor": 0.0}}
             if p.textura:
                 mat["pbrMetallicRoughness"]["baseColorTexture"] = {"index": 0}
+            if p.brilho > 0:
+                mat["emissiveFactor"] = cor(p.cor)[:3]
+                if p.brilho != 1.0:
+                    mat["extensions"] = {"KHR_materials_emissive_strength":
+                                         {"emissiveStrength": p.brilho}}
+                    usadas = self.json.setdefault("extensionsUsed", [])
+                    if "KHR_materials_emissive_strength" not in usadas:
+                        usadas.append("KHR_materials_emissive_strength")
             self.json["materials"].append(mat)
             idx = self._view(struct.pack('<%dI' % len(p.idx), *p.idx), 34963)
             self.json["accessors"].append({"bufferView": idx, "componentType": 5125,
@@ -704,10 +715,65 @@ def cajado():
     haste.prisma(6, 0.03, -0.35, 1.0)
     anel = Parte("#F4B400")
     anel.prisma(6, 0.05, 0.92, 1.0)
-    pedra = Parte("#4CC9F0")
+    pedra = Parte("#4CC9F0", brilho=0.8)
     pedra.prisma(5, 0.09, 1.0, 1.1)
     pedra.prisma(5, 0.09, 1.1, 1.22, raio_topo=0.0)
     m.no("cajado", m.malha("cajado", [haste, anel, pedra]), raiz=True)
+    return m
+
+
+def tocha():
+    """Tocha de pé (ou presa na parede, inclinada): o cabo de madeira, o
+    copo de ferro e a chama que brilha. A base na origem; 1,25 m."""
+    m = Modelo()
+    cabo = Parte("#6B4226")
+    cabo.prisma(6, 0.045, 0.0, 0.9, raio_topo=0.055)
+    copo = Parte("#3A3A42")
+    copo.prisma(6, 0.07, 0.86, 0.98, raio_topo=0.1)
+    fora = Parte("#FF8A1F", brilho=1.0)
+    fora.prisma(5, 0.085, 0.98, 1.08, raio_topo=0.07)
+    fora.prisma(5, 0.07, 1.08, 1.25, raio_topo=0.0, giro=0.3)
+    dentro = Parte("#FFE066", brilho=1.4)
+    dentro.prisma(4, 0.045, 1.04, 1.16, raio_topo=0.0, giro=0.6, centro=(0.0, 0.07))
+    m.no("tocha", m.malha("tocha", [cabo, copo, fora, dentro]), raiz=True)
+    return m
+
+
+def lampiao():
+    """Lampião de ferro com o vidro aceso: a base na origem; 0,45 m, com a
+    alça em cima (para pendurar ou segurar)."""
+    m = Modelo()
+    ferro = Parte("#2E2E36")
+    ferro.prisma(6, 0.12, 0.0, 0.05)
+    ferro.prisma(6, 0.13, 0.27, 0.31, raio_topo=0.06)
+    ferro.prisma(6, 0.06, 0.31, 0.35, raio_topo=0.03)
+    # As quatro colunas do vidro.
+    for x, z in ((0.09, 0.09), (-0.09, 0.09), (0.09, -0.09), (-0.09, -0.09)):
+        ferro.caixa(x, 0.16, z, 0.025, 0.22, 0.025)
+    # A alça: três barrinhas em arco.
+    ferro.caixa(0.0, 0.43, 0.0, 0.12, 0.025, 0.025)
+    ferro.caixa(0.065, 0.39, 0.0, 0.025, 0.08, 0.025)
+    ferro.caixa(-0.065, 0.39, 0.0, 0.025, 0.08, 0.025)
+    vidro = Parte("#FFD27A", brilho=1.2)
+    vidro.prisma(6, 0.085, 0.05, 0.27)
+    m.no("lampiao", m.malha("lampiao", [ferro, vidro]), raiz=True)
+    return m
+
+
+def cristal():
+    """Cristais que brilham saindo de uma pedra (cavernas): pontas de seis
+    lados, de alturas diferentes. A base na origem; ~1 m."""
+    m = Modelo()
+    pedra = Parte("#4A4652")
+    pedra.prisma(7, 0.42, 0.0, 0.16, raio_topo=0.3)
+    claro = Parte("#7FF5FF", brilho=0.9)
+    escuro = Parte("#4CC9F0", brilho=0.6)
+    for (x, z, r, h, parte) in ((0.0, 0.0, 0.13, 0.75, claro), (0.2, 0.08, 0.09, 0.45, escuro),
+                                (-0.17, 0.12, 0.08, 0.38, claro), (0.05, -0.2, 0.08, 0.5, escuro),
+                                (-0.12, -0.12, 0.06, 0.3, escuro)):
+        parte.prisma(6, r, 0.1, 0.1 + h, centro=(x, z))
+        parte.prisma(6, r, 0.1 + h, 0.1 + h + r * 2.2, raio_topo=0.0, centro=(x, z))
+    m.no("cristal", m.malha("cristal", [pedra, claro, escuro]), raiz=True)
     return m
 
 
@@ -848,7 +914,8 @@ def main():
                         ("caixote", caixote), ("estrela", estrela), ("moeda", moeda),
                         ("plataforma", plataforma), ("bicho", bicho), ("chave", chave),
                         ("porta", porta), ("espada", espada), ("cajado", cajado),
-                        ("besourao", besourao)]:
+                        ("besourao", besourao), ("tocha", tocha), ("lampiao", lampiao),
+                        ("cristal", cristal)]:
         with open(os.path.join(estrelas, nome + ".glb"), "wb") as f:
             f.write(fazer().glb())
     with open(os.path.join(testes, "roda.glb"), "wb") as f:

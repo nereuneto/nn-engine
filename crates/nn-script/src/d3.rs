@@ -394,20 +394,20 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                     )));
                 }
             };
+            let glow = opt::<f32>(o, "glow")?.unwrap_or(0.0).max(0.0);
             with_ctx(lua, |c| {
                 match thing {
-                    Thing::Mesh(mesh) => {
-                        c.renderer
-                            .draw_mesh_with(mesh.id, model, col, image, shadow)
+                    Thing::Mesh(mesh) => c.renderer.draw_mesh_glow(
+                        mesh.id,
+                        model,
+                        col,
+                        image,
+                        shadow,
+                        d3::Glow::own(glow),
+                    ),
+                    Thing::Model(key) => {
+                        c.draw_model_key_glow(&key, model, col, shadow, glow, joints.as_deref());
                     }
-                    Thing::Model(key) => match &joints {
-                        Some(j) => {
-                            c.draw_model_key_posed(&key, model, col, shadow, j);
-                        }
-                        None => {
-                            c.draw_model_key(&key, model, col, shadow);
-                        }
-                    },
                 }
                 Ok(())
             })
@@ -591,6 +591,42 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
     )?;
 
     t.set(
+        "lamp",
+        lua.create_function(|lua, opts: Table| {
+            let o = Some(&opts);
+            let position = Vec3::new(
+                opt::<f32>(o, "x")?.unwrap_or(0.0),
+                opt::<f32>(o, "y")?.unwrap_or(0.0),
+                opt::<f32>(o, "z")?.unwrap_or(0.0),
+            );
+            let mut lamp = d3::Lamp3D::at(position);
+            if let Some(c) = opt_color(o, "color")? {
+                lamp.color = c;
+            }
+            if let Some(k) = opt::<f32>(o, "intensity")? {
+                lamp.intensity = k.max(0.0);
+            }
+            if let Some(r) = opt::<f32>(o, "range")? {
+                lamp.range = r.max(0.0);
+            }
+            if let Some(dir) = opt_vec3(o, "direction")? {
+                if dir.length_squared() < 1e-8 {
+                    return Err(err("\"direction\": a direção não pode ser {0, 0, 0}"));
+                }
+                lamp.cone = Some(d3::Cone3D {
+                    direction: dir.normalize(),
+                    angle: opt::<f32>(o, "angle")?.unwrap_or(30.0).clamp(1.0, 89.0),
+                    softness: opt::<f32>(o, "soft")?.unwrap_or(0.25).clamp(0.0, 1.0),
+                });
+            }
+            with_ctx(lua, |c| {
+                c.renderer.add_lamp3d(lamp);
+                Ok(())
+            })
+        })?,
+    )?;
+
+    t.set(
         "sky",
         lua.create_function(|lua, v: Value| {
             let sky = match &v {
@@ -718,6 +754,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             t.set("visible", s.visible)?;
             t.set("shadow", s.shadow)?;
             t.set("draw_calls", s.draw_calls)?;
+            t.set("lamps", s.lamps)?;
             Ok(t)
         })?,
     )?;

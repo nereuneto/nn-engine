@@ -29,6 +29,27 @@ pub fn read_model(root: &Path, rel: &str) -> Result<nn_render::d3::ModelData, St
         .map_err(|e| format!("{rel}: {e}"))
 }
 
+/// A luz de um componente Luz na matriz `m` do objeto (como o
+/// `M.draw_light` do cena.lua, sem tremular), ou nada se estiver apagada.
+pub fn lamp_of(c: &Component, m: glam::Mat4) -> Option<nn_render::d3::Lamp3D> {
+    use glam::Vec3;
+    if !c.bool("on") || c.num("intensity") <= 0.0 || c.num("range") <= 0.0 {
+        return None;
+    }
+    let mut lamp = nn_render::d3::Lamp3D::at(m.transform_point3(Vec3::ZERO));
+    lamp.color = parse_color(c.str("color"));
+    lamp.intensity = c.num("intensity") as f32;
+    lamp.range = c.num("range") as f32;
+    if c.str("kind") == "spot" {
+        lamp.cone = Some(nn_render::d3::Cone3D {
+            direction: m.transform_vector3(Vec3::NEG_Z).normalize_or(Vec3::NEG_Y),
+            angle: (c.num("angle") as f32).clamp(1.0, 89.0),
+            softness: (c.num("soft") as f32).clamp(0.0, 1.0),
+        });
+    }
+    Some(lamp)
+}
+
 /// A caixa que envolve um objeto 3D no espaço dele (sem a transformação):
 /// o modelo, a forma ou, para a câmera e objetos vazios, um cubinho.
 pub fn bounds3(o: &Object, root: &Path, sizes: &mut Sizes) -> (glam::Vec3, glam::Vec3) {
@@ -996,7 +1017,13 @@ impl SceneRenderer {
                 for (ci, c) in o.components.iter().enumerate() {
                     if matches!(
                         c.kind.as_str(),
-                        "model" | "shape3d" | "camera3d" | "particles" | "terrain" | "text3d"
+                        "model"
+                            | "shape3d"
+                            | "light3d"
+                            | "camera3d"
+                            | "particles"
+                            | "terrain"
+                            | "text3d"
                     ) {
                         out.push((m, c.clone(), preview_anim3d(o), o.id, ci));
                     }
@@ -1062,31 +1089,48 @@ impl SceneRenderer {
                             let t = (view.time * speed).rem_euclid(d);
                             Some(s.joint_matrices(&s.pose(i, t)))
                         });
-                        match joints {
-                            Some(j) => self.renderer.draw_model_posed(
-                                &model,
-                                m,
-                                parse_color(c.str("color")),
-                                c.bool("shadow"),
-                                &j,
-                            ),
-                            None => self.renderer.draw_model(
-                                &model,
-                                m,
-                                parse_color(c.str("color")),
-                                c.bool("shadow"),
-                            ),
-                        }
+                        self.renderer.draw_model_glow(
+                            &model,
+                            m,
+                            parse_color(c.str("color")),
+                            c.bool("shadow"),
+                            c.num("glow") as f32,
+                            joints.as_deref(),
+                        );
                     }
                 }
                 "shape3d" => {
                     let mesh = self.mesh3(c.str("shape"));
-                    self.renderer.draw_mesh_with(
+                    self.renderer.draw_mesh_glow(
                         mesh,
                         m,
                         parse_color(c.str("color")),
                         None,
                         c.bool("shadow"),
+                        nn_render::d3::Glow::own(c.num("glow") as f32),
+                    );
+                }
+                "light3d" => {
+                    let pos = m.transform_point3(Vec3::ZERO);
+                    let color = parse_color(c.str("color"));
+                    if let Some(lamp) = lamp_of(&c, m) {
+                        self.renderer.add_lamp3d(lamp);
+                    }
+                    // Uma bolinha com a cor da luz (só no editor), para ver e
+                    // clicar; apagada, cinza.
+                    let ball = self.mesh3("sphere");
+                    let on = c.bool("on");
+                    self.renderer.draw_mesh_glow(
+                        ball,
+                        Mat4::from_scale_rotation_translation(
+                            Vec3::splat(0.22),
+                            Quat::IDENTITY,
+                            pos,
+                        ),
+                        if on { color } else { Color::hex(0x5B6472) },
+                        None,
+                        false,
+                        nn_render::d3::Glow::own(if on { 1.0 } else { 0.0 }),
                     );
                 }
                 "text3d" => {

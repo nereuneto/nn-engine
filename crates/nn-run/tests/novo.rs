@@ -924,6 +924,192 @@ fn modelo_vale3d_terreno_pisa_lago_volta_e_estrelas() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// A caverna do Vale 3D: entrar pelo arco abre a cena da caverna (guardando
+/// o vale), escura e iluminada por tochas, cristais, um lampião e a fresta;
+/// a estrela do fundo conta, e a saída volta para o vale como estava, que
+/// termina com as 6 estrelas.
+#[test]
+fn modelo_vale3d_caverna_com_luzes_entra_pega_a_estrela_e_volta() {
+    let base = temp("vale3d-caverna");
+    let dir = base.join("jogo");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: None,
+        template: Template::Vale3D,
+    })
+    .unwrap();
+    let project = Project::open(&dir).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let config = project
+        .config
+        .clone()
+        .size(320, 180)
+        .save_dir(base.join("dados"))
+        .hot_reload(false);
+    let start = project.start.clone();
+    let Ok(mut h) = Headless::new(config, move |ctx| SceneStack::new(ctx, rt.scene(start))) else {
+        assert!(std::env::var("NN_REQUIRE_GPU").is_err(), "GPU obrigatória");
+        return;
+    };
+    // A cena que está rodando (o cena.lua guarda em M.current).
+    let m: mlua::Table = rt2.lua().named_registry_value("nn.cena").unwrap();
+    rt2.lua().globals().set("M", m).unwrap();
+    let run = |code: &str| {
+        rt2.lua()
+            .load(format!("local C = M.current {code}"))
+            .exec()
+            .unwrap()
+    };
+    let get = |code: &str| -> String {
+        rt2.lua()
+            .load(format!("local C = M.current return tostring({code})"))
+            .eval()
+            .unwrap()
+    };
+    let media = |h: &Headless<SceneStack>| -> u32 {
+        let px = h.pixels().unwrap();
+        (px.chunks(4)
+            .map(|p| p[0] as u32 + p[1] as u32 + p[2] as u32)
+            .sum::<u32>())
+            / (px.len() as u32 / 4)
+    };
+    h.run_frames(30);
+    assert_eq!(get("C._path"), "cenas/vale.cena");
+    let dia = media(&h);
+    // Já com as 5 estrelas dos morros, entra no arco da caverna.
+    run("nn.vars.estrelas = 5
+         local x, y, z = C.objects['Entrada da caverna']:position3d()
+         C.objects['Herói']:move_to(x, y - 1.4, z)");
+    h.run_frames(90);
+    assert_eq!(get("C._path"), "cenas/caverna.cena");
+    assert_eq!(get("C._guardada"), "true");
+    // Escura, mas acesa pelas luzes: tochas, cristais, lampião e a fresta.
+    assert_eq!(get("C._environment.sky"), "false");
+    let luzes: u32 = get(
+        "(function() local n = 0 for _, o in ipairs(C.object_list) do
+            if o.light3d and o.light3d.on then n = n + 1 end end return n end)()",
+    )
+    .parse()
+    .unwrap();
+    assert!(luzes >= 12, "luzes: {luzes}");
+    if let Some(d) = std::env::var_os("NN_SAIDA") {
+        h.save_png(Path::new(&d).join("caverna-entrou.png"))
+            .unwrap();
+    }
+    let noite = media(&h);
+    assert!(
+        noite * 3 < dia && noite > 4,
+        "a caverna é escura, mas não preta: {noite} (dia {dia})"
+    );
+    // O herói segura a tocha na mão esquerda.
+    assert_eq!(get("C.objects['Tocha na mão']._bone"), "mao_e");
+    // A estrela do fundo conta.
+    run("local x, y, z = C.objects.estrela:position3d()
+         C.objects['Herói']:move_to(x, y - 0.5, z)");
+    h.run_frames(5);
+    assert_eq!(get("nn.vars.estrelas"), "6");
+    // A saída volta para o vale, como estava (o herói no arco).
+    run("local x, y, z = C.objects['Saída']:position3d()
+         C.objects['Herói']:move_to(x, y - 1.4, z)");
+    h.run_frames(50);
+    assert_eq!(get("C._path"), "cenas/vale.cena");
+    let hx: f64 = get("C.objects['Herói'].x").parse().unwrap();
+    assert!((hx - 15.0).abs() < 3.0, "o herói continua no arco: {hx}");
+    assert!(media(&h) > noite * 2, "o céu do vale de volta");
+    // Com as 6 estrelas, o vale termina.
+    h.run_frames(150);
+    assert_eq!(get("C._path"), "cenas/fim.cena");
+    drop(h);
+    std::fs::remove_dir_all(&base).unwrap();
+}
+
+/// Ferramenta: imagens da caverna do Vale 3D e da entrada dela no vale
+/// (`NN_SAIDA=<pasta> cargo test -p nn-run --test novo capturas_da_caverna
+/// -- --ignored`).
+#[test]
+#[ignore]
+fn capturas_da_caverna() {
+    let Some(out) = std::env::var_os("NN_SAIDA").map(PathBuf::from) else {
+        return;
+    };
+    std::fs::create_dir_all(&out).unwrap();
+    let dir = temp("captura-caverna");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Vale3D,
+    })
+    .unwrap();
+    for (cena, fotos) in [
+        (
+            "cenas/caverna.cena",
+            vec![
+                ("caverna-comeco", "", 30),
+                (
+                    "caverna-meio",
+                    "h:move_to(0, 0.1, -14) cam.yaw = 0 cam.pitch = 12",
+                    40,
+                ),
+                (
+                    "caverna-cristal",
+                    "h:move_to(-1.5, 0.1, -15) h.ry = 230 cam.yaw = 130 cam.pitch = 15",
+                    40,
+                ),
+                (
+                    "caverna-fundo",
+                    "h:move_to(0.5, 0.1, -31) cam.yaw = 0 cam.pitch = 16 cam.distance = 5",
+                    40,
+                ),
+            ],
+        ),
+        (
+            "cenas/vale.cena",
+            vec![(
+                "vale-entrada",
+                "local e = C.objects.Caverna
+                 local a = math.rad(e.ry)
+                 h:move_to(e.x + math.sin(a) * 9, e.y + 0.3, e.z + math.cos(a) * 9)
+                 h.ry = e.ry + 180 cam.yaw = e.ry cam.pitch = 12 cam.distance = 8",
+                60,
+            )],
+        ),
+    ] {
+        let project = Project::open(&dir).unwrap();
+        let rt = ScriptRuntime::new(&dir).unwrap();
+        let rt2 = rt.clone();
+        let config = project
+            .config
+            .clone()
+            .size(1280, 720)
+            .save_dir(dir.join("dados"))
+            .hot_reload(false);
+        let Ok(mut h) = Headless::new(config, move |ctx| {
+            let mut s = rt.scene(cena);
+            s.enter(ctx);
+            Uma(s)
+        }) else {
+            return;
+        };
+        rt2.lua()
+            .globals()
+            .set("C", h.game.0.table().unwrap())
+            .unwrap();
+        h.run_frames(20);
+        for (nome, codigo, quadros) in fotos {
+            rt2.lua()
+                .load(format!(
+                    "local h = C.objects['Herói'] local cam = C._player_cam.cam {codigo}"
+                ))
+                .exec()
+                .unwrap();
+            h.run_frames(quadros);
+            h.save_png(out.join(format!("{nome}.png"))).unwrap();
+        }
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 fn toque_uma(h: &mut Headless<Uma>, k: KeyCode) {
     h.ctx.input.press_key(k);
     h.run_frames(1);

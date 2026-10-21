@@ -11,8 +11,8 @@ def lua(v):
     if isinstance(v, str): return '"' + v.replace('"', '\\"') + '"'
     raise TypeError(v)
 
-def comp(kind, **kw):
-    return '{ type = %s%s }' % (lua(kind), ''.join(', %s = %s' % (k, lua(v)) for k, v in kw.items()))
+def comp(_tipo, **kw):
+    return '{ type = %s%s }' % (lua(_tipo), ''.join(', %s = %s' % (k, lua(v)) for k, v in kw.items()))
 
 class Cena:
     def __init__(self):
