@@ -111,6 +111,8 @@ pub const BEHAVIORS: &[(&str, &str)] = &[
     ("atirar", include_str!("comportamentos/atirar.lua")),
     ("golpe", include_str!("comportamentos/golpe.lua")),
     ("projetil", include_str!("comportamentos/projetil.lua")),
+    ("ondas", include_str!("comportamentos/ondas.lua")),
+    ("chefe", include_str!("comportamentos/chefe.lua")),
     ("gerador", include_str!("comportamentos/gerador.lua")),
     ("temporario", include_str!("comportamentos/temporario.lua")),
     (
