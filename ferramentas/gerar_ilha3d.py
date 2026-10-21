@@ -62,10 +62,10 @@ c.obj('Fogueira', [comp('shape3d', shape='cylinder', color='#5B3A29', shadow=Tru
       children=[
           # (Os filhos ficam dentro da escala da fogueira: 1 em y = 0,15 m.)
           c.child('Fogo', [particulas(
-              rate=60, lifetime=0.8, lifetime_var=0.4, speed_min=0.6, speed_max=1.6, spread=25,
-              gravity=1.5, area="circulo", area_radius=0.25, size_start=0.5, size_end=0.1,
+              rate=40, lifetime=0.8, lifetime_var=0.4, speed_min=0.6, speed_max=1.6, spread=25,
+              gravity=1.5, area="circulo", area_radius=0.3, size_start=0.4, size_end=0.1,
               size_var=0.3, color_start="#FFE066", color_mid="#FF7A1A", color_end="#B0201000",
-              blend="add"), comp('light3d', kind='point', color='#FF9A3C', intensity=1.6, range=8,
+              blend="add", wind=0.3), comp('light3d', kind='point', color='#FF9A3C', intensity=1.6, range=8,
               angle=30, soft=0.3, flicker=0.6, on=True, night=False)], y=6),
           c.child('Fumaça', [particulas(
               rate=8, lifetime=3, lifetime_var=0.3, speed_min=0.5, speed_max=1, spread=30,
@@ -210,7 +210,7 @@ c.obj('Besouro-rei', [
          abertura=70, ajudantes=True, ajudante='prefabs/besouro.prefab', quantos=2, furia=50, barra=True,
          cor_barra='#FF5A5A', solta='prefabs/estrela.prefab', som_aviso='assets/sons/rugido.wav', som_impacto='assets/sons/explosao.wav'),
 ], x=AX - 4, z=0, ry=90, scale_x=1.5, scale_y=1.5, scale_z=1.5)
-c.obj('Placar da arena', [comp('text', text='', size=30, color='#FFFFFF', anchor='right', font='', hud=True),
+c.obj('Placar da arena', [comp('text', text='', size=30, color='#FFFFFF', anchor='right', font='', hud=True, outline='#00000099'),
                           comp('behavior', script='nn:mostrar_valor', texto='Onda {onda} / 3     Faltam {restantes}')],
       x=-40, y=-44, anchor='top_right', visible=False)
 
@@ -268,10 +268,10 @@ c.obj('Pescador', [
                                                                          intensity=1.2, range=6, angle=30, soft=0.3,
                                                                          flicker=0.1, on=True, night=True)], y=0.18)])])
 
-c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
+c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True, outline='#00000099'),
                  comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 6     Moedas {moedas}     {relogio}')],
       x=40, y=-44, anchor='top_left')
-c.obj('Dica', [comp('text', text='Ache as 6 estrelas! Uma é do besouro-rei, na arena. (Esc solta o mouse)', size=30, color='#FFFFFF', anchor='center', font='', hud=True)],
+c.obj('Dica', [comp('text', text='Ache as 6 estrelas! Uma é do besouro-rei, na arena. (Esc solta o mouse)', size=30, color='#FFFFFF', anchor='center', font='', hud=True, outline='#00000099')],
       y=-120, anchor='top')
 coracoes(c)
 c.obj('Inventário', [comp('behavior', script='nn:inventario', canto='baixo_esquerda', tamanho=56, margem=24, fundo=True)])

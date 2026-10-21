@@ -104,7 +104,7 @@ return {
       x = -620, y = 320, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 5,
       components = {
-        { type = "text", text = "Pontos: 0", size = 30, color = "#FFFFFF", anchor = "left", font = "", hud = true },
+        { type = "text", text = "Pontos: 0", size = 30, color = "#FFFFFF", anchor = "left", font = "", hud = true, outline = "" },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Pontos: {pontos}    Vidas: {vidas}" },
       },
     },
@@ -113,7 +113,7 @@ return {
       x = 620, y = 320, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 5,
       components = {
-        { type = "text", text = "Recorde: 0", size = 30, color = "#FFD166", anchor = "right", font = "", hud = true },
+        { type = "text", text = "Recorde: 0", size = 30, color = "#FFD166", anchor = "right", font = "", hud = true, outline = "" },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Recorde: {recorde}" },
       },
     },

@@ -194,6 +194,14 @@ fn fs_main(in: VertexOut) -> FragOut {
     }
     let n = normalize(in.normal);
     let albedo = in.color * textureSample(tex, samp, in.uv);
+    let f = fog_amount(in.world);
+    var out: FragOut;
+    if (f > 0.995) {
+        // Toda na névoa: nem acende (o mar e o chão lá longe).
+        out.color = vec4<f32>(view.fog.rgb, albedo.a);
+        out.glow = vec4<f32>(0.0, 0.0, 0.0, albedo.a);
+        return out;
+    }
     var sun = max(dot(n, -view.sun_dir.xyz), 0.0);
     if (sun > 0.0) {
         sun = sun * sunlit(in.world, n);
@@ -204,9 +212,7 @@ fn fs_main(in: VertexOut) -> FragOut {
     // O brilho próprio: aparece mesmo no escuro.
     let own = albedo.rgb * in.glow.a + in.glow.rgb;
     rgb = rgb + own;
-    let f = fog_amount(in.world);
     rgb = mix(rgb, view.fog.rgb, f);
-    var out: FragOut;
     out.color = vec4<f32>(rgb, albedo.a);
     out.glow = vec4<f32>(min(own, vec3<f32>(1.0)) * (1.0 - f), albedo.a);
     return out;
@@ -216,12 +222,18 @@ fn fs_main(in: VertexOut) -> FragOut {
 // lado, pela direção da onda) e o brilho do sol ou da lua.
 fn water(in: VertexOut) -> FragOut {
     let albedo = in.color * textureSample(tex, samp, in.uv);
+    let f = fog_amount(in.world);
+    var out: FragOut;
+    if (f > 0.995) {
+        out.color = vec4<f32>(view.fog.rgb, 1.0);
+        out.glow = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        return out;
+    }
     let n = water_normal(in.world.xz, view.time_wind.x);
     let v = normalize(view.camera.xyz - in.world);
-    var sun = max(dot(n, -view.sun_dir.xyz), 0.0);
-    if (sun > 0.0) {
-        sun = sun * sunlit(in.world, vec3<f32>(0.0, 1.0, 0.0));
-    }
+    // A sombra na água: uma conta só (serve para a luz e para o brilho).
+    let lit = sunlit(in.world, vec3<f32>(0.0, 1.0, 0.0));
+    let sun = max(dot(n, -view.sun_dir.xyz), 0.0) * lit;
     let ambient = mix(view.ground.rgb, view.sky.rgb, 0.85);
     var rgb = albedo.rgb * (ambient + view.sun_color.rgb * sun * 0.8 + lamp_light(in.world, n));
     let r = reflect(-v, n);
@@ -235,14 +247,12 @@ fn water(in: VertexOut) -> FragOut {
     rgb = mix(rgb, refl, fresnel);
     // O brilho do sol (ou da lua) nas ondas.
     let glint = pow(max(dot(r, -view.sun_dir.xyz), 0.0), 180.0) * 2.5;
-    let sparkle = view.sun_color.rgb * glint * sunlit(in.world, vec3<f32>(0.0, 1.0, 0.0));
+    let sparkle = view.sun_color.rgb * glint * lit;
     let own = albedo.rgb * in.glow.a + in.glow.rgb;
     rgb = rgb + sparkle + own;
     var alpha = mix(albedo.a, 1.0, fresnel * 0.6);
-    let f = fog_amount(in.world);
     rgb = mix(rgb, view.fog.rgb, f);
     alpha = mix(alpha, 1.0, f);
-    var out: FragOut;
     out.color = vec4<f32>(rgb, alpha);
     // O brilho do sol nas ondas também ganha halo.
     out.glow = vec4<f32>(min(own + sparkle * 0.5, vec3<f32>(1.0)) * (1.0 - f), alpha);
@@ -443,6 +453,6 @@ fn fs_particle_add(in: ParticleOut) -> FragOut {
     var out: FragOut;
     out.color = vec4<f32>(c.rgb * (1.0 - particle_fog(in.world)), c.a);
     // O fogo e as faíscas (que somam luz) ganham halo.
-    out.glow = vec4<f32>(c.rgb * 0.6 * (1.0 - particle_fog(in.world)), c.a);
+    out.glow = vec4<f32>(c.rgb * 0.45 * (1.0 - particle_fog(in.world)), c.a);
     return out;
 }

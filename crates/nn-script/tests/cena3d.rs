@@ -1101,3 +1101,46 @@ fn copias_de_prefab_no_3d_ficam_no_lugar_certo() {
     );
     assert_eq!(z, -4.0);
 }
+
+/// Um texto na tela com Contorno: as letras ganham uma borda na cor dele
+/// (o placar lê bem em cima do céu). Sem contorno, nada em volta.
+#[test]
+fn texto_na_tela_com_contorno() {
+    let texto = |contorno: &str| {
+        format!(
+            r##"return {{ format = 1, mode = "3d", script = "cenas/obs.lua",
+  environment = {{ sky = false, fog = false, shadows = false }},
+  objects = {{
+    {{ id = 1, name = "Placar", components = {{ {{ type = "text", text = "IIII", size = 40,
+      color = "#FFFFFF", hud = true, outline = "{contorno}" }} }} }}
+  }} }}"##
+        )
+    };
+    let vermelhos = |contorno: &str| -> Option<usize> {
+        let dir = projeto(
+            &format!("contorno{}", contorno.len()),
+            &[
+                ("cenas/obs.lua", OBSERVA),
+                ("cenas/c.cena", &texto(contorno)),
+            ],
+        );
+        let (mut h, _rt) = cena(&dir, "cenas/c.cena")?;
+        h.run_frames(2);
+        assert_eq!(h.game.0.error(), None);
+        let p = h.pixels().unwrap();
+        let brancos = p
+            .chunks(4)
+            .filter(|c| c[0] > 200 && c[1] > 200 && c[2] > 200)
+            .count();
+        assert!(brancos > 20, "as letras aparecem: {brancos}");
+        Some(
+            p.chunks(4)
+                .filter(|c| c[0] > 150 && c[1] < 80 && c[2] < 80)
+                .count(),
+        )
+    };
+    let Some(sem) = vermelhos("") else { return };
+    let com = vermelhos("#FF0000").unwrap();
+    assert_eq!(sem, 0);
+    assert!(com > 20, "o contorno em volta: {com}");
+}

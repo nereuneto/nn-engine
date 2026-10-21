@@ -1246,4 +1246,22 @@ fn halo_so_em_volta_do_que_brilha() {
     let claro = desenha(&mut h, 0.0, true, true);
     assert!(brightness(pixel(&claro, 32, 32)) > 400, "aceso pelo sol");
     assert_eq!(fora(&claro), 0, "o que não brilha não ganha halo");
+    // Sem nada brilhando, o passe do halo nem roda.
+    assert!(!h.renderer.last_stats3().halo, "pulado sem brilho");
+    desenha(&mut h, 1.0, false, true);
+    assert!(h.renderer.last_stats3().halo);
+    // O disco do sol na tela também brilha; atrás da câmera, não.
+    h.renderer.set_sky3d(Some(Sky3D::default()));
+    for (sol, visto) in [
+        (Vec3::new(0.0, 0.0, 1.0), true),
+        (Vec3::new(0.0, 0.0, -1.0), false),
+    ] {
+        h.renderer.set_light3d(Light3D {
+            sun_direction: sol,
+            ..Light3D::default()
+        });
+        h.renderer.draw_mesh(cube, Mat4::IDENTITY, Color::WHITE);
+        h.render(Color::BLACK);
+        assert_eq!(h.renderer.last_stats3().halo, visto, "sol {sol}");
+    }
 }

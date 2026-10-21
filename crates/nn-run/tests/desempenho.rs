@@ -498,3 +498,53 @@ fn tempos_da_caverna() {
     drop(h);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Ferramenta: quanto cada coisa nova pesa na ilha (de dia, no começo): o
+/// halo, o vento (o balanço), a água do mar, a grama e as sombras, tirando
+/// uma de cada vez (`cargo test --release -p nn-run --test desempenho
+/// tempos_da_ilha -- --ignored --nocapture`).
+#[test]
+#[ignore]
+fn tempos_da_ilha() {
+    let Some((mut h, dir)) = abrir(Template::Visual3D, "cenas/ilha.cena", 1280, 720) else {
+        return;
+    };
+    h.run_frames(10);
+    let lua = h.game.rt.lua().clone();
+    lua.globals()
+        .set("C", h.game.cena.table().unwrap())
+        .unwrap();
+    let mut medir = |nome: &str, codigo: &str| {
+        lua.load(codigo).exec().unwrap();
+        h.run_frames(5);
+        let quadros = 60;
+        let t = Instant::now();
+        h.run_frames(quadros);
+        let total = t.elapsed().as_secs_f64() * 1000.0 / quadros as f64;
+        let s = h.ctx.renderer.last_stats3();
+        println!(
+            "{nome:28} {total:7.2} ms/quadro (malhas vistas: {}, halo: {})",
+            s.visible, s.halo
+        );
+    };
+    let env =
+        |campo: &str, v: &str| format!("C._data.environment.{campo} = {v}; C._env_dirty = true");
+    medir("ilha, tudo", "");
+    medir("sem o halo", &env("bloom", "0"));
+    medir("sem o vento", &env("wind", "0"));
+    medir(
+        "mar sem a água",
+        "C.objects['Mar']:component('shape3d').material = 'normal'",
+    );
+    medir(
+        "sem a grama",
+        "for _, o in ipairs(C.object_list) do
+           local m = o:component('model')
+           if m and m.file:find('grama') then o:destroy() end
+         end",
+    );
+    medir("sem as sombras", &env("shadows", "false"));
+    assert!(h.game.cena.error().is_none(), "{:?}", h.game.cena.error());
+    drop(h);
+    let _ = std::fs::remove_dir_all(&dir);
+}

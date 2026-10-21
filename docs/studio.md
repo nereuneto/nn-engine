@@ -671,6 +671,10 @@ tela do jogo, do jeito que fica no jogo. Clique para selecionar e arraste
 para mudar o lugar (as posições são em pixels, a partir do ponto da tela em
 que o objeto está preso). **HUD**, na barra da cena, mostra ou esconde.
 
+Um texto em cima do céu ou de um chão claro pode sumir: no Inspetor do Texto,
+**Contorno** põe uma borda em volta das letras (o placar dos modelos 3D usa
+preto meio transparente).
+
 Para criar: **➕ Objeto > Na tela (HUD)** tem **Texto na tela** e os
 componentes de interface (painel, botão, barra, ícones e o menu com botões).
 O mesmo menu está no **➕** da Hierarquia.
@@ -1427,14 +1431,15 @@ quase não usa o processador.
 
 ## O que vem depois
 
-A **v0.2** traz o 3D: cenas 3D no NN Studio, física, personagens animados,
-terreno, som e partículas no mundo, inimigos, portas e chaves, conversas e
-o HUD por cima da vista (veja o [CHANGELOG](../CHANGELOG.md)).
+A **v0.4** deixa os mundos 3D mais vivos: luzes (tochas, lâmpadas e
+holofotes), coisas que brilham no escuro, dia e noite, água com ondas que
+reflete o céu, vento que balança árvores e grama e o halo em volta do que
+brilha. Antes dela, a v0.3 trouxe o combate (caminhos, espada, tiros, ondas
+e chefes) e a v0.2, o 3D. Está tudo no [CHANGELOG](../CHANGELOG.md).
 
 Ainda não tem, e são ideias para as próximas versões:
 
-- luzes além do sol (lâmpadas, tochas que iluminam em volta);
-- inimigos que desviam de paredes para achar o caminho até o herói;
+- sombras das luzes (hoje, só o sol faz sombra);
 - exportar para a web e para outros sistemas além de Windows e Linux;
 - assinatura digital do instalador do Windows.
 

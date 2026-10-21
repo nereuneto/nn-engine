@@ -2,7 +2,30 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
-## Não lançado
+## 0.4.0
+
+A versão dos **mundos 3D mais vivos**: **luzes** (tochas que tremulam, lâmpadas e holofotes) e coisas que **brilham** no escuro; **dia e noite**, com o sol e a lua cruzando o céu, estrelas e luzes que acendem sozinhas; **água** com ondas que reflete o céu; **vento** que balança árvores, grama e bandeiras; e o **halo** em volta do que brilha. Tudo no **NN Studio sem código**. O Vale 3D ganhou uma caverna escura, a ilha tem dia e noite, mar com ondas e uma bandeira na arena, e há três tutoriais guiados novos: **Uma caverna iluminada**, **Dia e noite** e **Um lago com vida**. Para começar: [Luzes e brilho](docs/studio.md#luzes-e-brilho), [Ambiente](docs/studio.md#ambiente) e [Água, vento e halo](docs/studio.md#água-vento-e-halo).
+
+### Para quem vem da 0.3
+
+- **Os projetos da 0.3 abrem e rodam.** Conferido com os nove modelos de projeto da 0.3, também depois de abrir e gravar cada cena no NN Studio da 0.4. Algumas coisas ficam diferentes no jogo sem você mexer:
+  - o **Halo do brilho** vem ligado: o fogo e o disco do sol ganham um halo suave. Para o jeito de antes, **Halo do brilho** = 0 (☀ Ambiente);
+  - a **água dos Terrenos** tem ondas e reflete o céu;
+  - **partículas no 3D** que não somam luz (fumaça, poeira) recebem a luz do mundo: num ambiente escuro, ficam escuras.
+- Uma cena gravada pela 0.4 pode usar coisas que a 0.3 não conhece (a **Luz**, o **Dia e noite**). Para voltar à 0.3, use uma cópia do projeto.
+- Nenhuma função da API Lua nem comportamento pronto foi tirado ou mudou de nome.
+- **No Rust:** `ModelPart`, `ParticleConfig3`, `Sky3D` e `Stats3` ganharam campos (`emissive`, `wind`, `stars`, `lamps` e `halo`). Quem monta essas structs com `..Default::default()` não precisa mudar nada.
+
+### Revisão (Sprint 42)
+
+- **O halo só é desenhado quando algo brilha na tela:** o Brilho, a água, o fogo, o sol ou a lua. Numa cena sem nada disso, ele não pesa. `nn.d3.stats().halo` diz se foi desenhado.
+- **Mais leve:** a água faz a conta da sombra uma vez só, e o que está todo na névoa (o mar lá longe) não é mais iluminado. Sem placa de vídeo, a ilha ficou uns 10 ms mais rápida por quadro, em 1280 × 720.
+- **Contorno nos textos da tela:** no Inspetor do **Texto**, **Contorno** põe uma borda em volta das letras, para o texto ler bem em cima do céu (`outline` no componente). Os placares e as dicas da ilha e do Vale 3D usam.
+- **O fogo inclina com o vento**, em vez de voar com ele. O pronto **Fogo** e a **Tocha** vêm com **Levadas pelo vento** = 0,3, e o fogo tem um halo um pouco mais fraco. As fogueiras da ilha e do vale ficaram menores, sem virar uma bola branca.
+- **Ferramentas novas:**
+  - `tempos_da_ilha` mede quanto cada coisa pesa na ilha: o halo, o vento, a água, a grama e as sombras;
+  - `tempos_da_caverna` mede também sem o halo.
+- **Documentação:** o "O que vem depois" do guia do NN Studio foi atualizado, e há imagens novas da ilha, do vale, da caverna e do NN Studio.
 
 ### Água, vento e brilho (Sprint 41)
 
