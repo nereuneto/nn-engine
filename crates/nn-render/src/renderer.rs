@@ -158,6 +158,12 @@ pub struct Renderer {
     d3: crate::d3::Renderer3D,
 }
 
+/// Um modelo como ele é: sem brilho a mais, com o brilho do arquivo.
+const MODEL_GLOW: crate::d3::Glow = crate::d3::Glow {
+    amount: 0.0,
+    color: Color::WHITE,
+};
+
 impl Renderer {
     const INITIAL_CAPACITY: usize = 1024;
 
@@ -1262,27 +1268,29 @@ impl Renderer {
         color: Color,
         cast_shadow: bool,
     ) {
-        self.draw_model_glow(model, matrix, color, cast_shadow, 0.0, None);
+        self.draw_model_glow(model, matrix, color, cast_shadow, MODEL_GLOW, None);
     }
 
-    /// Desenha um modelo com brilho próprio (`glow`: quanto da própria cor
-    /// brilha, de 0 a 1; as partes que o arquivo já faz brilhar brilham
-    /// sempre) e, num modelo animado, na pose `joints` (`None`: parado).
+    /// Desenha um modelo com brilho próprio e, num modelo animado, na pose
+    /// `joints` (`None`: parado). No `glow`, `amount` é quanto da própria cor
+    /// brilha (0 a 1) e `color` multiplica o brilho que o arquivo já tem
+    /// (branco = como está; preto = apagado, como uma lanterna de dia).
     pub fn draw_model_glow(
         &mut self,
         model: &crate::d3::Model,
         matrix: Mat4,
         color: Color,
         cast_shadow: bool,
-        glow: f32,
+        glow: crate::d3::Glow,
         joints: Option<&[Mat4]>,
     ) {
         let rest = model.rest_joints.clone();
         let joints = joints.unwrap_or(&rest);
+        let k = glow.color;
         for &(mesh, texture, emissive) in &model.parts {
             let g = crate::d3::Glow {
-                amount: glow,
-                color: emissive,
+                amount: glow.amount,
+                color: Color::rgba(emissive.r * k.r, emissive.g * k.g, emissive.b * k.b, 1.0),
             };
             if model.skeleton.is_some() {
                 self.draw_mesh_skinned_glow(mesh, matrix, color, texture, cast_shadow, joints, g);
@@ -1303,7 +1311,7 @@ impl Renderer {
         cast_shadow: bool,
         joints: &[Mat4],
     ) {
-        self.draw_model_glow(model, matrix, color, cast_shadow, 0.0, Some(joints));
+        self.draw_model_glow(model, matrix, color, cast_shadow, MODEL_GLOW, Some(joints));
     }
 
     /// A câmera 3D (vale até ser trocada).

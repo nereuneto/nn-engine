@@ -567,7 +567,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.draw",
         "(malha, opts)",
-        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator(), glow = 0 a 1: a própria cor brilha, mesmo no escuro).",
+        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator(), glow = 0 a 1: a própria cor brilha, mesmo no escuro; emissive = false apaga o brilho que o modelo traz no arquivo).",
     ),
     d(
         "nn.d3.text",
@@ -602,7 +602,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.sky",
         "(opts)",
-        "Céu em degradê com o sol (opts: top, horizon, bottom, sun_size em graus). true = o céu padrão, false = sem céu.",
+        "Céu em degradê com o sol (opts: top, horizon, bottom, sun_size em graus, stars de 0 a 1: as estrelas). true = o céu padrão, false = sem céu.",
     ),
     d(
         "nn.d3.shadows",

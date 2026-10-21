@@ -29,6 +29,15 @@ pub fn read_model(root: &Path, rel: &str) -> Result<nn_render::d3::ModelData, St
         .map_err(|e| format!("{rel}: {e}"))
 }
 
+/// O brilho de uma forma ou modelo (o "Brilha só à noite" apaga de dia).
+fn glow_of(c: &Component, night: bool) -> f32 {
+    if c.bool("glow_night") && !night {
+        0.0
+    } else {
+        c.num("glow") as f32
+    }
+}
+
 /// A luz de um componente Luz na matriz `m` do objeto (como o
 /// `M.draw_light` do cena.lua, sem tremular), ou nada se estiver apagada.
 pub fn lamp_of(c: &Component, m: glam::Mat4) -> Option<nn_render::d3::Lamp3D> {
@@ -931,16 +940,20 @@ impl SceneRenderer {
         let size = view.size.max(UVec2::ONE);
         self.ensure_target(key, size);
 
-        // O ambiente da cena, como o jogo monta (M.apply_environment).
-        let col = |k: &str| parse_color(scene.env(k).str());
-        let num = |k: &str| scene.env(k).num() as f32;
-        let on = |k: &str| scene.env(k).bool();
+        // O ambiente da cena, como o jogo monta (M.apply_environment), na
+        // hora em que o jogo começa (com Dia e noite).
+        let env = scene.environment_now();
+        let col = |k: &str| parse_color(env.get(k).str());
+        let num = |k: &str| env.get(k).num() as f32;
+        let on = |k: &str| env.get(k).bool();
         self.renderer.set_sky3d(on("sky").then(|| Sky3D {
             top: col("sky_top"),
             horizon: col("sky_horizon"),
             bottom: col("sky_bottom"),
             sun_size: num("sun_size"),
+            stars: num("stars"),
         }));
+        let night = env.night;
         let (h, t) = (num("sun_height").to_radians(), num("sun_turn").to_radians());
         self.renderer.set_light3d(Light3D {
             sun_direction: Vec3::new(-h.cos() * t.sin(), -h.sin(), -h.cos() * t.cos()),
@@ -1094,7 +1107,14 @@ impl SceneRenderer {
                             m,
                             parse_color(c.str("color")),
                             c.bool("shadow"),
-                            c.num("glow") as f32,
+                            nn_render::d3::Glow {
+                                amount: glow_of(&c, night),
+                                color: if c.bool("glow_night") && !night {
+                                    Color::BLACK
+                                } else {
+                                    Color::WHITE
+                                },
+                            },
                             joints.as_deref(),
                         );
                     }
@@ -1107,13 +1127,15 @@ impl SceneRenderer {
                         parse_color(c.str("color")),
                         None,
                         c.bool("shadow"),
-                        nn_render::d3::Glow::own(c.num("glow") as f32),
+                        nn_render::d3::Glow::own(glow_of(&c, night)),
                     );
                 }
                 "light3d" => {
                     let pos = m.transform_point3(Vec3::ZERO);
                     let color = parse_color(c.str("color"));
-                    if let Some(lamp) = lamp_of(&c, m) {
+                    if let Some(lamp) = lamp_of(&c, m)
+                        && (night || !c.bool("night"))
+                    {
                         self.renderer.add_lamp3d(lamp);
                     }
                     // Uma bolinha com a cor da luz (só no editor), para ver e

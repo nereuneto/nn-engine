@@ -16,7 +16,7 @@ struct View {
     sky_top: vec4<f32>,
     sky_horizon: vec4<f32>,
     sky_bottom: vec4<f32>,
-    sky_params: vec4<f32>,   // x = cosseno do raio do sol, y = 1 com céu
+    sky_params: vec4<f32>,   // x = cosseno do raio do sol, y = 1 com céu, z = estrelas
     shadow: vec4<f32>,       // x = 1 com sombra, y = texel no mundo, z = força
     cam_right: vec4<f32>,    // direita da câmera (partículas)
     cam_up: vec4<f32>,       // cima da câmera
@@ -225,6 +225,10 @@ fn vs_sky(@builtin(vertex_index) i: u32) -> SkyOut {
     return out;
 }
 
+fn star_hash(p: vec3<f32>) -> f32 {
+    return fract(sin(dot(p, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
+}
+
 @fragment
 fn fs_sky(in: SkyOut) -> @location(0) vec4<f32> {
     let far = view.inv_view_proj * vec4<f32>(in.ndc, 1.0, 1.0);
@@ -236,6 +240,18 @@ fn fs_sky(in: SkyOut) -> @location(0) vec4<f32> {
         c = mix(view.sky_horizon.rgb, view.sky_top.rgb, pow(h, 0.6));
     } else {
         c = mix(view.sky_horizon.rgb, view.sky_bottom.rgb, pow(min(-h * 4.0, 1.0), 0.7));
+    }
+    // As estrelas: pontinhos sorteados pela direção, só acima do horizonte.
+    let stars = view.sky_params.z;
+    if (stars > 0.0 && h > 0.0) {
+        let g = dir * 160.0;
+        let cell = floor(g);
+        let r = star_hash(cell);
+        if (r > 0.993) {
+            let f = fract(g) - vec3<f32>(0.5);
+            let k = smoothstep(0.45, 0.0, length(f)) * (0.55 + 0.45 * star_hash(cell + vec3<f32>(1.7, 3.1, 5.3)));
+            c = c + vec3<f32>(0.9, 0.95, 1.0) * (k * stars * smoothstep(0.0, 0.12, h));
+        }
     }
     let s = dot(dir, -view.sun_dir.xyz);
     let cos_r = view.sky_params.x;
@@ -266,6 +282,8 @@ struct ParticleOut {
     @location(0) color: vec4<f32>,
     @location(1) uv: vec2<f32>,
     @location(2) world: vec3<f32>,
+    // 1 = recebe a luz do mundo (partículas; os textos, não).
+    @location(3) lit: f32,
 };
 
 @vertex
@@ -292,6 +310,7 @@ fn vs_particle(@builtin(vertex_index) i: u32, p: ParticleIn) -> ParticleOut {
     out.color = p.color;
     out.uv = p.region.xy + vec2<f32>(c.x + 0.5, 0.5 - c.y) * p.region.zw;
     out.world = world;
+    out.lit = select(0.0, 1.0, p.up.w > 1.5);
     return out;
 }
 
@@ -306,7 +325,11 @@ fn particle_fog(world: vec3<f32>) -> f32 {
 @fragment
 fn fs_particle(in: ParticleOut) -> @location(0) vec4<f32> {
     let c = in.color * textureSample(tex, samp, in.uv);
-    return vec4<f32>(mix(c.rgb, view.fog.rgb, particle_fog(in.world)), c.a);
+    // A luz do mundo (o céu e o sol, mais as lâmpadas), no máximo 1: de dia,
+    // como antes; de noite, a fumaça fica escura (ou da cor da tocha perto).
+    let luz = view.sky.rgb + view.sun_color.rgb + lamp_light(in.world, vec3<f32>(0.0, 1.0, 0.0));
+    let k = mix(vec3<f32>(1.0), clamp(luz, vec3<f32>(0.18), vec3<f32>(1.0)), in.lit);
+    return vec4<f32>(mix(c.rgb * k, view.fog.rgb, particle_fog(in.world)), c.a);
 }
 
 @fragment

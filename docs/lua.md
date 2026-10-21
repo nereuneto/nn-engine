@@ -196,6 +196,7 @@ return {
     ambient_sky = "#93AFCF", ambient_ground = "#6A5D48",
     fog = true, fog_near = 30, fog_far = 90,
     shadows = true, shadow_distance = 30,
+    cycle = false, day_length = 4, start_hour = 9,
   },
   objects = {
     { id = 1, name = "Câmera", y = 5, z = 10, rx = -22, components = { { type = "camera3d", fov = 60 } } },
@@ -204,13 +205,25 @@ return {
 }
 ```
 
-`sun_height` é a altura do sol em graus (90 = meio-dia) e `sun_turn` o lado de onde ele vem. Os componentes 3D:
+`sun_height` é a altura do sol em graus (90 = meio-dia) e `sun_turn` o lado de onde ele vem.
+
+**Dia e noite.** Com `cycle = true`, a hora anda: um dia do jogo dura `day_length` minutos, e o jogo começa na hora `start_hour` (0 a 24). O sol nasce às 6h, fica na altura `sun_height` ao meio-dia e se põe às 18h; de noite, a lua faz o mesmo, com uma luz azulada fraca, e aparecem estrelas. As cores passam pelos ambientes prontos *amanhecer* (por volta das 6h30), o da própria cena (o dia, das 8h30 às 16h), *entardecer* (18h) e *noite* (das 19h30 às 5h). O relógio vai para as variáveis `hora` (o número, de 0 a 23), `relogio` ("14:30", para o placar) e `dia` (1, 2, ...). De noite, das 18h às 6h, acendem as Luzes com `night = true` e os brilhos com `glow_night = true`; sem o ciclo, "de noite" é um ambiente escuro (o pronto *noite* ou *caverna*).
+
+| Na cena | O que faz |
+|---|---|
+| `scene:time_of_day()` | A hora (0 a 24, com os minutos na parte decimal) e o dia. |
+| `scene:set_time(h)` | Pula para a hora `h` (o céu muda no próximo quadro). |
+| `scene:pause_time(true/false)` | Para ou continua a hora. |
+| `scene:environment(pronto, segundos)` | Troca o ambiente por um pronto (`"dia"`, `"amanhecer"`, `"entardecer"`, `"noite"`, `"caverna"`) ou por uma tabela como a `environment`, aos poucos. Com o ciclo, o tempo para; `scene:pause_time(false)` volta para as cores da hora. |
+| `scene:is_night()` | De noite? |
+
+Os componentes 3D:
 
 | `type` | Campos (padrão) |
 |---|---|
-| `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; as partes que o `.glb` faz brilhar, com `emissiveFactor`, brilham sempre) |
-| `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; não ilumina em volta) |
-| `light3d` | Uma luz: `kind` ("point": ilumina em volta; "spot": um holofote, num cone para a frente do objeto, −Z), `color`, `intensity` (1.5), `range` (8 m: até onde chega), `angle` (30°: metade da abertura do holofote), `soft` (0.3: a borda do cone que apaga aos poucos), `flicker` (0 a 1: tremula como fogo), `on` (true). Valem as 32 mais perto da câmera; só o sol faz sombra. `obj.light3d.on = false` apaga. |
+| `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; as partes que o `.glb` faz brilhar, com `emissiveFactor`, brilham sempre), `glow_night` (false: o brilho, e o do arquivo, só de noite) |
+| `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; não ilumina em volta), `glow_night` (false: só de noite) |
+| `light3d` | Uma luz: `kind` ("point": ilumina em volta; "spot": um holofote, num cone para a frente do objeto, −Z), `color`, `intensity` (1.5), `range` (8 m: até onde chega), `angle` (30°: metade da abertura do holofote), `soft` (0.3: a borda do cone que apaga aos poucos), `flicker` (0 a 1: tremula como fogo), `on` (true), `night` (false: acesa só de noite). Valem as 32 mais perto da câmera; só o sol faz sombra. `obj.light3d.on = false` apaga. |
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
 | `anim3d` | `animation` ("": nenhuma), `speed` (1), `loop` (true): a animação que o `model` do objeto toca desde o começo |
 | `bone` | `bone` (""): preso a um osso do modelo do pai (uma espada na mão do herói: o osso `mao_d`). O objeto acompanha o osso quando o pai anima; a posição, a rotação e a escala dele contam a partir do osso. Um osso que não existe dá um aviso com a lista dos que existem. |
@@ -568,6 +581,8 @@ Condições (`cond`):
 | `cond` | Campos |
 |---|---|
 | `comecou` | — (a cena começou; numa regra de objeto, o objeto apareceu) |
+| `amanhecer` | `quando` ("anoitecer": às 18h; "amanhecer": às 6h), com Dia e noite |
+| `de_noite` | `quando` ("noite" ou "dia") |
 | `a_cada` / `depois_de` | `segundos` |
 | `chance` | `chance` (%) |
 | `tecla` | `modo` ("apertar", "soltar", "segurar"), `tecla` (uma tecla como "space", "x", "shift", ou um grupo: "pular", "confirmar", "voltar", "acao", "esquerda", "direita", "cima", "baixo", "qualquer") |
@@ -606,6 +621,9 @@ Ações (`act`):
 | `por_cima` | `cena` (abre por cima: a de baixo fica parada) |
 | `fechar_cena` | — (fecha a cena aberta por cima, ou aberta com `guardar`, e volta para a de antes) |
 | `luz` | `acao` ("acender", "apagar" ou "alternar"), `alvo` (precisa do componente `light3d`) |
+| `mudar_hora` | `hora` (0 a 24, com Dia e noite) |
+| `tempo` | `acao` ("parar" ou "continuar") |
+| `mudar_ambiente` | `pronto` ("dia", "amanhecer", "entardecer", "noite" ou "caverna"), `segundos` (2) |
 | `cor_luz` | `alvo`, `cor`, `forca` (0 = a mesma) |
 | `sair` | — (fecha o jogo) |
 | `criar` | `prefab`, `onde` (na posição de quem), `dx`, `dy`, `vx`, `vy` |

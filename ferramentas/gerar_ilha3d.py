@@ -64,12 +64,33 @@ c.obj('Fogueira', [comp('shape3d', shape='cylinder', color='#5B3A29', shadow=Tru
               rate=60, lifetime=0.8, lifetime_var=0.4, speed_min=0.6, speed_max=1.6, spread=25,
               gravity=1.5, area="circulo", area_radius=0.25, size_start=0.5, size_end=0.1,
               size_var=0.3, color_start="#FFE066", color_mid="#FF7A1A", color_end="#B0201000",
-              blend="add")], y=1),
+              blend="add"), comp('light3d', kind='point', color='#FF9A3C', intensity=1.6, range=8,
+              angle=30, soft=0.3, flicker=0.6, on=True, night=False)], y=6),
           c.child('Fumaça', [particulas(
               rate=8, lifetime=3, lifetime_var=0.3, speed_min=0.5, speed_max=1, spread=30,
               gravity=0.4, drag=0.3, area="circulo", area_radius=0.2, size_start=0.4,
               size_end=1.8, color_start="#9A9A9AAA", color_end="#5A5A5A00", spin=30)], y=8),
       ])
+
+# Postes com lampião: acendem sozinhos ao anoitecer (Luz e Brilho "só à
+# noite"; a ilha tem Dia e noite, em ☀ Ambiente).
+def poste(x, z, ry=0):
+    return c.obj('Poste', [], x=x, z=z, ry=ry, children=[
+        c.child('Haste', [comp('shape3d', shape='cylinder', color='#3A3A42', shadow=True, glow=0, glow_night=False),
+                          comp('body3d', body='static')],
+                y=1.3, scale_x=0.12, scale_y=2.6, scale_z=0.12),
+        c.child('Braço', [comp('shape3d', shape='cube', color='#3A3A42', shadow=True, glow=0, glow_night=False)],
+                y=2.55, z=0.25, scale_x=0.06, scale_y=0.06, scale_z=0.55),
+        c.child('Lampião', [comp('model', file='modelos/lampiao.glb', color='#FFFFFF', flat=False, shadow=True,
+                                 glow=0, glow_night=True)],
+                y=2.08, z=0.48, scale_x=1.1, scale_y=1.1, scale_z=1.1,
+                children=[c.child('Luz do poste', [comp('light3d', kind='point', color='#FFD27A', intensity=1.5,
+                                                        range=8, angle=30, soft=0.3, flicker=0.08, on=True,
+                                                        night=True)], y=0.18)]),
+    ])
+for (x, z, ry) in [(3.4, 3.2, 200), (4.3, 6.4, 120), (-11.8, 1.9, 90), (-11.8, -1.9, 90),
+                   (0.5, -6.5, 0), (8.5, -3.5, 300), (-6.5, -7.5, 40)]:
+    poste(x, z, ry)
 
 # O barulho do mar nas praias (som 3D; cada um se ouve de perto).
 for (x, z) in [(16, -6), (-14, 10), (6, 17)]:
@@ -219,10 +240,17 @@ c.obj('Pescador', [
          texto='falar', distancia=1.5, uma_vez=False, olhar=True),
 ], x=1.8, z=4.8, ry=-23,
    children=[c.child('Nome', [comp('text3d', text='Pescador', size=0.22, color='#FFFFFF', facing='camera',
-                                    outline='#000000B0', background='', font='')], y=2.15)])
+                                    outline='#000000B0', background='', font='')], y=2.15),
+             # De noite, ele acende o lampião (na mão esquerda).
+             c.child('Lampião do pescador', [comp('model', file='modelos/lampiao.glb', color='#FFFFFF', flat=False,
+                                                  shadow=True, glow=0, glow_night=True),
+                                             comp('bone', bone='mao_e')],
+                     y=-0.42, children=[c.child('Luz do lampião', [comp('light3d', kind='point', color='#FFD27A',
+                                                                         intensity=1.2, range=6, angle=30, soft=0.3,
+                                                                         flicker=0.1, on=True, night=True)], y=0.18)])])
 
 c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
-                 comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 6     Moedas {moedas}')],
+                 comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 6     Moedas {moedas}     {relogio}')],
       x=40, y=-44, anchor='top_left')
 c.obj('Dica', [comp('text', text='Ache as 6 estrelas! Uma é do besouro-rei, na arena. (Esc solta o mouse)', size=30, color='#FFFFFF', anchor='center', font='', hud=True)],
       y=-120, anchor='top')
@@ -293,7 +321,13 @@ scene_events = '''  events = {
       } },
   },
 '''
-text = HEADER + 'return {\n  format = 1,\n  mode = "3d",\n  gravity = -20,\n  ' + ENV + ',\n' + scene_events + '  objects = {\n' + '\n'.join(c.objs) + '\n  },\n}\n'
+# A ilha tem Dia e noite: um dia de 4 minutos, começando às 9h.
+ILHA_ENV = env(sky=True, sky_top="#3F8FD8", sky_horizon="#CDEBF5", sky_bottom="#2E6F9E",
+               sun_height=53, sun_turn=48, sun_color="#FFF1D6", sun_size=4,
+               ambient_sky="#93AFCF", ambient_ground="#5E6B52",
+               fog=True, fog_near=35, fog_far=90, shadows=True, shadow_distance=25,
+               cycle=True, day_length=4, start_hour=9)
+text = HEADER + 'return {\n  format = 1,\n  mode = "3d",\n  gravity = -20,\n  ' + ILHA_ENV + ',\n' + scene_events + '  objects = {\n' + '\n'.join(c.objs) + '\n  },\n}\n'
 write(BASE + '/visual3d/cenas/ilha.cena', text)
 
 PREFAB_HEADER = '''-- Prefab do NN Studio: um objeto pronto para usar em várias cenas.

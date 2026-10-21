@@ -223,6 +223,7 @@ pub fn all() -> &'static [Tutorial] {
             inimigos_3d(),
             um_chefe(),
             uma_caverna(),
+            dia_e_noite(),
             portas_e_chaves(),
             uma_conversa(),
             eventos(),
@@ -1181,6 +1182,112 @@ fn uma_caverna() -> Tutorial {
             Step {
                 title: "Pronto: uma caverna iluminada!",
                 text: "Você usou o ambiente Caverna, a Luz (tocha e holofote), o Brilho e a ação de acender e apagar. O Vale 3D (Novo projeto) tem uma caverna inteira, com o herói levando uma tocha na mão (Preso a um osso, mao_e). Para uma noite, experimente o ambiente pronto Noite.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+fn dia_e_noite() -> Tutorial {
+    Tutorial {
+        id: "dia-e-noite",
+        title: "Dia e noite",
+        summary: "O sol andando no céu, a noite com a lua e as estrelas, um poste que acende sozinho, uma janela que brilha à noite, o relógio no placar e uma regra para o anoitecer.",
+        minutes: 10,
+        template: Template::Vazio3D,
+        project: "Dia e noite",
+        steps: vec![
+            Step {
+                title: "O tempo passando",
+                text: "Com Dia e noite, a hora anda: o sol nasce, cruza o céu e se põe, e de noite vêm a lua e as estrelas. As luzes podem acender sozinhas ao anoitecer.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Ligue o Dia e noite",
+                text: "Clique num lugar vazio da cena e, no Inspetor, em ☀ Ambiente, marque Dia e noite. Ponha um dia de 2 minutos (no jogo, a noite chega rápido).",
+                target: Some("inspetor:ambiente:ciclo"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    doc_of(ws).is_some_and(|d| {
+                        d.data.env("cycle").bool() && d.data.env("day_length").num() <= 3.0
+                    })
+                }),
+            },
+            Step {
+                title: "Veja a noite",
+                text: "Em Começa às, arraste para umas 21:00. A vista mostra a cena nessa hora: escura, com a lua e as estrelas. (O dia, com as cores de sempre, é o desta cena.)",
+                target: Some("inspetor:ambiente:hora"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    doc_of(ws).is_some_and(|d| {
+                        let h = d.data.env("start_hour").num();
+                        !(5.0..19.0).contains(&h)
+                    })
+                }),
+            },
+            Step {
+                title: "Um poste",
+                text: "➕ Objeto > Luz > Lâmpada. No Inspetor da Luz, marque Só à noite: ela acende sozinha ao anoitecer e apaga ao amanhecer.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| lights(ws).iter().any(|c| c.bool("night"))),
+            },
+            Step {
+                title: "Uma janela que acende",
+                text: "➕ Objeto > Cubo, achatado como uma janela (Escala). No Inspetor da Forma 3D, ponha Brilho = 1 e marque Brilha só à noite.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        o.component("shape3d")
+                            .is_some_and(|c| c.num("glow") >= 0.5 && c.bool("glow_night"))
+                    })
+                }),
+            },
+            Step {
+                title: "Alguém para ver",
+                text: "➕ Objeto > Jogador 3D.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| objects(ws).iter().any(|o| has_behavior(o, "nn:jogador3d"))),
+            },
+            Step {
+                title: "O relógio",
+                text: "➕ Objeto > Na tela (HUD) > Texto, no canto de cima, e adicione Aparência > Mostrar valor com o texto {relogio}. A variável relogio tem a hora do jogo (\"21:30\"); hora é só o número (21) e dia conta os dias.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        behavior_of(o, "nn:mostrar_valor")
+                            .is_some_and(|c| c.str("texto").contains("{relogio}"))
+                    })
+                }),
+            },
+            Step {
+                title: "Quando anoitecer",
+                text: "No painel Eventos, uma regra da cena: Quando Cena e tempo > Amanhecer ou anoitecer (anoitecer), Então o que quiser: Tocar som, Mostrar um texto, Criar um prefab de inimigo...",
+                target: Some("eventos"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    all_rules(ws).iter().any(|r| {
+                        r.when.iter().any(|c| c.id == "amanhecer") && !r.actions.is_empty()
+                    })
+                }),
+            },
+            Step {
+                title: "Teste!",
+                text: "F6. Ponha Começa às perto das 17:00 para ver logo o pôr do sol, o poste acendendo e a janela brilhando.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: o dia passa!",
+                text: "Você usou o Dia e noite, a Luz e o Brilho só à noite, a variável relogio e o evento de anoitecer. Também dá para Mudar a hora (dormir numa cama), Parar o tempo e Mudar o ambiente (uma tempestade) nas ações. A ilha do modelo 3D tem postes no caminho e o pescador com um lampião de noite.",
                 target: None,
                 show: None,
                 done: None,

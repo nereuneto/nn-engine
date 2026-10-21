@@ -4,7 +4,7 @@ return {
   format = 1,
   gravity = -20,
   mode = "3d",
-  environment = { sky = true, sky_top = "#4A90D9", sky_horizon = "#D8EEF5", sky_bottom = "#3A6E8E", sun_height = 40, sun_turn = 135, sun_color = "#FFEBCC", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 45, fog_far = 120, shadows = true, shadow_distance = 30 },
+  environment = { sky = true, sky_top = "#4A90D9", sky_horizon = "#D8EEF5", sky_bottom = "#3A6E8E", sun_height = 40, sun_turn = 135, sun_color = "#FFEBCC", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 45, fog_far = 120, shadows = true, shadow_distance = 30, cycle = false, day_length = 4, start_hour = 9 },
   events = {
     { comment = "Começo: zera as estrelas e as moedas; a dica some depois de 4 segundos." },
     { when = {
@@ -54,7 +54,7 @@ return {
       z = 36, rx = 0, ry = 180, rz = 0, scale_z = 1.1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "behavior", script = "nn:jogador3d", agua = "voltar", altura = 0, camera = "atras", distancia = 7, inverter_y = false, prender_mouse = true, pulo = 8, pulos_no_ar = 0, queda = -25, raio = 0, sensibilidade = 0.15, velocidade = 6, virar = true },
         { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, tremer = 6, variavel = "vidas", vidas = 3 },
         { type = "behavior", script = "nn:golpe", acerto = 0.22, alcance = 1.7, alvo = "", angulo = 120, animacao = "golpe", dano = 1, empurrao = 6, intervalo = 0.45, quando = "tecla", som = "assets/sons/golpe.wav", som_acerto = "assets/sons/acerto.wav", tecla = "clique", todos = true },
@@ -79,7 +79,7 @@ return {
           z = 0, rx = 20, ry = 0, rz = 0, scale_z = 1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/espada.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "model", file = "modelos/espada.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
             { type = "bone", bone = "mao_d" },
           },
         },
@@ -99,7 +99,7 @@ return {
       z = -1.67, rx = 0, ry = 262, rz = 0, scale_z = 1.99,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -109,7 +109,7 @@ return {
       z = 2.2, rx = 0, ry = 299, rz = 0, scale_z = 0.91,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -119,7 +119,7 @@ return {
       z = 33.72, rx = 0, ry = 208, rz = 0, scale_z = 1.14,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -129,7 +129,7 @@ return {
       z = -37.27, rx = 0, ry = 59, rz = 0, scale_z = 1.17,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -139,7 +139,7 @@ return {
       z = 35.03, rx = 0, ry = 45, rz = 0, scale_z = 1.94,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -149,7 +149,7 @@ return {
       z = 34.24, rx = 0, ry = 175, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -159,7 +159,7 @@ return {
       z = -34.03, rx = 0, ry = 336, rz = 0, scale_z = 1.87,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -169,7 +169,7 @@ return {
       z = 21.02, rx = 0, ry = 62, rz = 0, scale_z = 1.3,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -179,7 +179,7 @@ return {
       z = -12.7, rx = 0, ry = 149, rz = 0, scale_z = 1.74,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -189,7 +189,7 @@ return {
       z = -3.89, rx = 0, ry = 197, rz = 0, scale_z = 1.45,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -199,7 +199,7 @@ return {
       z = 26.73, rx = 0, ry = 253, rz = 0, scale_z = 1.92,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -209,7 +209,7 @@ return {
       z = -34.39, rx = 0, ry = 292, rz = 0, scale_z = 1.19,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -219,7 +219,7 @@ return {
       z = -25.55, rx = 0, ry = 170, rz = 0, scale_z = 1.55,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -229,7 +229,7 @@ return {
       z = -31.74, rx = 0, ry = 219, rz = 0, scale_z = 2.01,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -239,7 +239,7 @@ return {
       z = 31.9, rx = 0, ry = 83, rz = 0, scale_z = 1.12,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -249,7 +249,7 @@ return {
       z = 7.24, rx = 0, ry = 192, rz = 0, scale_z = 1.17,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -259,7 +259,7 @@ return {
       z = -7.4, rx = 0, ry = 147, rz = 0, scale_z = 0.93,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -269,7 +269,7 @@ return {
       z = -19.36, rx = 0, ry = 87, rz = 0, scale_z = 1.13,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -279,7 +279,7 @@ return {
       z = 29.63, rx = 0, ry = 77, rz = 0, scale_z = 0.98,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -289,7 +289,7 @@ return {
       z = -1.68, rx = 0, ry = 269, rz = 0, scale_z = 1.43,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -299,7 +299,7 @@ return {
       z = -1.67, rx = 0, ry = 187, rz = 0, scale_z = 1.39,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -309,7 +309,7 @@ return {
       z = 30.52, rx = 0, ry = 297, rz = 0, scale_z = 1.13,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -319,7 +319,7 @@ return {
       z = 7.07, rx = 0, ry = 195, rz = 0, scale_z = 1.92,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -329,7 +329,7 @@ return {
       z = 7.49, rx = 0, ry = 299, rz = 0, scale_z = 1.37,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -339,7 +339,7 @@ return {
       z = 24.97, rx = 0, ry = 203, rz = 0, scale_z = 1.34,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -349,7 +349,7 @@ return {
       z = -37.97, rx = 0, ry = 60, rz = 0, scale_z = 0.98,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -359,7 +359,7 @@ return {
       z = -29.88, rx = 0, ry = 252, rz = 0, scale_z = 1.08,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -369,7 +369,7 @@ return {
       z = 9.7, rx = 0, ry = 103, rz = 0, scale_z = 2.06,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -379,7 +379,7 @@ return {
       z = 4, rx = 0, ry = 29, rz = 0, scale_z = 1.91,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -389,7 +389,7 @@ return {
       z = -39.37, rx = 0, ry = 290, rz = 0, scale_z = 0.93,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -399,7 +399,7 @@ return {
       z = -36.65, rx = 0, ry = 151, rz = 0, scale_z = 1.07,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -409,7 +409,7 @@ return {
       z = 24.25, rx = 0, ry = 279, rz = 0, scale_z = 1.22,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -419,7 +419,7 @@ return {
       z = 37.37, rx = 0, ry = 269, rz = 0, scale_z = 1.28,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -429,7 +429,7 @@ return {
       z = -24.84, rx = 0, ry = 103, rz = 0, scale_z = 1.08,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -439,7 +439,7 @@ return {
       z = -14.55, rx = 0, ry = 38, rz = 0, scale_z = 0.96,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -449,7 +449,7 @@ return {
       z = 10.12, rx = 0, ry = 258, rz = 0, scale_z = 1.44,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -459,7 +459,7 @@ return {
       z = -5.29, rx = 0, ry = 207, rz = 0, scale_z = 1.29,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -469,7 +469,7 @@ return {
       z = -9.17, rx = 0, ry = 335, rz = 0, scale_z = 1.25,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -479,7 +479,7 @@ return {
       z = -1.62, rx = 0, ry = 110, rz = 0, scale_z = 1.29,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -489,7 +489,7 @@ return {
       z = 10.14, rx = 0, ry = 310, rz = 0, scale_z = 1.27,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -499,7 +499,7 @@ return {
       z = 14.64, rx = 0, ry = 197, rz = 0, scale_z = 1.4,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -509,7 +509,7 @@ return {
       z = -9.45, rx = 0, ry = 3, rz = 0, scale_z = 1.29,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -519,7 +519,7 @@ return {
       z = 17.31, rx = 0, ry = 267, rz = 0, scale_z = 1.38,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -529,7 +529,7 @@ return {
       z = 35.48, rx = 0, ry = 55, rz = 0, scale_z = 1.15,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -539,7 +539,7 @@ return {
       z = -26.68, rx = 0, ry = 190, rz = 0, scale_z = 1.27,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -549,7 +549,7 @@ return {
       z = 14.53, rx = 0, ry = 164, rz = 0, scale_z = 1.42,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -699,7 +699,7 @@ return {
       z = 4, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cylinder", color = "#5B3A29", shadow = true, glow = 0 },
+        { type = "shape3d", shape = "cylinder", color = "#5B3A29", shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
         { type = "sound", sound = "assets/sons/fogueira.wav", autoplay = true, loop = true, volume = 1, channel = "effects", spatial = true, distance = 14 },
       },
@@ -737,7 +737,7 @@ return {
       z = 31, rx = 0, ry = 0, rz = 0, scale_z = 0.1,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#9C6B43", shadow = true, glow = 0 },
+        { type = "shape3d", shape = "cube", color = "#9C6B43", shadow = true, glow = 0, glow_night = false },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
       children = {
@@ -747,7 +747,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 1.2,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cylinder", color = "#7A5232", shadow = true, glow = 0 },
+            { type = "shape3d", shape = "cylinder", color = "#7A5232", shadow = true, glow = 0, glow_night = false },
           },
         },
         {
@@ -773,7 +773,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.2,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0 },
+            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -783,7 +783,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.2,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0 },
+            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -793,7 +793,7 @@ return {
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.4,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0 },
+            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -803,7 +803,7 @@ return {
           z = -1.2, rx = 0, ry = 0, rz = 0, scale_z = 0.4,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#050507", shadow = true, glow = 0 },
+            { type = "shape3d", shape = "cube", color = "#050507", shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -813,7 +813,7 @@ return {
           z = -3.4, rx = 0, ry = 0, rz = 0, scale_z = 4,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#5E5A63", shadow = true, glow = 0 },
+            { type = "shape3d", shape = "cube", color = "#5E5A63", shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -823,7 +823,7 @@ return {
           z = -0.6, rx = 0, ry = 30, rz = 0, scale_z = 2.6,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -833,7 +833,7 @@ return {
           z = -0.3, rx = 0, ry = 200, rz = 0, scale_z = 2.3,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -843,7 +843,7 @@ return {
           z = -1.3, rx = 0, ry = 80, rz = 0, scale_z = 2.4,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -853,7 +853,7 @@ return {
           z = -1.5, rx = 0, ry = 140, rz = 0, scale_z = 2.8,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -863,7 +863,7 @@ return {
           z = -3, rx = 0, ry = 260, rz = 0, scale_z = 3.4,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -873,7 +873,7 @@ return {
           z = -2.6, rx = 0, ry = 10, rz = 0, scale_z = 3,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -883,7 +883,7 @@ return {
           z = -2.8, rx = 0, ry = 300, rz = 0, scale_z = 3.2,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
@@ -902,7 +902,7 @@ return {
           z = 0.4, rx = 0, ry = 0, rz = 0, scale_z = 1.2,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#FFD16640", shadow = false, glow = 0 },
+            { type = "shape3d", shape = "cube", color = "#FFD16640", shadow = false, glow = 0, glow_night = false },
             { type = "behavior", script = "nn:gatilho", alvo = "", invisivel = true, mensagem = "", mensagem_saida = "", quem = "", som = "", uma_vez = false },
           },
         },
@@ -914,7 +914,7 @@ return {
       z = -13.45, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
       },
       children = {
         {
@@ -922,7 +922,7 @@ return {
           x = 0, y = 1.15, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true },
+            { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true, night = false },
             { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
           },
         },
@@ -934,7 +934,7 @@ return {
       z = -7.42, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
       },
       children = {
         {
@@ -942,7 +942,7 @@ return {
           x = 0, y = 1.15, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true },
+            { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true, night = false },
             { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
           },
         },
@@ -978,7 +978,7 @@ return {
       x = 8, y = 0.8, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "behavior", script = "nn:inimigo3d", andar = "vagar", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 0, z = 0 },
         { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
         { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/acerto.wav" },
@@ -990,7 +990,7 @@ return {
       z = -26, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "behavior", script = "nn:inimigo3d", andar = "patrulha", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 8, z = 0 },
         { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
         { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/acerto.wav" },
@@ -1002,7 +1002,7 @@ return {
       z = -30, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
         { type = "behavior", script = "nn:inimigo3d", andar = "vagar", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 0, z = 0 },
         { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
         { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/acerto.wav" },

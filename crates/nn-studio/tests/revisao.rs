@@ -380,11 +380,15 @@ fn modelos_o_jogo_comeca_igual_ao_editor() {
             for &id in &ids {
                 let o = data.find(id).unwrap();
                 // O que fica preso à tela (HUD) é desenhado de outro jeito.
+                // Preso a um osso (ou filho de quem está): o jogo já toca a
+                // animação (alguns cm).
                 let mut tela = false;
+                let mut osso = false;
                 let mut cur = Some(id);
                 while let Some(c) = cur {
                     let x = data.find(c).unwrap();
                     tela |= data.is_screen(x);
+                    osso |= x.component("bone").is_some();
                     cur = data.parent_of(c).flatten();
                 }
                 if tela {
@@ -418,12 +422,7 @@ fn modelos_o_jogo_comeca_igual_ao_editor() {
                     let t = data.world_transform(id).unwrap();
                     (t.x, t.y, 0.0)
                 };
-                // Preso a um osso: o jogo já toca a animação (alguns cm).
-                let tol: f64 = if o.component("bone").is_some() {
-                    0.1
-                } else {
-                    1e-3
-                };
+                let tol: f64 = if osso { 0.1 } else { 1e-3 };
                 let d = ((jogo[0] - ex).powi(2) + (jogo[1] - ey).powi(2) + (jogo[2] - ez).powi(2))
                     .sqrt();
                 assert!(
