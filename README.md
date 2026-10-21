@@ -49,7 +49,7 @@ cargo studio
 
 O NN Studio é o jeito mais fácil de fazer um jogo: crie um projeto a partir de um modelo (ou abra um dos exemplos), monte as fases com o mouse e aperte **▶ Jogar (F5)**. O jogo abre na janela dele e, com **▶ Testar daqui (F6)**, o que você muda no editor aparece no jogo aberto na hora. Guia completo em **[docs/studio.md](docs/studio.md)**.
 
-**Para aprender fazendo**, doze **tutoriais guiados** destacam cada botão e avançam sozinhos quando você faz o que o passo pede: seis no 2D (*Seu primeiro jogo*, em uns 15 minutos, *Eventos*, *Desenhe seu herói*, *Monte uma fase com tiles*, *Monte um menu*, *Efeitos com partículas*) e seis no 3D (*Seu primeiro mundo 3D*, *Efeitos no 3D*, *Pinte um terreno*, *Inimigos no 3D*, *Portas e chaves*, *Uma conversa*). Os modelos **Plataforma**, **Aventura**, **Nave**, **3D** (a ilha) e **Vale 3D** são jogos completos, sem código, para abrir e mudar. Novo no 3D? Comece pelo guia **[Comece aqui no 3D](docs/3d.md)**.
+**Para aprender fazendo**, catorze **tutoriais guiados** destacam cada botão e avançam sozinhos quando você faz o que o passo pede: seis no 2D (*Seu primeiro jogo*, em uns 15 minutos, *Eventos*, *Desenhe seu herói*, *Monte uma fase com tiles*, *Monte um menu*, *Efeitos com partículas*) e oito no 3D (*Seu primeiro mundo 3D*, *Efeitos no 3D*, *Pinte um terreno*, *Inimigos no 3D*, *Um chefe*, *Uma caverna iluminada*, *Portas e chaves*, *Uma conversa*). Os modelos **Plataforma**, **Aventura**, **Nave**, **3D** (a ilha) e **Vale 3D** são jogos completos, sem código, para abrir e mudar. Novo no 3D? Comece pelo guia **[Comece aqui no 3D](docs/3d.md)**.
 
 **Em todo jogo:**
 - **Cenas visuais** (`.cena`): arraste imagens, modelos, mapas e sons para a cena, mova, gire e escale com as alças, organize na Hierarquia e ajuste no Inspetor, com desfazer e refazer.
@@ -64,7 +64,7 @@ O NN Studio é o jeito mais fácil de fazer um jogo: crie um projeto a partir de
 
 ![Cena visual 2D no NN Studio](docs/imagens/nn-studio-cena.png)
 
-**No 3D:** vista em perspectiva com céu, sol, névoa e sombras, navegação como na Unity e no Godot; modelos `.glb` do Blender ou do Mixamo, animados; **física** (chão, paredes, caixas que caem, plataformas que levam o herói); o **Jogador 3D** em terceira pessoa; **terrenos** pintados com o mouse (morros, lagos, cores, árvores espalhadas); partículas e sons no mundo; inimigos que perseguem (contornando paredes) e atacam; **combate** com espada na mão, tiros que miram pelo meio da tela e números de dano; ondas de inimigos e **chefes** com vários ataques; portas com chave e inventário; e o HUD por cima da vista, do jeito que fica no jogo.
+**No 3D:** vista em perspectiva com céu, sol, névoa e sombras, navegação como na Unity e no Godot; modelos `.glb` do Blender ou do Mixamo, animados; **física** (chão, paredes, caixas que caem, plataformas que levam o herói); o **Jogador 3D** em terceira pessoa; **terrenos** pintados com o mouse (morros, lagos, cores, árvores espalhadas); partículas e sons no mundo; inimigos que perseguem (contornando paredes) e atacam; **combate** com espada na mão, tiros que miram pelo meio da tela e números de dano; ondas de inimigos e **chefes** com vários ataques; **luzes** (tochas que tremulam, lâmpadas, holofotes) e coisas que brilham no escuro, com ambientes prontos de dia, noite e caverna; portas com chave e inventário; e o HUD por cima da vista, do jeito que fica no jogo.
 
 ![Terreno sendo pintado no NN Studio](docs/imagens/nn-studio-terreno.png)
 
@@ -181,7 +181,7 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 |---|---|
 | `nn-core` | Tipos base: `Color`, `Time`, `FixedTimestep` |
 | `nn-input` | Estado de teclado, mouse e controles (`key_down`, `pad_pressed`, `move_vector()`...) e ações com nome |
-| `nn-render` | GPU, texturas, câmera 2D, sprites em lote, spritesheets, animação, texto, tamanho fixo do jogo ajustado à janela e o mundo 3D (`d3`: malhas, modelos glTF, câmera em perspectiva, sol com sombras, céu e névoa) |
+| `nn-render` | GPU, texturas, câmera 2D, sprites em lote, spritesheets, animação, texto, tamanho fixo do jogo ajustado à janela e o mundo 3D (`d3`: malhas, modelos glTF, câmera em perspectiva, sol com sombras, lâmpadas e holofotes, brilho próprio, céu e névoa) |
 | `nn-audio` | Efeitos sonoros e música (sobre o [kira](https://github.com/tesselode/kira)) com volume por canal, sintetizador simples |
 | `nn-app` | Janela, loop principal, trait `Game`, cenas, assets, interface (menus), dados salvos, leitura dos controles ([gilrs](https://gitlab.com/gilrs-project/gilrs)) e modo sem janela (`Headless`) para testes |
 | `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, camadas, raycast |

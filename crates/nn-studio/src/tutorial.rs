@@ -222,6 +222,7 @@ pub fn all() -> &'static [Tutorial] {
             terreno(),
             inimigos_3d(),
             um_chefe(),
+            uma_caverna(),
             portas_e_chaves(),
             uma_conversa(),
             eventos(),
@@ -1061,6 +1062,125 @@ fn um_chefe() -> Tutorial {
             Step {
                 title: "Pronto: um chefe!",
                 text: "Você usou Golpe, Preso a um osso, Ondas de inimigos, Chefe e os eventos de onda. Ideias: no Chefe, ligue os tiros em leque (com um prefab de Projétil) ou os ajudantes; ponha uma Zona de gatilho que fecha uma Porta atrás do herói; ou deixe o chefe soltar uma estrela ao ser derrotado.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// As Luzes da cena (os componentes).
+fn lights(ws: &ProjectWorkspace) -> Vec<&scene_data::Component> {
+    objects(ws)
+        .into_iter()
+        .filter_map(|o| o.component("light3d"))
+        .collect()
+}
+
+fn uma_caverna() -> Tutorial {
+    Tutorial {
+        id: "uma-caverna",
+        title: "Uma caverna iluminada",
+        summary: "Uma caverna escura com uma tocha que tremula, um cristal que brilha, um holofote que você acende e apaga com uma tecla e o herói andando com a luz.",
+        minutes: 10,
+        template: Template::Vazio3D,
+        project: "Uma caverna",
+        steps: vec![
+            Step {
+                title: "Luzes no escuro",
+                text: "De dia, o sol ilumina tudo. Numa caverna (ou à noite), quem ilumina são as luzes que você põe: tochas, lâmpadas, holofotes e coisas que brilham.\n\nVamos apagar o sol e acender a caverna.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Apague o dia",
+                text: "Clique num lugar vazio da cena (sem objeto escolhido) e, no Inspetor, em ☀ Ambiente > Pronto, clique em Caverna: o céu e o sol somem, e fica só uma luz fraquinha.",
+                target: Some("inspetor:ambiente:caverna"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    doc_of(ws).is_some_and(|d| {
+                        d.data.env("sky").num() == 0.0
+                            && d.data
+                                .env("sun_color")
+                                .str()
+                                .eq_ignore_ascii_case("#000000")
+                    })
+                }),
+            },
+            Step {
+                title: "Uma tocha",
+                text: "➕ Objeto > Luz > Tocha. A chama tremula como fogo e acende o chão em volta. A luz fica na Chama (na Hierarquia, dentro da Tocha).",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| lights(ws).iter().any(|c| c.num("flicker") > 0.0)),
+            },
+            Step {
+                title: "Mais longe",
+                text: "Na Hierarquia, abra a Tocha e escolha a Chama. No Inspetor, na Luz, aumente o Alcance para 10 m (até onde a luz chega) e, se quiser, troque a Cor.",
+                target: Some("hierarquia"),
+                show: Some(Tab::Hierarchy),
+                done: Some(|ws, _| lights(ws).iter().any(|c| c.num("range") >= 9.5)),
+            },
+            Step {
+                title: "Um cristal que brilha",
+                text: "No painel Arquivos, abra modelos e arraste cristal.glb para a cena, longe da tocha. Ele aparece aceso mesmo no escuro: o brilho vem no arquivo do modelo.",
+                target: Some("arquivo:modelos/cristal.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| !with_model(ws, "cristal.glb").is_empty()),
+            },
+            Step {
+                title: "Uma forma que brilha",
+                text: "➕ Objeto > Esfera e, no Inspetor da Forma 3D, ponha Brilho = 1. Ela fica acesa com a própria cor, mas não ilumina em volta: para isso, uma Luz.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        // (A brasa da tocha também brilha, mas é um cone.)
+                        o.component("shape3d")
+                            .is_some_and(|c| c.str("shape") == "sphere" && c.num("glow") >= 0.5)
+                    })
+                }),
+            },
+            Step {
+                title: "Um holofote",
+                text: "➕ Objeto > Luz > Holofote. Ele ilumina num cone, para a frente do objeto (a seta azul). Com ⟲ Girar, aponte para o cristal ou para a esfera.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| lights(ws).iter().any(|c| c.str("kind") == "spot")),
+            },
+            Step {
+                title: "Alguém para ver",
+                text: "➕ Objeto > Jogador 3D, para andar pela caverna.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| objects(ws).iter().any(|o| has_behavior(o, "nn:jogador3d"))),
+            },
+            Step {
+                title: "Acender e apagar",
+                text: "Selecione o Holofote e, no painel Eventos: ➕ Regra de Holofote > Controles > Tecla ou botão, com a tecla F. Em Então: ➕ ação > Aparência > Acender ou apagar luz, com \"acender ou apagar (o contrário)\".",
+                target: Some("eventos.regra_cena"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    all_rules(ws).iter().any(|r| {
+                        r.when.iter().any(|c| c.id == "tecla")
+                            && r.actions
+                                .iter()
+                                .any(|a| a.id == "luz" && a.str("acao") == "alternar")
+                    })
+                }),
+            },
+            Step {
+                title: "Teste!",
+                text: "F6 (▶ Testar daqui). Ande perto da tocha e do cristal, e aperte F para apagar e acender o holofote.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: uma caverna iluminada!",
+                text: "Você usou o ambiente Caverna, a Luz (tocha e holofote), o Brilho e a ação de acender e apagar. O Vale 3D (Novo projeto) tem uma caverna inteira, com o herói levando uma tocha na mão (Preso a um osso, mao_e). Para uma noite, experimente o ambiente pronto Noite.",
                 target: None,
                 show: None,
                 done: None,

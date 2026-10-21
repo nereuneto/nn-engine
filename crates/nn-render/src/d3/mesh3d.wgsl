@@ -93,13 +93,13 @@ fn lamp_light(world: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
     for (var i = 0u; i < count; i++) {
         let lamp = lamps.items[i];
         let to = lamp.pos_range.xyz - world;
-        let d = length(to);
+        let d2 = dot(to, to);
         let range = lamp.pos_range.w;
-        if (d >= range) {
+        if (d2 >= range * range) {
             continue;
         }
-        let l = to / max(d, 1e-4);
-        let k = 1.0 - (d * d) / (range * range);
+        let l = to * inverseSqrt(max(d2, 1e-8));
+        let k = 1.0 - d2 / (range * range);
         var a = k * k;
         if (lamp.cone.y > 0.5) {
             let c = dot(-l, lamp.dir_cos.xyz);

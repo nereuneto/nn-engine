@@ -2,6 +2,23 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### Luzes (Sprint 39)
+
+- **Luzes no 3D:** a **Luz** (componente novo) é uma **lâmpada** (ilumina em volta, até o **Alcance**) ou um **holofote** (ilumina num cone, para a frente do objeto), com cor e força, e pode **tremular** como fogo. Valem as 32 mais perto da câmera; só o sol faz sombra.
+- **Brilho:** na **Forma 3D** e no **Modelo 3D**, a própria cor aparece acesa mesmo no escuro. Os modelos `.glb` com emissão no material (`emissiveFactor` e `KHR_materials_emissive_strength`) brilham sozinhos nessas partes.
+- **No NN Studio:**
+  - **➕ Objeto > Luz**, com **Lâmpada**, **Tocha** (a chama com o fogo e a luz tremulando) e **Holofote**;
+  - as luzes acendem na vista 3D, e a escolhida mostra até onde chega;
+  - **☀ Ambiente > Pronto**: **Dia**, **Entardecer**, **Noite** e **Caverna**, de uma vez.
+- **Eventos:** **Acender ou apagar luz** e **Mudar a cor da luz**. Na ação **Ir para cena**, **Como: guardando esta (para voltar)**: a de agora fica como está, e **Fechar esta cena**, na outra, volta para ela.
+- **Modelos novos:** `tocha.glb`, `lampiao.glb` e `cristal.glb`, com partes que brilham, nos modelos de projeto 3D. A pedra do `cajado.glb` também brilha.
+- **O Vale 3D ganha uma caverna:** um arco de pedra no pé do morro leva a uma caverna escura, iluminada por tochas, cristais, um lampião e a luz que entra por uma fresta em cima da sexta estrela. O herói entra com uma tocha na mão; voltando, o vale continua de onde parou. Agora são 6 estrelas.
+- **Tutorial guiado novo: Uma caverna iluminada** (10 minutos).
+- **No Lua:** `nn.d3.lamp(opts)` (uma lâmpada ou um holofote no quadro), a opção `glow` do `nn.d3.draw`, `lamps` no `nn.d3.stats()` e o campo `obj.light3d`.
+- Voltando de uma cena guardada (ou de uma aberta por cima), uma cena 3D põe de novo o céu, o sol e a névoa dela.
+
 ## 0.3.0
 
 A versão do **combate**: inimigos que contornam paredes, buracos e água; uma espada na mão e golpes; tiros que miram pelo meio da tela; números de dano; ondas de inimigos; e chefes com vários ataques, tudo montado no **NN Studio sem código**. A ilha do modelo 3D ganhou uma arena com o besouro-rei, e há um tutorial guiado novo, **Um chefe**. Para começar: o guia [Comece aqui no 3D](docs/3d.md) e a seção [Combate](docs/studio.md#combate-espada-tiros-e-inimigos-que-atacam) do NN Studio.

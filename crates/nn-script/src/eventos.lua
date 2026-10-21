@@ -949,16 +949,17 @@ E.ACTIONS = {
   -- Cenas
   {
     id = "ir_para_cena", name = "Ir para cena", category = "Cenas",
-    text = "ir para a cena {cena}",
+    text = "ir para a cena {cena}, {como}",
     props = { { "cena", "", type = "scene", label = "Cena" },
-      { "guardar", false, label = "Guardar esta cena",
-        help = "A cena de agora fica guardada como está (os objetos, o herói, o que já foi pego). Na outra, \"Fechar esta cena\" volta para ela: entrar numa caverna ou numa casa e sair." },
+      { "como", "trocar", label = "Como", options = { { "trocar", "trocando (esta acaba)" },
+        { "guardar", "guardando esta (para voltar)" } },
+        help = "Guardando: a cena de agora fica como está (os objetos, o herói, o que já foi pego) e, na outra, \"Fechar esta cena\" volta para ela. Para entrar numa caverna ou numa casa e sair." },
       { "escurecer", 0.5, min = 0, label = "Escurecer (s)", advanced = true } },
     lua = "nn.scene.switch(\"{cena}\")",
     run = function(ctx, p)
       if p.cena == "" then return end
       local fade = number(p.escurecer)
-      if p.guardar then
+      if p.como == "guardar" then
         nn.scene.push(p.cena, { voltar = true }, { fade = fade > 0 and fade or nil })
       else
         nn.scene.switch(p.cena, nil, { fade = fade > 0 and fade or nil })

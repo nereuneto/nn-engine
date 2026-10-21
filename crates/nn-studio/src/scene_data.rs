@@ -634,8 +634,11 @@ pub struct Schema {
     pub shapes3d: Vec<String>,
     /// Ambientes prontos (`M.ENVIRONMENT_PRESETS`): id, nome e o ambiente
     /// inteiro (o padrão com os campos dele por cima).
-    pub environment_presets: Vec<(String, String, Vec<(String, Prop)>)>,
+    pub environment_presets: Vec<EnvironmentPreset>,
 }
+
+/// Um ambiente pronto: id, nome e o ambiente inteiro.
+pub type EnvironmentPreset = (String, String, Vec<(String, Prop)>);
 
 /// Chaves do tema da interface, na ordem do formulário.
 pub const THEME_KEYS: [&str; 10] = [

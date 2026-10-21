@@ -690,6 +690,11 @@ continua).
 | Névoa | O que está longe some na cor do horizonte, entre as duas distâncias |
 | Sombras | Sombra do sol até esta distância da câmera |
 
+**Pronto:** os botões **Dia**, **Entardecer**, **Noite** e **Caverna** trocam
+o céu, o sol, a luz ambiente e a névoa de uma vez (Ctrl+Z desfaz). Na Noite e
+na Caverna, as [luzes](#luzes-e-brilho) aparecem bem; a Caverna também deixa
+o fundo escuro.
+
 ### Física: Corpo 3D
 
 Adicione **Corpo 3D** (➕ Adicionar componente) a tudo o que deve bloquear,
@@ -966,6 +971,39 @@ Nos eventos: **Entrar numa zona** e **Sair de uma zona** (Toques), **Usar
 item** (Itens). Por exemplo: *o jogador usar a Placa* → *o jogador ganhar 1
 mapa*. O modelo **3D** (a ilha sem código) tem um cofre trancado com uma estrela
 dentro, e a chave numa das plataformas.
+
+### Luzes e brilho
+
+À noite ou numa caverna, quem ilumina são as **luzes**: tochas, lâmpadas e
+holofotes. O **Vale 3D** tem uma caverna assim (entre pelo arco de pedra, no
+pé do morro do leste), e o tutorial **Uma caverna iluminada** monta uma do
+zero.
+
+![A caverna do Vale 3D: tochas, cristais, um lampião e a luz que entra pela fresta em cima da estrela](imagens/jogo-caverna-3d.png)
+
+- **Luz** (componente, ou **➕ Objeto > Luz**):
+  - **Lâmpada**: ilumina para todos os lados, até o **Alcance** (some aos
+    poucos até lá);
+  - **Holofote**: ilumina num cone, para a frente do objeto (a seta azul);
+    gire o objeto para apontar. **Abertura do cone** é a metade dela;
+  - **Tocha** (no menu): um cabo com a chama em cima, com a luz tremulando
+    (**Tremular**) e o fogo em partículas.
+
+  Escolhida, a luz mostra na vista até onde chega (três círculos, ou o
+  cone). Valem as **32** luzes mais perto da câmera, e só o sol faz sombra.
+- **Brilho** (na Forma 3D e no Modelo 3D): a própria cor aparece acesa mesmo
+  no escuro, como um cristal ou uma janela à noite. O brilho não ilumina em
+  volta; para isso, ponha uma Luz junto. Os modelos `cristal.glb`,
+  `tocha.glb` e `lampiao.glb` (nos modelos de projeto 3D) já trazem as partes
+  que brilham.
+- **Luz na mão:** uma tocha presa à mão do herói (**Preso a um osso**,
+  *mao_e*), com a Luz num filho dela, ilumina por onde ele anda.
+- **Eventos:** **Acender ou apagar luz** (ou o contrário do que está) e
+  **Mudar a cor da luz**, em Aparência.
+- **Entrar e sair de uma caverna:** na ação **Ir para cena**, escolha
+  **Como: guardando esta (para voltar)**: a de agora fica como está (o
+  herói, o que já foi pego) e, na outra, **Fechar esta cena** volta para
+  ela. É assim que o Vale 3D leva para a caverna e de volta.
 
 ### Comportamentos e eventos no 3D
 

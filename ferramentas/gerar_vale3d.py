@@ -317,7 +317,7 @@ eventos = '''  events = {
     { when = {
         { cond = "entrar_zona", quem = "Entrada da caverna", por = "@jogador" },
       }, actions = {
-        { act = "ir_para_cena", cena = "cenas/caverna.cena", guardar = true, escurecer = 0.6 },
+        { act = "ir_para_cena", cena = "cenas/caverna.cena", como = "guardar", escurecer = 0.6 },
       } },
     { comment = "Achou as 6 estrelas (uma na caverna): vitória!" },
     { when = {

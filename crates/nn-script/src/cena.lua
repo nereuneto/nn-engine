@@ -3403,7 +3403,7 @@ function M.new(data, path)
     M.current = self
     -- "Abrir cena por cima": a de baixo continua aparecendo, parada.
     if type(args) == "table" and args.por_cima then self.overlay = true end
-    -- Aberta guardando a de antes ("Ir para cena" com Guardar esta cena):
+    -- Aberta guardando a de antes ("Ir para cena", guardando esta):
     -- "Fechar esta cena" volta para ela.
     if type(args) == "table" and args.voltar then self._guardada = true end
     M.setup(self, data, path)

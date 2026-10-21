@@ -439,3 +439,57 @@ fn as_cenas_3d_dos_modelos_rodam_e_cortam_o_que_nao_aparece() {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// Ferramenta: quanto as luzes pesam, na caverna do Vale 3D (tochas,
+/// cristais, lampião e a fresta): com todas acesas, apagadas e com 32 a
+/// mais espalhadas (`cargo test --release -p nn-run --test desempenho
+/// tempos_da_caverna -- --ignored --nocapture`).
+#[test]
+#[ignore]
+fn tempos_da_caverna() {
+    let Some((mut h, dir)) = abrir(Template::Vale3D, "cenas/caverna.cena", 1280, 720) else {
+        return;
+    };
+    h.run_frames(10);
+    let lua = h.game.rt.lua().clone();
+    lua.globals()
+        .set("C", h.game.cena.table().unwrap())
+        .unwrap();
+    let mut medir = |nome: &str, codigo: &str| {
+        lua.load(codigo).exec().unwrap();
+        h.run_frames(5);
+        h.game.t = Tempos::default();
+        let quadros = 60;
+        let t = Instant::now();
+        h.run_frames(quadros);
+        let total = t.elapsed().as_secs_f64() * 1000.0 / quadros as f64;
+        let s = h.ctx.renderer.last_stats3();
+        println!(
+            "{nome:28} {total:7.2} ms/quadro (lâmpadas na GPU: {}, malhas vistas: {})",
+            s.lamps, s.visible
+        );
+    };
+    medir("caverna, luzes acesas", "");
+    medir(
+        "caverna, luzes apagadas",
+        "for _, o in ipairs(C.object_list) do if o.light3d then o.light3d.on = false end end",
+    );
+    medir(
+        "caverna, 32 lâmpadas a mais",
+        "local n = 0
+         for _, o in ipairs(C.object_list) do
+           if o.light3d then
+             o.light3d.on = true
+           elseif n < 32 and (o.anchor or '') == '' and o.name ~= 'Herói' then
+             n = n + 1
+             local c = { type = 'light3d', kind = 'point', color = '#FFC080', intensity = 1,
+               range = 5, angle = 30, soft = 0.3, flicker = 0.3, on = true }
+             table.insert(o.components, c)
+             o.light3d = c
+           end
+         end",
+    );
+    assert!(h.game.cena.error().is_none(), "{:?}", h.game.cena.error());
+    drop(h);
+    let _ = std::fs::remove_dir_all(&dir);
+}
