@@ -881,6 +881,53 @@ Derrotar um besouro dá 3 moedas (um evento **Derrotar**).
   jogador derrotar qualquer um*), em Mensagens. No **Levar dano**, o
   **@outro** é quem bateu.
 
+### Ondas e chefes
+
+O modelo **3D** (a ilha) tem uma **arena** depois da ponte, a oeste:
+entrando, o portão fecha e vêm 3 ondas de besouros; depois, o
+**besouro-rei**. Derrotado, ele deixa a sexta estrela e o portão abre. Tudo
+com eventos, sem código. O tutorial **Um chefe** monta uma arena assim do
+zero.
+
+![O besouro-rei na arena da ilha, com o nome e a vida no alto da tela](imagens/jogo-chefe-3d.png)
+
+- **Ondas de inimigos** (**➕ Objeto > Ondas de inimigos**, ou o
+  comportamento em Inimigos): cria um prefab de inimigo em ondas, cada uma
+  com mais (**Inimigos na onda 1** e **A mais em cada onda**). A próxima onda
+  vem depois de uma **pausa**, quando todos da anterior foram derrotados. Os
+  quatro filhos (**Saída**) são de onde eles saem: espalhe-os pela arena (sem
+  filhos, eles saem em volta, no chão onde dá para andar, longe do herói).
+  **Começa** quando o jogador chega perto, quando a cena começa ou com a
+  mensagem *comecar*. Um letreiro grande ("Onda 2") aparece na tela, e as
+  variáveis **onda** e **restantes** vão para o placar (**Mostrar valor**:
+  *Onda {onda}   Faltam {restantes}*). Um **Inimigo forte** opcional entra a
+  partir de uma onda.
+- **Gerador** no 3D: cria o prefab num lugar do chão até **Espalhar até**
+  metros dele.
+- **Chefe** (Inimigos), num modelo grande como o `besourao.glb` (os modelos
+  3D trazem), com uma **Vida** (*Quando acabar: nada*, para ele tocar a
+  animação de cair). Marque os ataques que ele usa:
+  - **golpe**: bate na frente quando o herói chega perto;
+  - **investida**: corre reto para onde o herói estava; batendo numa parede,
+    fica **tonto** um instante (a hora de golpear);
+  - **pulo com impacto**: cai na frente do herói e acerta quem está no chão
+    em volta (pule para escapar);
+  - **tiros em leque**: um prefab com **Projétil**;
+  - **chamar ajudantes**: um prefab de inimigo.
+
+  Antes de cada ataque ele **avisa**: pisca em branco e se prepara (**Aviso
+  antes de atacar**, em segundos). Com a vida em **Furioso com a vida em**
+  (50%), fica mais rápido e ataca com menos pausa. A **barra no alto da
+  tela** mostra o nome e a vida dele quando a luta começa. Ele é pesado (os
+  golpes não empurram) e, derrotado, pode **deixar** um prefab (uma estrela,
+  uma chave). **A luta começa** quando o herói chega perto, com a mensagem
+  *comecar* ou quando ele leva o primeiro golpe.
+- **Eventos:** **Começar ou terminar uma onda** e **Vencer todas as ondas**
+  (Mensagens). Por exemplo: *terminarem as ondas de Ondas* → *mandar a
+  mensagem comecar para o besouro-rei*.
+- Na **Vida** de um inimigo, deixe **Guardar na variável** vazio (ou com
+  outro nome): "vidas" é do herói, e num inimigo ela não vale.
+
 ### Portas, chaves e zonas
 
 **➕ Objeto > Portas e itens** traz tudo pronto:
@@ -922,8 +969,8 @@ dentro, e a chave numa das plataformas.
 Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
 
 - **Jogador 3D** e **Vida** (Jogador);
-- **Inimigo 3D** e **Perigo** (Inimigos);
-- **Golpe**, **Atirar**, **Projétil** e **Destruir depois** (Ações);
+- **Inimigo 3D**, **Perigo**, **Ondas de inimigos** e **Chefe** (Inimigos);
+- **Golpe**, **Atirar**, **Projétil**, **Gerador** e **Destruir depois** (Ações);
 - **Coletável** (Itens): some quando o jogador encosta, soma numa variável e
   pode guardar um item no inventário; **Mostrar inventário** (Itens);
 - **Porta 3D**, **Zona de gatilho**, **Interagir** e **Diálogo** (Fases);

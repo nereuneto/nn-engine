@@ -71,13 +71,7 @@ end
 
 -- A frente do objeto no chão (o +Z do modelo, girado com ele).
 function B:frente()
-  local m = self.obj:matrix3d()
-  local x0, _, z0 = m:position()
-  local x1, _, z1 = m:transform_point(0, 0, 1)
-  local dx, dz = x1 - x0, z1 - z0
-  local n = math.sqrt(dx * dx + dz * dz)
-  if n < 1e-3 then return 0, 1 end
-  return dx / n, dz / n
+  return self.scene:front3(self.obj)
 end
 
 -- O alvo mais perto e a distância (para o modo "perto").
@@ -161,32 +155,7 @@ end
 --- Quem está na frente agora, dentro do alcance e da largura do golpe (do
 --- mais perto para o mais longe).
 function B:na_frente()
-  local o = self.obj
-  local x, y, z = o:position3d()
-  local _, y0, _, _, y1 = o:bounds3d()
-  local fx, fz = self:frente()
-  local meio = math.cos(math.rad(math.min(self.angulo, 360) / 2))
-  local out = {}
-  for _, a in ipairs(self.scene:foes(o, self.alvo)) do
-    if a.alive and a ~= o then
-      local ax, _, az = a:position3d()
-      local _, ay0, _, _, ay1 = a:bounds3d()
-      local dx, dz = ax - x, az - z
-      local r = B.raio_de(a)
-      local d = math.sqrt(dx * dx + dz * dz)
-      local alto = ay1 >= y0 - 0.3 and ay0 <= y1 + 0.3
-      local dentro = d - r <= self.alcance
-      local frente = d <= r + 0.2 or self.angulo >= 360 or (dx * fx + dz * fz) / math.max(d, 1e-6) >= meio
-      if alto and dentro and frente then table.insert(out, { a, d }) end
-    end
-  end
-  table.sort(out, function(p, q) return p[2] < q[2] end)
-  local lista = {}
-  for i, p in ipairs(out) do
-    lista[i] = p[1]
-    if not self.todos then break end
-  end
-  return lista, y
+  return self.scene:in_front(self.obj, self.alcance, self.angulo, self.alvo, self.todos)
 end
 
 -- O instante do acerto: tira vida de quem está na frente.

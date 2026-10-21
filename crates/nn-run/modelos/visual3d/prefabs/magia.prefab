@@ -1,0 +1,15 @@
+-- Prefab do NN Studio: um objeto pronto para usar em várias cenas.
+-- Dá para editar à mão; ao salvar pelo editor, comentários se perdem.
+return {
+  format = 1,
+  object = {
+    id = 1, name = "magia",
+    x = 0, y = 0, rotation = 0, scale_x = 0.35, scale_y = 0.35,
+    z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.35,
+    visible = true, layer = 0,
+    components = {
+      { type = "shape3d", shape = "sphere", color = "#FF7A1A", shadow = false },
+      { type = "behavior", script = "nn:projetil", alvo = "", atravessa = false, cor = "#FF7A1A", dano = 1, dura = 3, empurrao = 4, gravidade = 0, parede = true },
+    },
+  },
+}

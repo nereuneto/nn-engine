@@ -21,11 +21,12 @@ class Cena:
     def obj(self, name, comps=(), prefab=None, events=None, children=(), **t):
         i = self.next; self.next += 1
         anchor = t.pop('anchor', None)
+        visible = t.pop('visible', True)
         tr = dict(x=0, y=0, z=0, rx=0, ry=0, rz=0, scale_x=1, scale_y=1, scale_z=1)
         tr.update({k: v for k, v in t.items() if not k.startswith('_')})
         lines = ['    {', '      id = %d, name = %s,' % (i, lua(name))]
         lines.append('      ' + ', '.join('%s = %s' % (k, lua(tr[k])) for k in ['x', 'y', 'z', 'rx', 'ry', 'rz']) + ',')
-        lines.append('      ' + ', '.join('%s = %s' % (k, lua(tr[k])) for k in ['scale_x', 'scale_y', 'scale_z']) + ', visible = true, layer = 0,')
+        lines.append('      ' + ', '.join('%s = %s' % (k, lua(tr[k])) for k in ['scale_x', 'scale_y', 'scale_z']) + ', visible = %s, layer = 0,' % lua(visible))
         if anchor:
             lines.append('      anchor = %s,' % lua(anchor))
         if prefab:

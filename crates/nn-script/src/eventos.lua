@@ -718,6 +718,42 @@ E.CONDITIONS = {
     end,
   },
   {
+    mode = "3d",
+    id = "onda", name = "Começar ou terminar uma onda", category = "Mensagens", trigger = true,
+    text = "{quem} {quando} a onda {onda}",
+    help = "Precisa do comportamento Ondas de inimigos. Onda 0 = qualquer uma.",
+    props = { who("quem", "@este", "Ondas"),
+      { "quando", "comecar", options = { { "comecar", "começar" }, { "terminar", "terminar" } } },
+      { "onda", 0, min = 0, integer = true } },
+    lua = "function B:onda_comecou(n) ... end",
+    test = function(ctx, p, st, b)
+      local set = set_of(resolve(ctx.scene, p.quem, b, true))
+      local msg = p.quando == "terminar" and "onda_terminou" or "onda_comecou"
+      local n = number(p.onda)
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", msg)) do
+        if set[s.obj] and (n == 0 or s.arg == n) then table.insert(out, { este = s.obj }) end
+      end
+      return out
+    end,
+  },
+  {
+    mode = "3d",
+    id = "ondas_terminaram", name = "Vencer todas as ondas", category = "Mensagens", trigger = true,
+    text = "terminarem as ondas de {quem}",
+    help = "Depois que a última onda do comportamento Ondas de inimigos foi derrotada.",
+    props = { who("quem", "@este", "Ondas") },
+    lua = "function B:ondas_terminaram() ... end",
+    test = function(ctx, p, st, b)
+      local set = set_of(resolve(ctx.scene, p.quem, b, true))
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "ondas_terminaram")) do
+        if set[s.obj] then table.insert(out, { este = s.obj }) end
+      end
+      return out
+    end,
+  },
+  {
     id = "derrotar", name = "Derrotar", category = "Mensagens", trigger = true,
     text = "{quem} derrotar {alvo}",
     help = "Acabou a vida de alguém (com um golpe, um tiro ou um pisão) por causa de quem. O @outro é o derrotado.",

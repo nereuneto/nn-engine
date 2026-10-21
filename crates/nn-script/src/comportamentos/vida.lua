@@ -7,7 +7,7 @@ local B = {
   props = {
     { "vidas", 3, label = "Vidas", min = 1, integer = true },
     { "variavel", "vidas", label = "Guardar na variável",
-      help = "Variável do jogo (nn.vars), para mostrar na tela e passar de uma cena para outra. Vazio = não guarda." },
+      help = "Variável do jogo (nn.vars), para mostrar na tela e passar de uma cena para outra. Vazio = não guarda. \"vidas\" só vale no jogador (num inimigo, use outro nome)." },
     { "invencivel", 1, label = "Invencível depois do dano", min = 0, help = "Segundos." },
     { "ao_acabar", "reiniciar", label = "Quando acabar",
       options = {
@@ -32,6 +32,9 @@ local B = {
 }
 
 function B:start()
+  -- A variável padrão ("vidas") é a do jogador: num inimigo, ela não vale
+  -- (senão ele dividiria as vidas com o herói). Outro nome vale para todos.
+  if self.variavel == "vidas" and not self.obj._player then self.variavel = "" end
   self.atual = self.vidas
   if self.variavel ~= "" then
     local v = tonumber(nn.vars[self.variavel])

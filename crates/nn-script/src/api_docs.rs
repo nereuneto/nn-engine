@@ -798,6 +798,22 @@ pub const SCENE_MEMBERS: &[Member] = &[
         "Um número subindo de cima do objeto (o dano).",
     ),
     m("shake", "(forca, tempo)", "Treme a câmera (no 2D e no 3D)."),
+    m(
+        "in_front",
+        "(quem, alcance, angulo, nome, todos)",
+        "3D: quem `quem` pode acertar na frente dele (o que o Golpe usa).",
+    ),
+    m(
+        "front3",
+        "(obj)",
+        "3D: a frente do objeto no chão (dx, dz).",
+    ),
+    m(
+        "ground_spot",
+        "(x, y, z, raio, longe)",
+        "3D: um lugar no chão onde dá para andar, longe dos jogadores (x, y, z).",
+    ),
+    m("warn", "(texto)", "Um aviso no console (filtro Avisos)."),
 ];
 
 /// `self` dentro de um comportamento.

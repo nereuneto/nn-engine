@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Gera as cenas dos modelos de projeto "visual3d" (a ilha sem código) e
-"vazio3d", e os sons da fogueira e do mar.
+"""Gera as cenas dos modelos de projeto "visual3d" (a ilha sem código, com a
+arena do besouro-rei do outro lado da ponte) e "vazio3d", e os sons da
+fogueira e do mar.
 
     python3 ferramentas/gerar_ilha3d.py
 
@@ -40,9 +41,14 @@ c.obj('Herói', [comp('model', file='modelos/heroi.glb', color='#FFFFFF', flat=F
                 comp('behavior', script='nn:jogador3d', velocidade=6, pulo=8, pulos_no_ar=0, camera='atras',
                      distancia=7, prender_mouse=True, sensibilidade=0.15, inverter_y=False, virar=True,
                      queda=-3, raio=0, altura=0),
-                vida_heroi()],
+                vida_heroi(tremer=6),
+                comp('behavior', script='nn:golpe', quando='tecla', tecla='clique', alvo='', dano=1,
+                     alcance=1.7, angulo=120, todos=True, empurrao=6, intervalo=0.45, animacao='golpe',
+                     acerto=0.22, som='', som_acerto='assets/sons/dano.wav')],
       events=heroi_events, z=9, ry=180, scale_x=1.1, scale_y=1.1, scale_z=1.1,
-      children=[c.child('Poeira', [particulas(
+      children=[c.child('Espada', [comp('model', file='modelos/espada.glb', color='#FFFFFF', flat=False, shadow=True),
+                                   comp('bone', bone='mao_d')], rx=20),
+                c.child('Poeira', [particulas(
           mode="explosao", amount=14, on_start=False, lifetime=0.6, lifetime_var=0.4,
           speed_min=0.8, speed_max=2, spread=200, gravity=0.5, drag=4, area="circulo",
           area_radius=0.3, size_start=0.35, size_end=0.6, color_start="#E8DCC4CC",
@@ -115,6 +121,59 @@ for (x, y, z) in moedas:
 for (x, y, z) in [(-6, 4, -7), (10, 5.3, -10), (10.5, 9.3, 1.5), (0, 8.8, 0), (7.5, 0.9, 7.5)]:
     c.obj('estrela', prefab='prefabs/estrela.prefab', x=x, y=y - 0.4, z=z)
 
+# A arena do besouro-rei: outra ilha a oeste, ligada por uma ponte. Entrando,
+# o portão fecha e vêm 3 ondas de besouros; depois, o besouro-rei. Derrotado,
+# ele deixa a sexta estrela e o portão abre.
+AX, AR = -27.0, 9.0
+c.obj('Areia da arena', [comp('shape3d', shape='cylinder', color='#F2D49B', shadow=False)],
+      x=AX, y=-0.55, scale_x=AR * 2 + 1.5, scale_z=AR * 2 + 1.5)
+c.obj('Arena', [comp('shape3d', shape='cylinder', color='#C9B48A'), comp('body3d', body='static')],
+      x=AX, y=-2, scale_x=AR * 2, scale_y=4, scale_z=AR * 2)
+for i in range(4):
+    c.obj('Ponte', [comp('model', file='modelos/plataforma.glb', color='#C89B6D', flat=False, shadow=True),
+                    comp('body3d', body='static')], x=-14.6 - i * 0.95, z=0, scale_x=0.9, scale_y=0.5, scale_z=2.6)
+# A cerca: pilares de pedra em volta, menos no portão (virado para a ponte, em +X).
+for i in range(28):
+    a = 2 * math.pi * i / 28
+    if math.cos(a) > 0.95:
+        continue
+    c.obj('Pilar', [comp('shape3d', shape='cube', color='#8E939C', shadow=True), comp('body3d', body='static')],
+          x=round(AX + math.cos(a) * (AR - 0.5), 2), y=1.1, z=round(math.sin(a) * (AR - 0.5), 2),
+          ry=round(-math.degrees(a), 1), scale_x=0.7, scale_y=2.2, scale_z=0.9)
+c.obj('Portão da arena', [
+    comp('shape3d', shape='cube', color='#6B4226', shadow=True),
+    comp('body3d', body='kinematic'),
+    comp('behavior', script='nn:porta3d', abre='descendo', lado='esquerda', angulo=100, tempo=0.8,
+         abrir_com='mensagem', distancia=1.2, chave='', gastar_chave=True, fechar_depois=0,
+         texto='abrir', texto_fechar='fechar', texto_trancada='Precisa de: {item}',
+         som='assets/sons/porta.wav', som_trancada='assets/sons/dano.wav'),
+], x=AX + AR - 0.5, y=1.2, z=0, scale_x=0.5, scale_y=2.4, scale_z=3.4)
+c.obj('Zona da arena', [comp('shape3d', shape='cube', color='#FFD16640', shadow=False),
+                        comp('behavior', script='nn:gatilho', quem='', alvo='', mensagem='', mensagem_saida='',
+                             uma_vez=False, som='', invisivel=True)],
+      x=AX, y=1.5, z=0, scale_x=12, scale_y=3, scale_z=12)
+pontos = [c.child('Saída', [], x=round(math.cos(a) * 6, 2), z=round(math.sin(a) * 6, 2))
+          for a in (math.radians(d) for d in (60, 130, 230, 300))]
+c.obj('Ondas', [comp('behavior', script='nn:ondas', prefab='prefabs/besouro.prefab', prefab_forte='',
+                     forte_a_partir=2, ondas=3, primeira=2, a_mais=1, quando='mensagem', distancia=6,
+                     pausa=3, intervalo=0.6, raio=7, longe=3, letreiro=True, texto='Onda {onda}',
+                     texto_fim='', var_onda='onda', var_restantes='restantes', som='assets/sons/porta.wav',
+                     cor='#B36BFF')],
+      x=AX, z=0, children=pontos)
+c.obj('Besouro-rei', [
+    comp('model', file='modelos/besourao.glb', color='#FFFFFF', flat=False, shadow=True),
+    comp('behavior', script='nn:vida', vidas=14, variavel='', invencivel=0.25, ao_acabar='nada', cena='',
+         piscar=False, barra=False, cor_barra='#FF5A5A', numeros=True),
+    comp('behavior', script='nn:chefe', nome='Besouro-rei', quando='mensagem', distancia=10, velocidade=2.4,
+         pausa=1.4, aviso=0.8, dano=1, golpe=True, alcance=3, investida=True, velocidade_investida=11,
+         tonto=1.8, pulo=True, raio_impacto=4.5, leque=True, tiro='prefabs/magia.prefab', tiros=5,
+         abertura=70, ajudantes=True, ajudante='prefabs/besouro.prefab', quantos=2, furia=50, barra=True,
+         cor_barra='#FF5A5A', solta='prefabs/estrela.prefab', som_aviso='', som_impacto='assets/sons/explosao.wav'),
+], x=AX - 4, z=0, ry=90, scale_x=1.5, scale_y=1.5, scale_z=1.5)
+c.obj('Placar da arena', [comp('text', text='', size=30, color='#FFFFFF', anchor='right', font='', hud=True),
+                          comp('behavior', script='nn:mostrar_valor', texto='Onda {onda} / 3     Faltam {restantes}')],
+      x=-40, y=-44, anchor='top_right', visible=False)
+
 # O cofre: uma casinha de pedra com uma porta trancada e uma estrela dentro.
 # A chave fica numa plataforma (vai para o inventário quando o herói encosta).
 CX, CZ, LADO, ALTO, ESP = 7.5, 7.5, 3.4, 2.6, 0.3
@@ -163,9 +222,9 @@ c.obj('Pescador', [
                                     outline='#000000B0', background='', font='')], y=2.15)])
 
 c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
-                 comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 5     Moedas {moedas}')],
+                 comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 6     Moedas {moedas}')],
       x=40, y=-44, anchor='top_left')
-c.obj('Dica', [comp('text', text='Ache as 5 estrelas! (Esc solta o mouse)', size=34, color='#FFFFFF', anchor='center', font='', hud=True)],
+c.obj('Dica', [comp('text', text='Ache as 6 estrelas! Uma é do besouro-rei, na arena. (Esc solta o mouse)', size=30, color='#FFFFFF', anchor='center', font='', hud=True)],
       y=-120, anchor='top')
 coracoes(c)
 c.obj('Inventário', [comp('behavior', script='nn:inventario', canto='baixo_esquerda', tamanho=56, margem=24, fundo=True)])
@@ -191,9 +250,42 @@ scene_events = '''  events = {
       }, actions = {
         { act = "mostrar", acao = "esconder", alvo = "Dica" },
       } },
-    { comment = "Achou as 5 estrelas: vitória!" },
+    { comment = "A arena: o portão começa aberto." },
     { when = {
-        { cond = "variavel", var = "estrelas", op = ">=", valor = 5 },
+        { cond = "comecou" },
+      }, actions = {
+        { act = "mensagem", msg = "abrir", alvo = "Portão da arena" },
+        { act = "variavel", var = "arena", op = "definir", valor = 0 },
+      } },
+    { comment = "Entrou na arena: o portão fecha e as ondas começam." },
+    { when = {
+        { cond = "entrar_zona", quem = "Zona da arena", por = "@jogador" },
+        { cond = "variavel", var = "arena", op = "==", valor = 0 },
+      }, actions = {
+        { act = "variavel", var = "arena", op = "definir", valor = 1 },
+        { act = "mensagem", msg = "fechar", alvo = "Portão da arena" },
+        { act = "mostrar", acao = "mostrar", alvo = "Placar da arena" },
+        { act = "esperar", segundos = 1 },
+        { act = "mensagem", msg = "comecar", alvo = "Ondas" },
+      } },
+    { comment = "Venceu as ondas: o besouro-rei acorda." },
+    { when = {
+        { cond = "ondas_terminaram", quem = "Ondas" },
+      }, actions = {
+        { act = "mostrar", acao = "esconder", alvo = "Placar da arena" },
+        { act = "tremer", forca = 10, tempo = 0.6 },
+        { act = "mensagem", msg = "comecar", alvo = "Besouro-rei" },
+      } },
+    { comment = "Derrotou o besouro-rei: o portão abre." },
+    { when = {
+        { cond = "vida_acabou", quem = "Besouro-rei" },
+      }, actions = {
+        { act = "esperar", segundos = 1.5 },
+        { act = "mensagem", msg = "abrir", alvo = "Portão da arena" },
+      } },
+    { comment = "Achou as 6 estrelas: vitória!" },
+    { when = {
+        { cond = "variavel", var = "estrelas", op = ">=", valor = 6 },
       }, actions = {
         { act = "som", som = "assets/sons/vitoria.wav", volume = 1 },
         { act = "esperar", segundos = 1.2 },
@@ -207,11 +299,11 @@ write(BASE + '/visual3d/cenas/ilha.cena', text)
 PREFAB_HEADER = '''-- Prefab do NN Studio: um objeto pronto para usar em várias cenas.
 -- Dá para editar à mão; ao salvar pelo editor, comentários se perdem.
 '''
-def prefab(path, name, comps):
+def prefab(path, name, comps, escala=1):
     lines = [PREFAB_HEADER + 'return {', '  format = 1,', '  object = {',
              '    id = 1, name = %s,' % lua(name),
              '    x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0,',
-             '    scale_x = 1, scale_y = 1, scale_z = 1, visible = true, layer = 0,',
+             '    scale_x = %s, scale_y = %s, scale_z = %s, visible = true, layer = 0,' % (lua(escala), lua(escala), lua(escala)),
              '    components = {']
     for cc in comps: lines.append('      %s,' % cc)
     lines += ['    },', '  },', '}', '']
@@ -222,6 +314,22 @@ prefab(BASE + '/visual3d/prefabs/moeda.prefab', 'moeda', [
     comp('behavior', script='nn:coletavel', quem='', variavel='moedas', valor=1, som='assets/sons/moeda.wav', brilho=True, cor_brilho='#FFD166'),
     comp('behavior', script='nn:girar3d', velocidade=180, eixo='y', altura=0.12, duracao=3),
 ])
+prefab(BASE + '/visual3d/prefabs/besouro.prefab', 'besouro', [
+    comp('model', file='modelos/bicho.glb', color='#FFFFFF', flat=False, shadow=True),
+    comp('behavior', script='nn:inimigo3d', andar='parado', x=0, z=0, raio=4, velocidade=1.8,
+         perseguir=True, visao=20, correr=3.2, contornar=True, dano=1, empurrao=7, pisar=True, virar=True,
+         animar=True, anim_parado='parado', anim_andar='andar'),
+    comp('behavior', script='nn:vida', vidas=2, variavel='', invencivel=0.3, ao_acabar='destruir', cena='',
+         piscar=False, barra=True, cor_barra='#FF5A5A', numeros=True),
+    comp('behavior', script='nn:golpe', quando='perto', distancia=1.1, alvo='', dano=1, alcance=1.3,
+         angulo=100, empurrao=7, intervalo=1.2, animacao='golpe', acerto=0.3, som='',
+         som_acerto='assets/sons/dano.wav'),
+])
+prefab(BASE + '/visual3d/prefabs/magia.prefab', 'magia', [
+    comp('shape3d', shape='sphere', color='#FF7A1A', shadow=False),
+    comp('behavior', script='nn:projetil', alvo='', atravessa=False, cor='#FF7A1A', dano=1, dura=3,
+         empurrao=4, gravidade=0, parede=True),
+], escala=0.35)
 prefab(BASE + '/visual3d/prefabs/estrela.prefab', 'estrela', [
     comp('model', file='modelos/estrela.glb', color='#FFFFFF', flat=False, shadow=True),
     comp('behavior', script='nn:coletavel', quem='', variavel='estrelas', valor=1, som='assets/sons/vitoria.wav', brilho=True, cor_brilho='#FFD166'),

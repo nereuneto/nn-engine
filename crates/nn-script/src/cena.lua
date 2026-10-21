@@ -1116,6 +1116,48 @@ function M.foes(scene, by, who)
   return out
 end
 
+--- 3D: a frente de `o` no chão (o +Z do modelo, girado com ele): dx, dz.
+function M.front3(o)
+  local m = o:matrix3d()
+  local x0, _, z0 = m:position()
+  local x1, _, z1 = m:transform_point(0, 0, 1)
+  local dx, dz = x1 - x0, z1 - z0
+  local n = math.sqrt(dx * dx + dz * dz)
+  if n < 1e-3 then return 0, 1 end
+  return dx / n, dz / n
+end
+
+--- 3D: quem `by` pode acertar na frente dele, até `range` metros (da borda
+--- de cada um) e dentro de `angle` graus (360 = em volta), na altura dele.
+--- Do mais perto para o mais longe; com `all` falso, só o mais perto.
+function M.in_front(scene, by, range, angle, who, all)
+  local x, _, z = by:position3d()
+  local _, y0, _, _, y1 = by:bounds3d()
+  local fx, fz = M.front3(by)
+  local half = math.cos(math.rad(math.min(angle, 360) / 2))
+  local found = {}
+  for _, a in ipairs(M.foes(scene, by, who)) do
+    if a.alive and a ~= by then
+      local ax, _, az = a:position3d()
+      local bx0, ay0, bz0, bx1, ay1, bz1 = a:bounds3d()
+      local r = math.max(bx1 - bx0, bz1 - bz0) / 2
+      local dx, dz = ax - x, az - z
+      local d = math.sqrt(dx * dx + dz * dz)
+      local tall = ay1 >= y0 - 0.3 and ay0 <= y1 + 0.3
+      local near = d - r <= range
+      local ahead = d <= r + 0.2 or angle >= 360 or (dx * fx + dz * fz) / math.max(d, 1e-6) >= half
+      if tall and near and ahead then found[#found + 1] = { a, d } end
+    end
+  end
+  table.sort(found, function(p, q) return p[2] < q[2] end)
+  local out = {}
+  for i, p in ipairs(found) do
+    out[i] = p[1]
+    if all == false then break end
+  end
+  return out
+end
+
 --- `by` acerta `target` com `amount` de dano: tira vida (comportamento Vida),
 --- empurra para longe de `by` (ou na direção `opts.dx, opts.dz`) e manda
 --- "acertou" (alvo, dano) para quem bateu; se a vida acabar, o Vida manda
@@ -1172,6 +1214,41 @@ function M.hit(scene, by, target, amount, opts)
   end
   if by and by.alive then by:send("acertou", target, amount) end
   return true
+end
+
+--- 3D: um lugar no chão até `radius` metros de (x, z), onde dá para andar
+--- (pela grade dos caminhos; sem ela, um raio procura o chão) e a pelo menos
+--- `avoid` metros dos jogadores. Devolve x, y (o chão), z; sem achar, o
+--- próprio ponto.
+function M.ground_spot(scene, x, y, z, radius, avoid)
+  radius, avoid = radius or 0, avoid or 0
+  local nav = M.nav(scene)
+  local players = M.targets(scene, "")
+  local tries = radius > 0 and 40 or 1
+  for i = 1, tries do
+    local px, pz = x, z
+    if radius > 0 then
+      local a = math.random() * math.pi * 2
+      local r = radius * math.sqrt(math.random())
+      px, pz = x + math.cos(a) * r, z + math.sin(a) * r
+    end
+    local py
+    if nav then
+      if nav:walkable(px, pz) then py = nav:floor(px, pz) end
+    else
+      local hit = M.world3(scene):raycast(px, y + 8, pz, 0, -1, 0, 30)
+      py = hit and hit.y
+    end
+    -- Longe do jogador (menos na última tentativa).
+    if py and avoid > 0 and i < tries then
+      for _, p in ipairs(players) do
+        local qx, _, qz = p:position3d()
+        if (qx - px) ^ 2 + (qz - pz) ^ 2 < avoid * avoid then py = nil break end
+      end
+    end
+    if py then return px, py, pz end
+  end
+  return x, y, z
 end
 
 --- Treme a câmera (`strength` em pixels; no 3D, 80 pixels = 1 metro) por
@@ -3287,6 +3364,16 @@ function M.new(data, path)
     return M.hit(self, by, target, amount, opts)
   end
 
+  --- 3D: quem `by` pode acertar na frente dele (veja M.in_front).
+  function scene:in_front(by, range, angle, who, all)
+    return M.in_front(self, by, range, angle, who, all)
+  end
+
+  --- 3D: a frente de `o` no chão (dx, dz).
+  function scene:front3(o)
+    return M.front3(o)
+  end
+
   --- Quem `by` pode acertar ("" = os inimigos dele).
   function scene:foes(by, who)
     return M.foes(self, by, who)
@@ -3295,6 +3382,17 @@ function M.new(data, path)
   --- Um número subindo de cima de `o` (o dano que levou).
   function scene:damage_number(o, n, color)
     M.damage_number(self, o, n, color)
+  end
+
+  --- 3D: um lugar no chão em volta de (x, y, z), até `raio` metros, onde
+  --- dá para andar e longe `longe` metros dos jogadores (x, y, z).
+  function scene:ground_spot(x, y, z, raio, longe)
+    return M.ground_spot(self, x, y, z, raio, longe)
+  end
+
+  --- Um aviso no console (filtro Avisos), uma vez por texto.
+  function scene:warn(msg)
+    M.warn(msg)
   end
 
   --- Treme a câmera (no 2D e no 3D).
