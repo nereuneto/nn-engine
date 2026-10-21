@@ -5539,26 +5539,37 @@ fn cena_vazia_console_vazio_comemoracao_e_dica() {
         .click();
     h.run_steps(3);
     assert_eq!(h.state().project().unwrap().plays, 1);
-    let festa = |h: &Harness<'_, StudioApp>| {
-        avisos(h)
-            .iter()
-            .filter(|a| a.contains("rodou pela primeira vez"))
-            .count()
-    };
-    assert_eq!(festa(&h), 1, "{:?}", avisos(&h));
-    tela(&mut h, "comemoracao");
-    assert!(
-        h.state()
-            .settings
-            .celebrated
-            .iter()
-            .any(|k| k.starts_with("jogar:"))
-    );
-    // De novo: sem festa.
-    h.state_mut().project_mut().unwrap().toasts = Default::default();
-    atalho(&mut h, Modifiers::NONE, Key::F5);
-    h.run_steps(3);
-    assert_eq!(festa(&h), 0);
+    // A comemoração vem quando o jogo abre (o "jogo" falso só existe fora do
+    // Windows; lá o jogo não abre e não há o que comemorar).
+    if cfg!(unix) {
+        let festa = |h: &Harness<'_, StudioApp>| {
+            avisos(h)
+                .iter()
+                .filter(|a| a.contains("rodou pela primeira vez"))
+                .count()
+        };
+        assert_eq!(festa(&h), 1, "{:?}", avisos(&h));
+        tela(&mut h, "comemoracao");
+        assert!(
+            h.state()
+                .settings
+                .celebrated
+                .iter()
+                .any(|k| k.starts_with("jogar:"))
+        );
+        // De novo: sem festa.
+        h.state_mut().project_mut().unwrap().toasts = Default::default();
+        atalho(&mut h, Modifiers::NONE, Key::F5);
+        h.run_steps(3);
+        assert_eq!(festa(&h), 0);
+    } else {
+        assert!(
+            !avisos(&h)
+                .iter()
+                .any(|a| a.contains("rodou pela primeira vez")),
+            "sem jogo aberto, sem festa"
+        );
+    }
 
     // A dica do dia, no Início.
     h.state_mut().project_mut().unwrap().show_tab(Tab::Home);
