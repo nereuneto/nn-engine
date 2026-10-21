@@ -442,6 +442,7 @@ fn ceu_em_degrade_com_sol() {
         horizon: Color::rgb(1.0, 1.0, 1.0),
         bottom: Color::rgb(0.0, 1.0, 0.0),
         sun_size: 0.0,
+        stars: 0.0,
     }));
     h.renderer.set_light3d(Light3D {
         fog: Some(Fog {

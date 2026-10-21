@@ -4338,3 +4338,153 @@ fn tutorial_uma_caverna_avanca_sozinho_ate_o_fim() {
     h.run_steps(3);
     assert!(h.state().tutorial.is_none());
 }
+
+/// Dia e noite no NN Studio: o Ambiente liga o ciclo e mostra a hora em que
+/// o jogo começa; às 22h a vista fica escura e o poste "Só à noite" acende
+/// o chão em volta; ao meio-dia, ele fica apagado.
+#[test]
+fn cena_3d_dia_e_noite_na_vista() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let dir = temp("cena-3d-dia");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    {
+        let doc = cena_mut(&mut h);
+        doc.selection.clear();
+        let mut poste = Object::new(50, "Poste");
+        poste.y = 1.5;
+        poste.x = 3.0;
+        let mut l = Component::new("light3d");
+        l.set("night", Prop::Bool(true));
+        l.set("range", Prop::Num(4.0));
+        poste.components.push(l);
+        doc.data.objects.push(poste);
+        doc.cam3.look_at(
+            glam::Vec3::new(3.0, 8.0, 7.0),
+            glam::Vec3::new(3.0, 0.0, 0.0),
+        );
+        doc.cam3_set = true;
+    }
+    h.run_steps(3);
+    // Sem o ciclo, não há "Começa às".
+    assert!(h.query_by_label("Começa às:").is_none());
+    h.get_by_label("Dia e noite:");
+    cena_mut(&mut h).data.set_env("cycle", Prop::Bool(true));
+    h.run_steps(3);
+    h.get_by_label("Começa às:");
+    if !gpu {
+        return;
+    }
+    let mut foto = |h: &mut Harness<'_, StudioApp>, hora: f64| {
+        cena_mut(h).data.set_env("start_hour", Prop::Num(hora));
+        h.run_steps(3);
+        let rect = h.get_by_label("Vista da cena 3D").rect();
+        let img = h.render().expect("render");
+        let ppp = img.width() as f32 / 1280.0;
+        // O chão embaixo do poste e um pedaço longe dele.
+        let v = |x: f32, y: f32| {
+            let p = img.get_pixel(
+                ((rect.left() + x) * ppp) as u32,
+                ((rect.top() + y) * ppp) as u32,
+            );
+            p[0] as u32 + p[1] as u32 + p[2] as u32
+        };
+        (
+            v(rect.width() / 2.0, rect.height() * 0.62),
+            v(12.0, rect.height() - 12.0),
+        )
+    };
+    let (perto_dia, longe_dia) = foto(&mut h, 12.0);
+    let (perto_noite, longe_noite) = foto(&mut h, 22.0);
+    tela(&mut h, "cena-3d-noite");
+    assert!(
+        longe_noite * 2 < longe_dia,
+        "de noite, escuro: {longe_noite} (dia {longe_dia})"
+    );
+    assert!(
+        perto_noite > longe_noite * 2,
+        "o poste acende o chão: {perto_noite} / {longe_noite}"
+    );
+    assert!(
+        perto_dia < longe_dia * 2,
+        "de dia, o poste fica apagado: {perto_dia} / {longe_dia}"
+    );
+}
+
+#[test]
+fn tutorial_dia_e_noite_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, EventItem, Object, Prop, Rule};
+    let dir = temp("tutorial-dia");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("dia-e-noite");
+    h.run_steps(4);
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    h.run_steps(4);
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/mundo.cena").unwrap()
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    espera(&mut h, 1);
+    doc(&mut h).data.set_env("cycle", Prop::Bool(true));
+    doc(&mut h).data.set_env("day_length", Prop::Num(2.0));
+    espera(&mut h, 2);
+    doc(&mut h).data.set_env("start_hour", Prop::Num(21.0));
+    espera(&mut h, 3);
+    let mut poste = Object::new(40, "Lâmpada");
+    let mut l = Component::new("light3d");
+    l.set("night", Prop::Bool(true));
+    poste.components.push(l);
+    doc(&mut h).data.objects.push(poste);
+    espera(&mut h, 4);
+    let mut janela = Object::new(41, "Cubo");
+    let mut f = Component::new("shape3d");
+    f.set("glow", Prop::Num(1.0));
+    f.set("glow_night", Prop::Bool(true));
+    janela.components.push(f);
+    doc(&mut h).data.objects.push(janela);
+    espera(&mut h, 5);
+    let mut heroi = Object::new(42, "Jogador");
+    heroi
+        .components
+        .push(Component::behavior("nn:jogador3d", &[]));
+    doc(&mut h).data.objects.push(heroi);
+    espera(&mut h, 6);
+    let mut placar = Object::new(43, "relógio");
+    placar.components.push(Component::behavior(
+        "nn:mostrar_valor",
+        &[("texto".into(), Prop::Str("{relogio}".into()))],
+    ));
+    doc(&mut h).data.objects.push(placar);
+    espera(&mut h, 7);
+    let item = |id: &str, props: &[(&str, &str)]| EventItem {
+        id: id.into(),
+        not: false,
+        props: props
+            .iter()
+            .map(|(k, v)| (k.to_string(), Prop::Str(v.to_string())))
+            .collect(),
+    };
+    doc(&mut h).data.events.push(Rule {
+        when: vec![item("amanhecer", &[("quando", "anoitecer")])],
+        actions: vec![item("som", &[("som", "assets/sons/vitoria.wav")])],
+        ..Default::default()
+    });
+    espera(&mut h, 8);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 9);
+    h.get_by_label("Concluir").click();
+    h.run_steps(3);
+    assert!(h.state().tutorial.is_none());
+}

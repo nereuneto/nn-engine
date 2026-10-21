@@ -837,6 +837,11 @@ impl Renderer3D {
             axes: None,
         };
         self.quad(texture, quad, rotation, color, region, additive, srgb);
+        // Partículas (fumaça, poeira) recebem a luz do mundo: de noite, mais
+        // escuras. (Os textos 3D, não.)
+        if let Some(b) = self.billboards.last_mut() {
+            b.data.up[3] = 2.0;
+        }
     }
 
     /// Um retângulo 3D (partícula ou pedaço de texto) para este frame.
@@ -1210,7 +1215,7 @@ impl Renderer3D {
                     1.0
                 },
                 if self.sky.is_some() { 1.0 } else { 0.0 },
-                0.0,
+                sky.stars.clamp(0.0, 1.0),
                 0.0,
             ],
             shadow: [

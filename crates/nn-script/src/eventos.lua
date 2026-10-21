@@ -236,6 +236,28 @@ E.CONDITIONS = {
     test = function(ctx, p, st) return st.fire end,
   },
   {
+    mode = "3d",
+    id = "amanhecer", name = "Amanhecer ou anoitecer", category = "Cena e tempo", trigger = true,
+    text = "{quando}",
+    help = "Com Dia e noite (☀ Ambiente): às 6h o sol nasce; às 18h, ele se põe.",
+    props = { { "quando", "anoitecer", options = { { "anoitecer", "anoitecer" }, { "amanhecer", "amanhecer" } } } },
+    lua = "-- compare scene:time_of_day() em update",
+    test = function(ctx, p)
+      return #signals(ctx.scene, p.quando == "amanhecer" and "amanheceu" or "anoiteceu") > 0
+    end,
+  },
+  {
+    mode = "3d",
+    id = "de_noite", name = "Estiver de dia ou de noite", category = "Cena e tempo",
+    text = "estiver de {quando}",
+    help = "Com Dia e noite, das 18h às 6h é noite. Sem o ciclo, é noite num ambiente escuro (Noite, Caverna).",
+    props = { { "quando", "noite", options = { { "noite", "noite" }, { "dia", "dia" } } } },
+    lua = "self:is_night()",
+    test = function(ctx, p)
+      return (ctx.scene._night == true) == (p.quando == "noite")
+    end,
+  },
+  {
     id = "chance", name = "Sorte (chance em %)", category = "Cena e tempo",
     text = "der sorte ({chance}% de chance)",
     help = "Sorteia toda vez que a regra é conferida.",
@@ -1298,6 +1320,35 @@ E.ACTIONS = {
         if number(p.forca) > 0 then c.intensity = number(p.forca) end
       end)
     end,
+  },
+  {
+    mode = "3d",
+    id = "mudar_hora", name = "Mudar a hora", category = "Tempo",
+    text = "mudar a hora para {hora}h",
+    help = "Com Dia e noite (☀ Ambiente): pula para essa hora (6 = o sol nascendo, 22 = noite). Dormir numa cama, por exemplo.",
+    props = { { "hora", 6, min = 0, max = 24, label = "Hora" } },
+    lua = "self:set_time({hora})",
+    run = function(ctx, p) M.set_time(ctx.scene, number(p.hora)) end,
+  },
+  {
+    mode = "3d",
+    id = "tempo", name = "Parar ou continuar o tempo", category = "Tempo",
+    text = "{acao} o tempo",
+    help = "Com Dia e noite: a hora para de andar (o sol fica parado) ou volta a andar.",
+    props = { { "acao", "parar", options = { { "parar", "parar" }, { "continuar", "continuar" } } } },
+    lua = "self:pause_time(true)",
+    run = function(ctx, p) M.pause_time(ctx.scene, p.acao == "parar") end,
+  },
+  {
+    mode = "3d",
+    id = "mudar_ambiente", name = "Mudar o ambiente", category = "Aparência",
+    text = "mudar o ambiente para {pronto} em {segundos} s",
+    help = "Troca o céu, o sol, a luz ambiente e a névoa, aos poucos: uma tempestade, uma área escura. Com Dia e noite, o tempo para até \"Parar ou continuar o tempo\" (continuar) voltar à hora.",
+    props = { { "pronto", "noite", label = "Ambiente", options = { { "dia", "dia (o desta cena)" },
+      { "amanhecer", "amanhecer" }, { "entardecer", "entardecer" }, { "noite", "noite" }, { "caverna", "caverna" } } },
+      { "segundos", 2, min = 0, label = "Em (segundos)" } },
+    lua = "self:environment(\"{pronto}\", {segundos})",
+    run = function(ctx, p) M.change_environment(ctx.scene, p.pronto, number(p.segundos)) end,
   },
   {
     mode = "2d",

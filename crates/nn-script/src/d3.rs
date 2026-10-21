@@ -395,6 +395,8 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                 }
             };
             let glow = opt::<f32>(o, "glow")?.unwrap_or(0.0).max(0.0);
+            // emissive = false apaga o brilho que o modelo já traz no arquivo.
+            let emissive = opt::<bool>(o, "emissive")?.unwrap_or(true);
             with_ctx(lua, |c| {
                 match thing {
                     Thing::Mesh(mesh) => c.renderer.draw_mesh_glow(
@@ -406,7 +408,15 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                         d3::Glow::own(glow),
                     ),
                     Thing::Model(key) => {
-                        c.draw_model_key_glow(&key, model, col, shadow, glow, joints.as_deref());
+                        let g = d3::Glow {
+                            amount: glow,
+                            color: if emissive {
+                                nn_core::Color::WHITE
+                            } else {
+                                nn_core::Color::BLACK
+                            },
+                        };
+                        c.draw_model_key_glow(&key, model, col, shadow, g, joints.as_deref());
                     }
                 }
                 Ok(())
@@ -640,6 +650,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                         horizon: opt_color(o, "horizon")?.unwrap_or(d.horizon),
                         bottom: opt_color(o, "bottom")?.unwrap_or(d.bottom),
                         sun_size: opt::<f32>(o, "sun_size")?.unwrap_or(d.sun_size).clamp(0.0, 45.0),
+                        stars: opt::<f32>(o, "stars")?.unwrap_or(0.0).clamp(0.0, 1.0),
                     })
                 }
                 other => {

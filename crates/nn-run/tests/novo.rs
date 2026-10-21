@@ -1110,6 +1110,104 @@ fn capturas_da_caverna() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// Ferramenta: a ilha (modelo 3D) em várias horas do dia, com o herói perto
+/// do pescador e dos postes (`NN_SAIDA=<pasta> cargo test -p nn-run --test
+/// novo capturas_do_dia -- --ignored`).
+#[test]
+#[ignore]
+fn capturas_do_dia() {
+    let Some(out) = std::env::var_os("NN_SAIDA").map(PathBuf::from) else {
+        return;
+    };
+    std::fs::create_dir_all(&out).unwrap();
+    let dir = temp("captura-dia");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Visual3D,
+    })
+    .unwrap();
+    let project = Project::open(&dir).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let config = project
+        .config
+        .clone()
+        .size(1280, 720)
+        .save_dir(dir.join("dados"))
+        .hot_reload(false);
+    let start = project.start.clone();
+    let Ok(mut h) = Headless::new(config, move |ctx| {
+        let mut s = rt.scene(start);
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    rt2.lua()
+        .globals()
+        .set("C", h.game.0.table().unwrap())
+        .unwrap();
+    h.run_frames(20);
+    rt2.lua()
+        .load(
+            "local h = C.objects['Herói'] h:move_to(1, 0.1, 9) h.ry = 180
+             local cam = C._player_cam.cam cam.yaw = 0 cam.pitch = 14 cam.distance = 8",
+        )
+        .exec()
+        .unwrap();
+    for hora in [6.5, 9.0, 12.0, 17.5, 18.6, 20.0, 23.0] {
+        rt2.lua()
+            .load(format!("C:set_time({hora})"))
+            .exec()
+            .unwrap();
+        h.run_frames(30);
+        h.save_png(out.join(format!("ilha-{:04.1}h.png", hora)))
+            .unwrap();
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A ilha (modelo 3D) tem Dia e noite: começa às 9h com os postes
+/// apagados; de noite, eles e o lampião do pescador acendem, o céu tem
+/// estrelas e o relógio do placar anda.
+#[test]
+fn modelo_visual3d_ilha_anoitece_e_os_postes_acendem() {
+    let dir = temp("visual3d-noite");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: None,
+        template: Template::Visual3D,
+    })
+    .unwrap();
+    let Some((mut h, rt)) = cena_do_modelo(&dir, "cenas/ilha.cena") else {
+        return;
+    };
+    h.run_frames(10);
+    assert_eq!(h.game.0.error(), None);
+    assert!(lua::<String>(&rt, "return nn.vars.relogio").starts_with("09:0"));
+    // De dia: só a fogueira acesa.
+    assert_eq!(h.ctx.renderer.last_stats3().lamps, 1);
+    assert_eq!(h.ctx.renderer.sky3d().unwrap().stars, 0.0);
+    // O tempo anda: 4 minutos por dia, 6 horas por minuto.
+    h.run_frames(600);
+    let hora: f64 = lua(&rt, "return (cena:time_of_day())");
+    assert!((9.9..10.1).contains(&hora), "{hora}");
+    // De noite: os postes e o lampião acendem; as estrelas aparecem.
+    rt.lua().load("cena:set_time(21)").exec().unwrap();
+    h.run_frames(3);
+    assert!(
+        h.ctx.renderer.last_stats3().lamps >= 6,
+        "{:?}",
+        h.ctx.renderer.last_stats3()
+    );
+    assert!(h.ctx.renderer.sky3d().unwrap().stars > 0.9);
+    assert!(lua::<bool>(&rt, "return cena:is_night()"));
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 fn toque_uma(h: &mut Headless<Uma>, k: KeyCode) {
     h.ctx.input.press_key(k);
     h.run_frames(1);

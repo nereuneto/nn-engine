@@ -946,6 +946,10 @@ const MODEL_FIELDS: &[F] = &[
         ),
         "Quanto a própria cor brilha (0 a 1): aparece acesa mesmo no escuro, como um cristal ou uma janela à noite. Não ilumina em volta (para isso, uma Luz).",
     ),
+    help(
+        f("glow_night", "Brilha só à noite", W::Bool),
+        "Com Dia e noite (☀ Ambiente), o brilho acende ao anoitecer e apaga ao amanhecer: janelas, postes. Sem o ciclo, vale num ambiente escuro (Noite, Caverna).",
+    ),
 ];
 
 const SHAPE3D_FIELDS: &[F] = &[
@@ -976,6 +980,10 @@ const SHAPE3D_FIELDS: &[F] = &[
         ),
         "Quanto a própria cor brilha (0 a 1): aparece acesa mesmo no escuro, como um cristal ou uma janela à noite. Não ilumina em volta (para isso, uma Luz).",
     ),
+    help(
+        f("glow_night", "Brilha só à noite", W::Bool),
+        "Com Dia e noite (☀ Ambiente), o brilho acende ao anoitecer e apaga ao amanhecer: janelas, postes. Sem o ciclo, vale num ambiente escuro (Noite, Caverna).",
+    ),
 ];
 
 const LIGHT3D_FIELDS: &[F] = &[
@@ -991,6 +999,10 @@ const LIGHT3D_FIELDS: &[F] = &[
         "Lâmpada: ilumina para todos os lados, como uma tocha. Holofote: ilumina num cone, para a frente do objeto (a seta azul, -Z); gire o objeto para apontar.",
     ),
     f("on", "Acesa", W::Bool),
+    help(
+        f("night", "Só à noite", W::Bool),
+        "Com Dia e noite (☀ Ambiente), acende sozinha ao anoitecer e apaga ao amanhecer. Sem o ciclo, fica acesa num ambiente escuro (Noite, Caverna).",
+    ),
     f("color", "Cor", W::Color),
     help(
         f(
@@ -1430,6 +1442,51 @@ fn environment_ui(ui: &mut egui::Ui, doc: &mut SceneDoc) {
                         }
                     });
                     ui.end_row();
+
+                    let r = ui.label("Dia e noite:").on_hover_text(
+                        "O sol anda no céu e as cores mudam com a hora: amanhecer, dia, entardecer e noite (com a lua e as estrelas). O dia é o desta cena. A vista mostra a hora em que o jogo começa: mude para ver a cena de noite.",
+                    );
+                    crate::tutorial::anchor_in(ui, "inspetor:ambiente:ciclo", r.rect);
+                    ui.horizontal(|ui| {
+                        if check(ui, doc, "cycle", "") {
+                            ui.weak("um dia dura");
+                            let mut v = doc.data.env("day_length").num();
+                            if ui
+                                .add(
+                                    egui::DragValue::new(&mut v)
+                                        .range(0.1..=240.0)
+                                        .speed(0.1)
+                                        .suffix(" min"),
+                                )
+                                .changed()
+                            {
+                                doc.record(Some("ambiente:day_length"));
+                                doc.data.set_env("day_length", Prop::Num(v));
+                            }
+                        }
+                    });
+                    ui.end_row();
+                    if doc.data.env("cycle").bool() {
+                        ui.label("Começa às:").on_hover_text(
+                            "A hora em que o jogo começa (6 = o sol nascendo, 12 = meio-dia, 18 = o pôr do sol, 22 = noite). A vista da cena mostra essa hora.",
+                        );
+                        ui.horizontal(|ui| {
+                            let mut v = doc.data.env("start_hour").num();
+                            let r = ui.add(
+                                egui::Slider::new(&mut v, 0.0..=23.99)
+                                    .step_by(0.25)
+                                    .custom_formatter(|n, _| {
+                                        format!("{:02}:{:02}", n.floor() as u32, ((n % 1.0) * 60.0).round() as u32)
+                                    }),
+                            );
+                            crate::tutorial::anchor_in(ui, "inspetor:ambiente:hora", r.rect);
+                            if r.changed() {
+                                doc.record(Some("ambiente:start_hour"));
+                                doc.data.set_env("start_hour", Prop::Num(v));
+                            }
+                        });
+                        ui.end_row();
+                    }
                 });
         });
     crate::tutorial::anchor_in(ui, "inspetor:ambiente", r.header_response.rect);

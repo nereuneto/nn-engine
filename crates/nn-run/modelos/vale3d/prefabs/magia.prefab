@@ -8,7 +8,7 @@ return {
     z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.3,
     visible = true, layer = 0,
     components = {
-      { type = "shape3d", shape = "sphere", color = "#7FE3FF", shadow = false, glow = 0 },
+      { type = "shape3d", shape = "sphere", color = "#7FE3FF", shadow = false, glow = 0, glow_night = false },
       { type = "behavior", script = "nn:projetil", alvo = "", atravessa = false, cor = "#7FE3FF", dano = 1, dura = 3, empurrao = 4, gravidade = 0, parede = true },
     },
   },

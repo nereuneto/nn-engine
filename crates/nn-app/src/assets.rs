@@ -239,15 +239,16 @@ impl Context {
         }
     }
 
-    /// Como [`Context::draw_model_key`], com brilho próprio (`glow`, de 0 a
-    /// 1) e, num modelo animado, na pose `joints`.
+    /// Como [`Context::draw_model_key`], com brilho próprio (veja
+    /// [`Renderer::draw_model_glow`](nn_render::Renderer::draw_model_glow))
+    /// e, num modelo animado, na pose `joints`.
     pub fn draw_model_key_glow(
         &mut self,
         key: &str,
         matrix: glam::Mat4,
         color: nn_core::Color,
         cast_shadow: bool,
-        glow: f32,
+        glow: nn_render::d3::Glow,
         joints: Option<&[glam::Mat4]>,
     ) -> bool {
         match self.assets.models.get(key) {

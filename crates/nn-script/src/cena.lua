@@ -110,17 +110,18 @@ M.FIELDS = {
   -- 3D: um modelo .glb/.gltf, uma forma pronta e a câmera do jogo.
   model = {
     { "file", "" }, { "color", "#FFFFFF" }, { "flat", false }, { "shadow", true },
-    { "glow", 0 },
+    { "glow", 0 }, { "glow_night", false },
   },
   shape3d = {
     { "shape", "cube" }, { "color", "#7BC86C" }, { "shadow", true }, { "glow", 0 },
+    { "glow_night", false },
   },
   -- Luz: uma lâmpada (ilumina em volta, até o alcance) ou um holofote
   -- (ilumina num cone, para a frente do objeto, -Z). "flicker" faz a luz
   -- tremular como fogo (0 a 1).
   light3d = {
     { "kind", "point" }, { "color", "#FFD9A0" }, { "intensity", 1.5 }, { "range", 8 },
-    { "angle", 30 }, { "soft", 0.3 }, { "flicker", 0 }, { "on", true },
+    { "angle", 30 }, { "soft", 0.3 }, { "flicker", 0 }, { "on", true }, { "night", false },
   },
   camera3d = {
     { "fov", 60 },
@@ -172,12 +173,20 @@ M.ENVIRONMENT = {
   { "ambient_sky", "#93AFCF" }, { "ambient_ground", "#6A5D48" },
   { "fog", true }, { "fog_near", 30 }, { "fog_far", 90 },
   { "shadows", true }, { "shadow_distance", 30 },
+  -- Dia e noite: o sol anda no céu e as cores mudam com a hora. Um dia do
+  -- jogo dura `day_length` minutos; o jogo começa na hora `start_hour`.
+  { "cycle", false }, { "day_length", 4 }, { "start_hour", 9 },
 }
 
 -- Ambientes prontos (o NN Studio aplica com um clique): o que muda em cada
 -- um. Dia é o padrão.
 M.ENVIRONMENT_PRESETS = {
   { "dia", "Dia", {} },
+  { "amanhecer", "Amanhecer", {
+    sky_top = "#5A6FB0", sky_horizon = "#F4B183", sky_bottom = "#7A6A70",
+    sun_height = 8, sun_color = "#FFC79A", sun_size = 5,
+    ambient_sky = "#A08EB0", ambient_ground = "#5E5048", fog_near = 25, fog_far = 85,
+  } },
   { "entardecer", "Entardecer", {
     sky_top = "#3B4F8C", sky_horizon = "#F7A35C", sky_bottom = "#6B5A5A",
     sun_height = 8, sun_color = "#FFB070", sun_size = 6,
@@ -185,8 +194,8 @@ M.ENVIRONMENT_PRESETS = {
   } },
   { "noite", "Noite", {
     sky_top = "#0B1026", sky_horizon = "#22305A", sky_bottom = "#0E1220",
-    sun_height = 35, sun_color = "#4F6290", sun_size = 2,
-    ambient_sky = "#1C2744", ambient_ground = "#0E0E14", fog_near = 20, fog_far = 70,
+    sun_height = 35, sun_color = "#3D4A78", sun_size = 2,
+    ambient_sky = "#16203A", ambient_ground = "#0C0C12", fog_near = 20, fog_far = 70,
   } },
   { "caverna", "Caverna", {
     sky = false, sun_color = "#000000", sun_size = 0,
@@ -2496,8 +2505,10 @@ function M.apply_environment(env)
     if v == nil then v = f[2] end
     e[f[1]] = v
   end
+  e.stars = env and env.stars or 0
   if e.sky then
-    nn.d3.sky({ top = e.sky_top, horizon = e.sky_horizon, bottom = e.sky_bottom, sun_size = e.sun_size })
+    nn.d3.sky({ top = e.sky_top, horizon = e.sky_horizon, bottom = e.sky_bottom, sun_size = e.sun_size,
+      stars = e.stars })
   else
     nn.d3.sky(false)
   end
@@ -2509,6 +2520,243 @@ function M.apply_environment(env)
   })
   nn.d3.shadows(e.shadows and { distance = e.shadow_distance } or false)
   return e
+end
+
+-- Dia e noite ----------------------------------------------------------------
+
+local function hex_rgb(c)
+  c = tostring(c or ""):gsub("^#", "")
+  if #c < 6 then return 1, 1, 1 end
+  return tonumber(c:sub(1, 2), 16) / 255, tonumber(c:sub(3, 4), 16) / 255, tonumber(c:sub(5, 6), 16) / 255
+end
+
+local function rgb_hex(r, g, b)
+  local function k(v) return math.floor(math.max(0, math.min(1, v)) * 255 + 0.5) end
+  return ("#%02X%02X%02X"):format(k(r), k(g), k(b))
+end
+
+--- Mistura duas cores "#RRGGBB" (t = 0: a primeira; 1: a segunda).
+function M.mix_color(a, b, t)
+  local r1, g1, b1 = hex_rgb(a)
+  local r2, g2, b2 = hex_rgb(b)
+  return rgb_hex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t)
+end
+
+-- Os campos que mudam aos poucos entre dois ambientes (cores e números).
+local BLEND_COLORS = { "sky_top", "sky_horizon", "sky_bottom", "sun_color", "ambient_sky", "ambient_ground" }
+local BLEND_NUMBERS = { "sun_size", "fog_near", "fog_far", "stars" }
+
+--- O ambiente no meio do caminho entre `a` e `b` (t de 0 a 1). Os campos
+--- que não misturam (céu, névoa, sombras ligados) vêm de `a` até a metade.
+function M.mix_environment(a, b, t)
+  local e = {}
+  for k, v in pairs(a) do e[k] = v end
+  if t >= 0.5 then
+    for k, v in pairs(b) do e[k] = v end
+  end
+  for _, k in ipairs(BLEND_COLORS) do e[k] = M.mix_color(a[k], b[k], t) end
+  for _, k in ipairs(BLEND_NUMBERS) do
+    local x, y = tonumber(a[k]) or 0, tonumber(b[k]) or 0
+    e[k] = x + (y - x) * t
+  end
+  for _, k in ipairs({ "sun_height", "sun_turn" }) do
+    local x, y = tonumber(a[k]) or 0, tonumber(b[k]) or 0
+    e[k] = x + (y - x) * t
+  end
+  return e
+end
+
+-- As cores do dia: em cada hora, um ambiente (o "dia" é o da própria cena).
+local DAY_KEYS = {
+  { 0, "noite" }, { 5, "noite" }, { 6.5, "amanhecer" }, { 8.5, "dia" }, { 16, "dia" },
+  { 18, "entardecer" }, { 19.5, "noite" }, { 24, "noite" },
+}
+local STARS = { noite = 1, amanhecer = 0.15, dia = 0, entardecer = 0.1 }
+
+--- De noite (das 18h às 6h)?
+function M.is_night_hour(h)
+  h = h % 24
+  return h >= 18 or h < 6
+end
+
+local function smooth(a, b, x)
+  local t = math.max(0, math.min(1, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+end
+
+--- O ambiente de uma cena com Dia e noite na hora `h` (0 a 24): as cores
+--- entre os ambientes prontos (o dia é o da cena), o sol cruzando o céu de
+--- leste a oeste e, de noite, a lua. Sem o ciclo, devolve o ambiente igual.
+function M.environment_at(env, h)
+  local base = {}
+  for _, f in ipairs(M.ENVIRONMENT) do
+    local v = env and env[f[1]]
+    if v == nil then v = f[2] end
+    base[f[1]] = v
+  end
+  if not base.cycle then return base end
+  h = (tonumber(h) or 12) % 24
+  local function key(name)
+    local e = name == "dia" and base or M.environment_preset(name)
+    local c = {}
+    for k, v in pairs(e) do c[k] = v end
+    -- Os campos de ligar (céu, névoa, sombras) e a distância das sombras
+    -- são sempre os da cena.
+    c.sky, c.fog, c.shadows, c.shadow_distance = base.sky, base.fog, base.shadows, base.shadow_distance
+    c.cycle, c.day_length, c.start_hour = base.cycle, base.day_length, base.start_hour
+    c.stars = STARS[name] or 0
+    return c
+  end
+  local e
+  for i = 1, #DAY_KEYS - 1 do
+    local a, b = DAY_KEYS[i], DAY_KEYS[i + 1]
+    if h >= a[1] and h <= b[1] then
+      local t = b[1] > a[1] and (h - a[1]) / (b[1] - a[1]) or 0
+      e = M.mix_environment(key(a[2]), key(b[2]), t)
+      break
+    end
+  end
+  -- O sol: nasce a leste às 6h, fica mais alto ao meio-dia (a altura do
+  -- sol da cena) e se põe a oeste às 18h. De noite, a lua faz o mesmo.
+  local alto = math.max(20, math.min(85, tonumber(base.sun_height) or 50))
+  local lado = tonumber(base.sun_turn) or 120
+  local sol = math.sin(math.pi * (h - 6) / 12)
+  if h >= 6 and h <= 18 then
+    e.sun_height = math.max(1, sol * alto)
+    e.sun_turn = lado - 90 + 180 * (h - 6) / 12
+    e.sun_color = M.mix_color("#000000", e.sun_color, smooth(0, 0.12, sol))
+  else
+    local hn = (h - 18) % 24
+    local lua = math.sin(math.pi * hn / 12)
+    e.sun_height = math.max(1, lua * 45)
+    e.sun_turn = lado + 90 + 180 * hn / 12
+    e.sun_color = M.mix_color("#000000", key("noite").sun_color, smooth(0, 0.15, lua))
+    e.sun_size = 3
+  end
+  return e
+end
+
+--- O ambiente da cena 3D agora (com Dia e noite, o da hora atual).
+function M.refresh_environment(scene)
+  if not scene._3d or not scene._data then return end
+  local env = scene._data.environment
+  local e
+  if scene._env_now then
+    e = scene._env_now
+  elseif scene._cycle then
+    -- A hora em passos de meio minuto do jogo: o sol anda aos poucos e a
+    -- sombra não treme.
+    e = M.environment_at(env, math.floor(scene._hour * 120) / 120)
+  else
+    e = M.environment_at(env, 12)
+  end
+  if scene._env_blend then
+    local b = scene._env_blend
+    e = M.mix_environment(b.from, e, math.min(1, b.t / b.dur))
+  end
+  scene._environment = M.apply_environment(e)
+  -- "De noite" vale também sem o ciclo, num ambiente escuro (noite, caverna).
+  if scene._cycle and not scene._env_now then
+    scene._night = M.is_night_hour(scene._hour)
+  else
+    local r, g, b = hex_rgb(scene._environment.sun_color)
+    scene._night = (0.3 * r + 0.59 * g + 0.11 * b) < 0.5
+  end
+end
+
+-- As variáveis do relógio: hora (número, 0 a 23), relogio ("14:30") e dia.
+local function clock_vars(scene)
+  if not nn.vars then return end
+  local h = scene._hour or 12
+  nn.vars.hora = math.floor(h)
+  nn.vars.relogio = ("%02d:%02d"):format(math.floor(h), math.floor((h % 1) * 60))
+  nn.vars.dia = scene._day or 1
+end
+
+--- Começa o ambiente de uma cena 3D (na hora de começar, com Dia e noite).
+function M.start_environment(scene, env)
+  env = env or {}
+  scene._cycle = env.cycle == true
+  scene._hour = tonumber(env.start_hour) or 9
+  scene._day = 1
+  scene._time_paused = false
+  scene._env_now, scene._env_blend = nil, nil
+  M.refresh_environment(scene)
+  if scene._cycle then clock_vars(scene) end
+end
+
+-- A cada quadro: a hora anda e, ao passar das 6h ou das 18h, os eventos
+-- de amanhecer e anoitecer.
+local function update_day(scene, dt)
+  if not scene._3d then return end
+  if scene._env_blend then
+    scene._env_blend.t = scene._env_blend.t + dt
+    if scene._env_blend.t >= scene._env_blend.dur then scene._env_blend = nil end
+  end
+  if scene._cycle and not scene._time_paused then
+    local len = math.max(0.05, tonumber(scene._data.environment and scene._data.environment.day_length) or 4)
+    local antes = scene._hour
+    scene._hour = scene._hour + dt * 24 / (len * 60)
+    if scene._hour >= 24 then
+      scene._hour = scene._hour - 24
+      scene._day = scene._day + 1
+    end
+    local function passou(h)
+      if antes <= scene._hour then return antes < h and scene._hour >= h end
+      return antes < h or scene._hour >= h
+    end
+    if M.events then
+      if passou(6) then M.events.signal(scene, { kind = "amanheceu" }) end
+      if passou(18) then M.events.signal(scene, { kind = "anoiteceu" }) end
+    end
+    clock_vars(scene)
+  end
+  if scene._cycle or scene._env_blend or scene._env_dirty then
+    scene._env_dirty = nil
+    M.refresh_environment(scene)
+  end
+end
+M.update_day = update_day
+
+--- Muda a hora (0 a 24), com Dia e noite.
+function M.set_time(scene, h)
+  scene._hour = (tonumber(h) or 0) % 24
+  clock_vars(scene)
+  -- O céu muda no próximo quadro (no update da cena).
+  scene._env_dirty = true
+  if scene._cycle then scene._night = M.is_night_hour(scene._hour) end
+end
+
+--- Troca o ambiente por um pronto (ou uma tabela), aos poucos em `seconds`.
+--- Com Dia e noite, o tempo para até continuar (scene:resume_time()).
+function M.change_environment(scene, preset, seconds)
+  local e = type(preset) == "table" and preset or M.environment_preset(preset)
+  if not e then
+    error(("ambiente pronto desconhecido \"%s\" (use dia, amanhecer, entardecer, noite ou caverna)"):format(tostring(preset)), 0)
+  end
+  if preset == "dia" then
+    -- O dia é o da própria cena.
+    e = M.environment_at(scene._data.environment, 12)
+    e.cycle = false
+  end
+  local from = scene._environment
+  scene._env_now = e
+  if scene._cycle then scene._time_paused = true end
+  local dur = tonumber(seconds) or 0
+  scene._env_blend = (dur > 0 and from) and { from = from, t = 0, dur = dur } or nil
+  scene._env_dirty = true
+end
+
+--- Para ou continua o tempo (Dia e noite). Continuando depois de um
+--- ambiente trocado, as cores voltam às da hora aos poucos.
+function M.pause_time(scene, paused)
+  scene._time_paused = paused and true or false
+  if not paused and scene._env_now then
+    local from = scene._environment
+    scene._env_now = nil
+    scene._env_blend = from and { from = from, t = 0, dur = 1.5 } or nil
+    scene._env_dirty = true
+  end
 end
 
 --- 3D: põe a câmera do jogo onde está o objeto com camera3d (olhando para
@@ -2624,7 +2872,7 @@ function M.setup(scene, data, path)
   M.arrange_all(scene)
   sort_objects(scene)
 
-  if scene._3d then scene._environment = M.apply_environment(data.environment) end
+  if scene._3d then M.start_environment(scene, data.environment) end
   -- Aberta por cima de outra cena: a câmera e o fundo são os da de baixo.
   if not scene.overlay then
     if scene.background then nn.window.set_clear_color(scene.background) end
@@ -2785,6 +3033,7 @@ function M.update(scene, dt)
   if scene._3d then shake3_restore(scene) end
   scene._dt = dt
   if (scene._hitstop or 0) > 0 then return end
+  update_day(scene, dt)
   update_numbers(scene, dt)
   refresh_list(scene)
   if M.ui then M.ui.update(scene, dt) end
@@ -3039,6 +3288,8 @@ M.flicker_noise = flicker_noise
 --- o renderer neste quadro.
 function M.draw_light(o, c, m)
   if not c.on or c.intensity <= 0 or c.range <= 0 then return end
+  -- Só à noite: acesa do anoitecer ao amanhecer (ou num ambiente escuro).
+  if c.night and not (o.scene and o.scene._night) then return end
   local x, y, z = m:position()
   local k, r = c.intensity, c.range
   if c.flicker > 0 then
@@ -3079,7 +3330,10 @@ local function draw_object(o, alpha)
         c._draw = d
       end
       d.matrix, d.color, d.shadow, d.animator = m3, o._tint or c.color, c.shadow, c._anim
-      d.glow = c.glow
+      -- Brilha só à noite: de dia, nem o brilho do arquivo do modelo.
+      local dia = c.glow_night and not (o.scene and o.scene._night)
+      d.glow = dia and 0 or c.glow
+      d.emissive = not dia
       nn.d3.draw(c._model or c._mesh, d)
     elseif c.type == "light3d" and o.scene and o.scene._3d then
       m3 = m3 or o:matrix3d(alpha)
@@ -3210,7 +3464,7 @@ function M.live(scene, msg)
     -- O Ambiente de uma cena 3D (a tabela inteira).
     if scene._3d then
       scene._data.environment = msg.value
-      scene._environment = M.apply_environment(msg.value)
+      M.start_environment(scene, msg.value)
     end
     return
   end
@@ -3433,9 +3687,7 @@ function M.new(data, path)
     if self.background and not self.overlay then nn.window.set_clear_color(self.background) end
     -- 3D: o céu, o sol e a névoa desta cena de novo (a de cima pode ter
     -- trocado, como uma caverna escura).
-    if self._3d and self._data and not self.overlay then
-      self._environment = M.apply_environment(self._data.environment)
-    end
+    if self._3d and self._data and not self.overlay then M.refresh_environment(self) end
     call("resume", self)
   end
 
@@ -3524,6 +3776,32 @@ function M.new(data, path)
   end
 
   --- Para o jogo um instante (a pausa no acerto), em segundos.
+  --- Dia e noite: a hora (0 a 24) e o dia (1, 2, ...).
+  function scene:time_of_day()
+    return self._hour or 12, self._day or 1
+  end
+
+  --- Dia e noite: muda a hora.
+  function scene:set_time(h)
+    M.set_time(self, h)
+  end
+
+  --- Troca o ambiente por um pronto ("dia", "amanhecer", "entardecer",
+  --- "noite", "caverna") ou uma tabela, aos poucos em `segundos`.
+  function scene:environment(preset, seconds)
+    M.change_environment(self, preset, seconds)
+  end
+
+  --- Dia e noite: para (true) ou continua (false) o tempo.
+  function scene:pause_time(paused)
+    M.pause_time(self, paused)
+  end
+
+  --- De noite? (Com Dia e noite, das 18h às 6h; sem, num ambiente escuro.)
+  function scene:is_night()
+    return self._night == true
+  end
+
   function scene:hitstop(seconds)
     M.hitstop(self, seconds)
   end

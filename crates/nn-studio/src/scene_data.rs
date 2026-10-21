@@ -526,6 +526,77 @@ impl SceneData {
         }
     }
 
+    /// O ambiente como o jogo vai mostrar ao começar: com Dia e noite, o da
+    /// hora em que ele começa (o mesmo `M.environment_at` do jogo), e se é
+    /// de noite (para as luzes "Só à noite").
+    pub fn environment_now(&self) -> EnvironmentNow {
+        thread_local! {
+            static LUA: (Lua, Table) = {
+                let lua = Lua::new();
+                let module: Table = lua
+                    .load(nn_script::SCENE_RUNTIME)
+                    .eval()
+                    .expect("módulo das cenas da engine");
+                (lua, module)
+            };
+        }
+        let keys: Vec<String> = schema()
+            .environment
+            .iter()
+            .map(|(k, _)| k.clone())
+            .collect();
+        LUA.with(|(lua, module)| {
+            let run = || -> mlua::Result<EnvironmentNow> {
+                let env = lua.create_table()?;
+                for k in &keys {
+                    let v = match self.env(k) {
+                        Prop::Num(n) => Value::Number(n),
+                        Prop::Bool(b) => Value::Boolean(b),
+                        Prop::Str(s) => Value::String(lua.create_string(&s)?),
+                    };
+                    env.set(k.as_str(), v)?;
+                }
+                let at: mlua::Function = module.get("environment_at")?;
+                let hour = self.env("start_hour").num();
+                let e: Table = at.call((env, hour))?;
+                let mut values = BTreeMap::new();
+                for k in keys.iter().map(String::as_str).chain(["stars"]) {
+                    if let Some(p) = e.get::<Value>(k).ok().as_ref().and_then(to_prop) {
+                        values.insert(k.to_string(), p);
+                    }
+                }
+                let night = if self.env("cycle").bool() {
+                    let f: mlua::Function = module.get("is_night_hour")?;
+                    f.call(hour)?
+                } else {
+                    let c = values
+                        .get("sun_color")
+                        .map(|p| p.str().to_string())
+                        .unwrap_or_default();
+                    let hex = u32::from_str_radix(
+                        c.trim_start_matches('#').get(..6).unwrap_or("FFFFFF"),
+                        16,
+                    )
+                    .unwrap_or(0xFFFFFF);
+                    let (r, g, b) = (
+                        ((hex >> 16) & 255) as f64 / 255.0,
+                        ((hex >> 8) & 255) as f64 / 255.0,
+                        (hex & 255) as f64 / 255.0,
+                    );
+                    0.3 * r + 0.59 * g + 0.11 * b < 0.5
+                };
+                Ok(EnvironmentNow { values, night })
+            };
+            run().unwrap_or_else(|e| {
+                log::warn!("ambiente: {e}");
+                EnvironmentNow {
+                    values: keys.iter().map(|k| (k.clone(), self.env(k))).collect(),
+                    night: false,
+                }
+            })
+        })
+    }
+
     pub fn env(&self, key: &str) -> Prop {
         self.environment
             .iter()
@@ -635,6 +706,21 @@ pub struct Schema {
     /// Ambientes prontos (`M.ENVIRONMENT_PRESETS`): id, nome e o ambiente
     /// inteiro (o padrão com os campos dele por cima).
     pub environment_presets: Vec<EnvironmentPreset>,
+}
+
+/// O ambiente de uma cena 3D na hora em que o jogo começa (veja
+/// [`SceneData::environment_now`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnvironmentNow {
+    pub values: BTreeMap<String, Prop>,
+    /// De noite: as luzes "Só à noite" acendem.
+    pub night: bool,
+}
+
+impl EnvironmentNow {
+    pub fn get(&self, key: &str) -> Prop {
+        self.values.get(key).cloned().unwrap_or(Prop::Num(0.0))
+    }
 }
 
 /// Um ambiente pronto: id, nome e o ambiente inteiro.

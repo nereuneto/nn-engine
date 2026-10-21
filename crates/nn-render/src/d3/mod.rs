@@ -204,6 +204,8 @@ pub struct Sky3D {
     pub bottom: Color,
     /// Tamanho do sol, em graus (0 = sem disco).
     pub sun_size: f32,
+    /// Estrelas no céu, de 0 (nenhuma) a 1 (a noite inteira).
+    pub stars: f32,
 }
 
 impl Default for Sky3D {
@@ -213,6 +215,7 @@ impl Default for Sky3D {
             horizon: Color::hex(0xBFE3F2),
             bottom: Color::hex(0x8C9BA5),
             sun_size: 3.0,
+            stars: 0.0,
         }
     }
 }
