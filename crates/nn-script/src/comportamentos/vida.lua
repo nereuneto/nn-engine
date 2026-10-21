@@ -23,6 +23,11 @@ local B = {
       help = "Uma barrinha flutuando em cima do objeto (bom para inimigos e chefes)." },
     { "cor_barra", "#FF5A5A", type = "color", label = "Cor da barra", advanced = true,
       show_if = { "barra", true } },
+    { "numeros", false, label = "Mostrar o dano (números)",
+      help = "Um número sobe de quem leva dano, com quanto tirou (bom para inimigos e chefes)." },
+    { "vermelho", true, label = "Fica vermelho ao levar dano", advanced = true },
+    { "tremer", 0, label = "Treme a câmera ao levar dano", min = 0, advanced = true,
+      help = "A força do tremor (0 = não treme; 6 é leve). Bom para o jogador." },
   },
 }
 
@@ -33,6 +38,7 @@ function B:start()
     if v and v > 0 then self.atual = v else nn.vars[self.variavel] = self.vidas end
   end
   self.inv = 0
+  self.cor = 0
 end
 
 function B:update(dt)
@@ -40,13 +46,25 @@ function B:update(dt)
     self.inv = self.inv - dt
     if self.piscar then self.obj.visible = self.inv <= 0 or math.floor(self.inv * 15) % 2 == 0 end
   end
+  if self.cor > 0 then
+    self.cor = self.cor - dt
+    if self.cor <= 0 then self.obj._tint = nil end
+  end
 end
 
---- Tira `n` vidas. Devolve false se estava invencível.
-function B:dano(n)
+--- Tira `n` vidas (`de`: quem bateu). Devolve false se estava invencível.
+function B:dano(n, de)
   if self.inv > 0 or self.atual <= 0 then return false end
-  self:mudar(self.atual - (n or 1))
-  self.obj:send("levou_dano", n or 1)
+  n = n or 1
+  if type(de) == "table" and de.alive ~= nil then self.de = de end
+  self:mudar(self.atual - n)
+  self.obj:send("levou_dano", n, de)
+  if self.numeros and n > 0 then self.scene:damage_number(self.obj, n) end
+  if self.vermelho and n > 0 then
+    self.cor = 0.15
+    self.obj._tint = "#FF6A6A"
+  end
+  if self.tremer > 0 then self.scene:shake(self.tremer, 0.25) end
   if self.atual <= 0 then
     self:acabou()
   else
@@ -68,8 +86,10 @@ end
 
 function B:acabou()
   self.obj.visible = true
-  -- Para os eventos ("Quando a vida de ... acabar").
-  self.obj:send("vida_acabou")
+  self.obj._tint = nil
+  -- Para os eventos ("Quando a vida de ... acabar" e "Quando ... derrotar").
+  self.obj:send("vida_acabou", self.de)
+  if self.de and self.de.alive then self.de:send("derrotou", self.obj) end
   if self.ao_acabar == "nada" then
     return
   elseif self.ao_acabar == "destruir" then

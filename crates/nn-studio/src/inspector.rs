@@ -35,6 +35,8 @@ enum W {
     Object,
     /// Nome de uma animação da imagem do objeto.
     Anim,
+    /// Um osso do modelo do pai (componente Preso a um osso).
+    Bone,
     /// Cor que, vazia, vem do tema da interface (a chave do tema).
     ThemeColor(&'static str),
     /// Variável do jogo.
@@ -1082,6 +1084,11 @@ const TERRAIN_FIELDS: &[F] = &[
     f("water_color", "Cor da água", W::Color),
 ];
 
+const BONE_FIELDS: &[F] = &[help(
+    f("bone", "Osso", W::Bone),
+    "O osso do modelo do pai em que o objeto fica preso (\"mao_d\" é a mão direita do herói). A posição, a rotação e a escala do objeto contam a partir do osso: ajuste com o mouse até a arma ficar certa na mão.",
+)];
+
 const ANIM3D_FIELDS: &[F] = &[
     help(
         f("animation", "Animação", W::Anim),
@@ -1387,7 +1394,7 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
 pub fn is_3d_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "model" | "shape3d" | "camera3d" | "body3d" | "anim3d" | "terrain" | "text3d"
+        "model" | "shape3d" | "camera3d" | "body3d" | "anim3d" | "terrain" | "text3d" | "bone"
     )
 }
 
@@ -1404,6 +1411,7 @@ fn fields(kind: &str) -> &'static [F] {
         "camera3d" => CAMERA3D_FIELDS,
         "body3d" => BODY3D_FIELDS,
         "anim3d" => ANIM3D_FIELDS,
+        "bone" => BONE_FIELDS,
         "terrain" => TERRAIN_FIELDS,
         "text3d" => TEXT3D_FIELDS,
         "sprite" => SPRITE_FIELDS,
@@ -1527,6 +1535,10 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "anim3d" => (
             "Animação 3D",
             "Toca uma animação do modelo 3D (andar, acenar...), com velocidade e repetir.",
+        ),
+        "bone" => (
+            "Preso a um osso",
+            "Para segurar: uma espada ou um cajado na mão do personagem, que acompanha a animação. Ponha o objeto como filho do personagem.",
         ),
         "body3d" => (
             "Corpo 3D",
@@ -1755,6 +1767,8 @@ enum Wd {
     /// Animação da imagem do objeto (ou, num comportamento, também uma
     /// lista de quadros).
     Anim,
+    /// Um osso de um modelo 3D; o texto é o que mostrar quando vazio.
+    Bone(String),
     /// Cor que, vazia, vem do tema da interface.
     ThemeColor(&'static str),
     /// Variável do jogo.
@@ -1792,6 +1806,7 @@ impl From<&F> for Spec {
             W::File(k) => Wd::File(k),
             W::Object => Wd::Object("(nenhum)"),
             W::Anim => Wd::Anim,
+            W::Bone => Wd::Bone("(nenhum)".into()),
             W::ThemeColor(k) => Wd::ThemeColor(k),
             W::Var => Wd::Var,
             W::Font => Wd::Font,
@@ -1877,6 +1892,7 @@ fn behavior_spec(info: &BehaviorInfo, p: &behaviors::PropSpec) -> Spec {
         PropType::Image => Wd::File(FileKind::Image),
         PropType::Dialogue => Wd::File(FileKind::Dialogue),
         PropType::Anim => Wd::Anim,
+        PropType::Bone => Wd::Bone(p.allow_empty.clone().unwrap_or_else(|| "(nenhum)".into())),
         PropType::Tile => Wd::Int {
             min: 0.0,
             max: 1_000_000.0,
@@ -2463,6 +2479,15 @@ impl Inspector {
             return;
         }
         let mut chosen: Vec<Component> = Vec::new();
+        // Os ossos do modelo do pai (Preso a um osso já vem com uma mão).
+        let parent_bones = doc
+            .data
+            .parent_of(id)
+            .flatten()
+            .and_then(|p| doc.data.find(p))
+            .and_then(|p| p.component("model"))
+            .map(|m| sizes.model_bones(files.root(), m.str("file")))
+            .unwrap_or_default();
         let add_menu = ui.menu_button("➕ Adicionar componente", |ui| {
             let order = &crate::scene_data::schema().order;
             let is_ui = |k: &str| {
@@ -2483,7 +2508,7 @@ impl Inspector {
                 let exists = o.component(kind).is_some();
                 let unique = matches!(
                     kind,
-                    "body" | "camera" | "map" | "layout" | "body3d" | "anim3d" | "terrain"
+                    "body" | "camera" | "map" | "layout" | "body3d" | "anim3d" | "terrain" | "bone"
                 );
                 if ui
                     .add_enabled(!(exists && unique), egui::Button::new(title))
@@ -2498,6 +2523,11 @@ impl Inspector {
                     if kind == "text" && doc.data.three_d {
                         // No 3D, texto é do HUD (fica na tela).
                         c.set("hud", Prop::Bool(true));
+                    }
+                    if kind == "bone"
+                        && let Some(b) = hand_bone(&parent_bones)
+                    {
+                        c.set("bone", Prop::Str(b));
                     }
                     if kind == "body" {
                         // O corpo já vem do tamanho do que aparece.
@@ -2648,6 +2678,11 @@ impl Inspector {
                     .map(|c| sizes.model_anims(files.root(), c.str("file")))
             })
             .unwrap_or_default();
+        // Campos de osso: os do modelo 3D do objeto.
+        let bones = o
+            .component("model")
+            .map(|c| sizes.model_bones(files.root(), c.str("file")))
+            .unwrap_or_default();
         let mut changes: Vec<(String, Prop)> = Vec::new();
         let mut reverts: Vec<String> = Vec::new();
         let script = comp.str("script").to_string();
@@ -2717,9 +2752,16 @@ impl Inspector {
                     }
                     let current = value(&p.key);
                     ui.horizontal(|ui| {
-                        if let Some(new) =
-                            field_widget(ui, &spec, &current, files, names, &anims, (id, ci))
-                        {
+                        if let Some(new) = field_widget(
+                            ui,
+                            &spec,
+                            &current,
+                            files,
+                            names,
+                            &anims,
+                            &bones,
+                            (id, ci),
+                        ) {
                             changes.push((p.key.clone(), new));
                         }
                         // Valor no jogo aberto, se mudou (o jogo pode mexer nele).
@@ -2811,6 +2853,24 @@ impl Inspector {
         } else {
             Vec::new()
         };
+        // Preso a um osso: os ossos do modelo do pai.
+        let bones = if comp.kind == "bone" {
+            doc.data
+                .parent_of(id)
+                .flatten()
+                .and_then(|p| doc.data.find(p))
+                .and_then(|p| p.component("model"))
+                .map(|m| sizes.model_bones(files.root(), m.str("file")))
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        if comp.kind == "bone" && bones.is_empty() {
+            ui.colored_label(
+                crate::theme::WARNING,
+                "Ponha este objeto como filho de um personagem com esqueleto (arraste para cima dele na Hierarquia).",
+            );
+        }
         // Partículas: efeitos prontos e soltar na prévia.
         if comp.kind == "particles" {
             ui.horizontal_wrapped(|ui| {
@@ -2889,7 +2949,7 @@ impl Inspector {
                     field_row(ui, &spec, overridden, &mut reverts);
                     let current = comp.get(&spec.key).cloned().unwrap_or(Prop::Num(0.0));
                     if let Some(new) =
-                        field_widget(ui, &spec, &current, files, names, &anims, (id, ci))
+                        field_widget(ui, &spec, &current, files, names, &anims, &bones, (id, ci))
                     {
                         changes.push((spec.key.clone(), new));
                     }
@@ -3131,6 +3191,7 @@ fn field_widget(
     files: &FileTree,
     names: &[String],
     anims: &[String],
+    bones: &[String],
     salt: (u32, usize),
 ) -> Option<Prop> {
     let width = ui.available_width().clamp(80.0, 180.0);
@@ -3232,6 +3293,7 @@ fn field_widget(
             changed.then_some(Prop::Str(v))
         }
         Wd::Anim => anim_field(ui, spec, current, anims, salt, width),
+        Wd::Bone(empty) => bone_field(ui, spec, current, bones, empty, salt, width),
         Wd::ThemeColor(key) => theme_color_field(ui, current, key),
         Wd::Var => var_field(ui, current, width),
         Wd::OptColor => {
@@ -3477,6 +3539,71 @@ fn anim_field(
             });
         }
     });
+    changed.then_some(Prop::Str(v))
+}
+
+/// A mão direita entre os ossos de um modelo: "mao_d" (os nossos), a do
+/// Mixamo ("mixamorig:RightHand") ou um nome parecido.
+pub fn hand_bone(bones: &[String]) -> Option<String> {
+    let low = |b: &String| b.to_lowercase();
+    bones
+        .iter()
+        .find(|b| low(b) == "mao_d")
+        .or_else(|| bones.iter().find(|b| low(b).ends_with("righthand")))
+        .or_else(|| {
+            bones.iter().find(|b| {
+                let l = low(b);
+                (l.contains("hand") || l.contains("mao") || l.contains("mão"))
+                    && (l.contains("right")
+                        || l.ends_with("_r")
+                        || l.ends_with(".r")
+                        || l.ends_with("_d"))
+            })
+        })
+        .cloned()
+}
+
+/// Um osso de um modelo: a lista dos ossos (ou texto, se o editor não
+/// conhece o modelo).
+fn bone_field(
+    ui: &mut egui::Ui,
+    spec: &Spec,
+    current: &Prop,
+    bones: &[String],
+    empty: &str,
+    salt: (u32, usize),
+    width: f32,
+) -> Option<Prop> {
+    let mut v = current.str().to_string();
+    if bones.is_empty() {
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut v)
+                .desired_width(width)
+                .hint_text(empty),
+        );
+        return r.changed().then_some(Prop::Str(v));
+    }
+    let mut changed = false;
+    let r = egui::ComboBox::from_id_salt(("osso", salt, &spec.key))
+        .width(width)
+        .truncate()
+        .selected_text(if v.is_empty() {
+            empty.to_string()
+        } else {
+            v.clone()
+        })
+        .show_ui(ui, |ui| {
+            changed |= ui.selectable_value(&mut v, String::new(), empty).changed();
+            for b in bones {
+                changed |= ui.selectable_value(&mut v, b.clone(), b).changed();
+            }
+        });
+    if !v.is_empty() && !bones.contains(&v) {
+        r.response.on_hover_text(format!(
+            "O modelo não tem o osso \"{v}\". Tem: {}",
+            bones.join(", ")
+        ));
+    }
     changed.then_some(Prop::Str(v))
 }
 

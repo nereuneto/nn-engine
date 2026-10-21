@@ -128,7 +128,7 @@ fn todos_os_comportamentos_prontos_se_descrevem_sem_a_engine() {
             assert!(
                 [
                     "number", "bool", "text", "color", "choice", "object", "scene", "prefab",
-                    "sound", "image", "anim", "dialogue"
+                    "sound", "image", "anim", "dialogue", "bone"
                 ]
                 .contains(&ty.as_str()),
                 "{id}.{key}: tipo {ty}"

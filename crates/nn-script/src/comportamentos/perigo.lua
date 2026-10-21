@@ -66,6 +66,7 @@ function B:encostou(quem)
         local x, y = self.obj:world_transform()
         self.scene:burst(x, y)
       end
+      quem:send("derrotou", self.obj)
       self.obj:destroy()
     end
     return

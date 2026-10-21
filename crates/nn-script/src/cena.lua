@@ -134,6 +134,12 @@ M.FIELDS = {
   anim3d = {
     { "animation", "" }, { "speed", 1 }, { "loop", true },
   },
+  -- Preso a um osso do modelo do pai (uma espada na mão do herói): o objeto
+  -- acompanha o osso quando o pai anima. A posição, a rotação e a escala do
+  -- objeto contam a partir do osso.
+  bone = {
+    { "bone", "" },
+  },
   -- Corpo da física 3D. Forma "auto": parado (ou kinematic) com modelo usa a
   -- malha exata; o resto, uma caixa, esfera, cápsula ou cilindro do tamanho
   -- do modelo ou da forma.
@@ -474,6 +480,12 @@ function Object:matrix3d(alpha)
     x, y, z = p[1] + (x - p[1]) * alpha, p[2] + (y - p[2]) * alpha, p[3] + (z - p[3]) * alpha
   end
   local pm = self.parent and self.parent:matrix3d(alpha) or false
+  -- Preso a um osso: o pai, depois o osso dele agora (muda a cada quadro).
+  if self._bone and pm then
+    local a = M.model_animator(self.parent)
+    local b = a and a:bone(self._bone)
+    if b then pm = pm * b end
+  end
   -- A última matriz fica guardada: o que não se mexeu (a maioria das coisas
   -- de uma cena) não monta outra a cada quadro.
   local c = self._m3
@@ -631,7 +643,8 @@ end
 --- função (ex.: `jogador:send("dano", 1)`). Devolve o primeiro resultado.
 function Object:send(msg, ...)
   if self.scene and M.events then
-    M.events.signal(self.scene, { kind = "mensagem", obj = self, msg = msg, arg = (...) })
+    M.events.signal(self.scene, { kind = "mensagem", obj = self, msg = msg, arg = (...),
+      arg2 = select(2, ...) })
   end
   local result
   for _, b in ipairs(self.behaviors) do
@@ -1078,6 +1091,162 @@ function M.targets(scene, who)
     end
   end
   return out
+end
+
+-- Combate --------------------------------------------------------------------
+
+--- Os inimigos de quem ataca: para o jogador, quem tem Vida ou é um Inimigo
+--- 3D (menos os jogadores); para os outros, os jogadores. Sem ninguém (um
+--- tiro solto), todos que têm Vida. Com `who`, os objetos com esse nome.
+function M.foes(scene, by, who)
+  if who and who ~= "" then return M.targets(scene, who) end
+  local out = {}
+  if by and not by._player then return M.targets(scene, "") end
+  for _, o in ipairs(scene.object_list) do
+    if o.alive and o ~= by and not (by and o._player) then
+      for _, b in ipairs(o.behaviors) do
+        local s = b.component.script
+        if b.enabled and (type(b.dano) == "function" or s == "nn:inimigo3d") then
+          table.insert(out, o)
+          break
+        end
+      end
+    end
+  end
+  return out
+end
+
+--- `by` acerta `target` com `amount` de dano: tira vida (comportamento Vida),
+--- empurra para longe de `by` (ou na direção `opts.dx, opts.dz`) e manda
+--- "acertou" (alvo, dano) para quem bateu; se a vida acabar, o Vida manda
+--- "derrotou". Sem Vida, um Inimigo 3D ou um Perigo é derrotado de uma vez.
+--- Devolve true se acertou, false se o alvo estava invencível e nil se não
+--- dá para machucar ele.
+function M.hit(scene, by, target, amount, opts)
+  opts = opts or {}
+  if not (target and target.alive) then return nil end
+  amount = amount or 1
+  local ok = target:send("dano", amount, by)
+  if ok == nil then
+    if not (target:behavior("inimigo3d") or target:behavior("perigo") or opts.kill) then return nil end
+    if by and by.alive then by:send("acertou", target, amount) end
+    if scene._3d then
+      local x, y, z = target:position3d()
+      scene:burst(x, y + 0.4, "#FF6B6B", 20, z)
+    else
+      local x, y = target:world_transform()
+      scene:burst(x, y, "#FF6B6B", 20)
+    end
+    if by and by.alive then by:send("derrotou", target) end
+    target:send("derrotado", by)
+    target:destroy()
+    return true
+  end
+  if not ok then return false end
+  local push = opts.push or 0
+  local b = target.body
+  if push > 0 and target.alive and b and b.alive then
+    if scene._3d then
+      local dx, dz = opts.dx, opts.dz
+      if not dx and by then
+        local x, _, z = by:position3d()
+        local tx, _, tz = target:position3d()
+        dx, dz = tx - x, tz - z
+      end
+      dx, dz = dx or 0, dz or 1
+      local n = math.sqrt(dx * dx + dz * dz)
+      if n < 1e-3 then dx, dz, n = 0, 1, 1 end
+      b:set_velocity(dx / n * push, push * (opts.up or 0.5), dz / n * push)
+      target.empurrado = opts.stun or 0.3
+    else
+      local dx = opts.dx
+      if not dx and by then
+        local x = by:world_transform()
+        local tx = target:world_transform()
+        dx = tx >= x and 1 or -1
+      end
+      b.vx = (dx or 1) >= 0 and push or -push
+      b.vy = push * (opts.up or 0.5)
+      target.empurrado = opts.stun or 0.25
+    end
+  end
+  if by and by.alive then by:send("acertou", target, amount) end
+  return true
+end
+
+--- Treme a câmera (`strength` em pixels; no 3D, 80 pixels = 1 metro) por
+--- `seconds` segundos.
+function M.shake(scene, strength, seconds)
+  seconds = seconds or 0.3
+  if scene._3d then
+    scene._shake3 = { force = (strength or 8) / 80, t = seconds, total = math.max(seconds, 1e-3) }
+  else
+    nn.camera.shake(strength or 8, seconds)
+  end
+end
+
+--- Um número subindo de cima de `o` (o dano que ele levou), que some
+--- sozinho. `color`: a cor (padrão: amarelo; vermelho no jogador).
+function M.damage_number(scene, o, n, color)
+  local num = { n = n, t = 0, dx = math.random() - 0.5,
+    color = color or (o._player and "#FF5A5A" or "#FFE066") }
+  if scene._3d then
+    local x0, _, z0, x1, y1, z1 = o:bounds3d()
+    num.x, num.y, num.z = (x0 + x1) / 2, y1 + 0.2, (z0 + z1) / 2
+  else
+    local x, y = o:world_transform()
+    local _, hh = o:bounds()
+    num.x, num.y = x, y + hh + 6
+  end
+  scene._numbers = scene._numbers or {}
+  table.insert(scene._numbers, num)
+end
+
+local function update_numbers(scene, dt)
+  local list = scene._numbers
+  if not list then return end
+  for i = #list, 1, -1 do
+    local n = list[i]
+    n.t = n.t + dt
+    if n.t > 0.9 then table.remove(list, i) end
+  end
+end
+
+local function draw_numbers(scene)
+  for _, n in ipairs(scene._numbers or {}) do
+    local a = math.max(0, math.min(1, (0.9 - n.t) / 0.35))
+    local text = tostring(n.n == math.floor(n.n) and math.floor(n.n) or n.n)
+    if scene._3d then
+      local alpha = string.format("%02X", math.floor(a * 255))
+      nn.d3.text(text, { x = n.x + n.dx * 0.3 * n.t, y = n.y + n.t * 1.1, z = n.z,
+        size = 0.42, color = n.color:sub(1, 7) .. alpha, outline = "#000000" .. alpha })
+    else
+      nn.draw.text(text, n.x + n.dx * 20 * n.t, n.y + n.t * 50,
+        { size = 22, color = n.color, alpha = a, anchor = "center" })
+    end
+  end
+end
+
+-- No 3D, o tremor mexe a câmera só no desenho deste quadro: no próximo, ela
+-- volta para onde estava (se ninguém a mudou).
+local function shake3_apply(scene, dt)
+  local sk = scene._shake3
+  if not sk then return end
+  local c = nn.d3.camera()
+  local f = sk.force * (sk.t / sk.total)
+  local ox, oy, oz = (math.random() * 2 - 1) * f, (math.random() * 2 - 1) * f, (math.random() * 2 - 1) * f
+  scene._shake3_base = c
+  nn.d3.camera({ x = c.x + ox, y = c.y + oy, z = c.z + oz,
+    target = { c.target.x + ox, c.target.y + oy, c.target.z + oz } })
+  sk.t = sk.t - dt
+  if sk.t <= 0 then scene._shake3 = nil end
+end
+
+local function shake3_restore(scene)
+  local c = scene._shake3_base
+  if not c then return end
+  scene._shake3_base = nil
+  nn.d3.camera({ x = c.x, y = c.y, z = c.z, target = { c.target.x, c.target.y, c.target.z } })
 end
 
 -- Interações ("E para abrir") ------------------------------------------------
@@ -1950,6 +2119,19 @@ function M.prepare(scene, o, c, live)
         o.name, tostring(c.shape), table.concat(M.SHAPES3D, ", ")), 0)
     end
     c._mesh = make()
+  elseif t == "bone" then
+    o._bone = nil
+    if c.bone ~= "" then
+      local a = o.parent and M.model_animator(o.parent)
+      if not a then
+        M.warn(("objeto \"%s\" (Preso a um osso): o pai precisa de um modelo 3D com esqueleto e animações"):format(o.name))
+      elseif not a:bone(c.bone) then
+        M.warn(("objeto \"%s\" (Preso a um osso): o modelo de \"%s\" não tem o osso \"%s\" (tem: %s)"):format(
+          o.name, o.parent.name, c.bone, table.concat(a:bones(), ", ")))
+      else
+        o._bone = c.bone
+      end
+    end
   elseif t == "camera3d" then
     scene._camera3d = scene._camera3d or o
   elseif t == "body3d" then
@@ -2228,7 +2410,7 @@ end
 local PREPARE_ORDER = {
   "map", "sprite", "body", "sound", "particles", "panel", "button", "bar", "icons",
   "slider", "checkbox", "textfield", "camera", "model", "anim3d", "shape3d", "camera3d", "body3d",
-  "terrain", "text3d",
+  "terrain", "text3d", "bone",
 }
 
 -- Mapas antes dos corpos: a câmera e a colisão dependem deles.
@@ -2442,6 +2624,9 @@ local function refresh_list(scene)
 end
 
 function M.update(scene, dt)
+  if scene._3d then shake3_restore(scene) end
+  scene._dt = dt
+  update_numbers(scene, dt)
   refresh_list(scene)
   if M.ui then M.ui.update(scene, dt) end
   -- Interações: o escolhido no quadro anterior responde à tecla neste.
@@ -2680,6 +2865,7 @@ end
 local ONLY_3D = {
   model = true, shape3d = true, terrain = true, text3d = true, camera3d = true, body3d = true,
   anim3d = true, behavior = true, sound = true, body = true, camera = true, layout = true,
+  bone = true,
 }
 
 local function draw_object(o, alpha)
@@ -2697,7 +2883,7 @@ local function draw_object(o, alpha)
         d = {}
         c._draw = d
       end
-      d.matrix, d.color, d.shadow, d.animator = m3, c.color, c.shadow, c._anim
+      d.matrix, d.color, d.shadow, d.animator = m3, o._tint or c.color, c.shadow, c._anim
       nn.d3.draw(c._model or c._mesh, d)
     elseif c.type == "text3d" and o.scene and o.scene._3d then
       m3 = m3 or o:matrix3d(alpha)
@@ -2757,13 +2943,13 @@ local function draw_object(o, alpha)
         nn.screen.sprite(c._img, hx, hy, {
           frame = frame, origin_x = 0.5, origin_y = 0.5,
           w = w * sx, h = h * sy, rotation = -rot * DEG,
-          color = c.color, flip_x = c.flip_x, flip_y = c.flip_y, tile_w = tw, tile_h = th,
+          color = o._tint or c.color, flip_x = c.flip_x, flip_y = c.flip_y, tile_w = tw, tile_h = th,
         })
       else
         nn.draw.sprite(c._img, x, y, {
           frame = frame,
           w = w * sx, h = h * sy, rotation = rot * DEG,
-          color = c.color, flip_x = c.flip_x, flip_y = c.flip_y, tile_w = tw, tile_h = th,
+          color = o._tint or c.color, flip_x = c.flip_x, flip_y = c.flip_y, tile_w = tw, tile_h = th,
         })
       end
     elseif t == "shape" then
@@ -2804,12 +2990,16 @@ function M.draw(scene)
     local W, H = nn.window.size()
     nn.screen.rect(0, 0, W, H, scene.background)
   end
-  if scene._3d then M.update_camera3d(scene) end
+  if scene._3d then
+    M.update_camera3d(scene)
+    shake3_apply(scene, scene._dt or 1 / 60)
+  end
   for _, o in ipairs(scene._draw_list or {}) do
     if o.alive and o:shown() then draw_object(o, alpha) end
   end
   for _, fx in pairs(scene._fx or {}) do fx:draw() end
   each_behavior(scene, "draw")
+  draw_numbers(scene)
   M.draw_paths(scene)
   draw_prompt(scene)
   if M.dialogue then M.dialogue.draw(scene) end
@@ -3089,6 +3279,27 @@ function M.new(data, path)
   --- Faíscas num ponto (no 3D: scene:burst(x, y, cor, quantas, z)).
   function scene:burst(x, y, color, count, z)
     M.burst(self, x, y, color, count, z)
+  end
+
+  --- Combate: `by` acerta `target` com `amount` de dano (veja M.hit).
+  --- `opts`: push (empurrão), dx/dz (direção), up, stun, kill.
+  function scene:hit(target, amount, by, opts)
+    return M.hit(self, by, target, amount, opts)
+  end
+
+  --- Quem `by` pode acertar ("" = os inimigos dele).
+  function scene:foes(by, who)
+    return M.foes(self, by, who)
+  end
+
+  --- Um número subindo de cima de `o` (o dano que levou).
+  function scene:damage_number(o, n, color)
+    M.damage_number(self, o, n, color)
+  end
+
+  --- Treme a câmera (no 2D e no 3D).
+  function scene:shake(strength, seconds)
+    M.shake(self, strength, seconds)
   end
 
   --- Guarda o ponto de reinício desta cena.

@@ -485,16 +485,36 @@ impl SceneData {
         let local = local_matrix3(o);
         match self.parent_of(id)? {
             None => Some(local),
-            Some(p) => Some(self.world_matrix3(p)? * local),
+            Some(p) => Some(self.world_matrix3(p)? * self.bone_matrix3(p, o) * local),
         }
     }
 
-    /// 3D: a matriz do pai no mundo (identidade na raiz).
+    /// 3D: a matriz do pai no mundo (identidade na raiz). Para um objeto
+    /// preso a um osso, a do osso (na pose de descanso).
     pub fn parent_matrix3(&self, id: u32) -> glam::Mat4 {
-        match self.parent_of(id).flatten() {
-            Some(p) => self.world_matrix3(p).unwrap_or(glam::Mat4::IDENTITY),
-            None => glam::Mat4::IDENTITY,
+        match (self.parent_of(id).flatten(), self.find(id)) {
+            (Some(p), Some(o)) => {
+                self.world_matrix3(p).unwrap_or(glam::Mat4::IDENTITY) * self.bone_matrix3(p, o)
+            }
+            _ => glam::Mat4::IDENTITY,
         }
+    }
+
+    /// Objeto preso a um osso (componente "bone"): onde o osso fica no
+    /// modelo do pai, na pose de descanso. Identidade sem osso (ou com um
+    /// modelo que o editor ainda não leu).
+    pub fn bone_matrix3(&self, parent: u32, o: &Object) -> glam::Mat4 {
+        let Some(bone) = o
+            .component("bone")
+            .map(|c| c.str("bone"))
+            .filter(|b| !b.is_empty())
+        else {
+            return glam::Mat4::IDENTITY;
+        };
+        self.find(parent)
+            .and_then(|p| p.component("model"))
+            .and_then(|m| bone_rest(m.str("file"), bone))
+            .unwrap_or(glam::Mat4::IDENTITY)
     }
 
     /// 3D: põe o objeto na posição, rotação e escala do mundo dadas pela
@@ -527,6 +547,36 @@ impl SceneData {
             None => self.environment.push((key.to_string(), value)),
         }
     }
+}
+
+thread_local! {
+    /// Os ossos dos modelos que o editor já leu: (modelo, osso) → onde o
+    /// osso fica na pose de descanso. Preenchido por `Sizes` ao ler um
+    /// modelo; vale para todas as cenas abertas.
+    static BONES: std::cell::RefCell<std::collections::HashMap<(String, String), glam::Mat4>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// Guarda os ossos de um modelo (na pose de descanso) para
+/// [`SceneData::bone_matrix3`].
+pub fn remember_bones(model: &str, bones: &[(String, glam::Mat4)]) {
+    BONES.with(|b| {
+        let mut b = b.borrow_mut();
+        b.retain(|(m, _), _| m != model);
+        for (name, m) in bones {
+            b.insert((model.to_string(), name.clone()), *m);
+        }
+    });
+}
+
+/// Onde um osso do modelo fica na pose de descanso (se o editor já leu o
+/// modelo).
+pub fn bone_rest(model: &str, bone: &str) -> Option<glam::Mat4> {
+    BONES.with(|b| {
+        b.borrow()
+            .get(&(model.to_string(), bone.to_string()))
+            .copied()
+    })
 }
 
 /// A rotação 3D do objeto (graus em volta de X, Y e Z, aplicados Y, X, Z:
@@ -648,6 +698,7 @@ pub fn schema() -> &'static Schema {
             "body3d",
             "terrain",
             "text3d",
+            "bone",
         ]
         .into_iter()
         .filter(|k| components.contains_key(*k))
@@ -1821,7 +1872,7 @@ mod tests {
     fn esquema_vem_da_engine() {
         let s = schema();
         assert!(s.order.contains(&"sprite".to_string()));
-        assert_eq!(s.order.len(), 23);
+        assert_eq!(s.order.len(), 24);
         assert_eq!(
             s.default_of("text3d", "facing"),
             Some(&Prop::Str("camera".into()))

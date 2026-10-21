@@ -987,3 +987,124 @@ fn capturas_dos_jogos_3d() {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
+
+/// Ferramenta: imagens do combate no Vale 3D (o herói golpeando um besouro,
+/// o número do dano e a barra de vida): `NN_SAIDA=<pasta> cargo test -p
+/// nn-run --test novo capturas_do_combate -- --ignored`.
+#[test]
+#[ignore]
+fn capturas_do_combate() {
+    let Some(out) = std::env::var_os("NN_SAIDA").map(PathBuf::from) else {
+        return;
+    };
+    let dir = temp("captura-combate");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Vale3D,
+    })
+    .unwrap();
+    let project = Project::open(&dir).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let config = project
+        .config
+        .clone()
+        .size(1280, 720)
+        .save_dir(dir.join("dados"))
+        .hot_reload(false);
+    let start = project.start.clone();
+    let Ok(mut h) = Headless::new(config, move |ctx| {
+        let mut s = rt.scene(start);
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(30);
+    let lua = rt2.lua();
+    lua.globals().set("C", h.game.0.table().unwrap()).unwrap();
+    // O herói de frente para o primeiro besouro, a câmera mais perto e de lado.
+    lua.load(
+        r#"
+        local b = C:find_all("Besouro")[1]
+        local bx, by, bz = b:position3d()
+        b:behavior("inimigo3d").enabled = false
+        b:behavior("golpe").enabled = false
+        local h = C.objects["Herói"]
+        h:move_to(bx, by + 0.1, bz + 1.6)
+        h.ry = 180
+        local cam = C._player_cam.cam
+        cam.distance = 3.2
+        cam.yaw = 120
+        cam.pitch = 12
+        "#,
+    )
+    .exec()
+    .unwrap();
+    h.run_frames(60);
+    h.save_png(out.join("combate-parado.png")).unwrap();
+    h.ctx.input.press_key(KeyCode::KeyJ);
+    h.run_frames(1);
+    h.ctx.input.release_key(KeyCode::KeyJ);
+    h.run_frames(6);
+    h.save_png(out.join("combate-golpe-alto.png")).unwrap();
+    h.run_frames(8);
+    h.save_png(out.join("combate-golpe-acerto.png")).unwrap();
+    h.run_frames(12);
+    h.save_png(out.join("combate-numero.png")).unwrap();
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    // O herói com um cajado e um Atirar com a magia (mira no meio da tela).
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Vale3D,
+    })
+    .unwrap();
+    let cena = dir.join("cenas/vale.cena");
+    let texto = std::fs::read_to_string(&cena)
+        .unwrap()
+        .replace("modelos/espada.glb", "modelos/cajado.glb")
+        .replacen(
+            r#"{ type = "behavior", script = "nn:golpe","#,
+            r#"{ type = "behavior", script = "nn:atirar", prefab = "prefabs/magia.prefab", osso = "mao_d", som = "assets/sons/tiro.wav" },
+        { type = "behavior", script = "nn:golpe","#,
+            1,
+        );
+    std::fs::write(&cena, texto).unwrap();
+    let project = Project::open(&dir).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let config = project
+        .config
+        .clone()
+        .size(1280, 720)
+        .save_dir(dir.join("dados"))
+        .hot_reload(false);
+    let start = project.start.clone();
+    let Ok(mut h) = Headless::new(config, move |ctx| {
+        let mut s = rt.scene(start);
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(30);
+    let lua = rt2.lua();
+    lua.globals().set("C", h.game.0.table().unwrap()).unwrap();
+    lua.load("local cam = C._player_cam.cam; cam.pitch = 6")
+        .exec()
+        .unwrap();
+    h.run_frames(30);
+    h.ctx.input.press_mouse(nn_input::MouseButton::Right);
+    h.run_frames(1);
+    h.ctx.input.release_mouse(nn_input::MouseButton::Right);
+    h.run_frames(14);
+    h.save_png(out.join("combate-magia.png")).unwrap();
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+}

@@ -23,6 +23,8 @@ local B = {
       advanced = true, show_if = { "camera", "atras" } },
     { "inverter_y", false, label = "Inverter o mouse para cima e para baixo", advanced = true,
       show_if = { "camera", "atras" } },
+    { "ombro", 0, label = "Câmera de lado (ombro)", advanced = true, show_if = { "camera", "atras" },
+      help = "Metros para a direita: o personagem fica um pouco à esquerda do meio da tela, bom para mirar. Com um Atirar que mira no meio da tela, 0 vira 0,6." },
     { "virar", true, label = "Virar para onde anda",
       help = "O modelo vira para a direção do movimento (a frente do modelo é o +Z)." },
     { "animar", true, label = "Animar o modelo",
@@ -86,6 +88,7 @@ function B:start()
     self.cam = nn.d3.third_person({
       distance = self.distancia, pitch = 18, height = h * 0.8,
       yaw = (o.ry or 0) + 180, sensitivity = self.sensibilidade, invert_y = self.inverter_y,
+      shoulder = self.ombro,
     })
     scene._player_cam = self
     if self.prender_mouse then
@@ -125,6 +128,8 @@ function B:update(dt)
     elseif not nn.window.mouse_captured() and nn.input.mouse_pressed("left") then
       nn.window.capture_mouse(true)
       self.scene._captured = true
+      -- Este clique só prende o mouse (não golpeia nem atira).
+      self.scene._mouse_preso_em = nn.time.frame()
     end
   end
   local ix, iy = nn.input.move()
@@ -132,6 +137,8 @@ function B:update(dt)
   local conversa = self.scene._dlg ~= nil
   if conversa then ix, iy = 0, 0 end
   local vx, vz = self:direcao(ix, iy)
+  -- Golpeando (comportamento Golpe): fica parado.
+  if o._golpeando and o._golpeando.parar then vx, vz = 0, 0 end
   if (o.empurrado or 0) > 0 then
     -- Levou um empurrão: o controle volta daqui a pouco.
     vx, vz = 0, 0
@@ -154,6 +161,8 @@ end
 function B:animar_modelo(vx, vz)
   local a = self.obj:animator()
   if not (self.animar and a) then return end
+  -- O Golpe (ou o Atirar) toca a animação dele.
+  if self.obj._golpeando or (self.obj._atirando or 0) > nn.time.elapsed() then return end
   local c = self.corpo
   local nome, repetir = nil, true
   if not c.on_ground and self.no_ar > 0.08 then

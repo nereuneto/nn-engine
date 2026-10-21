@@ -32,6 +32,9 @@ pub(crate) struct LThirdPerson {
     zoom: bool,
     /// Quão rápido acompanha o alvo (maior = mais grudado).
     follow: f32,
+    /// Metros para a direita (câmera "no ombro", para mirar): o alvo fica um
+    /// pouco à esquerda do meio da tela.
+    shoulder: f32,
     /// Distância atual (encurta na hora quando algo fica no caminho).
     current: f32,
     target: Option<Vec3>,
@@ -56,6 +59,7 @@ impl LThirdPerson {
             invert_y: opt::<bool>(o, "invert_y")?.unwrap_or(false),
             zoom: opt::<bool>(o, "zoom")?.unwrap_or(true),
             follow: n("follow", 12.0)?.max(0.0),
+            shoulder: n("shoulder", 0.0)?,
             current: distance,
             target: None,
             position: Vec3::ZERO,
@@ -109,6 +113,11 @@ impl UserData for LThirdPerson {
         f.add_field_method_get("invert_y", |_, this| Ok(this.invert_y));
         f.add_field_method_set("invert_y", |_, this, v: bool| {
             this.invert_y = v;
+            Ok(())
+        });
+        f.add_field_method_get("shoulder", |_, this| Ok(this.shoulder));
+        f.add_field_method_set("shoulder", |_, this, v: f32| {
+            this.shoulder = v;
             Ok(())
         });
         f.add_field_method_get("x", |_, this| Ok(this.position.x));
@@ -186,6 +195,9 @@ impl UserData for LThirdPerson {
                     _ => goal,
                 };
                 this.target = Some(target);
+                // No ombro: o ponto olhado vai um pouco para a direita.
+                let r = this.right();
+                let target = target + Vec3::new(r.x, 0.0, r.y) * this.shoulder;
 
                 // Não atravessa paredes: encurta na hora, volta devagar.
                 let dir = this.offset_dir();

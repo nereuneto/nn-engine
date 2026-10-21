@@ -831,12 +831,53 @@ o rangido). O **Coletável** solta um brilho 3D ao ser pego.
   da cena: no jogo, o chão andável fica azulado e cada inimigo mostra os
   pontos do caminho que segue. Portas e plataformas que andam não entram na
   grade (desviar delas é com a física).
-- **Perigo** (Inimigos): lava, espinhos, um tiro. Machuca e empurra quem
-  encosta.
-- **Atirar** (Ações): no 3D, o tiro (um prefab) sai da frente do objeto,
-  da altura escolhida, e some sozinho depois de uns segundos. Um prefab de
-  bola com **Corpo 3D** (só detecta) e **Perigo** com *Machuca* = o nome do
-  inimigo derruba inimigos de longe.
+- **Perigo** (Inimigos): lava, espinhos. Machuca e empurra quem encosta.
+- **Números e vermelho:** na Vida, **Mostrar o dano (números)** faz um
+  número subir de quem leva dano (bom para inimigos e chefes), e o modelo
+  fica **vermelho** um instante a cada dano. No herói, **Treme a câmera ao
+  levar dano** (6 é leve) dá peso ao golpe que ele leva.
+
+### Combate: espada, tiros e inimigos que atacam
+
+O modelo **Vale 3D** já vem pronto: o herói com uma espada na mão (clique
+para golpear) e besouros com 2 de vida que mordem quando ele chega perto.
+Derrotar um besouro dá 3 moedas (um evento **Derrotar**).
+
+- **Golpe** (Ações): um ataque de perto. Com **Golpeia: ao apertar**, o
+  jogador golpeia com o **clique** (ou J, ou o X do controle): toca a
+  animação *golpe* do modelo e, no instante do acerto (**Acerta depois de**),
+  quem estiver na frente, dentro do **Alcance** e da **Largura do golpe**,
+  perde vida e é empurrado. O primeiro clique, que prende o mouse na janela,
+  não golpeia.
+- **Inimigo que ataca:** ponha um **Golpe** num inimigo com **Golpeia:
+  sozinho, quando o alvo chega perto**. Ele para, vira para o herói e golpeia
+  (o besouro dá uma mordida); dá para fugir do golpe. Com um Golpe, o
+  Inimigo 3D para de machucar só de encostar (o pisão continua valendo).
+- **Quem é acertado:** com **Acerta** vazio, o golpe do jogador acerta quem
+  tem **Vida** ou é um **Inimigo 3D** (um Inimigo 3D sem Vida cai de um golpe
+  só), e o de um inimigo acerta o jogador. Com um nome, só os objetos com esse
+  nome.
+- **Arma na mão:** arraste a espada para cima do herói na **Hierarquia**
+  (ela vira filha dele) e, no Inspetor dela, **➕ Adicionar componente >
+  Preso a um osso**. Ele já vem com a mão direita (*mao_d*); a lista **Osso**
+  mostra os ossos do modelo do pai. Na vista 3D, a espada já aparece na mão:
+  gire e mova com as alças até ela ficar certa. No jogo, ela acompanha os
+  braços. Os modelos 3D trazem a `espada.glb` e o `cajado.glb`.
+- **Atirar** (Ações): no 3D, com **Direção: para o meio da tela**, o tiro vai
+  para onde a câmera olha (também para cima e para baixo), saindo da frente
+  do objeto ou de um osso (**Sai do osso**: *mao_d*). Uma **mira** aparece no
+  meio da tela e a câmera vai um pouco para a direita (**Câmera de lado**, no
+  Jogador 3D), para a mira não ficar em cima do herói. A tecla padrão no 3D
+  é o **botão direito** do mouse (no controle, o RT ou o RB). O herói toca a
+  animação *atirar*.
+- **Projétil** (Ações), para o prefab do tiro: anda, tira vida de quem
+  acerta, empurra e some ao bater numa parede, com faíscas. Não acerta quem
+  atirou. **Cai** faz o tiro cair em arco (uma pedra), e **Atravessa** deixa
+  ele seguir depois de acertar. O Vale 3D traz o `magia.prefab`, uma bola
+  azul com Projétil: ponha um **Atirar** no herói com ele.
+- **Eventos:** **Acertar** (*o jogador acertar Besouro*) e **Derrotar** (*o
+  jogador derrotar qualquer um*), em Mensagens. No **Levar dano**, o
+  **@outro** é quem bateu.
 
 ### Portas, chaves e zonas
 
@@ -880,7 +921,7 @@ Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
 
 - **Jogador 3D** e **Vida** (Jogador);
 - **Inimigo 3D** e **Perigo** (Inimigos);
-- **Atirar** e **Destruir depois** (Ações);
+- **Golpe**, **Atirar**, **Projétil** e **Destruir depois** (Ações);
 - **Coletável** (Itens): some quando o jogador encosta, soma numa variável e
   pode guardar um item no inventário; **Mostrar inventário** (Itens);
 - **Porta 3D**, **Zona de gatilho**, **Interagir** e **Diálogo** (Fases);
@@ -890,6 +931,8 @@ Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
   nas pontas; já ganha um Corpo 3D que se move sozinho;
 - **Animação 3D** (um componente, não um comportamento): toca uma animação
   do modelo;
+- **Preso a um osso** (um componente): segura o objeto num osso do modelo do
+  pai (uma espada na mão);
 - **Ir para cena**, **Checkpoint**, **Mostrar valor** e **Botão**, como no 2D
   (no 3D, a porta de **Ir para cena** com tecla abre com **E** ou o **Y** do
   controle).

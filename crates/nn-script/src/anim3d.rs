@@ -235,6 +235,14 @@ impl UserData for LAnimator {
             };
             Ok(s.node_matrix(&pose, &name).map(crate::d3::LMat4))
         });
+        // Os nomes dos ossos (e das partes) do modelo, na ordem do arquivo.
+        m.add_method("bones", |_, this, ()| {
+            Ok(this
+                .skeleton
+                .as_ref()
+                .map(|s| s.nodes.iter().map(|n| n.name.clone()).collect::<Vec<_>>())
+                .unwrap_or_default())
+        });
     }
 }
 
@@ -275,7 +283,7 @@ mod tests {
         assert!(!a.finished());
         a.update(1.0);
         assert!(a.finished());
-        assert_eq!(a.joints().len(), 10);
+        assert_eq!(a.joints().len(), 12);
         let e = a.play("voar", true, 0.0, false).unwrap_err().to_string();
         assert!(e.contains("parado, andar"), "{e}");
     }

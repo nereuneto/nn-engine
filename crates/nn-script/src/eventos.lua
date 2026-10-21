@@ -691,7 +691,46 @@ E.CONDITIONS = {
       local set = set_of(resolve(ctx.scene, p.quem, b, true))
       local out = {}
       for _, s in ipairs(signals(ctx.scene, "mensagem", "levou_dano")) do
-        if set[s.obj] then table.insert(out, { este = s.obj }) end
+        local de = s.arg2
+        if set[s.obj] then
+          table.insert(out, { este = s.obj, outro = type(de) == "table" and de.alive ~= nil and de or nil })
+        end
+      end
+      return out
+    end,
+  },
+  {
+    id = "acertar", name = "Acertar (golpe ou tiro)", category = "Mensagens", trigger = true,
+    text = "{quem} acertar {alvo}",
+    help = "Um Golpe ou um tiro (Projétil) de quem bateu tirou vida de alguém. O @outro é quem levou.",
+    props = { who("quem"), { "alvo", "", type = "object", label = "Alvo", allow_empty = "qualquer um" } },
+    lua = "function B:acertou(alvo, dano) ... end",
+    test = function(ctx, p, st, b)
+      local set = set_of(resolve(ctx.scene, p.quem, b, true))
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "acertou")) do
+        local alvo = s.arg
+        if set[s.obj] and type(alvo) == "table" and (p.alvo == "" or alvo.name == p.alvo) then
+          table.insert(out, { este = s.obj, outro = alvo })
+        end
+      end
+      return out
+    end,
+  },
+  {
+    id = "derrotar", name = "Derrotar", category = "Mensagens", trigger = true,
+    text = "{quem} derrotar {alvo}",
+    help = "Acabou a vida de alguém (com um golpe, um tiro ou um pisão) por causa de quem. O @outro é o derrotado.",
+    props = { who("quem"), { "alvo", "", type = "object", label = "Alvo", allow_empty = "qualquer um" } },
+    lua = "function B:derrotou(alvo) ... end",
+    test = function(ctx, p, st, b)
+      local set = set_of(resolve(ctx.scene, p.quem, b, true))
+      local out = {}
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "derrotou")) do
+        local alvo = s.arg
+        if set[s.obj] and type(alvo) == "table" and (p.alvo == "" or alvo.name == p.alvo) then
+          table.insert(out, { este = s.obj, outro = alvo })
+        end
       end
       return out
     end,
@@ -1190,8 +1229,8 @@ E.ACTIONS = {
     text = "tremer a câmera",
     props = { { "forca", 8, min = 0, label = "Força", advanced = true },
       { "tempo", 0.3, min = 0, label = "Tempo (s)", advanced = true } },
-    lua = "nn.camera.shake({forca}, {tempo})",
-    run = function(ctx, p) nn.camera.shake(number(p.forca), number(p.tempo)) end,
+    lua = "self:shake({forca}, {tempo})",
+    run = function(ctx, p) ctx.scene:shake(number(p.forca), number(p.tempo)) end,
   },
   -- Som
   {
