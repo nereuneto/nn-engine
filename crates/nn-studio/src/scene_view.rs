@@ -266,6 +266,32 @@ pub struct SceneDoc {
     /// 3D: a câmera voou (WASD) com o botão direito segurado: soltar o botão
     /// não abre o menu.
     fly_moved: bool,
+    /// A última duplicação (o Ctrl+D seguinte repete o passo dela).
+    last_dup: Option<LastDup>,
+    /// Shift+D: as cópias seguem o mouse até o clique.
+    carry: Option<Carry>,
+    /// O clique que soltou as cópias do Shift+D: ignora o mouse até soltar.
+    swallow_press: bool,
+}
+
+/// De quem saíram as últimas cópias (Ctrl+D, Alt+arrastar, Shift+D).
+#[derive(Debug, Clone, PartialEq)]
+struct LastDup {
+    sources: Vec<u32>,
+    copies: Vec<u32>,
+}
+
+/// Cópias do Shift+D, seguindo o mouse.
+#[derive(Debug, Clone)]
+struct Carry {
+    /// Cada cópia e onde ela estava ao começar.
+    objects: Vec<(u32, WorldPos)>,
+    /// Onde o mouse estava no mundo 3D (no chão, na altura das cópias) e no
+    /// 2D (ou no HUD da cena 3D), ao começar.
+    anchor3: Option<glam::Vec3>,
+    anchor2: Option<(f64, f64)>,
+    /// A altura do plano em que as cópias do 3D andam.
+    y: f32,
 }
 
 /// Onde o botão direito foi clicado na vista.
@@ -279,16 +305,26 @@ struct ViewMenu {
     at3: glam::Vec3,
 }
 
-/// A posição copiada no menu do botão direito (para colar em outro objeto).
+/// Onde um objeto está no mundo (no 2D e no HUD, em pixels e z = 0). Também
+/// é a posição copiada no menu do botão direito.
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct CopiedPosition {
-    three_d: bool,
-    pos: [f64; 3],
+pub struct WorldPos {
+    /// No mundo 3D (metros); senão, no 2D ou no HUD (pixels, z = 0).
+    pub three_d: bool,
+    pub pos: [f64; 3],
 }
 
 fn copied_id() -> egui::Id {
     egui::Id::new("posicao-copiada")
 }
+
+/// Os objetos copiados (Ctrl+C), para o Colar aqui do menu.
+fn clip_id() -> egui::Id {
+    egui::Id::new("objetos-copiados")
+}
+
+/// O começo do texto de objetos copiados no NN Studio.
+const CLIP_MARK: &str = "-- nn-studio: objetos copiados";
 
 /// O que a aba pede ao espaço de trabalho.
 #[derive(Debug, Clone, PartialEq)]
@@ -551,6 +587,9 @@ impl SceneDoc {
             view_menu: None,
             quick_add: None,
             fly_moved: false,
+            last_dup: None,
+            carry: None,
+            swallow_press: false,
         }
     }
 
@@ -573,20 +612,20 @@ impl SceneDoc {
     }
 
     /// Onde o objeto está no mundo (no 2D e no HUD, z = 0).
-    fn world_position(&self, id: u32) -> Option<CopiedPosition> {
+    fn world_position(&self, id: u32) -> Option<WorldPos> {
         if self.data.three_d && !self.on_screen3(id) {
             let p = self
                 .data
                 .world_matrix3(id)?
                 .transform_point3(glam::Vec3::ZERO);
             let r = |v: f32| round2(f64::from(v));
-            return Some(CopiedPosition {
+            return Some(WorldPos {
                 three_d: true,
                 pos: [r(p.x), r(p.y), r(p.z)],
             });
         }
         let t = self.data.world_transform(id)?;
-        Some(CopiedPosition {
+        Some(WorldPos {
             three_d: false,
             pos: [t.x, t.y, 0.0],
         })
@@ -602,7 +641,7 @@ impl SceneDoc {
     /// Dá para colar a posição copiada no objeto? (Do 3D para o 3D, do 2D
     /// para o 2D.)
     pub fn can_paste_position(&self, ctx: &egui::Context, id: u32) -> bool {
-        let copied: Option<CopiedPosition> = ctx.data(|d| d.get_temp(copied_id()));
+        let copied: Option<WorldPos> = ctx.data(|d| d.get_temp(copied_id()));
         match (copied, self.world_position(id)) {
             (Some(c), Some(p)) => c.three_d == p.three_d,
             _ => false,
@@ -611,7 +650,7 @@ impl SceneDoc {
 
     /// Põe a seleção na posição copiada.
     pub fn paste_position(&mut self, ctx: &egui::Context) {
-        let Some(c) = ctx.data(|d| d.get_temp::<CopiedPosition>(copied_id())) else {
+        let Some(c) = ctx.data(|d| d.get_temp::<WorldPos>(copied_id())) else {
             return;
         };
         let ids: Vec<u32> = self
@@ -627,16 +666,22 @@ impl SceneDoc {
         }
         self.record(None);
         for id in ids {
-            if c.three_d {
-                if let Some(m0) = self.data.world_matrix3(id) {
-                    let p0 = m0.transform_point3(glam::Vec3::ZERO);
-                    let to = glam::Vec3::new(c.pos[0] as f32, c.pos[1] as f32, c.pos[2] as f32);
-                    self.data
-                        .set_world_matrix3(id, glam::Mat4::from_translation(to - p0) * m0);
-                }
-            } else {
-                self.set_world_position(id, c.pos[0], c.pos[1]);
+            self.move_to(id, c);
+        }
+    }
+
+    /// Leva o objeto para a posição do mundo (no 3D, sem mudar a rotação e
+    /// a escala).
+    fn move_to(&mut self, id: u32, p: WorldPos) {
+        if p.three_d {
+            if let Some(m0) = self.data.world_matrix3(id) {
+                let p0 = m0.transform_point3(glam::Vec3::ZERO);
+                let to = glam::Vec3::new(p.pos[0] as f32, p.pos[1] as f32, p.pos[2] as f32);
+                self.data
+                    .set_world_matrix3(id, glam::Mat4::from_translation(to - p0) * m0);
             }
+        } else {
+            self.set_world_position(id, p.pos[0], p.pos[1]);
         }
     }
 
@@ -659,13 +704,69 @@ impl SceneDoc {
         Some(id)
     }
 
-    /// Duplica a seleção (no 2D um pouco ao lado; no 3D um passo da grade).
+    /// Duplica a seleção (o mesmo que [`Self::duplicate_selection`]).
     pub fn duplicate_any(&mut self) {
-        if self.data.three_d {
-            self.duplicate_selection3();
-        } else {
-            self.duplicate_selection();
+        self.duplicate_selection();
+    }
+
+    /// Duplica a seleção: cada cópia anda `step3` (no mundo 3D, em metros)
+    /// ou `step2` (no 2D e no HUD) a partir do original. Seleciona e
+    /// devolve as cópias.
+    fn duplicate_by(&mut self, step3: [f64; 3], step2: [f64; 3]) -> Vec<u32> {
+        let keep = self.prefab_root();
+        let roots: Vec<u32> = self
+            .selection_roots()
+            .into_iter()
+            .filter(|id| Some(*id) != keep)
+            .collect();
+        if roots.is_empty() {
+            return Vec::new();
         }
+        self.record(None);
+        let mut sources = Vec::new();
+        let mut copies = Vec::new();
+        for id in roots {
+            let Some(n) = self.data.duplicate(id) else {
+                continue;
+            };
+            if let Some(mut p) = self.world_position(id) {
+                let step = if p.three_d { step3 } else { step2 };
+                if step != [0.0; 3] {
+                    for (v, s) in p.pos.iter_mut().zip(step) {
+                        *v = round2(*v + s);
+                    }
+                    self.move_to(n, p);
+                }
+            }
+            sources.push(id);
+            copies.push(n);
+        }
+        self.selection = copies.clone();
+        self.last_dup = Some(LastDup {
+            sources,
+            copies: copies.clone(),
+        });
+        copies
+    }
+
+    /// O passo da última duplicação, se a seleção são as cópias dela
+    /// (duplicou e moveu a cópia: o próximo Ctrl+D anda o mesmo tanto).
+    fn learned_step(&self) -> Option<WorldPos> {
+        let d = self.last_dup.as_ref()?;
+        if d.copies.is_empty() || d.copies != self.selection_roots() {
+            return None;
+        }
+        let a = self.world_position(d.sources[0])?;
+        let b = self.world_position(d.copies[0])?;
+        let step = [
+            b.pos[0] - a.pos[0],
+            b.pos[1] - a.pos[1],
+            b.pos[2] - a.pos[2],
+        ];
+        (a.three_d == b.three_d && step.iter().any(|v| v.abs() > 1e-6)).then_some(WorldPos {
+            three_d: b.three_d,
+            pos: step,
+        })
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -808,27 +909,303 @@ impl SceneDoc {
         }
     }
 
+    /// Ctrl+D: duplica a seleção um passo ao lado (no 2D, um quadrado da
+    /// grade para a direita e para baixo; no 3D, um passo da grade em X). Se
+    /// a seleção são as cópias da última duplicação, repete o passo dela.
     pub fn duplicate_selection(&mut self) {
-        if self.selection.is_empty() {
-            return;
+        let mut step3 = [self.grid3.max(0.5), 0.0, 0.0];
+        let mut step2 = [self.grid, -self.grid, 0.0];
+        match self.learned_step() {
+            Some(s) if s.three_d => step3 = s.pos,
+            Some(s) => step2 = s.pos,
+            None => {}
         }
-        self.record(None);
-        let mut new = Vec::new();
+        self.duplicate_by(step3, step2);
+    }
+
+    /// Duplica no mesmo lugar (Alt+arrastar e Shift+D levam as cópias).
+    fn duplicate_in_place(&mut self) -> Vec<u32> {
+        self.duplicate_by([0.0; 3], [0.0; 3])
+    }
+
+    /// A seleção como texto para a área de transferência: um pedaço de cena
+    /// (dá para colar em outra cena, ou noutro NN Studio aberto). Os filhos
+    /// copiados sozinhos vão com a posição do mundo.
+    pub fn selection_text(&self) -> Option<String> {
         let keep = self.prefab_root();
+        let mut objects = Vec::new();
         for id in self.selection_roots() {
             if Some(id) == keep {
                 continue;
             }
-            if let Some(n) = self.data.duplicate(id) {
-                // A cópia aparece um pouco ao lado, para dar para ver.
-                if let Some(o) = self.data.find_mut(n) {
-                    o.x += self.grid;
-                    o.y -= self.grid;
+            let Some(mut o) = self.data.find(id).cloned() else {
+                continue;
+            };
+            if self.data.parent_of(id).flatten().is_some() {
+                if self.data.three_d && !self.on_screen3(id) {
+                    if let Some(m) = self.data.world_matrix3(id) {
+                        scene_data::set_local_matrix3(&mut o, m);
+                    }
+                } else if !self.data.three_d
+                    && let Some(t) = self.data.world_transform(id)
+                {
+                    (o.x, o.y, o.rotation) = (t.x, t.y, t.rotation);
+                    (o.scale_x, o.scale_y) = (t.scale_x, t.scale_y);
                 }
-                new.push(n);
+            }
+            objects.push(o);
+        }
+        if objects.is_empty() {
+            return None;
+        }
+        let piece = SceneData {
+            three_d: self.data.three_d,
+            objects,
+            ..SceneData::default()
+        };
+        Some(format!("{CLIP_MARK}\n{}", scene_data::write(&piece)))
+    }
+
+    /// Ctrl+C: copia a seleção (para o sistema e para o Colar aqui do menu).
+    pub fn copy_selection(&self, ctx: &egui::Context) -> bool {
+        let Some(text) = self.selection_text() else {
+            return false;
+        };
+        ctx.copy_text(text.clone());
+        ctx.data_mut(|d| d.insert_temp(clip_id(), text));
+        true
+    }
+
+    /// Ctrl+X: copia e apaga.
+    pub fn cut_selection(&mut self, ctx: &egui::Context) {
+        if self.copy_selection(ctx) {
+            self.delete_selection();
+        }
+    }
+
+    /// Os objetos copiados neste NN Studio (para o Colar aqui).
+    pub fn copied_objects(ctx: &egui::Context) -> Option<String> {
+        ctx.data(|d| d.get_temp::<String>(clip_id()))
+    }
+
+    /// Cola objetos copiados (o texto do Ctrl+C). Com `at`, o grupo vai para
+    /// lá (o último copiado no ponto; no 3D, só em X e Z: a altura fica).
+    /// Devolve os objetos colados (selecionados), ou nada se o texto não é
+    /// de objetos desta cena (2D com 2D, 3D com 3D).
+    pub fn paste_objects(&mut self, text: &str, root: &Path, at: Option<WorldPos>) -> Vec<u32> {
+        let Some(body) = text.strip_prefix(CLIP_MARK) else {
+            return Vec::new();
+        };
+        let Ok(mut piece) = scene_data::read(body, "colado") else {
+            return Vec::new();
+        };
+        if piece.three_d != self.data.three_d || piece.objects.is_empty() {
+            return Vec::new();
+        }
+        piece.link_prefabs(root);
+        self.record(None);
+        let parent = self.prefab_root();
+        let mut ids = Vec::new();
+        for mut o in piece.objects {
+            let id = self.data.next_id();
+            let mut next = id;
+            renumber(&mut o, &mut next);
+            let n = match parent {
+                Some(p) => self.data.find(p).map(|x| x.children.len()).unwrap_or(0),
+                None => self.data.objects.len(),
+            };
+            self.data.insert(parent, n, o);
+            ids.push(id);
+        }
+        if let Some(at) = at
+            && let Some(lead) = ids.last().and_then(|id| self.world_position(*id))
+            && lead.three_d == at.three_d
+        {
+            let mut d = [
+                at.pos[0] - lead.pos[0],
+                at.pos[1] - lead.pos[1],
+                at.pos[2] - lead.pos[2],
+            ];
+            if at.three_d {
+                d[1] = 0.0;
+            }
+            for id in ids.clone() {
+                if let Some(mut p) = self.world_position(id)
+                    && p.three_d == at.three_d
+                {
+                    for (v, dv) in p.pos.iter_mut().zip(d) {
+                        *v = round2(*v + dv);
+                    }
+                    self.move_to(id, p);
+                }
             }
         }
-        self.selection = new;
+        self.selection = ids.clone();
+        ids
+    }
+
+    /// Ctrl+C, Ctrl+X e Ctrl+V com o mouse na vista ou na Hierarquia. `at`:
+    /// onde colar (o mouse na vista); sem ele, no mesmo lugar.
+    pub fn clipboard_keys(&mut self, ui: &egui::Ui, root: &Path, at: Option<WorldPos>) {
+        let events = ui.input(|i| i.events.clone());
+        for e in events {
+            match e {
+                egui::Event::Copy => {
+                    self.copy_selection(ui.ctx());
+                }
+                egui::Event::Cut => self.cut_selection(ui.ctx()),
+                egui::Event::Paste(text) => {
+                    self.paste_objects(&text, root, at);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Shift+D: duplica a seleção e as cópias passam a seguir o mouse.
+    pub fn start_carry(&mut self) -> bool {
+        let copies = self.duplicate_in_place();
+        let objects: Vec<(u32, WorldPos)> = copies
+            .iter()
+            .filter_map(|id| Some((*id, self.world_position(*id)?)))
+            .collect();
+        if objects.is_empty() {
+            return false;
+        }
+        let y = objects
+            .iter()
+            .rev()
+            .find(|(_, p)| p.three_d)
+            .map_or(0.0, |(_, p)| p.pos[1] as f32);
+        self.carry = Some(Carry {
+            objects,
+            anchor3: None,
+            anchor2: None,
+            y,
+        });
+        true
+    }
+
+    /// As cópias do Shift+D estão seguindo o mouse?
+    pub fn carrying(&self) -> bool {
+        self.carry.is_some()
+    }
+
+    /// Um quadro do Shift+D: `p2` é o mouse no 2D (ou no HUD da cena 3D);
+    /// `p3`, o mouse no plano das cópias do 3D. O primeiro ponto de cada um
+    /// é a âncora: as cópias andam o quanto o mouse andou dali.
+    fn carry_to(&mut self, p2: Option<(f64, f64)>, p3: Option<glam::Vec3>) {
+        let Some(mut c) = self.carry.take() else {
+            return;
+        };
+        c.anchor2 = c.anchor2.or(p2);
+        c.anchor3 = c.anchor3.or(p3);
+        let mut d2 = match (c.anchor2, p2) {
+            (Some(a), Some(b)) => (b.0 - a.0, b.1 - a.1),
+            _ => (0.0, 0.0),
+        };
+        let mut d3 = match (c.anchor3, p3) {
+            (Some(a), Some(b)) => (f64::from(b.x - a.x), f64::from(b.z - a.z)),
+            _ => (0.0, 0.0),
+        };
+        // Encaixar: a cópia principal (a última) vai para a grade; as outras
+        // acompanham.
+        if self.snap
+            && let Some((_, lead)) = c.objects.last()
+        {
+            let snap = |v: f64, g: f64| (v / g).round() * g;
+            if lead.three_d {
+                let g = self.grid3;
+                d3 = (
+                    snap(lead.pos[0] + d3.0, g) - lead.pos[0],
+                    snap(lead.pos[2] + d3.1, g) - lead.pos[2],
+                );
+            } else {
+                let g = self.grid;
+                d2 = (
+                    snap(lead.pos[0] + d2.0, g) - lead.pos[0],
+                    snap(lead.pos[1] + d2.1, g) - lead.pos[1],
+                );
+            }
+        }
+        for (id, p0) in c.objects.clone() {
+            let mut p = p0;
+            if p.three_d {
+                p.pos[0] = round2(p.pos[0] + d3.0);
+                p.pos[2] = round2(p.pos[2] + d3.1);
+            } else {
+                p.pos[0] = round2(p.pos[0] + d2.0);
+                p.pos[1] = round2(p.pos[1] + d2.1);
+            }
+            self.move_to(id, p);
+        }
+        self.carry = Some(c);
+    }
+
+    /// Termina o Shift+D: `keep` solta as cópias onde estão; senão, elas
+    /// somem (desfaz a duplicação).
+    fn finish_carry(&mut self, keep: bool) {
+        if self.carry.take().is_some() {
+            if keep {
+                self.history.seal();
+            } else {
+                self.undo();
+            }
+        }
+    }
+
+    /// O Shift+D num quadro da vista (2D e 3D): Esc ou o botão direito
+    /// desistem, o clique solta. `p3` só no 3D. Devolve `true` enquanto as
+    /// cópias seguem o mouse (a vista não faz mais nada com o mouse).
+    fn carry_input(
+        &mut self,
+        ui: &mut egui::Ui,
+        p2: Option<(f64, f64)>,
+        p3: Option<glam::Vec3>,
+    ) -> bool {
+        if self.swallow_press {
+            // Até soltar o botão (e no quadro em que solta, que seria um
+            // clique na vista).
+            if !ui.input(|i| i.pointer.any_down()) {
+                self.swallow_press = false;
+            }
+            return true;
+        }
+        if self.carry.is_none() {
+            return false;
+        }
+        let (esc, primary, secondary) = ui.input_mut(|i| {
+            (
+                i.consume_key(Modifiers::NONE, Key::Escape),
+                i.pointer.primary_pressed(),
+                i.pointer.secondary_pressed(),
+            )
+        });
+        if esc || secondary {
+            self.finish_carry(false);
+            self.swallow_press = secondary;
+            return true;
+        }
+        self.carry_to(p2, p3);
+        if primary {
+            self.finish_carry(true);
+            self.swallow_press = true;
+        }
+        true
+    }
+
+    /// A dica embaixo da vista enquanto as cópias seguem o mouse.
+    fn carry_hint(&self, painter: &egui::Painter, rect: Rect) {
+        if self.carry.is_none() {
+            return;
+        }
+        let text = "Clique para soltar a cópia · Esc ou o botão direito desistem";
+        let pos = rect.center_bottom() - Vec2::new(0.0, 14.0);
+        let font = egui::FontId::proportional(14.0);
+        let galley = painter.layout_no_wrap(text.into(), font, Color32::WHITE);
+        let bg = Rect::from_center_size(pos, galley.size() + Vec2::new(16.0, 8.0));
+        painter.rect_filled(bg, 6.0, Color32::from_black_alpha(170));
+        painter.galley(bg.min + Vec2::new(8.0, 4.0), galley, Color32::WHITE);
     }
 
     /// Cria um objeto na posição `(x, y)` do mundo (na raiz) e seleciona.
@@ -1154,11 +1531,13 @@ impl SceneDoc {
         } else {
             self.handle_input(ui, &response, rect, env, &mut actions);
             self.draw_overlays(&painter, rect, env);
+            self.carry_hint(&painter, rect);
             self.view_menu2(&response, rect, env, &mut actions);
         }
         if let Some(mut q) = self.quick_add.take() {
-            use crate::catalog::{QuickResult, catalog2, quick_add_ui};
-            match quick_add_ui(ui.ctx(), &mut q, &catalog2()) {
+            use crate::catalog::{QuickResult, catalog2, quick_add_ui, with_favorites};
+            let entries = with_favorites(catalog2(), env.root, false);
+            match quick_add_ui(ui.ctx(), &mut q, &entries) {
                 QuickResult::Open => self.quick_add = Some(q),
                 QuickResult::Close => {}
                 QuickResult::Pick(p) => {
@@ -1339,7 +1718,7 @@ impl SceneDoc {
                 ui.separator();
             }
             let menu = ui.menu_button("➕ Objeto", |ui| {
-                if let Some(p) = add_object_menu(ui) {
+                if let Some(p) = add_object_menu(ui, env.root) {
                     self.place_picked(env, p, None, actions);
                 }
             });
@@ -1833,14 +2212,16 @@ impl SceneDoc {
             None
         };
         let three_d = self.data.three_d;
+        let root = env.root;
         let add = |ui: &mut egui::Ui| {
             if three_d {
-                scene3d::add_menu3(ui)
+                scene3d::add_menu3(ui, root)
             } else {
-                add_object_menu(ui)
+                add_object_menu(ui, root)
             }
         };
         let mut picked = None;
+        let mut paste = None;
         let mut out = Vec::new();
         let shown = egui::Popup::context_menu(response)
             .open_memory(command)
@@ -1858,7 +2239,7 @@ impl SceneDoc {
                     Some((id, name, false)) => {
                         ui.label(egui::RichText::new(name).strong());
                         ui.separator();
-                        crate::hierarchy::object_menu(ui, self, id, &mut out);
+                        crate::hierarchy::object_menu(ui, self, id, root, &mut out);
                         ui.separator();
                         let r = ui.menu_button("➕ Criar aqui", |ui| picked = add(ui));
                         crate::tutorial::anchor(ui.ctx(), "cena.menu.criar", r.response.rect);
@@ -1868,7 +2249,7 @@ impl SceneDoc {
                         picked = add(ui);
                         ui.separator();
                         ui.menu_button(name, |ui| {
-                            crate::hierarchy::object_menu(ui, self, id, &mut out);
+                            crate::hierarchy::object_menu(ui, self, id, root, &mut out);
                         });
                     }
                     None => {
@@ -1876,9 +2257,30 @@ impl SceneDoc {
                         picked = add(ui);
                     }
                 }
+                if let Some(text) = Self::copied_objects(ui.ctx()) {
+                    ui.separator();
+                    if crate::hierarchy::menu_item(ui, "📋 Colar aqui", "Ctrl+V").clicked() {
+                        paste = Some(text);
+                        ui.close();
+                    }
+                }
             });
         if shown.is_none() {
             self.view_menu = None;
+        }
+        if let (Some(text), Some(m)) = (paste, self.view_menu) {
+            let at = if three_d {
+                WorldPos {
+                    three_d: true,
+                    pos: [f64::from(m.at3.x), f64::from(m.at3.y), f64::from(m.at3.z)],
+                }
+            } else {
+                WorldPos {
+                    three_d: false,
+                    pos: [m.at2.0, m.at2.1, 0.0],
+                }
+            };
+            self.paste_objects(&text, env.root, Some(at));
         }
         if let (Some(p), Some(m)) = (picked, self.view_menu) {
             if three_d {
@@ -1933,6 +2335,28 @@ impl SceneDoc {
                 );
             });
         }
+        // Shift+D: as cópias seguem o mouse até o clique.
+        let p2 = pointer.map(|p| self.camera.to_world(rect, p));
+        if self.carry_input(ui, p2, None) {
+            return;
+        }
+        if response.hovered()
+            && !ui.ctx().text_edit_focused()
+            && pointer.is_some()
+            && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::D))
+        {
+            self.start_carry();
+            self.carry_to(p2, None);
+            return;
+        }
+        // Ctrl+C, Ctrl+X e Ctrl+V (colar onde o mouse está).
+        if response.hovered() && !ui.ctx().text_edit_focused() && self.quick_add.is_none() {
+            let at = p2.map(|(x, y)| WorldPos {
+                three_d: false,
+                pos: [x, y, 0.0],
+            });
+            self.clipboard_keys(ui, env.root, at);
+        }
         // Shift+A: a busca rápida para criar, onde o mouse está.
         if response.hovered()
             && !ui.ctx().text_edit_focused()
@@ -1963,7 +2387,15 @@ impl SceneDoc {
             if middle || space || response.dragged_by(egui::PointerButton::Secondary) {
                 self.start_drag(DragKind::Pan { start: self.camera }, start);
             } else if let Some(kind) = self.gizmo_hit(env, rect, start) {
+                // Alt + arrastar a seta: leva uma cópia.
+                let copy = modifiers.alt && matches!(kind, DragKind::Move(_));
+                if copy {
+                    self.duplicate_in_place();
+                }
                 self.start_drag(kind, start);
+                if copy && let Some(d) = &mut self.drag {
+                    d.recorded = true;
+                }
             } else if let Some(id) = self.hit(env, rect, start) {
                 if !self.selection.contains(&id) {
                     if modifiers.shift || modifiers.command {
@@ -1971,6 +2403,14 @@ impl SceneDoc {
                     } else {
                         self.selection = vec![id];
                     }
+                }
+                // Alt + arrastar o objeto: leva uma cópia (o original fica).
+                if modifiers.alt && !self.duplicate_in_place().is_empty() {
+                    self.start_drag(DragKind::Move(None), start);
+                    if let Some(d) = &mut self.drag {
+                        d.recorded = true;
+                    }
+                    return;
                 }
                 let kind = match self.tool {
                     Tool::Rotate => {
@@ -2617,8 +3057,9 @@ impl SceneDoc {
 
 /// Itens do menu "Adicionar objeto": devolve o objeto pronto (com id 0;
 /// [`SceneDoc::add_prepared`] numera ele e os filhos).
-pub fn add_object_menu(ui: &mut egui::Ui) -> Option<crate::catalog::Picked> {
-    crate::catalog::menu(ui, &crate::catalog::catalog2(), "2d")
+pub fn add_object_menu(ui: &mut egui::Ui, root: &Path) -> Option<crate::catalog::Picked> {
+    let entries = crate::catalog::with_favorites(crate::catalog::catalog2(), root, false);
+    crate::catalog::menu(ui, &entries, "2d")
 }
 
 /// O botão Caminhos (com o jogo aberto): mostra no jogo por onde os

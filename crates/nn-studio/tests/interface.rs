@@ -2942,33 +2942,40 @@ fn tutorial_mundo_3d_avanca_sozinho_ate_o_fim() {
     espera(&mut h, 6);
     let mut arvore = modelo(11, "arvore", "modelos/arvore.glb");
     arvore.components.push(corpo("static"));
-    doc(&mut h).data.objects.push(arvore);
+    doc(&mut h).data.objects.push(arvore.clone());
     espera(&mut h, 7);
+    // A fileira (Alt+arrastar e Ctrl+D, como a cena faz).
+    for id in 30..33 {
+        let mut a = arvore.clone();
+        a.id = id;
+        doc(&mut h).data.objects.push(a);
+    }
+    espera(&mut h, 8);
     let mut caixote = modelo(12, "caixote", "modelos/caixote.glb");
     caixote.components.push(corpo("dynamic"));
     doc(&mut h).data.objects.push(caixote);
-    espera(&mut h, 8);
+    espera(&mut h, 9);
     let mut bicho = modelo(15, "bicho", "modelos/bicho.glb");
     let mut anim = Component::new("anim3d");
     anim.set("animation", Prop::Str("andar".into()));
     bicho.components.push(anim);
     doc(&mut h).data.objects.push(bicho);
-    espera(&mut h, 9);
+    espera(&mut h, 10);
     let mut estrela = modelo(13, "estrela", "modelos/estrela.glb");
     estrela
         .components
         .push(Component::behavior("nn:coletavel", &[]));
     doc(&mut h).data.objects.push(estrela);
-    espera(&mut h, 10);
+    espera(&mut h, 11);
     let mut plat = modelo(14, "plataforma", "modelos/plataforma.glb");
     plat.components.push(corpo("kinematic"));
     plat.components
         .push(Component::behavior("nn:plataforma3d", &[]));
     doc(&mut h).data.objects.push(plat);
-    espera(&mut h, 11);
+    espera(&mut h, 12);
     // O passo do Ambiente: o sol mais baixo.
     doc(&mut h).data.set_env("sun_height", Prop::Num(15.0));
-    espera(&mut h, 12);
+    espera(&mut h, 13);
     assert!(tabs(&h).contains(&Tab::Events));
     let cat = nn_studio::events::catalog();
     let mut acabou = cat.condition("acabaram").unwrap().new_item(false);
@@ -2978,9 +2985,9 @@ fn tutorial_mundo_3d_avanca_sozinho_ate_o_fim() {
         actions: vec![cat.action("reiniciar").unwrap().new_item(false)],
         ..Default::default()
     });
-    espera(&mut h, 13);
-    h.get_by_label("▶ Testar daqui").click();
     espera(&mut h, 14);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 15);
     let text = std::fs::read_to_string(proj.join("cenas/mundo.cena")).unwrap();
     assert!(
         text.contains("nn:jogador3d") && text.contains("sun_height = 15"),
@@ -5023,4 +5030,400 @@ fn botao_direito_na_cena_2d_na_hierarquia_e_no_inspetor() {
     assert_eq!(c.str("shape"), "circle", "a forma continua");
     atalho(&mut h, Modifiers::COMMAND, Key::Z);
     assert_eq!(objeto(&h, "quadrado").components[0].str("color"), "#FF0000");
+}
+
+// Menos trabalho repetido (S44) ------------------------------------------------
+
+/// Arrasta segurando Alt.
+fn arrastar_com_alt(h: &mut Harness<'_, StudioApp>, from: egui::Pos2, to: egui::Pos2) {
+    h.event(egui::Event::ModifiersChanged(Modifiers::ALT));
+    h.run();
+    arrastar(h, from, to);
+    h.event(egui::Event::ModifiersChanged(Modifiers::NONE));
+    h.run();
+}
+
+fn quantos(h: &Harness<'_, StudioApp>, prefixo: &str) -> usize {
+    let mut n = 0;
+    nn_studio::scene_data::visit(&cena(h).data.objects, &mut |o| {
+        if o.name.starts_with(prefixo) {
+            n += 1;
+        }
+    });
+    n
+}
+
+/// Cena 2D: Alt+arrastar leva uma cópia; o Ctrl+D seguinte repete o passo;
+/// cada um desfaz de uma vez.
+#[test]
+fn duplicar_arrastando_e_ctrl_d_repete_o_passo() {
+    let dir = temp("duplicar-2d");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena(&mut h, &proj);
+    let rect = h.get_by_label("Vista da cena").rect();
+    let q = objeto(&h, "quadrado").clone();
+    let from = cena(&h).camera.to_screen(rect, q.x, q.y);
+    let to = from + egui::vec2(120.0, 0.0);
+    arrastar_com_alt(&mut h, from, to);
+    assert_eq!(quantos(&h, "quadrado"), 2, "Alt+arrastar duplicou");
+    assert_eq!(objeto(&h, "quadrado").x, q.x, "o original ficou");
+    let copia = cena(&h).selection[0];
+    let passo = cena(&h).data.find(copia).unwrap().x - q.x;
+    assert!(passo > 20.0, "a cópia andou: {passo}");
+    // Ctrl+D: a próxima vai o mesmo tanto adiante.
+    h.hover_at(rect.center());
+    h.run();
+    atalho(&mut h, Modifiers::COMMAND, Key::D);
+    assert_eq!(quantos(&h, "quadrado"), 3);
+    let terceira = cena(&h).selection[0];
+    let x3 = cena(&h).data.find(terceira).unwrap().x;
+    let x2 = cena(&h).data.find(copia).unwrap().x;
+    assert!(
+        (x3 - x2 - passo).abs() < 0.01,
+        "passo repetido: {x2} → {x3}"
+    );
+    // De novo.
+    atalho(&mut h, Modifiers::COMMAND, Key::D);
+    assert_eq!(quantos(&h, "quadrado"), 4);
+    // Cada duplicação desfaz de uma vez (o Alt+arrastar também).
+    for n in [3, 2, 1] {
+        atalho(&mut h, Modifiers::COMMAND, Key::Z);
+        assert_eq!(quantos(&h, "quadrado"), n);
+    }
+}
+
+/// Cena 3D: Shift+D leva a cópia com o mouse até o clique; Esc desiste.
+/// Alt+arrastar a seta do Mover leva uma cópia; Alt+arrastar no vazio só
+/// gira a câmera.
+#[test]
+fn shift_d_e_alt_arrastar_na_cena_3d() {
+    let dir = temp("duplicar-3d");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    h.run();
+    let cubo = objeto(&h, "Cubo").clone();
+    cena_mut(&mut h).selection = vec![cubo.id];
+    h.run();
+    let a = na_vista3d(&h, glam::Vec3::new(0.0, 0.5, 0.0));
+    let b = na_vista3d(&h, glam::Vec3::new(3.0, 0.5, -2.0));
+    h.hover_at(a);
+    h.run();
+    h.key_press_modifiers(Modifiers::SHIFT, Key::D);
+    h.run();
+    assert!(cena(&h).carrying(), "a cópia segue o mouse");
+    assert_eq!(quantos(&h, "Cubo"), 2);
+    h.hover_at(b);
+    h.run();
+    tela(&mut h, "shift-d");
+    clique(&mut h, b);
+    assert!(!cena(&h).carrying(), "o clique soltou");
+    let copia = cena(&h).selection[0];
+    let c = cena(&h).data.find(copia).unwrap().clone();
+    assert!(
+        perto(c.x, 3.0, 0.2) && perto(c.z, -2.0, 0.2) && perto(c.y, cubo.y, 1e-6),
+        "a cópia ficou em ({}, {}, {})",
+        c.x,
+        c.y,
+        c.z
+    );
+    assert_eq!(
+        cena(&h).selection,
+        vec![copia],
+        "o clique não trocou a seleção"
+    );
+    // Esc desiste: a cópia some.
+    h.hover_at(a);
+    h.run();
+    h.key_press_modifiers(Modifiers::SHIFT, Key::D);
+    h.run();
+    assert_eq!(quantos(&h, "Cubo"), 3);
+    h.hover_at(b);
+    h.run();
+    h.key_press(Key::Escape);
+    h.run();
+    assert!(!cena(&h).carrying());
+    assert_eq!(quantos(&h, "Cubo"), 2, "Esc tirou a cópia");
+
+    // Alt + arrastar a seta X do Mover: uma cópia andando em X.
+    cena_mut(&mut h).selection = vec![cubo.id];
+    h.run();
+    let centro = glam::Vec3::new(cubo.x as f32, cubo.y as f32, cubo.z as f32);
+    let len = (centro - cena(&h).cam3.pos).length() * 0.16;
+    let s0 = na_vista3d(&h, centro + glam::Vec3::X * len * 0.75);
+    let s1 = na_vista3d(&h, centro + glam::Vec3::X * len * 2.0);
+    arrastar_com_alt(&mut h, s0, s1);
+    assert_eq!(quantos(&h, "Cubo"), 3, "Alt + seta duplicou");
+    assert_eq!(objeto(&h, "Cubo").x, cubo.x, "o original ficou");
+    let nova = cena(&h).data.find(cena(&h).selection[0]).unwrap().clone();
+    assert!(nova.x > cubo.x + 0.3 && perto(nova.z, cubo.z, 1e-6));
+    // Alt + arrastar no vazio: gira a câmera, sem copiar.
+    let antes = cena(&h).cam3;
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    arrastar_com_alt(
+        &mut h,
+        rect.left_top() + egui::vec2(60.0, 60.0),
+        rect.left_top() + egui::vec2(140.0, 60.0),
+    );
+    assert_eq!(quantos(&h, "Cubo"), 3);
+    assert_ne!(cena(&h).cam3.yaw, antes.yaw);
+}
+
+/// Ctrl+C / Ctrl+V cola onde o mouse está; Ctrl+X recorta; colar em outra
+/// cena; o menu do botão direito tem Colar aqui.
+#[test]
+fn copiar_recortar_e_colar_objetos() {
+    let dir = temp("copiar-colar");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena(&mut h, &proj);
+    let rect = h.get_by_label("Vista da cena").rect();
+    let q = objeto(&h, "quadrado").clone();
+    cena_mut(&mut h).selection = vec![q.id];
+    h.hover_at(rect.center());
+    h.run();
+    h.event(egui::Event::Copy);
+    h.run();
+    let texto = nn_studio::scene_view::SceneDoc::copied_objects(&h.ctx).expect("copiou");
+    // Colar com o mouse em outro ponto: o quadrado vai para lá.
+    let p = rect.center() + egui::vec2(150.0, -90.0);
+    let (wx, wy) = cena(&h).camera.to_world(rect, p);
+    h.hover_at(p);
+    h.run();
+    h.event(egui::Event::Paste(texto.clone()));
+    h.run();
+    assert_eq!(quantos(&h, "quadrado"), 2);
+    let colado = cena(&h).data.find(cena(&h).selection[0]).unwrap().clone();
+    assert_ne!(colado.id, q.id);
+    assert!(
+        perto(colado.x, wx, 1.0) && perto(colado.y, wy, 1.0),
+        "colado em ({}, {}), mouse em ({wx}, {wy})",
+        colado.x,
+        colado.y
+    );
+    assert_eq!(colado.components, q.components);
+    // Ctrl+X recorta o colado; Ctrl+Z traz de volta.
+    h.event(egui::Event::Cut);
+    h.run();
+    assert_eq!(quantos(&h, "quadrado"), 1);
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(quantos(&h, "quadrado"), 2);
+    // Botão direito no vazio > Colar aqui.
+    let p2 = rect.center() + egui::vec2(-160.0, 100.0);
+    clique_direito(&mut h, p2);
+    h.get_by_label_contains("Colar aqui").click();
+    h.run();
+    assert_eq!(quantos(&h, "quadrado"), 3);
+    // Em outra cena 2D: colado no mesmo lugar (pela Hierarquia não tem mouse).
+    std::fs::write(
+        proj.join("cenas/outra.cena"),
+        nn_studio::files::visual_scene_template(),
+    )
+    .unwrap();
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.files.rescan();
+        ws.open_file("cenas/outra.cena", None);
+    }
+    h.run();
+    let outra = {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut("cenas/outra.cena").unwrap();
+        doc.data.objects.retain(|o| o.name != "quadrado");
+        doc.paste_objects(&texto, &proj, None);
+        doc.data.objects.clone()
+    };
+    let q2 = outra
+        .iter()
+        .find(|o| o.name == "quadrado")
+        .expect("colou na outra cena");
+    assert_eq!((q2.x, q2.y), (q.x, q.y));
+    // Objetos 2D não colam numa cena 3D.
+    std::fs::write(
+        proj.join("cenas/mundo.cena"),
+        nn_studio::files::scene3d_template(),
+    )
+    .unwrap();
+    let mut doc3 = nn_studio::scene_view::SceneDoc::open(&proj, "cenas/mundo.cena");
+    assert!(doc3.paste_objects(&texto, &proj, None).is_empty());
+    assert!(doc3.paste_objects("print('oi')", &proj, None).is_empty());
+}
+
+/// Vários selecionados: o Inspetor mostra o que todos têm, marca o que
+/// difere e muda em todos; componentes copiados colam em todos.
+#[test]
+fn inspetor_com_varios_objetos_e_componentes_copiados() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    let dir = temp("varios");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    h.run();
+    let cores = ["#FF0000", "#00FF00", "#0000FF"];
+    {
+        let doc = cena_mut(&mut h);
+        doc.data
+            .objects
+            .retain(|o| o.component("camera3d").is_some());
+        for (i, cor) in cores.iter().enumerate() {
+            let mut o = Object::new(10 + i as u32, &format!("bloco{i}"));
+            o.x = i as f64 * 2.0;
+            let mut c = Component::new("shape3d");
+            c.set("color", Prop::Str((*cor).into()));
+            o.components.push(c);
+            if i == 2 {
+                // Só o último tem uma luz: ela não aparece com os três.
+                o.components.push(Component::new("light3d"));
+            }
+            doc.data.objects.push(o);
+        }
+        doc.selection = vec![10, 11, 12];
+    }
+    h.run();
+    h.get_by_label("3 objetos");
+    h.get_by_label("Posição ≠");
+    h.get_by_label("Cor ≠");
+    assert!(h.query_by_label("Luz").is_none(), "a luz não é de todos");
+    tela(&mut h, "inspetor-varios");
+    // Visível: desmarcar esconde os três (um passo de desfazer).
+    h.get_by_label("Visível").click();
+    h.run();
+    assert!(
+        cena(&h)
+            .data
+            .objects
+            .iter()
+            .filter(|o| o.id >= 10)
+            .all(|o| !o.visible)
+    );
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(
+        cena(&h)
+            .data
+            .objects
+            .iter()
+            .filter(|o| o.id >= 10)
+            .all(|o| o.visible)
+    );
+    // Restaurar o padrão da Forma 3D: a cor volta nos três; a forma fica.
+    h.get_all_by_label("Forma 3D")
+        .next()
+        .unwrap()
+        .click_secondary();
+    h.run();
+    h.get_by_label("↺ Restaurar o padrão").click();
+    h.run();
+    let padrao = Component::new("shape3d").str("color").to_string();
+    for o in cena(&h).data.objects.iter().filter(|o| o.id >= 10) {
+        assert_eq!(o.components[0].str("color"), padrao, "{}", o.name);
+    }
+    h.get_by_label("Cor");
+    // Copiar a luz do bloco2 e colar como componente novo nos dois outros.
+    cena_mut(&mut h).selection = vec![12];
+    h.run();
+    h.get_all_by_label("Luz").next().unwrap().click_secondary();
+    h.run();
+    h.get_by_label("📋 Copiar componente").click();
+    h.run();
+    cena_mut(&mut h).selection = vec![10, 11];
+    h.run();
+    h.get_by_label_contains("Colar componente").click();
+    h.run();
+    for id in [10, 11] {
+        let o = cena(&h).data.find(id).unwrap();
+        assert!(o.component("light3d").is_some(), "{} ganhou a luz", o.name);
+    }
+    // Colar valores: a cor do bloco0 vira a do bloco1.
+    {
+        let doc = cena_mut(&mut h);
+        doc.data.find_mut(10).unwrap().components[0].set("color", Prop::Str("#123456".into()));
+        doc.selection = vec![10];
+    }
+    h.run();
+    h.get_all_by_label("Forma 3D")
+        .next()
+        .unwrap()
+        .click_secondary();
+    h.run();
+    h.get_by_label("📋 Copiar componente").click();
+    h.run();
+    cena_mut(&mut h).selection = vec![11];
+    h.run();
+    h.get_all_by_label("Forma 3D")
+        .next()
+        .unwrap()
+        .click_secondary();
+    h.run();
+    h.get_by_label("📋 Colar valores").click();
+    h.run();
+    assert_eq!(
+        cena(&h).data.find(11).unwrap().components[0].str("color"),
+        "#123456"
+    );
+}
+
+/// Favoritos: guardar pelo botão direito; criar de novo pelo ➕ Objeto e
+/// pelo Shift+A; cada cópia fica livre.
+#[test]
+fn favoritos_do_projeto() {
+    let dir = temp("favoritos");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena(&mut h, &proj);
+    {
+        let doc = cena_mut(&mut h);
+        let q = doc
+            .data
+            .objects
+            .iter_mut()
+            .find(|o| o.name == "quadrado")
+            .unwrap();
+        q.components[0].set("color", nn_studio::scene_data::Prop::Str("#FF00FF".into()));
+    }
+    h.run();
+    h.get_by_label("quadrado").click_secondary();
+    h.run();
+    h.get_by_label("⭐ Guardar nos favoritos").click();
+    h.run();
+    assert!(proj.join("favoritos/quadrado.favorito").is_file());
+    assert!(
+        console_text(&h).contains("favoritos"),
+        "{}",
+        console_text(&h)
+    );
+    // ➕ Objeto > ⭐ Favoritos > quadrado.
+    h.get_by_label("➕ Objeto").click();
+    h.run();
+    submenu(&mut h, "⭐ Favoritos");
+    tela(&mut h, "favoritos");
+    // (O da Hierarquia fica à esquerda; o do menu, na cena.)
+    h.get_all_by(|n| n.role() == Role::Button && n.label().as_deref() == Some("quadrado"))
+        .max_by(|a, b| a.rect().left().total_cmp(&b.rect().left()))
+        .unwrap()
+        .click();
+    h.run();
+    assert_eq!(quantos(&h, "quadrado"), 2);
+    let novo = cena(&h).data.find(cena(&h).selection[0]).unwrap().clone();
+    assert_eq!(novo.components[0].str("color"), "#FF00FF");
+    assert!(novo.prefab.is_none(), "favorito não é prefab");
+    // Shift+A acha o favorito.
+    let rect = h.get_by_label("Vista da cena").rect();
+    h.hover_at(rect.center() + egui::vec2(100.0, 0.0));
+    h.run();
+    atalho(&mut h, Modifiers::SHIFT, Key::A);
+    digitar(&mut h, "quadr");
+    h.get_by_label("⭐ Favoritos › quadrado");
+    h.key_press(Key::Enter);
+    h.run();
+    assert_eq!(quantos(&h, "quadrado"), 3);
+    // Um 3D não vê os favoritos do 2D.
+    let fav = nn_studio::catalog::favorites(&proj);
+    assert_eq!(fav.len(), 1);
+    assert!(!fav[0].three_d);
 }

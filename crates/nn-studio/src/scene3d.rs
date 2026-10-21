@@ -708,9 +708,11 @@ impl SceneDoc {
 
         self.input3(ui, &response, rect, env, &mut actions);
         self.overlays3(&painter, rect, env);
+        self.carry_hint(&painter, rect);
         self.view_menu3(&response, rect, env, &mut actions);
         if let Some(mut q) = self.quick_add.take() {
-            match catalog::quick_add_ui(ui.ctx(), &mut q, &catalog::catalog3()) {
+            let entries = catalog::with_favorites(catalog::catalog3(), env.root, true);
+            match catalog::quick_add_ui(ui.ctx(), &mut q, &entries) {
                 QuickResult::Open => self.quick_add = Some(q),
                 QuickResult::Close => {}
                 QuickResult::Pick(p) => {
@@ -921,7 +923,7 @@ impl SceneDoc {
             }
             ui.separator();
             let menu = ui.menu_button("➕ Objeto", |ui| {
-                if let Some(p) = add_menu3(ui) {
+                if let Some(p) = add_menu3(ui, env.root) {
                     self.place_picked3(env, p, None, actions);
                 }
             });
@@ -1073,6 +1075,37 @@ impl SceneDoc {
         });
         let hovered = response.hovered() || response.dragged();
 
+        // Shift+D: as cópias seguem o mouse (no plano delas) até o clique.
+        if let Some(y) = self
+            .carry
+            .as_ref()
+            .map(|c| c.y)
+            .or(self.swallow_press.then_some(0.0))
+        {
+            let p = response.hover_pos();
+            let p3 = p.and_then(|p| {
+                let (o, d) = ray(&self.cam3, rect, p);
+                ray_plane(o, d, y)
+            });
+            let p2 = p.map(|p| self.camera.to_world(rect, p));
+            if self.carry_input(ui, p2, p3) {
+                return;
+            }
+        }
+        if response.hovered()
+            && !secondary
+            && !ui.ctx().text_edit_focused()
+            && let Some(p) = response.hover_pos()
+            && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::D))
+        {
+            if self.start_carry() {
+                let y = self.carry.as_ref().map_or(0.0, |c| c.y);
+                let (o, d) = ray(&self.cam3, rect, p);
+                let p2 = self.camera.to_world(rect, p);
+                self.carry_to(Some(p2), ray_plane(o, d, y));
+            }
+            return;
+        }
         // Apertar o botão direito: ainda não voou (soltar sem voar abre o menu).
         if ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary)) {
             self.fly_moved = false;
@@ -1168,7 +1201,18 @@ impl SceneDoc {
             && response.drag_started_by(egui::PointerButton::Primary)
             && let Some(p) = response.interact_pointer_pos()
         {
-            if mods.alt {
+            // Alt + arrastar uma seta do Mover: leva uma cópia. Em qualquer
+            // outro lugar, Alt + arrastar gira a câmera em volta.
+            let copy_kind = (mods.alt && self.tool == Tool::Move)
+                .then(|| self.gizmo_hit3(rect, p))
+                .flatten();
+            if let Some(kind) = copy_kind {
+                self.duplicate_in_place();
+                self.start_drag3(kind, p);
+                if let Some(d) = &mut self.drag3 {
+                    d.recorded = true;
+                }
+            } else if mods.alt {
                 let pivot = self.pivot3();
                 self.drag3 = Some(Drag3 {
                     kind: Drag3Kind::Orbit { pivot },
@@ -1260,6 +1304,17 @@ impl SceneDoc {
             self.pick3(env.root, env.sizes, o, d).map(|(id, _)| id)
         });
 
+        // Ctrl+C, Ctrl+X e Ctrl+V (colar onde o mouse aponta).
+        if response.hovered() && !ui.ctx().text_edit_focused() && self.quick_add.is_none() {
+            let at = response.hover_pos().map(|p| {
+                let w = self.point_under3(env, rect, p);
+                super::WorldPos {
+                    three_d: true,
+                    pos: [f64::from(w.x), f64::from(w.y), f64::from(w.z)],
+                }
+            });
+            self.clipboard_keys(ui, env.root, at);
+        }
         // Shift+A: a busca rápida para criar, onde o mouse está.
         if response.hovered()
             && !secondary
@@ -1493,26 +1548,9 @@ impl SceneDoc {
         }
     }
 
-    /// Duplica a seleção, com a cópia um passo da grade ao lado.
+    /// Duplica a seleção (o mesmo que [`SceneDoc::duplicate_selection`]).
     pub fn duplicate_selection3(&mut self) {
-        if self.selection.is_empty() {
-            return;
-        }
-        self.record(None);
-        let mut new = Vec::new();
-        let keep = self.prefab_root();
-        for id in self.selection_roots() {
-            if Some(id) == keep {
-                continue;
-            }
-            if let Some(n) = self.data.duplicate(id) {
-                if let Some(o) = self.data.find_mut(n) {
-                    o.x += self.grid3.max(0.5);
-                }
-                new.push(n);
-            }
-        }
-        self.selection = new;
+        self.duplicate_selection();
     }
 
     fn overlays3(&self, painter: &egui::Painter, rect: Rect, env: &mut SceneEnv) {
@@ -1737,8 +1775,9 @@ fn arrow(painter: &egui::Painter, from: Pos2, to: Pos2, color: Color32) {
 /// O menu ➕ da cena 3D: os objetos do mundo e, num submenu, os da tela
 /// (HUD e menus, que ficam por cima do mundo).
 /// O menu ➕ Objeto do 3D (a lista fica em [`crate::catalog::catalog3`]).
-pub fn add_menu3(ui: &mut egui::Ui) -> Option<Picked> {
-    catalog::menu(ui, &catalog::catalog3(), "3d")
+pub fn add_menu3(ui: &mut egui::Ui, root: &Path) -> Option<Picked> {
+    let entries = catalog::with_favorites(catalog::catalog3(), root, true);
+    catalog::menu(ui, &entries, "3d")
 }
 
 /// Um lago: um plano azul, um pouco transparente, com o Material Água

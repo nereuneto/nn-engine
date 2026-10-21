@@ -4,6 +4,17 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Menos trabalho repetido (Sprint 44)
+
+- **Ctrl+D repete o passo:** duplicou e moveu a cópia? O próximo Ctrl+D põe a nova o mesmo tanto adiante. Uma cerca ou uma fileira sai com Ctrl+D, Ctrl+D, Ctrl+D…
+- **Alt + arrastar** leva uma cópia e deixa o original. No 2D, arrastando o objeto ou a seta; no 3D, arrastando uma seta do Mover (Alt + arrastar no resto continua girando a câmera).
+- **Shift+D:** a cópia segue o mouse até o clique (com Encaixar, na grade). Esc ou o botão direito desistem.
+- **Copiar, recortar e colar objetos** (Ctrl+C, Ctrl+X, Ctrl+V), com os filhos, na cena e na Hierarquia. Na cena, o colado vai para onde o mouse está. Cola em outra cena do projeto e em outro NN Studio aberto. O botão direito no vazio tem **📋 Colar aqui**, e o menu de um objeto tem Copiar e Recortar.
+- **Copiar e colar componentes:** o menu do componente (☰ ou o botão direito no nome) tem **📋 Copiar componente** e **📋 Colar valores**. Embaixo do ➕ Adicionar componente, **📋 Colar componente** põe uma cópia no objeto.
+- **Vários objetos no Inspetor:** com vários selecionados, ele mostra a Transformação e os componentes que todos têm. O que você muda vale para todos, só no campo mexido. Um **≠** marca os campos com valores diferentes. Adicionar, colar ou remover um componente também vale para todos.
+- **⭐ Favoritos:** no botão direito de um objeto, **⭐ Guardar nos favoritos** guarda um molde em `favoritos/`. Ele aparece no topo do ➕ Objeto, do botão direito e do Shift+A. Diferente do prefab, cada cópia é livre.
+- **Tutorial:** o **Seu primeiro mundo 3D** tem um passo novo, **Uma fileira de árvores**.
+
 ### Botão direito e criar rápido (Sprint 43)
 
 - **Botão direito na cena** (2D e 3D): clicar e soltar, sem arrastar, abre um menu. No vazio, ele cria o objeto **onde você clicou**, e não mais no meio da vista. Em cima de um objeto, mostra o menu dele: Renomear, Duplicar, ⛶ Focar, **Copiar e Colar posição**, **➕ Criar dentro**, Criar filho vazio, 📦 Criar prefab, Excluir e **➕ Criar aqui**. Num chão (plano, terreno, mapa de tiles), o menu é de criar em cima. Arrastar com o botão direito continua movendo a vista (e, no 3D, voando); pintando tiles, ele continua pegando o tile.
