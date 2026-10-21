@@ -2,6 +2,12 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## 0.2.2
+
+Correção da 0.2.1.
+
+- **Nas cenas 3D, as cópias de um prefab iam todas para z = 0** no jogo (no NN Studio elas apareciam no lugar certo). As moedas e as estrelas dos modelos **3D** e **Vale 3D**, por exemplo, ficavam enfileiradas longe da trilha e dos morros. Agora cada cópia fica onde está na cena: valem o Z, a rotação 3D (X, Y e Z) e a escala em Z dela. O mesmo para os prefabs criados pelo jogo com `scene:spawn(prefab, x, y, { z = ... })`: o **Atirar** no 3D soltava o tiro em z = 0 quando quem atirava estava em outro lugar.
+
 ## 0.2.1
 
 Correção da 0.2.0.

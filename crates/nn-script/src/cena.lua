@@ -825,7 +825,7 @@ M.PREFAB_EXTENSION = "prefab"
 -- Campos próprios de cada instância; o resto vem do prefab.
 M.INSTANCE_FIELDS = {
   "id", "name", "x", "y", "rotation", "scale_x", "scale_y", "visible", "locked", "layer",
-  "anchor",
+  "anchor", "z", "rx", "ry", "rz", "scale_z",
 }
 
 local function load_data(path, what)
