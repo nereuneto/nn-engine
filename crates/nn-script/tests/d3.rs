@@ -465,7 +465,7 @@ fn heroi_animado_pelo_lua() {
         .count();
     assert!(diff > 10, "o braço subiu: {diff} pixels");
     let nomes: String = lua.globals().get("nomes").unwrap();
-    assert_eq!(nomes, "parado,andar,correr,pular,cair,acenar");
+    assert_eq!(nomes, "parado,andar,correr,pular,cair,acenar,golpe,atirar");
     let tocando: String = lua.globals().get("tocando").unwrap();
     assert_eq!(tocando, "acenar");
     // Uma animação que não existe: erro com a lista.

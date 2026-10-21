@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Gera o modelo de projeto "vale3d": um vale pintado num Terreno (morros,
 um lago, uma trilha, cores), com árvores espalhadas, estrelas nos morros,
-moedas na trilha, uma fogueira e o herói.
+moedas na trilha, uma fogueira, besouros que mordem e o herói com uma espada
+na mão (Golpe).
 
     python3 ferramentas/gerar_vale3d.py
     NN_REESCREVER=1 cargo test -p nn-studio --lib modelos_ja_vem
@@ -123,13 +124,19 @@ heroi_events = [
     '          } },',
 ]
 hx, hz = 0.0, 36.0
+ESPADA_RX = 20
 c.obj('Herói', [comp('model', file='modelos/heroi.glb', color='#FFFFFF', flat=False, shadow=True),
                 comp('behavior', script='nn:jogador3d', velocidade=6, pulo=8, pulos_no_ar=0, camera='atras',
                      distancia=7, prender_mouse=True, sensibilidade=0.15, inverter_y=False, virar=True,
                      agua='voltar', queda=-25, raio=0, altura=0),
-                vida_heroi()],
+                vida_heroi(tremer=6),
+                comp('behavior', script='nn:golpe', quando='tecla', tecla='clique', alvo='', dano=1,
+                     alcance=1.7, angulo=120, todos=True, empurrao=6, intervalo=0.45, animacao='golpe',
+                     acerto=0.22, som='', som_acerto='assets/sons/dano.wav')],
       events=heroi_events, x=hx, y=round(chao(hx, hz) + 0.05, 2), z=hz, ry=180, scale_x=1.1, scale_y=1.1, scale_z=1.1,
-      children=[c.child('Poeira', [particulas(
+      children=[c.child('Espada', [comp('model', file='modelos/espada.glb', color='#FFFFFF', flat=False, shadow=True),
+                                   comp('bone', bone='mao_d')], rx=ESPADA_RX),
+                c.child('Poeira', [particulas(
           mode="explosao", amount=14, on_start=False, lifetime=0.6, lifetime_var=0.4,
           speed_min=0.8, speed_max=2, spread=200, gravity=0.5, drag=4, area="circulo",
           area_radius=0.3, size_start=0.35, size_end=0.6, color_start="#E8DCC4CC",
@@ -206,13 +213,13 @@ c.obj('Placa', [comp('shape3d', shape='cube', color='#9C6B43', shadow=True), com
 c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
                  comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 5     Moedas {moedas}')],
       x=40, y=-44, anchor='top_left')
-c.obj('Dica', [comp('text', text='Ache as 5 estrelas nos morros! (Esc solta o mouse)', size=32, color='#FFFFFF', anchor='center', font='', hud=True)],
+c.obj('Dica', [comp('text', text='Ache as 5 estrelas nos morros! Clique para golpear (Esc solta o mouse)', size=32, color='#FFFFFF', anchor='center', font='', hud=True)],
       y=-120, anchor='top')
 coracoes(c)
 
 # Besouros perto da trilha.
 for (bx, bz, modo, ax) in [(8, 0, 'vagar', 0), (-8, -26, 'patrulha', 8), (14, -30, 'vagar', 0)]:
-    besouro(c, bx, round(chao(bx, bz), 2), bz, andar=modo, ax=ax, az=0, raio=4)
+    besouro(c, bx, round(chao(bx, bz), 2), bz, andar=modo, ax=ax, az=0, raio=4, combate=True)
 
 eventos = '''  events = {
     { comment = "Começo: zera as estrelas e as moedas; a dica some depois de 4 segundos." },
@@ -226,6 +233,12 @@ eventos = '''  events = {
         { cond = "depois_de", segundos = 4 },
       }, actions = {
         { act = "mostrar", acao = "esconder", alvo = "Dica" },
+      } },
+    { comment = "Derrotou um besouro: ganha 3 moedas." },
+    { when = {
+        { cond = "derrotar", quem = "@jogador", alvo = "Besouro" },
+      }, actions = {
+        { act = "variavel", var = "moedas", op = "somar", valor = 3 },
       } },
     { comment = "Achou as 5 estrelas: vitória!" },
     { when = {

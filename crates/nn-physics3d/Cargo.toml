@@ -9,6 +9,7 @@ license.workspace = true
 
 [dependencies]
 glam.workspace = true
+nn-nav.workspace = true
 rapier3d.workspace = true
 
 [lints]

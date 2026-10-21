@@ -9,7 +9,9 @@ use mlua::{
     AnyUserData, Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods, Value,
 };
 use nn_core::Color;
-use nn_physics3d::{BodyDesc, BodyId3, BodyKind3, CharacterDesc, Event3, Shape3, World3};
+use nn_physics3d::{
+    BodyDesc, BodyId3, BodyKind3, CharacterDesc, Event3, NavOptions3, Shape3, World3,
+};
 
 use crate::api::with_ctx;
 use crate::convert::{err, opt};
@@ -414,6 +416,46 @@ impl UserData for LWorld3 {
                 s.tags.insert(id, t);
             }
             Ok(LBody3::new(&this.0, id))
+        });
+        // nav({ cell, radius, height, step, slope, area = {x1, z1, x2, z2},
+        // water = { {x1, z1, x2, z2, nível}, ... } }): a grade do chão por
+        // onde dá para andar.
+        m.add_method("nav", |_, this, opts: Option<Table>| {
+            let o = opts.as_ref();
+            let d = NavOptions3::default();
+            let n = |k: &str, v: f32| -> Result<f32> { Ok(opt::<f32>(o, k)?.unwrap_or(v)) };
+            let area = match opt::<Table>(o, "area")? {
+                Some(a) => {
+                    let v: Vec<f32> = a.sequence_values().collect::<Result<_>>()?;
+                    if v.len() != 4 {
+                        return Err(err("area: { x1, z1, x2, z2 }"));
+                    }
+                    Some((glam::Vec2::new(v[0], v[1]), glam::Vec2::new(v[2], v[3])))
+                }
+                None => None,
+            };
+            let mut water = Vec::new();
+            if let Some(list) = opt::<Table>(o, "water")? {
+                for w in list.sequence_values::<Table>() {
+                    let v: Vec<f32> = w?.sequence_values().collect::<Result<_>>()?;
+                    if v.len() != 5 {
+                        return Err(err("water: { { x1, z1, x2, z2, nível }, ... }"));
+                    }
+                    let (a, b) = (glam::Vec2::new(v[0], v[1]), glam::Vec2::new(v[2], v[3]));
+                    water.push((a.min(b), a.max(b), v[4]));
+                }
+            }
+            let opts = NavOptions3 {
+                cell: n("cell", d.cell)?,
+                radius: n("radius", d.radius)?,
+                height: n("height", d.height)?,
+                step: n("step", d.step)?,
+                max_slope: n("slope", d.max_slope)?,
+                area,
+                water,
+            };
+            let grid = this.0.borrow().world.nav_grid(&opts);
+            Ok(crate::nav::LNav::new(grid, true))
         });
         m.add_method("step", |lua, this, dt: f32| {
             let events: Vec<Event3> = {

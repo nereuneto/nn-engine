@@ -8,8 +8,10 @@
 //! ```
 //!
 //! e a cena visual aberta com aquele arquivo aplica a mudança na hora, sem
-//! salvar. Também chegam comandos: `{"cmd": "pause"}`, `"resume"` e
-//! `"step"` (avança um quadro com o jogo pausado).
+//! salvar. Também chegam comandos: `{"cmd": "pause"}`, `"resume"`,
+//! `"step"` (avança um quadro com o jogo pausado) e `"show_paths"` /
+//! `"hide_paths"` (mostra a grade dos caminhos e o caminho de cada inimigo;
+//! também `{"cmd": "paths", "on": true}`).
 //!
 //! No sentido contrário, o jogo escreve no log (alvo [`LOG_TARGET`]):
 //!
@@ -35,6 +37,12 @@ static INBOX: Mutex<VecDeque<(String, serde_json::Value)>> = Mutex::new(VecDeque
 static ENABLED: AtomicBool = AtomicBool::new(false);
 static PAUSED: AtomicBool = AtomicBool::new(false);
 static STEPS: AtomicU32 = AtomicU32::new(0);
+static PATHS: AtomicBool = AtomicBool::new(false);
+
+/// Mostrar os caminhos? (Pedido pelo editor, ou `NN_CAMINHOS=1`.)
+pub fn show_paths() -> bool {
+    PATHS.load(Ordering::Relaxed) || std::env::var("NN_CAMINHOS").is_ok_and(|v| v == "1")
+}
 
 /// O canal com o editor está ligado?
 pub fn enabled() -> bool {
@@ -83,6 +91,12 @@ pub fn push(line: &str) -> bool {
                 PAUSED.store(true, Ordering::Relaxed);
                 STEPS.fetch_add(1, Ordering::Relaxed);
             }
+            "paths" => {
+                let on = value.get("on").and_then(|v| v.as_bool()).unwrap_or(true);
+                PATHS.store(on, Ordering::Relaxed);
+            }
+            "show_paths" => PATHS.store(true, Ordering::Relaxed),
+            "hide_paths" => PATHS.store(false, Ordering::Relaxed),
             _ => return false,
         }
         return true;

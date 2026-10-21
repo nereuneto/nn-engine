@@ -18,6 +18,12 @@ return {
       }, actions = {
         { act = "mostrar", acao = "esconder", alvo = "Dica" },
       } },
+    { comment = "Derrotou um besouro: ganha 3 moedas." },
+    { when = {
+        { cond = "derrotar", quem = "@jogador", alvo = "Besouro" },
+      }, actions = {
+        { act = "variavel", var = "moedas", op = "somar", valor = 3 },
+      } },
     { comment = "Achou as 5 estrelas: vitória!" },
     { when = {
         { cond = "variavel", var = "estrelas", op = ">=", valor = 5 },
@@ -37,14 +43,15 @@ return {
       },
     },
     {
-      id = 3, name = "Herói",
+      id = 4, name = "Herói",
       x = 0, y = 0.1, rotation = 0, scale_x = 1.1, scale_y = 1.1,
       z = 36, rx = 0, ry = 180, rz = 0, scale_z = 1.1,
       visible = true, layer = 0,
       components = {
         { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true },
         { type = "behavior", script = "nn:jogador3d", agua = "voltar", altura = 0, camera = "atras", distancia = 7, inverter_y = false, prender_mouse = true, pulo = 8, pulos_no_ar = 0, queda = -25, raio = 0, sensibilidade = 0.15, velocidade = 6, virar = true },
-        { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, variavel = "vidas", vidas = 3 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, tremer = 6, variavel = "vidas", vidas = 3 },
+        { type = "behavior", script = "nn:golpe", acerto = 0.22, alcance = 1.7, alvo = "", angulo = 120, animacao = "golpe", dano = 1, empurrao = 6, intervalo = 0.45, quando = "tecla", som = "", som_acerto = "assets/sons/dano.wav", tecla = "clique", todos = true },
       },
       events = {
         { when = {
@@ -61,7 +68,17 @@ return {
       },
       children = {
         {
-          id = 2, name = "Poeira",
+          id = 2, name = "Espada",
+          x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+          z = 0, rx = 20, ry = 0, rz = 0, scale_z = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "model", file = "modelos/espada.glb", color = "#FFFFFF", flat = false, shadow = true },
+            { type = "bone", bone = "mao_d" },
+          },
+        },
+        {
+          id = 3, name = "Poeira",
           x = 0, y = 0.05, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
@@ -71,7 +88,7 @@ return {
       },
     },
     {
-      id = 4, name = "pedra",
+      id = 5, name = "pedra",
       x = 10.8, y = 1.44, rotation = 0, scale_x = 1.99, scale_y = 1.99,
       z = -1.67, rx = 0, ry = 262, rz = 0, scale_z = 1.99,
       visible = true, layer = 0,
@@ -81,7 +98,7 @@ return {
       },
     },
     {
-      id = 5, name = "arvore",
+      id = 6, name = "arvore",
       x = -25.31, y = 0.93, rotation = 0, scale_x = 0.91, scale_y = 0.91,
       z = 2.2, rx = 0, ry = 299, rz = 0, scale_z = 0.91,
       visible = true, layer = 0,
@@ -91,7 +108,7 @@ return {
       },
     },
     {
-      id = 6, name = "arvore",
+      id = 7, name = "arvore",
       x = 20.11, y = 0.97, rotation = 0, scale_x = 1.14, scale_y = 1.14,
       z = 33.72, rx = 0, ry = 208, rz = 0, scale_z = 1.14,
       visible = true, layer = 0,
@@ -101,7 +118,7 @@ return {
       },
     },
     {
-      id = 7, name = "arvore",
+      id = 8, name = "arvore",
       x = 9.27, y = 4.96, rotation = 0, scale_x = 1.17, scale_y = 1.17,
       z = -37.27, rx = 0, ry = 59, rz = 0, scale_z = 1.17,
       visible = true, layer = 0,
@@ -111,7 +128,7 @@ return {
       },
     },
     {
-      id = 8, name = "pedra",
+      id = 9, name = "pedra",
       x = 11.91, y = 1.02, rotation = 0, scale_x = 1.94, scale_y = 1.94,
       z = 35.03, rx = 0, ry = 45, rz = 0, scale_z = 1.94,
       visible = true, layer = 0,
@@ -121,7 +138,7 @@ return {
       },
     },
     {
-      id = 9, name = "arvore",
+      id = 10, name = "arvore",
       x = -30.01, y = 4.92, rotation = 0, scale_x = 1.2, scale_y = 1.2,
       z = 34.24, rx = 0, ry = 175, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
@@ -131,7 +148,7 @@ return {
       },
     },
     {
-      id = 10, name = "pedra",
+      id = 11, name = "pedra",
       x = 25.61, y = 1.84, rotation = 0, scale_x = 1.87, scale_y = 1.87,
       z = -34.03, rx = 0, ry = 336, rz = 0, scale_z = 1.87,
       visible = true, layer = 0,
@@ -141,7 +158,7 @@ return {
       },
     },
     {
-      id = 11, name = "arvore",
+      id = 12, name = "arvore",
       x = 20.38, y = 4.85, rotation = 0, scale_x = 1.3, scale_y = 1.3,
       z = 21.02, rx = 0, ry = 62, rz = 0, scale_z = 1.3,
       visible = true, layer = 0,
@@ -151,7 +168,7 @@ return {
       },
     },
     {
-      id = 12, name = "pedra",
+      id = 13, name = "pedra",
       x = -8.96, y = 1.84, rotation = 0, scale_x = 1.74, scale_y = 1.74,
       z = -12.7, rx = 0, ry = 149, rz = 0, scale_z = 1.74,
       visible = true, layer = 0,
@@ -161,7 +178,7 @@ return {
       },
     },
     {
-      id = 13, name = "arvore",
+      id = 14, name = "arvore",
       x = -10.78, y = 0.08, rotation = 0, scale_x = 1.45, scale_y = 1.45,
       z = -3.89, rx = 0, ry = 197, rz = 0, scale_z = 1.45,
       visible = true, layer = 0,
@@ -171,7 +188,7 @@ return {
       },
     },
     {
-      id = 14, name = "pedra",
+      id = 15, name = "pedra",
       x = -18.74, y = 1.79, rotation = 0, scale_x = 1.92, scale_y = 1.92,
       z = 26.73, rx = 0, ry = 253, rz = 0, scale_z = 1.92,
       visible = true, layer = 0,
@@ -181,7 +198,7 @@ return {
       },
     },
     {
-      id = 15, name = "arvore",
+      id = 16, name = "arvore",
       x = -39.77, y = 3.73, rotation = 0, scale_x = 1.19, scale_y = 1.19,
       z = -34.39, rx = 0, ry = 292, rz = 0, scale_z = 1.19,
       visible = true, layer = 0,
@@ -191,7 +208,7 @@ return {
       },
     },
     {
-      id = 16, name = "pedra",
+      id = 17, name = "pedra",
       x = 9.81, y = 2.7, rotation = 0, scale_x = 1.55, scale_y = 1.55,
       z = -25.55, rx = 0, ry = 170, rz = 0, scale_z = 1.55,
       visible = true, layer = 0,
@@ -201,7 +218,7 @@ return {
       },
     },
     {
-      id = 17, name = "pedra",
+      id = 18, name = "pedra",
       x = -15.47, y = 3.89, rotation = 0, scale_x = 2.01, scale_y = 2.01,
       z = -31.74, rx = 0, ry = 219, rz = 0, scale_z = 2.01,
       visible = true, layer = 0,
@@ -211,7 +228,7 @@ return {
       },
     },
     {
-      id = 18, name = "arvore",
+      id = 19, name = "arvore",
       x = 14.07, y = 0.73, rotation = 0, scale_x = 1.12, scale_y = 1.12,
       z = 31.9, rx = 0, ry = 83, rz = 0, scale_z = 1.12,
       visible = true, layer = 0,
@@ -221,7 +238,7 @@ return {
       },
     },
     {
-      id = 19, name = "arvore",
+      id = 20, name = "arvore",
       x = 36.91, y = 1.27, rotation = 0, scale_x = 1.17, scale_y = 1.17,
       z = 7.24, rx = 0, ry = 192, rz = 0, scale_z = 1.17,
       visible = true, layer = 0,
@@ -231,7 +248,7 @@ return {
       },
     },
     {
-      id = 20, name = "arvore",
+      id = 21, name = "arvore",
       x = -4.86, y = 0.09, rotation = 0, scale_x = 0.93, scale_y = 0.93,
       z = -7.4, rx = 0, ry = 147, rz = 0, scale_z = 0.93,
       visible = true, layer = 0,
@@ -241,7 +258,7 @@ return {
       },
     },
     {
-      id = 21, name = "arvore",
+      id = 22, name = "arvore",
       x = -35.83, y = 8.43, rotation = 0, scale_x = 1.13, scale_y = 1.13,
       z = -19.36, rx = 0, ry = 87, rz = 0, scale_z = 1.13,
       visible = true, layer = 0,
@@ -251,7 +268,7 @@ return {
       },
     },
     {
-      id = 22, name = "arvore",
+      id = 23, name = "arvore",
       x = -8.44, y = -0.18, rotation = 0, scale_x = 0.98, scale_y = 0.98,
       z = 29.63, rx = 0, ry = 77, rz = 0, scale_z = 0.98,
       visible = true, layer = 0,
@@ -261,7 +278,7 @@ return {
       },
     },
     {
-      id = 23, name = "arvore",
+      id = 24, name = "arvore",
       x = 19.67, y = 1.08, rotation = 0, scale_x = 1.43, scale_y = 1.43,
       z = -1.68, rx = 0, ry = 269, rz = 0, scale_z = 1.43,
       visible = true, layer = 0,
@@ -271,7 +288,7 @@ return {
       },
     },
     {
-      id = 24, name = "arvore",
+      id = 25, name = "arvore",
       x = 32.92, y = 1.43, rotation = 0, scale_x = 1.39, scale_y = 1.39,
       z = -1.67, rx = 0, ry = 187, rz = 0, scale_z = 1.39,
       visible = true, layer = 0,
@@ -281,7 +298,7 @@ return {
       },
     },
     {
-      id = 25, name = "arvore",
+      id = 26, name = "arvore",
       x = 23.62, y = 3.1, rotation = 0, scale_x = 1.13, scale_y = 1.13,
       z = 30.52, rx = 0, ry = 297, rz = 0, scale_z = 1.13,
       visible = true, layer = 0,
@@ -291,7 +308,7 @@ return {
       },
     },
     {
-      id = 26, name = "pedra",
+      id = 27, name = "pedra",
       x = -28.9, y = 0.61, rotation = 0, scale_x = 1.92, scale_y = 1.92,
       z = 7.07, rx = 0, ry = 195, rz = 0, scale_z = 1.92,
       visible = true, layer = 0,
@@ -301,7 +318,7 @@ return {
       },
     },
     {
-      id = 27, name = "arvore",
+      id = 28, name = "arvore",
       x = -38.12, y = 0.68, rotation = 0, scale_x = 1.37, scale_y = 1.37,
       z = 7.49, rx = 0, ry = 299, rz = 0, scale_z = 1.37,
       visible = true, layer = 0,
@@ -311,7 +328,7 @@ return {
       },
     },
     {
-      id = 28, name = "pedra",
+      id = 29, name = "pedra",
       x = 20.13, y = 4.5, rotation = 0, scale_x = 1.34, scale_y = 1.34,
       z = 24.97, rx = 0, ry = 203, rz = 0, scale_z = 1.34,
       visible = true, layer = 0,
@@ -321,7 +338,7 @@ return {
       },
     },
     {
-      id = 29, name = "arvore",
+      id = 30, name = "arvore",
       x = -32.48, y = 3.18, rotation = 0, scale_x = 0.98, scale_y = 0.98,
       z = -37.97, rx = 0, ry = 60, rz = 0, scale_z = 0.98,
       visible = true, layer = 0,
@@ -331,7 +348,7 @@ return {
       },
     },
     {
-      id = 30, name = "arvore",
+      id = 31, name = "arvore",
       x = 12.43, y = 2.88, rotation = 0, scale_x = 1.08, scale_y = 1.08,
       z = -29.88, rx = 0, ry = 252, rz = 0, scale_z = 1.08,
       visible = true, layer = 0,
@@ -341,7 +358,7 @@ return {
       },
     },
     {
-      id = 31, name = "pedra",
+      id = 32, name = "pedra",
       x = 31.04, y = 2.45, rotation = 0, scale_x = 2.06, scale_y = 2.06,
       z = 9.7, rx = 0, ry = 103, rz = 0, scale_z = 2.06,
       visible = true, layer = 0,
@@ -351,7 +368,7 @@ return {
       },
     },
     {
-      id = 32, name = "pedra",
+      id = 33, name = "pedra",
       x = 16.8, y = 0.76, rotation = 0, scale_x = 1.91, scale_y = 1.91,
       z = 4, rx = 0, ry = 29, rz = 0, scale_z = 1.91,
       visible = true, layer = 0,
@@ -361,7 +378,7 @@ return {
       },
     },
     {
-      id = 33, name = "arvore",
+      id = 34, name = "arvore",
       x = 23.26, y = 1.57, rotation = 0, scale_x = 0.93, scale_y = 0.93,
       z = -39.37, rx = 0, ry = 290, rz = 0, scale_z = 0.93,
       visible = true, layer = 0,
@@ -371,7 +388,7 @@ return {
       },
     },
     {
-      id = 34, name = "arvore",
+      id = 35, name = "arvore",
       x = -14.91, y = 2.43, rotation = 0, scale_x = 1.07, scale_y = 1.07,
       z = -36.65, rx = 0, ry = 151, rz = 0, scale_z = 1.07,
       visible = true, layer = 0,
@@ -381,7 +398,7 @@ return {
       },
     },
     {
-      id = 35, name = "arvore",
+      id = 36, name = "arvore",
       x = 25.41, y = 6.59, rotation = 0, scale_x = 1.22, scale_y = 1.22,
       z = 24.25, rx = 0, ry = 279, rz = 0, scale_z = 1.22,
       visible = true, layer = 0,
@@ -391,7 +408,7 @@ return {
       },
     },
     {
-      id = 36, name = "arvore",
+      id = 37, name = "arvore",
       x = 18.77, y = 0.59, rotation = 0, scale_x = 1.28, scale_y = 1.28,
       z = 37.37, rx = 0, ry = 269, rz = 0, scale_z = 1.28,
       visible = true, layer = 0,
@@ -401,7 +418,7 @@ return {
       },
     },
     {
-      id = 37, name = "arvore",
+      id = 38, name = "arvore",
       x = 20.63, y = 6.55, rotation = 0, scale_x = 1.08, scale_y = 1.08,
       z = -24.84, rx = 0, ry = 103, rz = 0, scale_z = 1.08,
       visible = true, layer = 0,
@@ -411,7 +428,7 @@ return {
       },
     },
     {
-      id = 38, name = "arvore",
+      id = 39, name = "arvore",
       x = -11.58, y = 2.44, rotation = 0, scale_x = 0.96, scale_y = 0.96,
       z = -14.55, rx = 0, ry = 38, rz = 0, scale_z = 0.96,
       visible = true, layer = 0,
@@ -421,7 +438,7 @@ return {
       },
     },
     {
-      id = 39, name = "arvore",
+      id = 40, name = "arvore",
       x = 12.14, y = 0.26, rotation = 0, scale_x = 1.44, scale_y = 1.44,
       z = 10.12, rx = 0, ry = 258, rz = 0, scale_z = 1.44,
       visible = true, layer = 0,
@@ -431,7 +448,7 @@ return {
       },
     },
     {
-      id = 40, name = "arvore",
+      id = 41, name = "arvore",
       x = -36.09, y = 1.71, rotation = 0, scale_x = 1.29, scale_y = 1.29,
       z = -5.29, rx = 0, ry = 207, rz = 0, scale_z = 1.29,
       visible = true, layer = 0,
@@ -441,7 +458,7 @@ return {
       },
     },
     {
-      id = 41, name = "arvore",
+      id = 42, name = "arvore",
       x = -21.09, y = 3.76, rotation = 0, scale_x = 1.25, scale_y = 1.25,
       z = -9.17, rx = 0, ry = 335, rz = 0, scale_z = 1.25,
       visible = true, layer = 0,
@@ -451,7 +468,7 @@ return {
       },
     },
     {
-      id = 42, name = "arvore",
+      id = 43, name = "arvore",
       x = -33.17, y = 0.8, rotation = 0, scale_x = 1.29, scale_y = 1.29,
       z = -1.62, rx = 0, ry = 110, rz = 0, scale_z = 1.29,
       visible = true, layer = 0,
@@ -461,7 +478,7 @@ return {
       },
     },
     {
-      id = 43, name = "arvore",
+      id = 44, name = "arvore",
       x = 22.36, y = 1.94, rotation = 0, scale_x = 1.27, scale_y = 1.27,
       z = 10.14, rx = 0, ry = 310, rz = 0, scale_z = 1.27,
       visible = true, layer = 0,
@@ -471,7 +488,7 @@ return {
       },
     },
     {
-      id = 44, name = "arvore",
+      id = 45, name = "arvore",
       x = 15.92, y = 1.54, rotation = 0, scale_x = 1.4, scale_y = 1.4,
       z = 14.64, rx = 0, ry = 197, rz = 0, scale_z = 1.4,
       visible = true, layer = 0,
@@ -481,7 +498,7 @@ return {
       },
     },
     {
-      id = 45, name = "arvore",
+      id = 46, name = "arvore",
       x = -15.52, y = 2.26, rotation = 0, scale_x = 1.29, scale_y = 1.29,
       z = -9.45, rx = 0, ry = 3, rz = 0, scale_z = 1.29,
       visible = true, layer = 0,
@@ -491,7 +508,7 @@ return {
       },
     },
     {
-      id = 46, name = "pedra",
+      id = 47, name = "pedra",
       x = 30.05, y = 5.95, rotation = 0, scale_x = 1.38, scale_y = 1.38,
       z = 17.31, rx = 0, ry = 267, rz = 0, scale_z = 1.38,
       visible = true, layer = 0,
@@ -501,7 +518,7 @@ return {
       },
     },
     {
-      id = 47, name = "arvore",
+      id = 48, name = "arvore",
       x = -15.79, y = 0.71, rotation = 0, scale_x = 1.15, scale_y = 1.15,
       z = 35.48, rx = 0, ry = 55, rz = 0, scale_z = 1.15,
       visible = true, layer = 0,
@@ -511,7 +528,7 @@ return {
       },
     },
     {
-      id = 48, name = "arvore",
+      id = 49, name = "arvore",
       x = 39.27, y = 2.56, rotation = 0, scale_x = 1.27, scale_y = 1.27,
       z = -26.68, rx = 0, ry = 190, rz = 0, scale_z = 1.27,
       visible = true, layer = 0,
@@ -521,7 +538,7 @@ return {
       },
     },
     {
-      id = 49, name = "arvore",
+      id = 50, name = "arvore",
       x = 11.33, y = 0.17, rotation = 0, scale_x = 1.42, scale_y = 1.42,
       z = 14.53, rx = 0, ry = 164, rz = 0, scale_z = 1.42,
       visible = true, layer = 0,
@@ -531,147 +548,147 @@ return {
       },
     },
     {
-      id = 50, name = "estrela",
+      id = 51, name = "estrela",
       x = 24, y = 10.17, rotation = 0, scale_x = 1, scale_y = 1,
       z = -18, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 51, name = "estrela",
+      id = 52, name = "estrela",
       x = -28, y = 11.35, rotation = 0, scale_x = 1, scale_y = 1,
       z = -22, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 52, name = "estrela",
+      id = 53, name = "estrela",
       x = 28, y = 7.74, rotation = 0, scale_x = 1, scale_y = 1,
       z = 22, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 53, name = "estrela",
+      id = 54, name = "estrela",
       x = -30, y = 6.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 30, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 54, name = "estrela",
+      id = 55, name = "estrela",
       x = 2, y = 8.64, rotation = 0, scale_x = 1, scale_y = 1,
       z = -40, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 55, name = "moeda",
+      id = 56, name = "moeda",
       x = 0, y = 0.63, rotation = 0, scale_x = 1, scale_y = 1,
       z = 35.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 56, name = "moeda",
+      id = 57, name = "moeda",
       x = 0, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 31, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 57, name = "moeda",
+      id = 58, name = "moeda",
       x = 0, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 26.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 58, name = "moeda",
+      id = 59, name = "moeda",
       x = 1.5, y = 0.54, rotation = 0, scale_x = 1, scale_y = 1,
       z = 18.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 59, name = "moeda",
+      id = 60, name = "moeda",
       x = 3, y = 0.51, rotation = 0, scale_x = 1, scale_y = 1,
       z = 15, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 60, name = "moeda",
+      id = 61, name = "moeda",
       x = 4.5, y = 0.55, rotation = 0, scale_x = 1, scale_y = 1,
       z = 11.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 61, name = "moeda",
+      id = 62, name = "moeda",
       x = 5.5, y = 0.82, rotation = 0, scale_x = 1, scale_y = 1,
       z = 4.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 62, name = "moeda",
+      id = 63, name = "moeda",
       x = 5, y = 0.9, rotation = 0, scale_x = 1, scale_y = 1,
       z = 1, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 63, name = "moeda",
+      id = 64, name = "moeda",
       x = 4.5, y = 0.84, rotation = 0, scale_x = 1, scale_y = 1,
       z = -2.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 64, name = "moeda",
+      id = 65, name = "moeda",
       x = 1.5, y = 0.71, rotation = 0, scale_x = 1, scale_y = 1,
       z = -9, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 65, name = "moeda",
+      id = 66, name = "moeda",
       x = -1, y = 0.78, rotation = 0, scale_x = 1, scale_y = 1,
       z = -12, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 66, name = "moeda",
+      id = 67, name = "moeda",
       x = -3.5, y = 1.01, rotation = 0, scale_x = 1, scale_y = 1,
       z = -15, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 67, name = "moeda",
+      id = 68, name = "moeda",
       x = -5.5, y = 1.45, rotation = 0, scale_x = 1, scale_y = 1,
       z = -22, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 68, name = "moeda",
+      id = 69, name = "moeda",
       x = -5, y = 1.52, rotation = 0, scale_x = 1, scale_y = 1,
       z = -26, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 69, name = "moeda",
+      id = 70, name = "moeda",
       x = -4.5, y = 1.41, rotation = 0, scale_x = 1, scale_y = 1,
       z = -30, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 72, name = "Fogueira",
+      id = 73, name = "Fogueira",
       x = -4, y = -0.81, rotation = 0, scale_x = 0.9, scale_y = 0.15,
       z = 4, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
@@ -682,7 +699,7 @@ return {
       },
       children = {
         {
-          id = 70, name = "Fogo",
+          id = 71, name = "Fogo",
           x = 0, y = 1, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
@@ -690,7 +707,7 @@ return {
           },
         },
         {
-          id = 71, name = "Fumaça",
+          id = 72, name = "Fumaça",
           x = 0, y = 8, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
@@ -700,7 +717,7 @@ return {
       },
     },
     {
-      id = 73, name = "Lago",
+      id = 74, name = "Lago",
       x = -14, y = -1.2, rotation = 0, scale_x = 1, scale_y = 1,
       z = 12, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -709,7 +726,7 @@ return {
       },
     },
     {
-      id = 76, name = "Placa",
+      id = 77, name = "Placa",
       x = 2.6, y = 1.74, rotation = 0, scale_x = 2.6, scale_y = 0.75,
       z = 31, rx = 0, ry = 0, rz = 0, scale_z = 0.1,
       visible = true, layer = 0,
@@ -719,7 +736,7 @@ return {
       },
       children = {
         {
-          id = 74, name = "Poste",
+          id = 75, name = "Poste",
           x = 0, y = -1.25, rotation = 0, scale_x = 0.06, scale_y = 2.1,
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 1.2,
           visible = true, layer = 0,
@@ -728,7 +745,7 @@ return {
           },
         },
         {
-          id = 75, name = "Letreiro",
+          id = 76, name = "Letreiro",
           x = 0, y = 0, rotation = 0, scale_x = 0.385, scale_y = 1.333,
           z = 0.6, rx = 0, ry = 0, rz = 0, scale_z = 10,
           visible = true, layer = 0,
@@ -739,7 +756,7 @@ return {
       },
     },
     {
-      id = 77, name = "Placar",
+      id = 78, name = "Placar",
       x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -748,15 +765,15 @@ return {
       },
     },
     {
-      id = 78, name = "Dica",
+      id = 79, name = "Dica",
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top",
       components = {
-        { type = "text", text = "Ache as 5 estrelas nos morros! (Esc solta o mouse)", size = 32, color = "#FFFFFF", anchor = "center", font = "", hud = true },
+        { type = "text", text = "Ache as 5 estrelas nos morros! Clique para golpear (Esc solta o mouse)", size = 32, color = "#FFFFFF", anchor = "center", font = "", hud = true },
       },
     },
     {
-      id = 79, name = "Corações",
+      id = 80, name = "Corações",
       x = 40, y = -90, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -764,35 +781,38 @@ return {
       },
     },
     {
-      id = 80, name = "Besouro",
+      id = 81, name = "Besouro",
       x = 8, y = 0.8, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
         { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true },
         { type = "behavior", script = "nn:inimigo3d", andar = "vagar", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 0, z = 0 },
-        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, piscar = true, variavel = "", vidas = 1 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
+        { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/dano.wav" },
       },
     },
     {
-      id = 81, name = "Besouro",
+      id = 82, name = "Besouro",
       x = -8, y = 1.97, rotation = 0, scale_x = 1, scale_y = 1,
       z = -26, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
         { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true },
         { type = "behavior", script = "nn:inimigo3d", andar = "patrulha", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 8, z = 0 },
-        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, piscar = true, variavel = "", vidas = 1 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
+        { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/dano.wav" },
       },
     },
     {
-      id = 82, name = "Besouro",
+      id = 83, name = "Besouro",
       x = 14, y = 2.94, rotation = 0, scale_x = 1, scale_y = 1,
       z = -30, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
         { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true },
         { type = "behavior", script = "nn:inimigo3d", andar = "vagar", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 0, z = 0 },
-        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, piscar = true, variavel = "", vidas = 1 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
+        { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/dano.wav" },
       },
     },
   },

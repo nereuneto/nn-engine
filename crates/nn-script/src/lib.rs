@@ -35,6 +35,7 @@ mod d3;
 mod errors;
 mod input;
 pub mod live;
+mod nav;
 mod particles;
 mod physics;
 mod physics3d;
@@ -108,6 +109,8 @@ pub const BEHAVIORS: &[(&str, &str)] = &[
     ("animacao", include_str!("comportamentos/animacao.lua")),
     ("movimento", include_str!("comportamentos/movimento.lua")),
     ("atirar", include_str!("comportamentos/atirar.lua")),
+    ("golpe", include_str!("comportamentos/golpe.lua")),
+    ("projetil", include_str!("comportamentos/projetil.lua")),
     ("gerador", include_str!("comportamentos/gerador.lua")),
     ("temporario", include_str!("comportamentos/temporario.lua")),
     (
@@ -763,6 +766,7 @@ impl LuaScene {
                         mlua::LuaSerdeExt::from_value::<serde_json::Value>(&lua, state)
                 {
                     json["paused"] = serde_json::Value::Bool(live::paused());
+                    json["paths"] = serde_json::Value::Bool(live::show_paths());
                     live::report(&json);
                 }
                 if let Some(id) = picked {

@@ -455,6 +455,15 @@ fn modelo_aventura_chave_abre_a_porta_e_o_bau_termina() {
     let Some((mut h, rt)) = cena_do_modelo(&dir, "cenas/mapa.cena") else {
         return;
     };
+    // A grade de caminhos: a parede de tijolos do meio (os tiles sólidos)
+    // e o lago não são andáveis; o gramado é.
+    h.run_frames(2);
+    let anda = |rt: &ScriptRuntime, x: f64, y: f64| -> bool {
+        lua(rt, &format!("return cena:nav():walkable({x}, {y})"))
+    };
+    assert!(!anda(&rt, 96.0, 240.0), "a parede do meio");
+    assert!(anda(&rt, -160.0, -160.0), "o gramado");
+    assert!(!anda(&rt, -310.0, 0.0), "o lago");
     // Sem inimigos, para o teste não depender de onde eles andam.
     let sem_inimigos = "for _, n in ipairs({ 'lesma', 'morcego' }) do \
         for _, o in ipairs(cena:find_all(n)) do o:destroy() end end";
@@ -618,6 +627,22 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     // Dois besouros andando e três corações no HUD.
     assert_eq!(lua::<i64>(&rt, "return #cena:find_all('Besouro')"), 2);
     assert_eq!(lua::<i64>(&rt, "return nn.vars.vidas"), 3);
+    // Os besouros andam pela ilha (pelos caminhos) sem cair no mar.
+    let mut menor = f64::MAX;
+    for _ in 0..20 {
+        h.run_frames(15);
+        let m: f64 = lua(
+            &rt,
+            "local m = 99 for _, b in ipairs(cena:find_all('Besouro')) do
+               local _, y = b:position3d() m = math.min(m, y) end return m",
+        );
+        menor = menor.min(m);
+    }
+    assert!(menor > -0.5, "um besouro caiu: {menor}");
+    assert!(
+        !lua::<bool>(&rt, "return cena:nav():walkable(0, 40)"),
+        "o mar"
+    );
     // O herói está em pé na ilha e a câmera atrás dele: W anda para −Z.
     let y: f64 = lua(&rt, "return cena.objects['Herói'].y");
     assert!(y.abs() < 0.1, "em pé no chão: {y}");
@@ -778,6 +803,38 @@ fn modelo_vale3d_terreno_pisa_lago_volta_e_estrelas() {
         ((x + 14.0).powi(2) + (z - 12.0).powi(2)).sqrt() > 5.0,
         "saiu do lago: {x} {z}"
     );
+    // Os caminhos: o lago (com a água do terreno) não é andável, a trilha
+    // é; e os besouros andam sem entrar no lago.
+    rt.lua().load("cena._nav_dirty = true").exec().unwrap();
+    let t = std::time::Instant::now();
+    let andaveis: i64 = lua(&rt, "return cena:nav().walkable_count");
+    eprintln!(
+        "grade de caminhos do vale: {andaveis} células, {:?}",
+        t.elapsed()
+    );
+    assert!(andaveis > 5000, "{andaveis}");
+    assert!(
+        !lua::<bool>(&rt, "return cena:nav():walkable(-14, 12)"),
+        "o lago"
+    );
+    assert!(
+        lua::<bool>(&rt, "return cena:nav():walkable(0, 30)"),
+        "a trilha"
+    );
+    let mut fundo = f64::MAX;
+    for _ in 0..30 {
+        h.run_frames(10);
+        let m: f64 = lua(
+            &rt,
+            "local m = 99 for _, b in ipairs(cena:find_all('Besouro')) do
+               local x, y, z = b:position3d()
+               local a = cena:water_level(x, z)
+               if a then m = math.min(m, y - a) end
+             end return m",
+        );
+        fundo = fundo.min(m);
+    }
+    assert!(fundo > -0.3, "um besouro entrou no lago: {fundo}");
     // As 5 estrelas ficam em cima dos morros, e dá para pegar.
     let n: i64 = lua(&rt, "return #cena:find_all('estrela')");
     assert_eq!(n, 5);
@@ -875,15 +932,24 @@ fn miniaturas_dos_modelos() {
 }
 
 /// Ferramenta: grava as imagens dos jogos 3D do README e do guia "Comece aqui
-/// no 3D" (`cargo test -p nn-run --test novo capturas -- --ignored`).
+/// no 3D" (`cargo test -p nn-run --test novo capturas -- --ignored`). Com
+/// `NN_CAMINHOS=1`, aparecem a grade dos caminhos e o caminho dos inimigos.
 #[test]
 #[ignore]
 fn capturas_dos_jogos_3d() {
-    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/imagens");
-    for (template, file, frente) in [
+    // NN_SAIDA=<pasta>: grava lá (para conferir sem mexer nas da documentação).
+    let out = std::env::var_os("NN_SAIDA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/imagens"));
+    let mut lista = vec![
         (Template::Visual3D, "jogo-ilha-3d.png", 25),
         (Template::Vale3D, "jogo-vale-3d.png", 45),
-    ] {
+    ];
+    if std::env::var_os("NN_SAIDA").is_some() {
+        // Só para conferir (não vai para a documentação).
+        lista.push((Template::Aventura, "jogo-aventura.png", 0));
+    }
+    for (template, file, frente) in lista {
         let dir = temp(&format!("captura-{}", template.name()));
         create_project(&NewOptions {
             dir: dir.clone(),
@@ -892,7 +958,11 @@ fn capturas_dos_jogos_3d() {
         })
         .unwrap();
         let project = Project::open(&dir).unwrap();
-        let scene = project.start.clone();
+        let scene = if template == Template::Aventura {
+            "cenas/mapa.cena".to_string()
+        } else {
+            project.start.clone()
+        };
         let rt = ScriptRuntime::new(&dir).unwrap();
         let config = project
             .config
@@ -916,4 +986,125 @@ fn capturas_dos_jogos_3d() {
         h.save_png(out.join(file)).unwrap();
         std::fs::remove_dir_all(&dir).unwrap();
     }
+}
+
+/// Ferramenta: imagens do combate no Vale 3D (o herói golpeando um besouro,
+/// o número do dano e a barra de vida): `NN_SAIDA=<pasta> cargo test -p
+/// nn-run --test novo capturas_do_combate -- --ignored`.
+#[test]
+#[ignore]
+fn capturas_do_combate() {
+    let Some(out) = std::env::var_os("NN_SAIDA").map(PathBuf::from) else {
+        return;
+    };
+    let dir = temp("captura-combate");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Vale3D,
+    })
+    .unwrap();
+    let project = Project::open(&dir).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let config = project
+        .config
+        .clone()
+        .size(1280, 720)
+        .save_dir(dir.join("dados"))
+        .hot_reload(false);
+    let start = project.start.clone();
+    let Ok(mut h) = Headless::new(config, move |ctx| {
+        let mut s = rt.scene(start);
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(30);
+    let lua = rt2.lua();
+    lua.globals().set("C", h.game.0.table().unwrap()).unwrap();
+    // O herói de frente para o primeiro besouro, a câmera mais perto e de lado.
+    lua.load(
+        r#"
+        local b = C:find_all("Besouro")[1]
+        local bx, by, bz = b:position3d()
+        b:behavior("inimigo3d").enabled = false
+        b:behavior("golpe").enabled = false
+        local h = C.objects["Herói"]
+        h:move_to(bx, by + 0.1, bz + 1.6)
+        h.ry = 180
+        local cam = C._player_cam.cam
+        cam.distance = 3.2
+        cam.yaw = 120
+        cam.pitch = 12
+        "#,
+    )
+    .exec()
+    .unwrap();
+    h.run_frames(60);
+    h.save_png(out.join("combate-parado.png")).unwrap();
+    h.ctx.input.press_key(KeyCode::KeyJ);
+    h.run_frames(1);
+    h.ctx.input.release_key(KeyCode::KeyJ);
+    h.run_frames(6);
+    h.save_png(out.join("combate-golpe-alto.png")).unwrap();
+    h.run_frames(8);
+    h.save_png(out.join("combate-golpe-acerto.png")).unwrap();
+    h.run_frames(12);
+    h.save_png(out.join("combate-numero.png")).unwrap();
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    // O herói com um cajado e um Atirar com a magia (mira no meio da tela).
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Vale3D,
+    })
+    .unwrap();
+    let cena = dir.join("cenas/vale.cena");
+    let texto = std::fs::read_to_string(&cena)
+        .unwrap()
+        .replace("modelos/espada.glb", "modelos/cajado.glb")
+        .replacen(
+            r#"{ type = "behavior", script = "nn:golpe","#,
+            r#"{ type = "behavior", script = "nn:atirar", prefab = "prefabs/magia.prefab", osso = "mao_d", som = "assets/sons/tiro.wav" },
+        { type = "behavior", script = "nn:golpe","#,
+            1,
+        );
+    std::fs::write(&cena, texto).unwrap();
+    let project = Project::open(&dir).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let config = project
+        .config
+        .clone()
+        .size(1280, 720)
+        .save_dir(dir.join("dados"))
+        .hot_reload(false);
+    let start = project.start.clone();
+    let Ok(mut h) = Headless::new(config, move |ctx| {
+        let mut s = rt.scene(start);
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(30);
+    let lua = rt2.lua();
+    lua.globals().set("C", h.game.0.table().unwrap()).unwrap();
+    lua.load("local cam = C._player_cam.cam; cam.pitch = 6")
+        .exec()
+        .unwrap();
+    h.run_frames(30);
+    h.ctx.input.press_mouse(nn_input::MouseButton::Right);
+    h.run_frames(1);
+    h.ctx.input.release_mouse(nn_input::MouseButton::Right);
+    h.run_frames(14);
+    h.save_png(out.join("combate-magia.png")).unwrap();
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
 }

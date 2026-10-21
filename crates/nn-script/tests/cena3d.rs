@@ -757,6 +757,12 @@ fn inimigos_vida_perigo_e_tiro_no_3d() {
     h.ctx.input.press_key(KeyCode::KeyX);
     h.run_frames(2);
     h.ctx.input.release_key(KeyCode::KeyX);
+    // O herói toca "atirar"; o tiro sai logo depois (o braço sobe antes).
+    assert_eq!(
+        lua::<String>(&rt, "C.objects['Herói']:animator().animation"),
+        "atirar"
+    );
+    h.run_frames(6);
     assert_eq!(lua::<i64>(&rt, "#C:find_all('tiro')"), antes + 1);
     h.run_frames(5);
     let (_, ty, tz) = pos(&rt, "tiro");

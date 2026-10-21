@@ -212,10 +212,11 @@ return {
 | `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true) |
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
 | `anim3d` | `animation` ("": nenhuma), `speed` (1), `loop` (true): a animação que o `model` do objeto toca desde o começo |
+| `bone` | `bone` (""): preso a um osso do modelo do pai (uma espada na mão do herói: o osso `mao_d`). O objeto acompanha o osso quando o pai anima; a posição, a rotação e a escala dele contam a partir do osso. Um osso que não existe dá um aviso com a lista dos que existem. |
 | `body3d` | `body` ("static", "dynamic" ou "kinematic"), `shape` ("auto", "box", "sphere", "capsule", "cylinder", "mesh"), `sensor`, `bounce` (0), `friction` (0.5), `mass` (0 = pelo tamanho), `lock_rotation`, `gravity_scale` (1), `tag` |
 | `text3d` | `text` ("Texto"), `size` (0.5: a altura das letras em metros, vezes a escala do objeto), `color`, `facing` ("camera": sempre de frente; "placa": preso como uma placa, lido de frente pelo +Z do objeto e espelhado quando visto de trás), `outline` ("#000000B0": contorno; "" = sem), `background` ("": um retângulo atrás), `font`. Aparece atrás das paredes e com névoa; `obj.text3d.text` muda o texto (o `nn:mostrar_valor` também). |
 
-O `body3d` é um corpo de [`nn.physics3d`](#nnphysics3d-física-3d) no mundo da cena (com a `gravity` dela; numa cena 3D, -20 por padrão). A forma `"auto"` usa a malha exata de um `model` num corpo `static` ou `kinematic`; nos outros casos, uma caixa (ou esfera, cápsula e cilindro, conforme o `shape3d`) do tamanho do modelo ou da forma, com a escala do objeto. Os comportamentos que funcionam no 3D são `nn:jogador3d`, `nn:inimigo3d`, `nn:porta3d`, `nn:girar3d`, `nn:plataforma3d`, `nn:vida`, `nn:perigo`, `nn:atirar`, `nn:temporario`, `nn:coletavel`, `nn:gatilho`, `nn:interagir`, `nn:inventario`, `nn:ir_para_cena`, `nn:checkpoint`, `nn:mostrar_valor` e `nn:botao` (veja os [prontos](#comportamentos-prontos)); um comportamento seu pode dizer `mode = "3d"` (ou `"2d"`, ou `"both"`) para o NN Studio só oferecer ele nesse tipo de cena. Uma propriedade também pode ter `mode = "2d"` ou `"3d"` (só aparece nesse tipo de cena) e `default3d` (o padrão numa cena 3D, como metros em vez de pixels).
+O `body3d` é um corpo de [`nn.physics3d`](#nnphysics3d-física-3d) no mundo da cena (com a `gravity` dela; numa cena 3D, -20 por padrão). A forma `"auto"` usa a malha exata de um `model` num corpo `static` ou `kinematic`; nos outros casos, uma caixa (ou esfera, cápsula e cilindro, conforme o `shape3d`) do tamanho do modelo ou da forma, com a escala do objeto. Os comportamentos que funcionam no 3D são `nn:jogador3d`, `nn:inimigo3d`, `nn:golpe`, `nn:projetil`, `nn:porta3d`, `nn:girar3d`, `nn:plataforma3d`, `nn:vida`, `nn:perigo`, `nn:atirar`, `nn:temporario`, `nn:coletavel`, `nn:gatilho`, `nn:interagir`, `nn:inventario`, `nn:ir_para_cena`, `nn:checkpoint`, `nn:mostrar_valor` e `nn:botao` (veja os [prontos](#comportamentos-prontos)); um comportamento seu pode dizer `mode = "3d"` (ou `"2d"`, ou `"both"`) para o NN Studio só oferecer ele nesse tipo de cena. Uma propriedade também pode ter `mode = "2d"` ou `"3d"` (só aparece nesse tipo de cena) e `default3d` (o padrão numa cena 3D, como metros em vez de pixels).
 
 No script:
 
@@ -337,7 +338,7 @@ end
 return B
 ```
 
-- **Propriedades** (`props`): lista de `{ "nome", padrão, ... }`. Cada uma vira `self.<nome>`, com o valor que o objeto tem no `.cena` (ou o padrão). Opções: `label`, `help`, `min`, `max`, `integer = true`, `options = { { valor, "texto" }, ... }` (escolha), `advanced = true` (só no modo Completo), `show_if = { "outra", valores... }` (só aparece quando outra propriedade tem um desses valores) e `type`, que normalmente é deduzido do padrão (número, sim/não, cor `"#RRGGBB"`, texto). Para o Inspetor mostrar a lista certa, `type` pode ser `"object"` (nome de um objeto da cena), `"scene"`, `"prefab"`, `"sound"`, `"image"`, `"dialogue"` (um `.dialogo`), `"color"` ou `"choice"`. Também vale um mapa simples: `props = { velocidade = 90 }`.
+- **Propriedades** (`props`): lista de `{ "nome", padrão, ... }`. Cada uma vira `self.<nome>`, com o valor que o objeto tem no `.cena` (ou o padrão). Opções: `label`, `help`, `min`, `max`, `integer = true`, `options = { { valor, "texto" }, ... }` (escolha), `advanced = true` (só no modo Completo), `show_if = { "outra", valores... }` (só aparece quando outra propriedade tem um desses valores) e `type`, que normalmente é deduzido do padrão (número, sim/não, cor `"#RRGGBB"`, texto). Para o Inspetor mostrar a lista certa, `type` pode ser `"object"` (nome de um objeto da cena), `"scene"`, `"prefab"`, `"sound"`, `"image"`, `"dialogue"` (um `.dialogo`), `"anim"` (uma animação da imagem ou do modelo do objeto), `"bone"` (um osso do modelo 3D do objeto), `"color"` ou `"choice"`. Também vale um mapa simples: `props = { velocidade = 90 }`.
 - **Callbacks** (todos opcionais): `start()`, `update(dt)`, `fixed_update(dt)`, `draw()` (depois dos objetos), `contact(outro, e)` (o corpo do objeto tocou o de `outro`; `e` é o evento da física) e `destroyed()`.
 - **Campos:** `self.obj` (o objeto), `self.scene` (a cena: `self.scene:find`, `self.scene:spawn`...), `self.enabled` (`false` para de rodar) e `self.component` (o componente, com os valores do arquivo).
 - `player = true` marca um comportamento de jogador: é quem os outros procuram quando "Quem" ou "Alvo" fica vazio.
@@ -351,11 +352,11 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 |---|---|---|
 | `nn:plataforma` | Jogador de plataforma: anda e pula (setas, WASD, espaço, controle). Precisa de corpo dinâmico. | `velocidade` (320), `pulo` (860), `pulos_no_ar` (0), `coiote` (0.1), `pulo_variavel` (true) |
 | `nn:topdown` | Jogador visto de cima: anda nas 4 direções. | `velocidade` (260) |
-| `nn:vida` | (2D e 3D) Pontos de vida; recebe `dano(n)` e `curar(n)`. | `vidas` (3), `variavel` ("vidas": espelha numa variável do jogo), `invencivel` (1 s), `ao_acabar` ("reiniciar", "checkpoint", "cena", "destruir", "nada"), `cena`, `piscar` (true), `barra` (false: uma barra de vida flutuando em cima), `cor_barra` |
+| `nn:vida` | (2D e 3D) Pontos de vida; recebe `dano(n, quem)` (quem bateu) e `curar(n)`. | `vidas` (3), `variavel` ("vidas": espelha numa variável do jogo), `invencivel` (1 s), `ao_acabar` ("reiniciar", "checkpoint", "cena", "destruir", "nada"), `cena`, `piscar` (true), `barra` (false: uma barra de vida flutuando em cima), `cor_barra`, `numeros` (false: um número sobe de quem leva dano, com quanto tirou), `vermelho` (true: fica vermelho um instante ao levar dano), `tremer` (0: a força do tremor da câmera ao levar dano; 6 é leve) |
 | `nn:patrulha` | Anda até uma parede (ou a beirada) e volta. Precisa de corpo. | `velocidade` (120), `direcao` ("direita"), `beirada` (true), `espelhar` (true) |
-| `nn:perseguir` | Vai atrás do alvo quando ele chega perto. | `alvo` ("" = jogador), `velocidade` (150), `visao` (320), `voar` (false), `espelhar` (true) |
+| `nn:perseguir` | Vai atrás do alvo quando ele chega perto. Voando (ou num jogo visto de cima), contorna as paredes pelos [caminhos](#caminhos-inimigos-que-contornam-paredes). | `alvo` ("" = jogador), `velocidade` (150), `visao` (320), `voar` (false), `contornar` (true, só voando), `espelhar` (true) |
 | `nn:perigo` | (2D e 3D) Machuca quem encosta. | `quem` (""), `acao` ("dano", "checkpoint", "reiniciar"), `dano` (1), `pisar` (false: pular em cima destrói), `some` (false), `empurrao` (520; no 3D, 7 m/s) |
-| `nn:inimigo3d` | (3D) Anda sozinho, persegue o jogador quando ele chega perto e machuca quem encosta. Cria o próprio corpo (como o Jogador 3D) e, num modelo animado, toca parado e andar. Pisado: manda `dano` para a Vida dele (sem Vida, some) e `derrotado`. | `andar` ("patrulha": de onde começa até `x`, `z` e volta; "vagar": sem rumo até `raio` m; "parado"), `x` (6), `z` (0), `raio` (6), `velocidade` (2), `perseguir` (true), `visao` (8 m; desiste a 1,6 × isso), `correr` (3.5), `dano` (1), `empurrao` (7), `pisar` (true), `virar` (true), `animar` (true), `anim_parado`, `anim_andar` |
+| `nn:inimigo3d` | (3D) Anda sozinho, persegue o jogador quando ele chega perto e machuca quem encosta. Cria o próprio corpo (como o Jogador 3D) e, num modelo animado, toca parado e andar. Pisado: manda `dano` para a Vida dele (sem Vida, some), `derrotado` e, para quem pisou, `derrotou`. Com um [Golpe](#combate-golpes-tiros-e-dano) no mesmo objeto, só o golpe machuca (encostar não). Empurrado (por um golpe ou um tiro), para de andar um instante. | `andar` ("patrulha": de onde começa até `x`, `z` e volta; "vagar": sem rumo até `raio` m; "parado"), `x` (6), `z` (0), `raio` (6), `velocidade` (2), `perseguir` (true), `visao` (8 m; desiste a 1,6 × isso), `correr` (3.5), `contornar` (true: acha um [caminho](#caminhos-inimigos-que-contornam-paredes) em volta de paredes, árvores, buracos e água), `dano` (1), `empurrao` (7), `pisar` (true), `virar` (true), `animar` (true), `anim_parado`, `anim_andar` |
 | `nn:coletavel` | Some ao ser tocado e soma numa variável; pode guardar um item no [inventário](#inventário-nninventory). | `quem` (""), `variavel` ("moedas"; "" = não soma), `valor` (1), `item` ("": o nome do item que vai para o inventário, como "chave"), `icone` (a imagem do item; vazio = a do objeto, no 2D), `som`, `brilho` (true), `cor_brilho` |
 | `nn:gatilho` | (2D e 3D) Zona de gatilho: avisa quando alguém entra ou sai dela (pela caixa do objeto) e some no jogo. Manda `entrou` e `saiu` (com quem) para a própria zona e a mensagem escolhida para os objetos `alvo`. | `quem` (""), `alvo` (""), `mensagem` ("abrir"), `mensagem_saida` (""), `uma_vez` (false), `som`, `invisivel` (true) |
 | `nn:interagir` | (2D e 3D) Perto do objeto aparece "E  usar"; apertando E (ou o Y do controle) ele manda `interagiu` (com quem) e a `mensagem` para os objetos `alvo`. Pode pedir um item do inventário (sem ele, o aviso diz o que falta e manda `falta_item`). Só o objeto mais perto do jogador mostra o aviso. | `texto` ("usar"), `distancia` (24 px; no 3D, 1.2 m, da borda), `quem` (""), `alvo` (""), `mensagem` ("abrir"), `item` (""), `gastar` (true), `texto_sem_item` ("Precisa de: {item}"), `uma_vez` (false), `som` |
@@ -367,15 +368,17 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:movimento` | Gira, flutua ou vai e volta (com corpo cinemático, carrega quem está em cima). | `tipo` ("ir_e_voltar", "flutuar", "girar"), `distancia_x` (200), `distancia_y` (0), `altura` (12), `duracao` (2), `velocidade` (90) |
 | `nn:animacao` | Troca a animação conforme o estado. Precisa de imagem. | `parado` ("1"), `andando`, `pulando`, `caindo` (o nome de uma [animação](#animações-anim) da imagem, como `"andar"`, ou quadros como `"1-4"` e `"5,6"`; vazio usa o anterior), `fps` (10, para quadros), `espelhar` (true) |
 | `nn:mostrar_valor` | Escreve variáveis num texto (`text` ou `text3d`). | `texto` ("Moedas: {moedas}") |
-| `nn:atirar` | (2D e 3D) Cria um prefab andando. No 3D, sai da frente do objeto (o +Z do modelo), na altura escolhida; com Corpo 3D, sem gravidade. | `prefab`, `tecla` ("x"; vazio = sozinho), `intervalo` (0.3), `velocidade` (700; no 3D, 14 m/s), `direcao` ("frente", "jogador", "camera" no 3D, "direita", "cima"), `som`, `distancia` (24; no 3D, 0.8 m), `altura` (3D: 1 m), `duracao` (3D: o tiro some depois de 3 s) |
+| `nn:atirar` | (2D e 3D) Cria um prefab andando. No 3D, sai da frente do objeto (o +Z do modelo), na altura escolhida, ou de um osso; com Corpo 3D, sem gravidade. No 3D, com "camera", vai para o meio da tela (também para cima e para baixo), e a câmera do Jogador 3D vai para o ombro. Manda `atirou` (com o tiro). | `prefab`, `tecla` ("x"; no 3D, "clique_direito"; "clique" é o botão esquerdo; vazio = sozinho; no controle, o X, e no 3D o RT ou o RB), `intervalo` (0.3), `velocidade` (700; no 3D, 14 m/s), `direcao` ("frente"; no 3D, "camera"; "jogador", "direita", "cima"), `som`, `distancia` (24; no 3D, 0.8 m), `altura` (3D: 1 m), `osso` (3D, "": sai desse osso do modelo, como "mao_d"), `mira` (3D, true: uma cruzinha no meio da tela), `animacao` (3D, "atirar"), `atraso` (3D, 0.08 s: o tiro sai depois que a animação começa), `duracao` (3D: o tiro some depois de 3 s) |
+| `nn:golpe` | (3D) Ataque de perto: toca a animação do golpe e, no instante do acerto, acerta quem está na frente (dentro do alcance e da largura), tira vida e empurra. O jogador golpeia com o clique (ou J, ou o X do controle); um inimigo, sozinho, quando o alvo chega perto (ele para, vira e golpeia). Manda `golpeou` ao começar e `acertou` (alvo, dano) a cada acerto. | `quando` ("tecla", "perto"), `tecla` ("clique"), `distancia` (1.3 m, no "perto"), `alvo` ("": os inimigos; veja [Combate](#combate-golpes-tiros-e-dano)), `dano` (1), `alcance` (1.6 m), `angulo` (120°), `todos` (true; false = só o mais perto), `empurrao` (6 m/s), `intervalo` (0.45 s), `animacao` ("golpe"), `acerto` (0.22 s), `parar` (true: para de andar golpeando), `som`, `som_acerto`, `faiscas` (true) |
+| `nn:projetil` | (3D) Para o prefab de um tiro: anda (com a velocidade que o Atirar deu, ou a do corpo), acerta quem tem Vida (tira vida e empurra), some ao bater numa parede (com faíscas) e não acerta quem atirou. Manda `acertou` e `bateu`. | `dano` (1), `alvo` ("": os inimigos de quem atirou), `empurrao` (4 m/s), `atravessa` (false), `parede` (true: some ao bater), `gravidade` (0: reto; 1 = cai como uma pedra), `dura` (4 s), `cor` (das faíscas) |
 | `nn:gerador` | Cria um prefab de tempos em tempos. | `prefab`, `intervalo` (2), `maximo` (10), `espalhar_x`, `espalhar_y` (0), `comecar_ja` (false) |
 | `nn:temporario` | (2D e 3D) Some depois de um tempo (no 2D, também ao sair da tela). | `tempo` (3), `fora_da_tela` (true, só 2D) |
-| `nn:jogador3d` | (3D) Jogador 3D: anda para onde a câmera olha (WASD, setas, analógico), pula (espaço, A) e leva a câmera em 3ª pessoa. Cria o próprio corpo (uma cápsula do tamanho do modelo). Manda `pulou` e `caiu`. | `velocidade` (6), `pulo` (8), `pulos_no_ar` (0), `camera` ("atras" ou "cena"), `distancia` (7), `prender_mouse` (true), `sensibilidade` (0.15), `inverter_y` (false), `virar` (true), `agua` ("voltar": na água de um Terreno, volta ao último chão firme; "nada": anda no fundo; nos dois, recebe a mensagem `agua`), `animar` (true: parado, andar, correr, pular e cair num modelo animado), `anim_parado`, `anim_andar`, `anim_correr`, `anim_pular`, `anim_cair` (os nomes das animações), `queda` (-10), `raio`, `altura` (0 = pelo modelo) |
+| `nn:jogador3d` | (3D) Jogador 3D: anda para onde a câmera olha (WASD, setas, analógico), pula (espaço, A) e leva a câmera em 3ª pessoa. Cria o próprio corpo (uma cápsula do tamanho do modelo). Manda `pulou` e `caiu`. | `velocidade` (6), `pulo` (8), `pulos_no_ar` (0), `camera` ("atras" ou "cena"), `distancia` (7), `prender_mouse` (true), `sensibilidade` (0.15), `inverter_y` (false), `ombro` (0 m: a câmera vai para a direita, para mirar), `virar` (true), `agua` ("voltar": na água de um Terreno, volta ao último chão firme; "nada": anda no fundo; nos dois, recebe a mensagem `agua`), `animar` (true: parado, andar, correr, pular e cair num modelo animado), `anim_parado`, `anim_andar`, `anim_correr`, `anim_pular`, `anim_cair` (os nomes das animações), `queda` (-10), `raio`, `altura` (0 = pelo modelo) |
 | `nn:girar3d` | (3D) Gira em volta de um eixo e flutua. | `velocidade` (90 graus/s), `eixo` ("y", "x", "z"), `altura` (0.2 m), `duracao` (2 s) |
 | `nn:plataforma3d` | (3D) Vai e volta a partir de onde está; com um `body3d` kinematic, leva quem está em cima. | `x` (4), `y` (0), `z` (0), `duracao` (3 s), `espera` (0.5 s) |
 | `nn:botao` | Botão de menu: destaca com o mouse ou as setas (teclado e controle); clique, Enter ou A apertam. Manda a mensagem `clicou` e faz a ação. | `acao` ("nada", "cena", "reiniciar", "sair"), `cena`, `foco` (false: começa selecionado), `cor` ("#FFD166": cor ao destacar), `aumentar` (1.1), `som` |
 
-A **Vida** também tem `ao_acabar = "nada"` (um evento decide o que fazer) e avisa por mensagem: `levou_dano` a cada dano e `vida_acabou` no fim. O **Coletável** manda `coletou` (com o item) para quem pegou. Essas mensagens chegam aos comportamentos (como funções) e aos [eventos](#eventos-quando-então).
+A **Vida** também tem `ao_acabar = "nada"` (um evento decide o que fazer) e avisa por mensagem: `levou_dano` (o dano e quem bateu) a cada dano e `vida_acabou` no fim; quem bateu por último recebe `derrotou` (com o derrotado). O **Coletável** manda `coletou` (com o item) para quem pegou. Essas mensagens chegam aos comportamentos (como funções) e aos [eventos](#eventos-quando-então).
 
 Os prontos são escritos em Lua, com a mesma API dos seus: o código deles está em `crates/nn-script/src/comportamentos/` e é um bom ponto de partida para um comportamento novo.
 
@@ -478,6 +481,53 @@ No script da cena, `self:start_dialogue("dialogos/ana.dialogo", ana)` abre uma c
 
 O Interagir e a Porta 3D usam o mesmo aviso: perto do objeto aparece a tecla (E, ou Y se o controle foi o último usado) e o que ela faz. De tudo o que está perto, só o mais perto do jogador mostra o aviso e responde à tecla. Um comportamento seu pode usar o mesmo sistema: chame `self.scene:interaction(self, quem, distancia, texto, trancado)` no `update`; ele devolve o objeto que apertou a tecla (ou `nil`). `self.scene:gap(a, b)` é a distância entre as caixas de dois objetos (0 se encostam).
 
+### Caminhos (inimigos que contornam paredes)
+
+Cada cena com física tem uma **grade de caminhos**: o chão dividido em quadradinhos, cada um marcado como andável ou não. Ela é montada sozinha na primeira vez que alguém pede (e de novo quando um corpo parado aparece ou some):
+
+- **No 3D**, células de 0,5 m. Um raio procura o chão de cada uma (os corpos parados: chão, terreno, cenário) e confere se cabe alguém em pé ali. Debaixo de uma plataforma no ar vale o chão; uma ponte por cima da água vale. Não é andável: paredes, árvores, o que não tem chão (buracos), a água dos terrenos e um desnível maior que um degrau (45 cm) entre duas células (barrancos).
+- **No 2D** (jogos vistos de cima), células de 16 unidades. Bloqueiam os corpos parados (menos sensores e plataformas de mão única) e os tiles sólidos, com uma folga de 12.
+- Corpos que se movem (portas, plataformas que andam, caixas) não entram na grade: quem anda desvia deles pela física.
+
+O Inimigo 3D e o Perseguir (voando) usam a grade com **Contorna paredes** ligado: vão em linha reta quando dá e, quando não dá, seguem o caminho, refeito a cada meio segundo. No NN Studio, com o jogo aberto, **🧭 Caminhos** (na barra da cena) mostra no jogo as células andáveis e o caminho de cada inimigo; `NN_CAMINHOS=1` faz o mesmo ao abrir o jogo pelo terminal.
+
+No Lua:
+
+| Função | O que faz |
+|---|---|
+| `scene:path(a, b)` | Um caminho de `a` até `b` (objetos ou pontos `{x, y}`; no 3D, `{x, z}`): a lista de pontos (`{x, y}`, ou `{x, y, z}` no 3D, com o y do chão) e `true` se chega mesmo lá (`false`: leva ao lugar mais perto). |
+| `scene:steer(estado, x, y, tx, ty, dt)` | Para um comportamento seu: para onde andar agora, indo de (x, y) para (tx, ty) e contornando o que bloqueia (no 3D, x e z). `estado` é uma tabela sua, que guarda o caminho entre um quadro e outro. Guarde-a também em `self.obj._nav_state` para o botão Caminhos mostrar. |
+| `scene:nav()` | A grade da cena (ou `nil` sem física). |
+| `nav:path(x1, y1, x2, y2)` | Como `scene:path`, com números. |
+| `nav:walkable(x, y)`, `nav:sight(x1, y1, x2, y2)` | Dá para andar ali? Dá para ir reto de um ponto ao outro? |
+| `nav:floor(x, z)` | A altura do chão (3D). |
+| `nav:block(x1, y1, x2, y2)`, `nav:unblock(...)` | Bloqueia ou libera um retângulo (uma ponte que caiu, uma porta trancada). |
+| `nav.cell`, `nav.columns`, `nav.rows`, `nav.walkable_count`, `nav:bounds()` | O tamanho das células, da grade e o pedaço coberto. |
+
+Para montar uma grade com outras medidas, ponha antes `scene._nav_opts = { cell = 0.25, radius = 0.3, height = 1.8, step = 0.3 }` e marque `scene._nav_dirty = true`. Fora das cenas visuais, `mundo:nav(opts)` (de [`nn.physics`](#nnphysics) ou [`nn.physics3d`](#nnphysics3d-física-3d)) devolve uma grade nova; no 3D, chame depois de um `mundo:step`.
+
+### Combate (golpes, tiros e dano)
+
+No 3D, o **Golpe** (de perto) e o **Atirar** com um prefab que tem **Projétil** (de longe) tiram vida do comportamento **Vida**. Quem pode ser acertado ("Acerta" vazio):
+
+- **Quem ataca é o jogador:** quem tem Vida ou é um Inimigo 3D (menos os jogadores). Um Inimigo 3D (ou um Perigo) sem Vida é derrotado de uma vez.
+- **Quem ataca é outro (um inimigo):** os jogadores.
+- **Com um nome em "Acerta":** só os objetos com esse nome.
+
+A cada acerto, o alvo é empurrado para longe de quem bateu, quem bateu recebe a mensagem `acertou` (o alvo e o dano) e, se a vida acabou, `derrotou`. Os eventos **Acertar** e **Derrotar** usam essas mensagens, e o **Levar dano** sabe quem bateu (o `@outro`).
+
+Para segurar uma arma, ponha o objeto da arma como **filho** do personagem e dê a ele o componente **Preso a um osso** (`bone`) com a mão (`mao_d` no herói dos modelos). Os modelos de projeto 3D trazem a `espada.glb` (o cabo na origem, a lâmina para a frente) e o `cajado.glb` (para cima). O herói tem as animações `golpe` (o acerto é perto de 0,22 s) e `atirar`, e o besouro (`bicho.glb`) tem um `golpe` (a mordida, perto de 0,3 s). O Vale 3D já vem com a espada na mão do herói, besouros que mordem e o prefab `magia.prefab` (uma bola com Projétil, para um Atirar).
+
+No Lua:
+
+| Função | O que faz |
+|---|---|
+| `scene:hit(alvo, dano, quem, opts)` | `quem` acerta o `alvo`: tira vida, empurra e manda as mensagens acima. Opções: `push` (o empurrão em m/s), `dx`, `dz` (a direção; sem elas, para longe de `quem`), `up` (0.5: quanto do empurrão vai para cima), `stun` (0.3 s sem andar), `kill` (sem Vida, derrota mesmo assim). Devolve `true` se acertou, `false` se o alvo estava invencível e `nil` se não dá para machucar ele. |
+| `scene:foes(quem, nome)` | Quem `quem` pode acertar (as regras acima; com `nome`, os objetos com esse nome). |
+| `scene:damage_number(obj, n, cor)` | Um número subindo de cima do objeto, que some sozinho (amarelo; vermelho no jogador). |
+| `scene:shake(forca, tempo)` | Treme a câmera (a ação Tremer também). No 3D, 80 de força = 1 metro. |
+| `obj._tint` | Uma cor que pinta o modelo, a forma ou a imagem do objeto por cima da dele (`nil` = a dele); a Vida usa para o vermelho. |
+
 ### Eventos: "Quando... Então..."
 
 Eventos são regras escritas no `.cena` (no campo `events` da cena) ou num objeto (no campo `events` dele, que vai junto quando o objeto é um prefab). No [NN Studio](studio.md#eventos-quando-então) elas são montadas no painel Eventos, lidas como frases; no arquivo, ficam assim:
@@ -522,7 +572,8 @@ Condições (`cond`):
 | `no_chao` | `quem`, `onde` ("chao", "ar") |
 | `visivel` | `quem`, `estado` ("visivel", "escondido") |
 | `pegar` | `quem`, `item` ("" = qualquer coletável) |
-| `levou_dano` / `vida_acabou` | `quem` (precisa do comportamento Vida) |
+| `levou_dano` / `vida_acabou` | `quem` (precisa do comportamento Vida). No `levou_dano`, o `@outro` é quem bateu. |
+| `acertar` / `derrotar` | `quem` (quem bateu), `alvo` ("" = qualquer um): um golpe ou um tiro tirou vida / acabou com a vida de alguém. O `@outro` é quem levou. |
 | `animacao_terminou` | `quem`, `nome` ("" = qualquer uma; só animações de modo "once") |
 | `particulas_terminaram` | `quem` (uma explosão acabou, ou um emissor desligado ficou sem partículas) |
 | `mensagem` | `quem`, `msg` (de `obj:send("msg")`, de comportamentos ou da ação `mensagem`) |
@@ -824,7 +875,7 @@ end
 
 O jogo de plataforma (`jogos/plataforma/lib/inimigos.lua`) tem uma lesma que patrulha (vira na parede com `touching_left`/`touching_right` e na beirada com `mapa:solid`) e um morcego que persegue o jogador quando ele chega perto.
 
-O mundo tem `:step(dt)` (chame em `fixed_update`), `:body(opts)`, `:add_tilemap(mapa)`, `:raycast(x, y, dx, dy, distancia, mascara)` (devolve `{ x, y, nx, ny, distance, body }` ou `nil`), `:query_point(x, y)`, `:query_rect(x, y, w, h)`, `:bodies(tag)`, `:debug_draw()` e os campos `gravity_x`, `gravity_y` e `count`.
+O mundo tem `:step(dt)` (chame em `fixed_update`), `:body(opts)`, `:add_tilemap(mapa)`, `:raycast(x, y, dx, dy, distancia, mascara)` (devolve `{ x, y, nx, ny, distance, body }` ou `nil`), `:query_point(x, y)`, `:query_rect(x, y, w, h)`, `:bodies(tag)`, `:debug_draw()`, `:nav({ cell = 16, radius = 12, area = { x1, y1, x2, y2 } })` (a [grade de caminhos](#caminhos-inimigos-que-contornam-paredes)) e os campos `gravity_x`, `gravity_y` e `count`.
 
 Os eventos de `step` são tabelas `{ type = "enter" | "exit", a = corpo, b = corpo }`. Pelo menos um dos dois é sensor; se só um for, ele vem em `a`.
 
@@ -1099,7 +1150,7 @@ Um modelo com esqueleto (ossos) e animações, como um personagem do Blender ou 
 ```lua
 function cena:enter()
   self.heroi = nn.assets.model("modelos/heroi.glb")
-  print(table.concat(self.heroi:animations(), ", "))   -- parado, andar, correr, pular, cair, acenar
+  print(table.concat(self.heroi:animations(), ", "))   -- parado, andar, correr, pular, cair, acenar, golpe, atirar
   self.anim = self.heroi:animator()
   self.anim:play("parado")
 end
@@ -1121,11 +1172,12 @@ end
 | `anim:stop()` | Volta para a pose do modelo, sem animação. |
 | `anim:finished()` | Uma animação sem `loop` chegou ao fim? |
 | `anim:animations()`, `anim:has(nome)` | Os nomes / se tem essa. |
+| `anim:bones()` | Os nomes dos ossos (e das partes) do modelo. |
 | `anim:bone(nome)` | Onde está um osso (ou parte) agora, como [matriz](#desenhar) no espaço do modelo: para prender uma espada na mão, `nn.d3.draw(espada, { matrix = matriz_do_heroi * anim:bone("braco_d") })`. |
 | `anim.animation`, `anim.time`, `anim.duration` | A animação tocando (ou `nil`), o instante e a duração (segundos). `time` pode ser mudado. |
 | `anim.speed`, `anim.looping` | Velocidade (1 = normal; negativo toca ao contrário) e se repete. |
 
-Os modelos dos exemplos e dos modelos de projeto 3D trazem o `heroi.glb` (as animações acima; a frente dele é o +Z) e o `bicho.glb` (`parado` e `andar`).
+Os modelos dos exemplos e dos modelos de projeto 3D trazem o `heroi.glb` (as animações acima, mais `golpe` e `atirar`; a frente dele é o +Z; as mãos são os ossos `mao_e` e `mao_d`) e o `bicho.glb` (`parado`, `andar` e `golpe`). Numa cena visual, o componente `bone` prende um objeto num osso sem código (veja [Combate](#combate-golpes-tiros-e-dano)).
 
 **Do Blender:** cada *Action* do personagem vira uma animação com o mesmo nome. Exporte em *Arquivo > Exportar > glTF 2.0*, formato *glb*, com *Animação* marcada. Um personagem olhando para −Y no Blender (a vista de frente) olha para +Z no jogo, como os nossos. Use 1 unidade = 1 metro.
 
@@ -1199,13 +1251,14 @@ end
 | `invert_y` | Inverte o movimento vertical. |
 | `zoom` | `false` desliga a rodinha. |
 | `follow` | Quão grudada ela segue o personagem (padrão 12; maior = mais grudada, 0 = sem suavizar). |
+| `shoulder` | Metros para a direita (câmera "no ombro", padrão 0): o personagem fica um pouco à esquerda do meio da tela, bom para mirar. |
 
 `camera:update(dt, x, y, z, opts)` vai no `update`. Ela lê o mouse (só quando ele está preso), o analógico e a rodinha, e põe a câmera do `nn.d3`. As opções são:
 - `world`: um mundo de `nn.physics3d`, para não atravessar paredes;
 - `ignore`: o corpo do personagem;
 - `control = false`: ignora a entrada, para cenas cinematográficas.
 
-Os campos `yaw`, `pitch`, `distance`, `sensitivity` e `invert_y` podem ser lidos e mudados (por exemplo, numa tela de opções), e `x`, `y`, `z` dizem onde a câmera está. Os métodos são:
+Os campos `yaw`, `pitch`, `distance`, `shoulder`, `sensitivity` e `invert_y` podem ser lidos e mudados (por exemplo, numa tela de opções), e `x`, `y`, `z` dizem onde a câmera está. Os métodos são:
 - `camera:direction(ix, iy)`: transforma a entrada em `vx, vz` no chão;
 - `camera:forward()`: para onde ela olha, `fx, fz`;
 - `camera:rotate(graus_lado, graus_cima)`.
@@ -1428,6 +1481,7 @@ A gravidade do mundo cuida da queda. Ele empurra os corpos dinâmicos e entra no
 
 Outros métodos do mundo:
 - `:raycast(x, y, z, dx, dy, dz, distancia, ignorar)`: devolve `{ x, y, z, nx, ny, nz, distance, body }` ou `nil`. Ignora os sensores e o corpo `ignorar` (quem atira). Com `nn.d3.ray(mx, my)`, diz o que está embaixo do mouse.
+- `:nav({ cell = 0.5, radius = 0.35, height = 1, step = 0.45, slope = 50, area = { x1, z1, x2, z2 }, water = { { x1, z1, x2, z2, nível }, ... } })`: a [grade de caminhos](#caminhos-inimigos-que-contornam-paredes) do chão (depois de um `:step`).
 - `:query_sphere(x, y, z, raio)`: os corpos dentro da esfera.
 - `:bodies(tag)`: os corpos com esse rótulo, ou todos.
 - `:debug_draw()`.

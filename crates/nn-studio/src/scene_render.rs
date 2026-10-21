@@ -147,8 +147,13 @@ pub struct Sizes {
     models: HashMap<String, Option<ModelInfo>>,
 }
 
-/// O que o editor sabe de um modelo 3D: a caixa e os nomes das animações.
-type ModelInfo = ((glam::Vec3, glam::Vec3), Vec<String>);
+/// O que o editor sabe de um modelo 3D: a caixa, os nomes das animações e os
+/// ossos (nome e onde fica na pose de descanso, no espaço do modelo).
+type ModelInfo = (
+    (glam::Vec3, glam::Vec3),
+    Vec<String>,
+    Vec<(String, glam::Mat4)>,
+);
 
 impl Sizes {
     pub fn invalidate(&mut self, rel: &str) {
@@ -168,13 +173,21 @@ impl Sizes {
         if rel.is_empty() {
             return None;
         }
-        self.model_info(root, rel).map(|(b, _)| *b)
+        self.model_info(root, rel).map(|(b, _, _)| *b)
     }
 
     /// As animações de um modelo 3D (vazio se não tiver ou não abrir).
     pub fn model_anims(&mut self, root: &Path, rel: &str) -> Vec<String> {
         self.model_info(root, rel)
-            .map(|(_, a)| a.clone())
+            .map(|(_, a, _)| a.clone())
+            .unwrap_or_default()
+    }
+
+    /// Os ossos (e as partes) de um modelo 3D com esqueleto, na ordem do
+    /// arquivo (vazio se não tiver ou não abrir).
+    pub fn model_bones(&mut self, root: &Path, rel: &str) -> Vec<String> {
+        self.model_info(root, rel)
+            .map(|(_, _, b)| b.iter().map(|(n, _)| n.clone()).collect())
             .unwrap_or_default()
     }
 
@@ -189,7 +202,20 @@ impl Sizes {
                     .as_ref()
                     .map(|s| s.animations.iter().map(|a| a.name.clone()).collect())
                     .unwrap_or_default();
-                (m.bounds(), anims)
+                let bones: Vec<(String, glam::Mat4)> = m
+                    .skeleton
+                    .as_ref()
+                    .map(|s| {
+                        let rest = s.rest_pose();
+                        s.nodes
+                            .iter()
+                            .filter_map(|n| Some((n.name.clone(), s.node_matrix(&rest, &n.name)?)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                // Os objetos presos a um osso ficam nele também no editor.
+                crate::scene_data::remember_bones(rel, &bones);
+                (m.bounds(), anims, bones)
             });
             self.models.insert(rel.to_string(), info);
         }
@@ -912,15 +938,60 @@ impl SceneRenderer {
         });
         self.renderer.set_camera3d(view.camera);
 
+        // Objetos presos a um osso: onde o osso do pai está agora (com a
+        // animação da prévia).
+        type Preso = (u32, String, bool, Option<(String, f32)>, String);
+        fn presos(list: &[Object], out: &mut Vec<Preso>) {
+            for o in list {
+                for ch in o.prefab_children().iter().chain(&o.children) {
+                    let bone = ch.component("bone").map(|c| c.str("bone")).unwrap_or("");
+                    if let (false, Some(m)) = (bone.is_empty(), o.component("model")) {
+                        out.push((
+                            ch.id,
+                            m.str("file").to_string(),
+                            m.bool("flat"),
+                            preview_anim3d(o),
+                            bone.to_string(),
+                        ));
+                    }
+                }
+                presos(o.prefab_children(), out);
+                presos(&o.children, out);
+            }
+        }
+        let mut lista = Vec::new();
+        presos(&scene.objects, &mut lista);
+        let mut bones: HashMap<u32, Mat4> = HashMap::new();
+        for (id, file, flat, anim, bone) in lista {
+            let Some(model) = self.model3(root, &file, flat) else {
+                continue;
+            };
+            let Some(s) = model.skeleton.as_ref() else {
+                continue;
+            };
+            let pose = anim
+                .as_ref()
+                .and_then(|(name, speed)| {
+                    let i = s.animation(name)?;
+                    let d = s.animations[i].duration.max(1e-3);
+                    Some(s.pose(i, (view.time * speed).rem_euclid(d)))
+                })
+                .unwrap_or_else(|| s.rest_pose());
+            if let Some(m) = s.node_matrix(&pose, &bone) {
+                bones.insert(id, m);
+            }
+        }
+
         // Os objetos, com a transformação dos pais.
         type Draw = (Mat4, Component, Option<(String, f32)>, u32, usize);
         let mut draws: Vec<Draw> = Vec::new();
-        fn walk(list: &[Object], parent: Mat4, out: &mut Vec<Draw>) {
+        fn walk(list: &[Object], parent: Mat4, bones: &HashMap<u32, Mat4>, out: &mut Vec<Draw>) {
             for o in list {
                 if !o.visible {
                     continue;
                 }
-                let m = parent * crate::scene_data::local_matrix3(o);
+                let bone = bones.get(&o.id).copied().unwrap_or(Mat4::IDENTITY);
+                let m = parent * bone * crate::scene_data::local_matrix3(o);
                 for (ci, c) in o.components.iter().enumerate() {
                     if matches!(
                         c.kind.as_str(),
@@ -929,11 +1000,11 @@ impl SceneRenderer {
                         out.push((m, c.clone(), preview_anim3d(o), o.id, ci));
                     }
                 }
-                walk(o.prefab_children(), m, out);
-                walk(&o.children, m, out);
+                walk(o.prefab_children(), m, bones, out);
+                walk(&o.children, m, bones, out);
             }
         }
-        walk(&scene.objects, Mat4::IDENTITY, &mut draws);
+        walk(&scene.objects, Mat4::IDENTITY, &bones, &mut draws);
         let mut seen = Vec::new();
         for (m, c, anim, id, ci) in draws {
             match c.kind.as_str() {

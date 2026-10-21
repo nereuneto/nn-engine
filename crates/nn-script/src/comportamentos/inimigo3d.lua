@@ -18,7 +18,10 @@ local B = {
     { "visao", 8, label = "Vê o jogador a", min = 0, show_if = { "perseguir", true },
       help = "Metros. Longe assim e mais um pouco, ele desiste e volta." },
     { "correr", 3.5, label = "Velocidade perseguindo", min = 0, show_if = { "perseguir", true } },
-    { "dano", 1, label = "Dano", min = 0, help = "Vida que tira do jogador (comportamento Vida)." },
+    { "contornar", true, label = "Contorna paredes e buracos",
+      help = "Acha um caminho em volta de paredes, árvores, buracos e água, em vez de ir reto e ficar preso." },
+    { "dano", 1, label = "Dano", min = 0,
+      help = "Vida que tira do jogador ao encostar (comportamento Vida). Com um Golpe no mesmo objeto, só o golpe machuca." },
     { "empurrao", 7, label = "Empurrão", min = 0, advanced = true },
     { "pisar", true, label = "Morre se pisarem em cima",
       help = "Como num jogo de plataforma. Com Vida, perde uma vida a cada pisão." },
@@ -60,6 +63,9 @@ function B:start()
   self.ultimo = { x, z }
   self.alvo = nil
   self.caca = nil
+  -- O caminho em volta do que bloqueia (scene:steer guarda aqui).
+  self.rota = {}
+  o._nav_state = self.rota
 end
 
 -- O jogador mais perto (e a distância no chão).
@@ -120,13 +126,31 @@ end
 function B:fixed_update(dt)
   local o, c = self.obj, self.corpo
   if not (c and c.alive) then return end
+  -- Levou um empurrão (um golpe, um tiro): a física leva, ele não anda.
+  if (o.empurrado or 0) > 0 then
+    o.empurrado = o.empurrado - dt
+    self.ultimo = { o.x, o.z }
+    return
+  end
   local vx, vz = 0, 0
+  -- Golpeando (comportamento Golpe): parado, e a animação é a do golpe.
+  local golpe = o._golpeando
+  if golpe then
+    if golpe.parar then c:walk(0, 0) end
+    self:tocar_em_quem_encosta()
+    return
+  end
   if self.espera > 0 then
     self.espera = self.espera - dt
   else
     local tx, tz, v = self:destino(dt)
     if tx then
       local x, _, z = o:position3d()
+      if self.contornar then
+        tx, tz = self.scene:steer(self.rota, x, z, tx, tz, dt)
+      else
+        self.rota.path = nil
+      end
       local dx, dz = tx - x, tz - z
       local n = math.sqrt(dx * dx + dz * dz)
       if n > 0.05 then vx, vz = dx / n * v, dz / n * v end
@@ -153,7 +177,12 @@ function B:fixed_update(dt)
     o.ry = (o.ry or 0) + d * math.min(1, dt * 8)
   end
   self:animar_modelo(vx, vz)
-  -- Encostou no jogador.
+  self:tocar_em_quem_encosta()
+end
+
+-- Encostou no jogador.
+function B:tocar_em_quem_encosta()
+  local o = self.obj
   self._vy = self._vy or setmetatable({}, { __mode = "k" })
   for _, p in ipairs(self.scene:targets("")) do
     if o.alive and o:touching(p, 0.05) then self:encostou(p) end
@@ -187,12 +216,15 @@ function B:encostou(p)
     if o:send("dano", 1, p) == nil then
       local x, y, z = o:position3d()
       self.scene:burst(x, y + 0.3, "#FFFFFF", 18, z)
+      p:send("derrotou", o)
       o:send("derrotado", p)
       o:destroy()
     end
     return
   end
-  if self.dano <= 0 then return end
+  -- Com um Golpe, quem machuca é o golpe.
+  local g = o:behavior("golpe")
+  if self.dano <= 0 or (g and g.enabled) then return end
   local levou = p:send("dano", self.dano, o)
   if levou == nil then
     -- O jogador não tem Vida: volta ao checkpoint (ou reinicia a cena).

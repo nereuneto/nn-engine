@@ -88,10 +88,11 @@ def write(path, text):
     open(path, 'w').write(text)
 
 
-def vida_heroi(vidas=3):
+def vida_heroi(vidas=3, tremer=0):
     """O comportamento Vida do herói (as vidas vão para a variável "vidas")."""
+    extra = {'tremer': tremer} if tremer else {}
     return comp('behavior', script='nn:vida', vidas=vidas, variavel='vidas', invencivel=1,
-                ao_acabar='reiniciar', cena='', piscar=True, barra=False, cor_barra='#FF5A5A')
+                ao_acabar='reiniciar', cena='', piscar=True, barra=False, cor_barra='#FF5A5A', **extra)
 
 def coracoes(c, y=-90):
     """Os corações no HUD, embaixo do placar (componente Ícones)."""
@@ -100,13 +101,24 @@ def coracoes(c, y=-90):
                             empty_color='#FFFFFF40', align='left', pixel_art=True, hud=True)],
           x=40, y=y, anchor='top_left')
 
-def besouro(c, x, y, z, andar='patrulha', ax=5, az=0, raio=4, ry=0):
-    """Um besouro inimigo: anda, persegue o herói e morre se pisarem em cima."""
-    return c.obj('Besouro', [
+def besouro(c, x, y, z, andar='patrulha', ax=5, az=0, raio=4, ry=0, combate=False):
+    """Um besouro inimigo: anda, persegue o herói e morre se pisarem em cima.
+    Com `combate`, tem 2 de vida (com a barra e os números do dano) e morde
+    (Golpe sozinho, quando o herói chega perto)."""
+    comps = [
         comp('model', file='modelos/bicho.glb', color='#FFFFFF', flat=False, shadow=True),
         comp('behavior', script='nn:inimigo3d', andar=andar, x=ax, z=az, raio=raio, velocidade=1.8,
              perseguir=True, visao=6, correr=3.2, dano=1, empurrao=7, pisar=True, virar=True,
              animar=True, anim_parado='parado', anim_andar='andar'),
-        comp('behavior', script='nn:vida', vidas=1, variavel='', invencivel=0.3, ao_acabar='destruir',
-             cena='', piscar=True, barra=False, cor_barra='#FF5A5A'),
-    ], x=x, y=y, z=z, ry=ry)
+    ]
+    if combate:
+        comps.append(comp('behavior', script='nn:vida', vidas=2, variavel='', invencivel=0.3,
+                          ao_acabar='destruir', cena='', piscar=False, barra=True, cor_barra='#FF5A5A',
+                          numeros=True))
+        comps.append(comp('behavior', script='nn:golpe', quando='perto', distancia=1.1, alvo='', dano=1,
+                          alcance=1.3, angulo=100, empurrao=7, intervalo=1.2, animacao='golpe',
+                          acerto=0.3, som='', som_acerto='assets/sons/dano.wav'))
+    else:
+        comps.append(comp('behavior', script='nn:vida', vidas=1, variavel='', invencivel=0.3,
+                          ao_acabar='destruir', cena='', piscar=True, barra=False, cor_barra='#FF5A5A'))
+    return c.obj('Besouro', comps, x=x, y=y, z=z, ry=ry)

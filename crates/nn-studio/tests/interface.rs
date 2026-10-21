@@ -1159,6 +1159,18 @@ fn jogo_conta_onde_estao_os_objetos_e_o_editor_pausa() {
         assert!(start.elapsed().as_secs() < 10, "não chegou: {t}");
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
+    // Caminhos pede para o jogo mostrar a grade dos caminhos.
+    h.get_by_label("🧭 Caminhos").click();
+    h.run_steps(3);
+    let start = std::time::Instant::now();
+    loop {
+        let t = std::fs::read_to_string(&arquivo).unwrap_or_default();
+        if t.contains(r#"{"cmd":"show_paths"}"#) {
+            break;
+        }
+        assert!(start.elapsed().as_secs() < 10, "não chegou: {t}");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
     h.key_press_modifiers(Modifiers::SHIFT, Key::F5);
     h.run_steps(3);
 }
@@ -3032,6 +3044,66 @@ fn cena_3d_previa_da_animacao_e_inspetor() {
         }
     }
     assert!(diff > 30, "a prévia animou: {diff} pixels");
+}
+
+/// Uma espada como filha do herói: "Preso a um osso" já vem com a mão
+/// direita, o inspetor lista os ossos do modelo do pai e, no editor, a
+/// espada fica na mão (na pose de descanso).
+#[test]
+fn cena_3d_espada_presa_na_mao() {
+    use nn_studio::scene_data::{Component, Object, Prop};
+    let dir = temp("cena-3d-espada");
+    let proj = plataforma(&dir);
+    let modelos = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../jogos/estrelas3d/modelos");
+    std::fs::create_dir_all(proj.join("modelos")).unwrap();
+    for m in ["heroi.glb", "espada.glb"] {
+        std::fs::copy(modelos.join(m), proj.join("modelos").join(m)).unwrap();
+    }
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    com_cena3d(&mut h, &proj);
+    {
+        let doc = cena_mut(&mut h);
+        let mut o = Object::new(20, "Herói");
+        o.ry = 90.0;
+        let mut m = Component::new("model");
+        m.set("file", Prop::Str("modelos/heroi.glb".into()));
+        o.components.push(m);
+        let mut espada = Object::new(21, "Espada");
+        let mut m = Component::new("model");
+        m.set("file", Prop::Str("modelos/espada.glb".into()));
+        espada.components.push(m);
+        o.children.push(espada);
+        doc.data.objects.push(o);
+        doc.selection = vec![21];
+        doc.cam3.look_at(
+            glam::Vec3::new(2.5, 1.4, 2.5),
+            glam::Vec3::new(0.0, 0.8, 0.0),
+        );
+        doc.cam3_set = true;
+    }
+    h.run_steps(3);
+    // Sem o componente, a espada fica nos pés do herói.
+    let p = cena_mut(&mut h)
+        .data
+        .world_matrix3(21)
+        .unwrap()
+        .transform_point3(glam::Vec3::ZERO);
+    assert!(p.length() < 1e-4, "{p}");
+    h.get_by_label("➕ Adicionar componente").click();
+    h.run_steps(2);
+    h.get_by_label("Preso a um osso").click();
+    h.run_steps(3);
+    let doc = cena_mut(&mut h);
+    let o = doc.data.find(21).unwrap();
+    assert_eq!(o.component("bone").unwrap().str("bone"), "mao_d");
+    // Na mão direita: o -X do herói, virado 90° para +X, vira +Z.
+    let p = doc
+        .data
+        .world_matrix3(21)
+        .unwrap()
+        .transform_point3(glam::Vec3::ZERO);
+    assert!(p.abs_diff_eq(glam::Vec3::new(0.0, 0.53, 0.41), 1e-3), "{p}");
+    tela(&mut h, "cena-3d-espada");
 }
 
 /// Partículas e som numa cena 3D: os efeitos prontos do 3D, os campos em

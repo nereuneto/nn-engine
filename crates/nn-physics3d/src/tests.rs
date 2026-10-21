@@ -356,3 +356,70 @@ fn personagem_vai_junto_com_a_plataforma() {
     assert!((pos.y - 3.2).abs() < 0.15, "subiu junto: {pos}");
     assert!(w.on_ground(p));
 }
+
+fn parado(w: &mut World3, tamanho: Vec3, p: Vec3) -> BodyId3 {
+    w.add(&BodyDesc {
+        kind: BodyKind3::Static,
+        shape: Shape3::Box(tamanho),
+        position: p,
+        ..Default::default()
+    })
+    .unwrap()
+}
+
+#[test]
+fn grade_de_caminhos_ve_paredes_plataformas_buracos_e_agua() {
+    let mut w = World3::default();
+    chao(&mut w);
+    // Uma parede, uma plataforma no ar (dá para passar por baixo), um
+    // degrau baixo (dá para subir) e, ao lado do chão, um buraco.
+    parado(&mut w, Vec3::new(6.0, 2.0, 0.4), Vec3::new(0.0, 1.0, 5.0));
+    parado(
+        &mut w,
+        Vec3::new(3.0, 0.2, 3.0),
+        Vec3::new(-10.0, 3.0, -10.0),
+    );
+    parado(
+        &mut w,
+        Vec3::new(2.0, 0.3, 2.0),
+        Vec3::new(10.0, 0.15, -10.0),
+    );
+    parado(
+        &mut w,
+        Vec3::new(10.0, 1.0, 40.0),
+        Vec3::new(26.0, -0.5, 0.0),
+    );
+    // Uma ponte sobre a "água" (de x = 4 a 8, z = -2 a 2).
+    parado(&mut w, Vec3::new(4.0, 0.2, 1.0), Vec3::new(6.0, 0.6, -15.0));
+    let mut caixa_dinamica = BodyDesc {
+        position: Vec3::new(-5.0, 0.5, 0.0),
+        ..Default::default()
+    };
+    caixa_dinamica.shape = Shape3::Box(Vec3::ONE);
+    w.add(&caixa_dinamica).unwrap();
+    passos(&mut w, 0.1);
+    let opts = NavOptions3 {
+        water: vec![(Vec2::new(4.0, -18.0), Vec2::new(8.0, -12.0), 0.3)],
+        ..Default::default()
+    };
+    let nav = w.nav_grid(&opts);
+    let anda = |x: f32, z: f32| nav.walkable_at(Vec2::new(x, z));
+    assert!(anda(0.0, 0.0));
+    assert!(nav.floor_at(Vec2::new(0.0, 0.0)).abs() < 0.01);
+    assert!(!anda(0.0, 5.0), "a parede");
+    assert!(anda(-10.0, -10.0), "debaixo da plataforma no ar");
+    assert!(nav.floor_at(Vec2::new(-10.0, -10.0)).abs() < 0.01);
+    assert!(anda(10.0, -10.0), "em cima do degrau baixo");
+    assert!((nav.floor_at(Vec2::new(10.0, -10.0)) - 0.3).abs() < 0.01);
+    assert!(!anda(20.5, 0.0), "o buraco");
+    assert!(anda(22.0, 0.0), "o chão do outro lado");
+    assert!(anda(-5.0, 0.0), "a caixa que se move não bloqueia");
+    assert!(!anda(6.0, -13.0), "a água");
+    assert!(anda(6.0, -15.0), "a ponte sobre a água");
+    // O caminho dá a volta na parede.
+    let p = nav
+        .path(Vec2::new(0.0, 2.0), Vec2::new(0.0, 8.0))
+        .expect("caminho");
+    assert!(p.complete);
+    assert!(p.points.iter().any(|q| q.x.abs() > 3.0), "{:?}", p.points);
+}

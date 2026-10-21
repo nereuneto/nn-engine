@@ -36,6 +36,8 @@ pub enum PropType {
     Behavior,
     /// Nome de uma animação da imagem (`.anim`).
     Anim,
+    /// Um osso do modelo 3D do objeto ("mao_d").
+    Bone,
     /// Um tile do mapa (número; 0 = nenhum).
     Tile,
     /// Um arquivo de diálogo (`.dialogo`).
@@ -61,6 +63,7 @@ impl PropType {
             "value" => Self::Value,
             "behavior" => Self::Behavior,
             "anim" => Self::Anim,
+            "bone" => Self::Bone,
             "tile" => Self::Tile,
             "tiletype" => Self::TileType,
             "dialogue" => Self::Dialogue,

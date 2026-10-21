@@ -41,6 +41,7 @@ nn-audio = { path = "crates/nn-audio", version = "0.2.2" }
 nn-script = { path = "crates/nn-script", version = "0.2.2" }
 nn-physics = { path = "crates/nn-physics", version = "0.2.2" }
 nn-physics3d = { path = "crates/nn-physics3d", version = "0.2.2" }
+nn-nav = { path = "crates/nn-nav", version = "0.2.2" }
 nn-tilemap = { path = "crates/nn-tilemap", version = "0.2.2" }
 nn-run = { path = "crates/nn-run", version = "0.2.2" }
 
