@@ -305,7 +305,8 @@ fn chefe_avisa_golpeia_fica_furioso_e_cai_deixando_o_premio() {
         .load("C:hit(C.objects.Chefe, 3, C.objects['Herói'])")
         .exec()
         .unwrap();
-    h.run_frames(3);
+    // (Depois da pausa no acerto do golpe dele.)
+    h.run_frames(10);
     assert!(lua::<bool>(
         &rt,
         "C.objects.Chefe:behavior('chefe').furioso"
@@ -456,4 +457,58 @@ fn poses_do_besouro_rei() {
         h.save_png(out.join(format!("rei-{nome}-{t}.png"))).unwrap();
     }
     assert_eq!(h.game.0.error(), None);
+}
+
+/// Muitos inimigos atrás do herói: se espalham em volta dele, sem um empurrar
+/// o outro (antes, se espremiam, e a física gastava muito com isso).
+#[test]
+fn inimigos_em_grupo_se_espalham_sem_se_espremer() {
+    let mut objetos = heroi(0.0, 99);
+    for i in 0..8 {
+        let x = -1.2 + (i % 4) as f64 * 0.8;
+        let z = 6.0 + (i / 4) as f64 * 0.8;
+        objetos.push_str(&format!(
+            r#",
+    {{ id = {}, name = "bicho", x = {x}, z = {z},
+      components = {{ {{ type = "model", file = "modelos/bicho.glb" }},
+        {{ type = "behavior", script = "nn:inimigo3d", andar = "parado", visao = 20, dano = 0, pisar = false }} }} }}"#,
+            30 + i
+        ));
+    }
+    let cena_ = mundo(&objetos, "");
+    let dir = projeto("grupo", &arquivos(&cena_));
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    h.run_frames(240);
+    assert_eq!(h.game.0.error(), None);
+    // Todos chegaram perto do herói, e nenhum par está espremido (com um
+    // pouco de espaço entre eles).
+    let (perto, colados, menor): (u32, u32, f64) = rt
+        .lua()
+        .load(
+            r#"
+            local bs = C:find_all("bicho")
+            local hx, _, hz = C.objects["Herói"]:position3d()
+            local perto, colados, menor = 0, 0, 9
+            for i, a in ipairs(bs) do
+              local ax, _, az = a:position3d()
+              if math.sqrt((ax - hx) ^ 2 + (az - hz) ^ 2) < 3.5 then perto = perto + 1 end
+              for j = i + 1, #bs do
+                local bx, _, bz = bs[j]:position3d()
+                local lim = a._char3.radius + bs[j]._char3.radius
+                menor = math.min(menor, math.sqrt((ax - bx) ^ 2 + (az - bz) ^ 2) / lim)
+                if math.sqrt((ax - bx) ^ 2 + (az - bz) ^ 2) < lim * 1.1 then colados = colados + 1 end
+              end
+            end
+            return perto, colados, menor
+            "#,
+        )
+        .eval()
+        .unwrap();
+    println!("perto {perto}, menor distância / soma dos raios {menor:.2}");
+    assert!(perto >= 6, "perto do herói: {perto}");
+    assert_eq!(colados, 0, "espremidos");
+    drop(h);
+    let _ = std::fs::remove_dir_all(&dir);
 }

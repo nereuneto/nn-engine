@@ -132,7 +132,7 @@ c.obj('Herói', [comp('model', file='modelos/heroi.glb', color='#FFFFFF', flat=F
                 vida_heroi(tremer=6),
                 comp('behavior', script='nn:golpe', quando='tecla', tecla='clique', alvo='', dano=1,
                      alcance=1.7, angulo=120, todos=True, empurrao=6, intervalo=0.45, animacao='golpe',
-                     acerto=0.22, som='', som_acerto='assets/sons/dano.wav')],
+                     acerto=0.22, som='assets/sons/golpe.wav', som_acerto='assets/sons/acerto.wav')],
       events=heroi_events, x=hx, y=round(chao(hx, hz) + 0.05, 2), z=hz, ry=180, scale_x=1.1, scale_y=1.1, scale_z=1.1,
       children=[c.child('Espada', [comp('model', file='modelos/espada.glb', color='#FFFFFF', flat=False, shadow=True),
                                    comp('bone', bone='mao_d')], rx=ESPADA_RX),

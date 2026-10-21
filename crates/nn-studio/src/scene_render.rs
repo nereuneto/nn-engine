@@ -326,8 +326,9 @@ pub fn icons_count(c: &Component) -> (usize, usize) {
     if !c.str("var").is_empty() {
         n = var_num(c.str("var")).unwrap_or(0.0);
     }
-    let n = n.max(0.0).floor() as usize;
-    (n, n.max(c.num("max").max(0.0).floor() as usize))
+    // Até 100, como no jogo.
+    let n = (n.max(0.0).floor() as usize).min(100);
+    (n, n.max(c.num("max").max(0.0).floor() as usize).min(100))
 }
 
 /// Tamanho (sem escala) de um componente de interface, como o

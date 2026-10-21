@@ -291,7 +291,7 @@ function B:fixed_update(dt)
       self.feito = true
       local fx, fz = self.scene:front3(o)
       for _, a in ipairs(self.scene:in_front(o, self.alcance, 140, "", true)) do
-        self.scene:hit(a, self.dano, o, { push = 9, dx = fx, dz = fz, up = 0.5 })
+        self.scene:hit(a, self.dano, o, { push = 9, dx = fx, dz = fz, up = 0.5, hitstop = 0.08 })
       end
       self.scene:shake(5, 0.2)
     end
@@ -303,7 +303,7 @@ function B:fixed_update(dt)
     -- Atropela o jogador (uma vez).
     if p and not self.acertou_investida and o:touching(p, 0.15) then
       self.acertou_investida = true
-      self.scene:hit(p, self.dano, o, { push = 11, dx = self.dir[1], dz = self.dir[2], up = 0.6 })
+      self.scene:hit(p, self.dano, o, { push = 11, dx = self.dir[1], dz = self.dir[2], up = 0.6, hitstop = 0.08 })
     end
     -- Bateu numa parede: parou de andar.
     local x, _, z = o:position3d()
@@ -386,7 +386,7 @@ function B:impacto()
     local d = math.sqrt((px - x) ^ 2 + (pz - z) ^ 2)
     local no_chao = not p.body or p.body.on_ground or py < y + 0.4
     if d <= r + self.raio and no_chao then
-      self.scene:hit(p, self.dano, o, { push = 9, up = 0.7 })
+      self.scene:hit(p, self.dano, o, { push = 9, up = 0.7, hitstop = 0.08 })
     end
   end
   o:send("impactou")

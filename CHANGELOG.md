@@ -2,7 +2,30 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
-## Não lançado
+## 0.3.0
+
+A versão do **combate**: inimigos que contornam paredes, buracos e água; uma espada na mão e golpes; tiros que miram pelo meio da tela; números de dano; ondas de inimigos; e chefes com vários ataques, tudo montado no **NN Studio sem código**. A ilha do modelo 3D ganhou uma arena com o besouro-rei, e há um tutorial guiado novo, **Um chefe**. Para começar: o guia [Comece aqui no 3D](docs/3d.md) e a seção [Combate](docs/studio.md#combate-espada-tiros-e-inimigos-que-atacam) do NN Studio.
+
+### Para quem vem da 0.2
+
+- **Os projetos da 0.2 abrem e rodam.** Algumas coisas ficaram diferentes no jogo:
+  - **Atirar no 3D**, num modelo com a animação `atirar` (como o herói dos modelos), agora toca essa animação, e o tiro sai 0,08 s depois, com o braço levantado. Para o jeito de antes: **Animação** = nenhuma, ou **O tiro sai depois de** = 0.
+  - **Vida** fica vermelha um instante a cada dano. Para desligar: **Fica vermelho ao levar dano**.
+  - **Vida** com a variável padrão (**vidas**) só usa a variável no jogador. Num inimigo, ela é ignorada; antes, ele dividia as vidas com o herói. Para mostrar a vida de um inimigo numa variável, use outro nome.
+  - Um **Inimigo 3D com um Golpe** não machuca mais só de encostar (o golpe machuca). Sem Golpe, nada muda.
+- Os **Atirar** novos no 3D vêm com **para o meio da tela** e o **botão direito** do mouse. Os que já estão nas cenas continuam como estavam.
+- Nenhuma função da API Lua nem comportamento pronto foi tirado ou mudou de nome. A Vida recebe agora `dano(n, quem)`; o `quem` é opcional.
+
+### Revisão
+
+- **Pausa no acerto:** quando um golpe acerta (do herói ou nele), o jogo para por uma fração de segundo, o que dá peso ao golpe. No Golpe, **Pausa no acerto** (0,06 s; 0 = sem pausa). No Lua, `scene:hitstop(segundos)` e a opção `hitstop` do `scene:hit`.
+- **Inimigos em grupo se espalham:** vários Inimigos 3D atrás do herói se espalham em volta dele, em vez de um empurrar o outro. Fica mais bonito e mais leve: com 30 besouros na arena, a simulação gasta metade do tempo de antes (com 60, um quarto).
+- **Mais leve com muitos objetos:** a lista de quem os comportamentos procuram (o jogador, um nome) é montada uma vez por passo, e não a cada pergunta.
+- **Ícones** (o componente que mostra as vidas em corações) desenham no máximo 100. Antes, um número enorme na variável travava o jogo.
+- **Sons novos**, nos modelos de projeto 3D: `golpe.wav` (a espada cortando o ar), `acerto.wav` (o baque) e `rugido.wav` (o besouro-rei se preparando). A ilha e o Vale 3D já usam.
+- **Testes novos:**
+  - em todo modelo de projeto, cada objeto começa no jogo onde o NN Studio mostra (teria pegado o erro das cópias de prefab da 0.2.1);
+  - o repositório confere que todo crate está nas dependências do workspace com a mesma versão, e que o CHANGELOG tem a seção da versão.
 
 ### Caminhos
 

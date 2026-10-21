@@ -66,6 +66,48 @@ function B:start()
   -- O caminho em volta do que bloqueia (scene:steer guarda aqui).
   self.rota = {}
   o._nav_state = self.rota
+  -- Os inimigos 3D da cena (para um não entrar no outro).
+  local todos = {}
+  for _, b in ipairs(scene._inimigos3d or {}) do
+    if b.obj.alive then todos[#todos + 1] = b end
+  end
+  todos[#todos + 1] = self
+  scene._inimigos3d = todos
+end
+
+-- Em grupo: não empurra o inimigo que está colado na frente (escorrega para o
+-- lado) e se afasta um pouco dos vizinhos. Assim eles se espalham em volta do
+-- jogador em vez de se empilhar, e a física não precisa separar quem está
+-- se espremendo (com muitos inimigos, era o que mais pesava).
+function B:espalhar(x, z, vx, vz, v)
+  local r = self.obj._char3.radius
+  local sx, sz = 0, 0
+  for _, b in ipairs(self.scene._inimigos3d) do
+    local outro = b.obj
+    if b ~= self and outro.alive and outro._char3 then
+      local dx, dz = b.ultimo[1] - x, b.ultimo[2] - z
+      local d2 = dx * dx + dz * dz
+      local lim = r + outro._char3.radius + 0.3
+      if d2 < lim * lim then
+        local d = math.sqrt(d2)
+        if d < 1e-3 then
+          -- Um em cima do outro: cada um para um lado.
+          local a = (outro.id or 0) < (self.obj.id or 0) and 0 or math.pi
+          dx, dz, d = math.cos(a), math.sin(a), 1
+        else
+          dx, dz = dx / d, dz / d
+        end
+        local frente = vx * dx + vz * dz
+        if frente > 0 then vx, vz = vx - frente * dx, vz - frente * dz end
+        local f = 1 - d / lim
+        sx, sz = sx - dx * f, sz - dz * f
+      end
+    end
+  end
+  vx, vz = vx + sx * v, vz + sz * v
+  local m = math.sqrt(vx * vx + vz * vz)
+  if m > v then vx, vz = vx / m * v, vz / m * v end
+  return vx, vz
 end
 
 -- O jogador mais perto (e a distância no chão).
@@ -154,6 +196,7 @@ function B:fixed_update(dt)
       local dx, dz = tx - x, tz - z
       local n = math.sqrt(dx * dx + dz * dz)
       if n > 0.05 then vx, vz = dx / n * v, dz / n * v end
+      if vx ~= 0 or vz ~= 0 then vx, vz = self:espalhar(x, z, vx, vz, v) end
     end
   end
   c:walk(vx, vz)

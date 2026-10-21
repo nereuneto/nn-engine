@@ -118,7 +118,7 @@ def besouro(c, x, y, z, andar='patrulha', ax=5, az=0, raio=4, ry=0, combate=Fals
                           numeros=True))
         comps.append(comp('behavior', script='nn:golpe', quando='perto', distancia=1.1, alvo='', dano=1,
                           alcance=1.3, angulo=100, empurrao=7, intervalo=1.2, animacao='golpe',
-                          acerto=0.3, som='', som_acerto='assets/sons/dano.wav'))
+                          acerto=0.3, som='', som_acerto='assets/sons/acerto.wav'))
     else:
         comps.append(comp('behavior', script='nn:vida', vidas=1, variavel='', invencivel=0.3,
                           ao_acabar='destruir', cena='', piscar=True, barra=False, cor_barra='#FF5A5A'))
