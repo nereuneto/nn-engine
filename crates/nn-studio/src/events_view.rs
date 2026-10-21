@@ -1337,7 +1337,7 @@ fn field(
                 v.clone()
             })
         }
-        PropType::Text => {
+        PropType::Text | PropType::Bone => {
             let mut v = current.str().to_string();
             let w = text_width(&v).max(60.0);
             let r = ui.add(egui::TextEdit::singleline(&mut v).desired_width(w));

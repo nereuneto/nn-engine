@@ -263,7 +263,8 @@ pub enum SceneAction {
     TestHere,
     Reload,
     OpenAsText,
-    /// Comando para o jogo aberto: "pause", "resume" ou "step".
+    /// Comando para o jogo aberto: "pause", "resume", "step",
+    /// "show_paths" ou "hide_paths".
     Game(&'static str),
     /// Criar um mapa de tiles (abre a janela).
     NewMap,
@@ -312,6 +313,8 @@ pub struct GameObject {
 pub struct GameState {
     pub scene: String,
     pub paused: bool,
+    /// O jogo está mostrando os caminhos (botão Caminhos).
+    pub paths: bool,
     pub objects: std::collections::HashMap<u32, GameObject>,
     pub vars: Vec<(String, Prop)>,
     /// Regras que dispararam desde o último estado ("c:2" = 2ª regra da
@@ -335,6 +338,7 @@ impl GameState {
         let mut state = GameState {
             scene: v.get("scene")?.as_str()?.to_string(),
             paused: v.get("paused").and_then(|p| p.as_bool()).unwrap_or(false),
+            paths: v.get("paths").and_then(|p| p.as_bool()).unwrap_or(false),
             ..Default::default()
         };
         // Lista vazia chega como {} (tabela Lua vazia).
@@ -1104,6 +1108,7 @@ impl SceneDoc {
                 {
                     actions.push(SceneAction::Game("pause"));
                 }
+                paths_button(ui, env, actions);
             }
             ui.separator();
             for (tool, label, tip) in [
@@ -2331,6 +2336,23 @@ pub fn add_object_menu(ui: &mut egui::Ui) -> Option<Object> {
     });
     crate::tutorial::anchor(ui.ctx(), "cena.objeto:interface", r.response.rect);
     out
+}
+
+/// O botão Caminhos (com o jogo aberto): mostra no jogo por onde os
+/// inimigos podem andar e o caminho de cada um.
+pub(crate) fn paths_button(ui: &mut egui::Ui, env: &SceneEnv, actions: &mut Vec<SceneAction>) {
+    let on = env.game.is_some_and(|g| g.paths);
+    let r = ui
+        .selectable_label(on, "🧭 Caminhos")
+        .on_hover_text("Mostra no jogo aberto por onde os inimigos podem andar (a grade de caminhos) e o caminho que cada um está seguindo");
+    crate::tutorial::anchor(ui.ctx(), "cena.caminhos", r.rect);
+    if r.clicked() {
+        actions.push(SceneAction::Game(if on {
+            "hide_paths"
+        } else {
+            "show_paths"
+        }));
+    }
 }
 
 /// O submenu Interface: menus e HUD.

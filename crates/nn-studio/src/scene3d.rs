@@ -792,6 +792,12 @@ impl SceneDoc {
             if r.clicked() {
                 actions.push(SceneAction::TestHere);
             }
+            if env.connected {
+                ui.colored_label(GREEN, "• Ao vivo").on_hover_text(
+                    "O jogo aberto está nesta cena: o que você mudar aparece nele na hora, sem salvar.",
+                );
+                super::paths_button(ui, env, actions);
+            }
             ui.separator();
             for (tool, label, tip) in [
                 (

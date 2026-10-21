@@ -312,3 +312,40 @@ fn sobreposicao_entre_dois_corpos_ignora_camadas() {
     w.remove(inimigo);
     assert!(!w.intersects(jogador, inimigo));
 }
+
+#[test]
+fn grade_de_caminhos_com_paredes_tiles_e_o_que_nao_bloqueia() {
+    let mut w = World::new(Vec2::ZERO);
+    w.add(Body::fixed(Shape::rect(200.0, 20.0)).at(Vec2::new(0.0, 0.0)));
+    w.add(Body::fixed(Shape::circle(20.0)).at(Vec2::new(0.0, 100.0)));
+    w.add(
+        Body::fixed(Shape::rect(40.0, 40.0))
+            .at(Vec2::new(-100.0, 100.0))
+            .as_sensor(),
+    );
+    w.add(
+        Body::fixed(Shape::rect(40.0, 10.0))
+            .at(Vec2::new(100.0, 100.0))
+            .as_one_way(),
+    );
+    w.add(Body::dynamic(Shape::rect(16.0, 16.0)).at(Vec2::new(0.0, -100.0)));
+    let mut g = CollisionGrid::new(4, 4, Vec2::splat(16.0), Vec2::new(-200.0, -200.0));
+    g.set(1, 1, Cell::Solid);
+    w.add_grid(g);
+    let nav = w.nav_grid(None, 8.0, 6.0);
+    let anda = |x: f32, y: f32| nav.walkable_at(Vec2::new(x, y));
+    assert!(!anda(0.0, 0.0), "a parede");
+    assert!(!anda(0.0, 13.0), "perto da parede (o raio de quem anda)");
+    assert!(anda(0.0, 20.0));
+    assert!(!anda(0.0, 100.0), "o círculo");
+    assert!(anda(-100.0, 100.0), "sensor não bloqueia");
+    assert!(anda(100.0, 100.0), "mão única não bloqueia");
+    assert!(anda(0.0, -100.0), "quem se move não bloqueia");
+    assert!(!anda(-200.0 + 24.0, -200.0 + 24.0), "o tile sólido");
+    assert!(anda(-200.0 + 56.0, -200.0 + 24.0));
+    let p = nav
+        .path(Vec2::new(0.0, -40.0), Vec2::new(0.0, 40.0))
+        .unwrap();
+    assert!(p.complete);
+    assert!(p.points.iter().any(|q| q.x.abs() > 100.0), "{:?}", p.points);
+}

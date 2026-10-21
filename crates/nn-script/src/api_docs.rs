@@ -436,12 +436,12 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.physics3d.world",
         "(opts)",
-        "Cria um mundo 3D ({ gravity = -9.81 }): :body(opts), :character(opts), :step(dt), :raycast(...), :debug_draw().",
+        "Cria um mundo 3D ({ gravity = -9.81 }): :body(opts), :character(opts), :step(dt), :raycast(...), :nav(opts) (grade de caminhos), :debug_draw().",
     ),
     d(
         "nn.physics.world",
         "(opts)",
-        "Cria um mundo físico ({ gravity = -1800 }): :body(opts), :step(dt), :raycast(...).",
+        "Cria um mundo físico ({ gravity = -1800 }): :body(opts), :step(dt), :raycast(...), :nav(opts) (grade de caminhos).",
     ),
     // Mapas
     d("nn.tilemap", "", "Mapas de tiles (Tiled)."),
@@ -782,6 +782,22 @@ pub const SCENE_MEMBERS: &[Member] = &[
     ),
     m("set_checkpoint", "(x, y)", "Guarda o ponto de reinício."),
     m("checkpoint", "()", "Último ponto de reinício (x, y)."),
+    m(
+        "hit",
+        "(alvo, dano, quem, opts)",
+        "Combate: quem acerta o alvo (tira vida, empurra com opts.push e manda \"acertou\").",
+    ),
+    m(
+        "foes",
+        "(quem, nome)",
+        "Quem pode ser acertado por quem (os inimigos dele, ou os objetos com esse nome).",
+    ),
+    m(
+        "damage_number",
+        "(obj, n, cor)",
+        "Um número subindo de cima do objeto (o dano).",
+    ),
+    m("shake", "(forca, tempo)", "Treme a câmera (no 2D e no 3D)."),
 ];
 
 /// `self` dentro de um comportamento.

@@ -236,6 +236,26 @@ impl UserData for LWorld {
             })
         });
 
+        // nav({ cell = 16, radius = 12, area = {x1, y1, x2, y2} }): a grade
+        // por onde dá para andar (jogo visto de cima).
+        m.add_method("nav", |_, this, opts: Option<Table>| {
+            let o = opts.as_ref();
+            let cell = opt::<f32>(o, "cell")?.unwrap_or(16.0);
+            let radius = opt::<f32>(o, "radius")?.unwrap_or(cell * 0.75);
+            let area = match opt::<Table>(o, "area")? {
+                Some(a) => {
+                    let v: Vec<f32> = a.sequence_values().collect::<Result<_>>()?;
+                    if v.len() != 4 {
+                        return Err(err("area: { x1, y1, x2, y2 }"));
+                    }
+                    Some(Aabb::new(Vec2::new(v[0], v[1]), Vec2::new(v[2], v[3])))
+                }
+                None => None,
+            };
+            let grid = this.0.borrow().nav_grid(area, cell, radius);
+            Ok(crate::nav::LNav::new(grid, false))
+        });
+
         m.add_method("step", |lua, this, dt: f32| {
             let events: Vec<Event> = this.0.borrow_mut().step(dt).to_vec();
             let list = lua.create_table()?;

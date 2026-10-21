@@ -9,12 +9,15 @@
 //! - Personagens ([`CharacterDesc`]): andam, pulam, sobem degraus e rampas,
 //!   não atravessam paredes e empurram o que é dinâmico.
 //! - Sensores, eventos de toque ([`Event3`]) e raios ([`World3::raycast`]).
+//! - Caminhos: [`World3::nav_grid`] monta a grade do chão por onde dá para
+//!   andar (para inimigos que contornam paredes, buracos e água).
 //!
 //! Y para cima; a unidade é livre (pense em metros).
 
 use std::collections::HashMap;
 
-use glam::{Quat, Vec3};
+use glam::{Quat, Vec2, Vec3};
+pub use nn_nav::{NavGrid, Path as NavPath};
 use rapier3d::control::{CharacterAutostep, CharacterLength, KinematicCharacterController};
 use rapier3d::prelude::*;
 
@@ -33,6 +36,43 @@ fn rq(q: Quat) -> RRot {
 }
 fn gq(q: RRot) -> Quat {
     Quat::from_xyzw(q.x, q.y, q.z, q.w)
+}
+
+/// Como montar a grade de caminhos ([`World3::nav_grid`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct NavOptions3 {
+    /// O lado de cada célula (no chão).
+    pub cell: f32,
+    /// A largura de quem anda (metade): as células mais perto que isso de
+    /// uma parede ficam bloqueadas.
+    pub radius: f32,
+    /// A altura de quem anda: precisa caber de pé.
+    pub height: f32,
+    /// O degrau: a maior diferença de altura do chão entre duas células
+    /// vizinhas que ainda dá para atravessar (buracos e barrancos não).
+    pub step: f32,
+    /// A inclinação máxima do chão, em graus.
+    pub max_slope: f32,
+    /// O pedaço do chão coberto, de (x, z) a (x, z). Sem ele, o dos corpos
+    /// parados.
+    pub area: Option<(Vec2, Vec2)>,
+    /// Água (ou lava): retângulos de (x, z) a (x, z) com o nível. Um chão
+    /// abaixo do nível não vale (mas uma ponte por cima vale).
+    pub water: Vec<(Vec2, Vec2, f32)>,
+}
+
+impl Default for NavOptions3 {
+    fn default() -> Self {
+        Self {
+            cell: 0.5,
+            radius: 0.35,
+            height: 1.0,
+            step: 0.45,
+            max_slope: 50.0,
+            area: None,
+            water: Vec::new(),
+        }
+    }
 }
 
 /// Identificador de um corpo no [`World3`]. Continua único mesmo depois
@@ -853,6 +893,115 @@ impl World3 {
             normal: gv(hit.normal),
             distance: hit.time_of_impact,
         })
+    }
+
+    /// A grade do chão por onde dá para andar. Para cada célula, raios
+    /// procuram os andares (só corpos parados: chão, terreno, cenário) e
+    /// uma caixa confere se cabe alguém em pé em cada um, do degrau para
+    /// cima. Vale o andar mais baixo que serve (o chão debaixo de uma
+    /// plataforma no ar, não o topo dela); sem nenhum (sem chão, chão
+    /// inclinado demais, debaixo d'água ou algo no caminho), a célula fica
+    /// bloqueada. Precisa de um [`World3::step`] depois de pôr os corpos.
+    pub fn nav_grid(&self, opts: &NavOptions3) -> NavGrid {
+        let cell = opts.cell.max(0.05);
+        let only_fixed = || QueryFilter::only_fixed().exclude_sensors();
+        // A área: a dos corpos parados (com uma folga), ou a pedida.
+        let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+        for (_, c) in self.world.colliders.iter() {
+            let fixed = c
+                .parent()
+                .and_then(|p| self.world.bodies.get(p))
+                .is_some_and(|b| b.is_fixed());
+            if fixed && !c.is_sensor() {
+                let a = c.compute_aabb();
+                lo = lo.min(Vec3::new(a.mins.x, a.mins.y, a.mins.z));
+                hi = hi.max(Vec3::new(a.maxs.x, a.maxs.y, a.maxs.z));
+            }
+        }
+        if lo.x > hi.x {
+            lo = Vec3::splat(-16.0);
+            hi = Vec3::splat(16.0);
+        }
+        let (min, max) = opts
+            .area
+            .unwrap_or((Vec2::new(lo.x, lo.z) - cell, Vec2::new(hi.x, hi.z) + cell));
+        let mut nav = NavGrid::new(min, max, cell);
+        nav.max_step = opts.step.max(0.0);
+        let top = hi.y + 1.0;
+        let body_h = (opts.height - opts.step).max(0.05);
+        let r = opts.radius.max(0.01);
+        let probes = [
+            Vec2::ZERO,
+            Vec2::new(r, r),
+            Vec2::new(-r, r),
+            Vec2::new(r, -r),
+            Vec2::new(-r, -r),
+        ];
+        let min_up = opts.max_slope.to_radians().cos();
+        let under_water = |p: Vec2, y: f32| {
+            opts.water
+                .iter()
+                .any(|(a, b, level)| p.cmpge(*a).all() && p.cmple(*b).all() && y < *level)
+        };
+        for cy in 0..nav.height() {
+            for cx in 0..nav.width() {
+                let c = nav.center((cx, cy));
+                // Os andares deste ponto, de cima para baixo (o chão, uma
+                // ponte, o topo de uma plataforma...): vale o mais baixo onde
+                // cabe alguém em pé e que não está debaixo d'água.
+                let mut from = top;
+                let mut chosen = None;
+                for k in 0..6 {
+                    // (Não sólido: um raio que começa dentro de uma plataforma
+                    // sai pela face de baixo dela, e o próximo continua.)
+                    let ray = Ray::new(rv(Vec3::new(c.x, from, c.y)), rv(Vec3::NEG_Y));
+                    let Some((_, hit)) = self
+                        .world
+                        .query_pipeline_with_filter(only_fixed())
+                        .cast_ray_and_get_normal(&ray, from - lo.y + 2.0, false)
+                    else {
+                        break;
+                    };
+                    let floor = from - hit.time_of_impact;
+                    from = floor - 0.05;
+                    if gv(hit.normal).y < min_up || under_water(c, floor) {
+                        continue;
+                    }
+                    // Enterrado (um chão que fica dentro de outra coisa, como
+                    // o chão debaixo de um degrau): não vale. (O primeiro
+                    // chão, visto de cima, não tem nada em cima.)
+                    let buried = k > 0
+                        && self
+                            .world
+                            .query_pipeline_with_filter(only_fixed())
+                            .intersect_point(rv(Vec3::new(c.x, floor + 0.03, c.y)))
+                            .next()
+                            .is_some();
+                    if buried {
+                        continue;
+                    }
+                    // Cabe alguém em pé? Raios para cima, do degrau até a
+                    // altura, no meio e nos quatro cantos da largura (mais
+                    // baratos que uma caixa contra um terreno inteiro).
+                    let free = probes.iter().all(|o| {
+                        let start = Vec3::new(c.x + o.x, floor + opts.step, c.y + o.y);
+                        let ray = Ray::new(rv(start), rv(Vec3::Y));
+                        self.world
+                            .query_pipeline_with_filter(only_fixed())
+                            .cast_ray(&ray, body_h, true)
+                            .is_none()
+                    });
+                    if free {
+                        chosen = Some(floor);
+                    }
+                }
+                match chosen {
+                    Some(floor) => nav.set_floor((cx, cy), floor),
+                    None => nav.set_walkable((cx, cy), false),
+                }
+            }
+        }
+        nav
     }
 
     /// Os corpos que encostam numa esfera (sensores incluídos).

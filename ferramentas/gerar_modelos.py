@@ -360,10 +360,13 @@ def pedra():
 
 def heroi():
     """Virado para +Z (a frente no glTF), 1,8 m, com esqueleto e as animações
-    parado, andar, correr, pular, cair e acenar. A esquerda dele é o +X."""
+    parado, andar, correr, pular, cair, acenar, golpe e atirar. A esquerda dele
+    é o +X. As mãos (mao_e e mao_d) são ossos sem nada preso: o lugar de
+    segurar uma espada ou um cajado (componente "Preso a um osso")."""
     m = Modelo()
     # Ossos (posição no mundo, na pose de descanso).
-    RAIZ, QUADRIL, TRONCO, CABECA, BRACO_E, BRACO_D, PERNA_E, CANELA_E, PERNA_D, CANELA_D = range(10)
+    (RAIZ, QUADRIL, TRONCO, CABECA, BRACO_E, BRACO_D, PERNA_E, CANELA_E, PERNA_D, CANELA_D,
+     MAO_E, MAO_D) = range(12)
     m.ossos([
         ("raiz", None, (0, 0, 0)),
         ("quadril", RAIZ, (0, 0.5, 0)),
@@ -375,6 +378,8 @@ def heroi():
         ("canela_e", PERNA_E, (0.13, 0.26, 0)),
         ("perna_d", QUADRIL, (-0.13, 0.5, 0)),
         ("canela_d", PERNA_D, (-0.13, 0.26, 0)),
+        ("mao_e", BRACO_E, (0.41, 0.53, 0)),
+        ("mao_d", BRACO_D, (-0.41, 0.53, 0)),
     ])
     corpo = Parte("#FF8C42")
     corpo.osso = TRONCO
@@ -473,6 +478,25 @@ def heroi():
         (CABECA, "rotation"): [quat("z", g) for g in (0, 4, 0, 4, 0)],
         (QUADRIL, "translation"): quadril(0.5, 0.5, 0.5, 0.5, 0.5),
     })
+    # Golpe: o braço direito sobe por cima da cabeça e desce na frente (o
+    # acerto é perto de 0,22 s), com o tronco indo junto.
+    t = [0, 0.12, 0.22, 0.34, 0.5]
+    m.animacao("golpe", t, {
+        (BRACO_D, "rotation"): [quat_xz(g, -z) for g, z in ((0, 4), (-165, 12), (-60, 6), (-45, 6), (0, 4))],
+        (BRACO_E, "rotation"): [quat_xz(g, 6) for g in (0, 20, -15, -10, 0)],
+        (TRONCO, "rotation"): x(0, -8, 16, 12, 0),
+        (CABECA, "rotation"): x(0, 4, -8, -6, 0),
+        (QUADRIL, "translation"): quadril(0.5, 0.5, 0.46, 0.47, 0.5),
+        (PERNA_E, "rotation"): x(0, -10, -22, -20, 0),
+        (PERNA_D, "rotation"): x(0, 6, 14, 12, 0),
+    })
+    # Atirar: o braço direito vai para a frente, fica um tempinho e volta (o
+    # tiro sai perto de 0,1 s).
+    t = [0, 0.08, 0.25, 0.4]
+    m.animacao("atirar", t, {
+        (BRACO_D, "rotation"): [quat_xz(g, -4) for g in (0, -88, -86, 0)],
+        (TRONCO, "rotation"): x(0, -4, -3, 0),
+    })
     del q0
     return m
 
@@ -526,6 +550,54 @@ def bicho():
         (P2, "rotation"): x(30, 0, -30, 0, 30),
         (P3, "rotation"): x(30, 0, -30, 0, 30),
     })
+    # Golpe: recua e dá uma mordida para a frente (o acerto é perto de 0,3 s).
+    t = [0, 0.18, 0.3, 0.45, 0.6]
+    m.animacao("golpe", t, {
+        (CORPO, "translation"): [(0, 0.3, 0), (0, 0.33, -0.08), (0, 0.27, 0.12), (0, 0.28, 0.08), (0, 0.3, 0)],
+        (CABECA, "translation"): [(0, 0.02, 0.32), (0, 0.06, 0.26), (0, -0.02, 0.44), (0, 0, 0.4), (0, 0.02, 0.32)],
+        (CABECA, "rotation"): x(0, -18, 14, 8, 0),
+        (P1, "rotation"): x(0, 12, -20, -15, 0),
+        (P2, "rotation"): x(0, 12, -20, -15, 0),
+    })
+    return m
+
+
+def espada():
+    """Espada para segurar: o cabo na origem (onde a mão pega) e a lâmina
+    para a frente (+Z), 0,9 m. Presa no osso mao_d do herói, com o braço
+    parado, ela aponta para a frente."""
+    m = Modelo()
+    lamina = Parte("#D9E2EC")
+    lamina.caixa(0, 0, 0.47, 0.03, 0.09, 0.62)
+    # A ponta: um prisma de 4 lados deitado (fino como a lâmina).
+    ponta = Parte("#D9E2EC")
+    ponta.tri((0.015, -0.045, 0.78), (0.015, 0.045, 0.78), (0, 0, 0.9))
+    ponta.tri((-0.015, 0.045, 0.78), (-0.015, -0.045, 0.78), (0, 0, 0.9))
+    ponta.tri((-0.015, -0.045, 0.78), (0.015, -0.045, 0.78), (0, 0, 0.9))
+    ponta.tri((0.015, 0.045, 0.78), (-0.015, 0.045, 0.78), (0, 0, 0.9))
+    ponta.quad((0.015, -0.045, 0.78), (-0.015, -0.045, 0.78), (-0.015, 0.045, 0.78), (0.015, 0.045, 0.78))
+    guarda = Parte("#F4B400")
+    guarda.caixa(0, 0, 0.13, 0.06, 0.28, 0.05)
+    cabo = Parte("#6B4226")
+    cabo.caixa(0, 0, 0.02, 0.05, 0.05, 0.2)
+    pomo = Parte("#F4B400")
+    pomo.caixa(0, 0, -0.1, 0.07, 0.07, 0.06)
+    m.no("espada", m.malha("espada", [lamina, ponta, guarda, cabo, pomo]), raiz=True)
+    return m
+
+
+def cajado():
+    """Cajado de mago: a mão pega na origem; a haste sobe (+Y) até 1,1 m,
+    com uma pedra brilhante na ponta, e desce 0,35 m."""
+    m = Modelo()
+    haste = Parte("#8B5A3C")
+    haste.prisma(6, 0.03, -0.35, 1.0)
+    anel = Parte("#F4B400")
+    anel.prisma(6, 0.05, 0.92, 1.0)
+    pedra = Parte("#4CC9F0")
+    pedra.prisma(5, 0.09, 1.0, 1.1)
+    pedra.prisma(5, 0.09, 1.1, 1.22, raio_topo=0.0)
+    m.no("cajado", m.malha("cajado", [haste, anel, pedra]), raiz=True)
     return m
 
 
@@ -665,7 +737,7 @@ def main():
     for nome, fazer in [("arvore", arvore), ("pedra", pedra), ("heroi", heroi),
                         ("caixote", caixote), ("estrela", estrela), ("moeda", moeda),
                         ("plataforma", plataforma), ("bicho", bicho), ("chave", chave),
-                        ("porta", porta)]:
+                        ("porta", porta), ("espada", espada), ("cajado", cajado)]:
         with open(os.path.join(estrelas, nome + ".glb"), "wb") as f:
             f.write(fazer().glb())
     with open(os.path.join(testes, "roda.glb"), "wb") as f:

@@ -64,7 +64,7 @@ O NN Studio é o jeito mais fácil de fazer um jogo: crie um projeto a partir de
 
 ![Cena visual 2D no NN Studio](docs/imagens/nn-studio-cena.png)
 
-**No 3D:** vista em perspectiva com céu, sol, névoa e sombras, navegação como na Unity e no Godot; modelos `.glb` do Blender ou do Mixamo, animados; **física** (chão, paredes, caixas que caem, plataformas que levam o herói); o **Jogador 3D** em terceira pessoa; **terrenos** pintados com o mouse (morros, lagos, cores, árvores espalhadas); partículas e sons no mundo; inimigos que perseguem; portas com chave e inventário; e o HUD por cima da vista, do jeito que fica no jogo.
+**No 3D:** vista em perspectiva com céu, sol, névoa e sombras, navegação como na Unity e no Godot; modelos `.glb` do Blender ou do Mixamo, animados; **física** (chão, paredes, caixas que caem, plataformas que levam o herói); o **Jogador 3D** em terceira pessoa; **terrenos** pintados com o mouse (morros, lagos, cores, árvores espalhadas); partículas e sons no mundo; inimigos que perseguem (contornando paredes) e atacam; **combate** com espada na mão, tiros que miram pelo meio da tela e números de dano; portas com chave e inventário; e o HUD por cima da vista, do jeito que fica no jogo.
 
 ![Terreno sendo pintado no NN Studio](docs/imagens/nn-studio-terreno.png)
 
@@ -186,6 +186,7 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-app` | Janela, loop principal, trait `Game`, cenas, assets, interface (menus), dados salvos, leitura dos controles ([gilrs](https://gitlab.com/gilrs-project/gilrs)) e modo sem janela (`Headless`) para testes |
 | `nn-physics` | Física arcade: corpos retangulares e circulares, grade de tiles, plataformas de mão única, sensores, camadas, raycast |
 | `nn-physics3d` | Física 3D sobre o [rapier](https://rapier.rs): corpos que caem e empilham, personagem que anda e pula, sensores, raios |
+| `nn-nav` | Caminhos: grade de lugares por onde dá para andar e A*, para os inimigos contornarem paredes, buracos e água (2D e 3D) |
 | `nn-tilemap` | Tilemaps com camadas, tilesets e objetos; importação do editor Tiled (JSON) |
 | `nn-script` | Scripting em Lua: API `nn.*` (com a documentação de cada função em `api_docs`), cenas em Lua e cenas visuais (`.cena`), comportamentos prontos, eventos "Quando... Então...", prefabs, variáveis do jogo, recarga ao salvar, canal ao vivo com o editor, tela de erro |
 | `nn-run` | Ferramenta `nn` (cria, roda e exporta projetos Lua, com os modelos de `nn novo`) e `nn-jogo`, o executável dos jogos exportados |

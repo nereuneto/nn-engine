@@ -1,0 +1,14 @@
+[package]
+name = "nn-nav"
+description = "Caminhos da nn-engine: grade de lugares por onde dá para andar e A*, para os inimigos contornarem paredes, buracos e água (2D e 3D)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+glam.workspace = true
+
+[lints]
+workspace = true

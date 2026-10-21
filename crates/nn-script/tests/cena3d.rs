@@ -757,6 +757,12 @@ fn inimigos_vida_perigo_e_tiro_no_3d() {
     h.ctx.input.press_key(KeyCode::KeyX);
     h.run_frames(2);
     h.ctx.input.release_key(KeyCode::KeyX);
+    // O herói toca "atirar"; o tiro sai logo depois (o braço sobe antes).
+    assert_eq!(
+        lua::<String>(&rt, "C.objects['Herói']:animator().animation"),
+        "atirar"
+    );
+    h.run_frames(6);
     assert_eq!(lua::<i64>(&rt, "#C:find_all('tiro')"), antes + 1);
     h.run_frames(5);
     let (_, ty, tz) = pos(&rt, "tiro");
@@ -1042,4 +1048,56 @@ fn clique_do_mouse_no_3d_acerta_o_objeto_e_nao_da_erro() {
     h.run_frames(1);
     assert_eq!(h.game.0.error(), None);
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Cópias de um prefab numa cena 3D ficam onde a cena diz: a posição em Z, a
+/// rotação 3D e a escala em Z da cópia valem (antes, só x, y e a rotação 2D:
+/// as moedas e as estrelas dos modelos 3D iam todas para z = 0).
+#[test]
+fn copias_de_prefab_no_3d_ficam_no_lugar_certo() {
+    let dir = projeto(
+        "prefab-3d",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            (
+                "prefabs/moeda.prefab",
+                r#"return { format = 1, object = { id = 1, name = "moeda", ry = 30,
+  components = { { type = "shape3d", shape = "cylinder" } } } }"#,
+            ),
+            (
+                "cenas/mundo.cena",
+                &format!(
+                    r#"return {{ format = 1, mode = "3d", gravity = -20, script = "cenas/obs.lua",
+  environment = {{ fog = false, shadows = false }},
+  objects = {{
+    {CHAO},
+    {{ id = 10, name = "moeda", prefab = "prefabs/moeda.prefab", x = 2, y = 0.6, z = 7,
+      rx = 10, ry = 90, rz = 5, scale_x = 1, scale_y = 1, scale_z = 2 }},
+    {{ id = 11, name = "outra", prefab = "prefabs/moeda.prefab", x = -1, y = 0.6 }},
+  }} }}"#
+                ),
+            ),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    let v: Vec<f64> = lua(&rt, "{ C.objects.moeda:position3d() }");
+    assert_eq!(v, vec![2.0, 0.6000000238418579, 7.0]);
+    let r: Vec<f64> = lua(
+        &rt,
+        "{ C.objects.moeda.rx, C.objects.moeda.ry, C.objects.moeda.rz, C.objects.moeda.scale_z }",
+    );
+    assert_eq!(r, vec![10.0, 90.0, 5.0, 2.0]);
+    // Sem os campos na cópia, valem os do prefab.
+    let ry: f64 = lua(&rt, "C.objects.outra.ry");
+    assert_eq!(ry, 30.0);
+    // scene:spawn com z também.
+    let z: f64 = lua(
+        &rt,
+        "select(3, C:spawn('prefabs/moeda.prefab', 0, 1, { z = -4 }):position3d())",
+    );
+    assert_eq!(z, -4.0);
 }

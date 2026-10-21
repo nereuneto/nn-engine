@@ -568,9 +568,11 @@ fn heroi_gerado_tem_esqueleto_e_animacoes() {
     let nomes: Vec<&str> = s.animations.iter().map(|a| a.name.as_str()).collect();
     assert_eq!(
         nomes,
-        ["parado", "andar", "correr", "pular", "cair", "acenar"]
+        [
+            "parado", "andar", "correr", "pular", "cair", "acenar", "golpe", "atirar"
+        ]
     );
-    assert_eq!(s.joints.len(), 10);
+    assert_eq!(s.joints.len(), 12);
     assert!(
         h.parts
             .iter()
@@ -600,6 +602,32 @@ fn heroi_gerado_tem_esqueleto_e_animacoes() {
         .unwrap()
         .transform_point3(Vec3::new(0.0, -0.2, 0.0));
     assert!(pe_e.z > 0.1 && pe_d.z < -0.1, "pés {pe_e} {pe_d}");
+    // As mãos: em descanso, na ponta dos braços; no golpe, a direita passa
+    // por cima da cabeça e desce na frente do corpo.
+    let mao = |pose: &nn_render::d3::Pose| {
+        s.node_matrix(pose, "mao_d")
+            .unwrap()
+            .transform_point3(Vec3::ZERO)
+    };
+    let descanso = mao(&s.rest_pose());
+    assert!(
+        descanso.abs_diff_eq(Vec3::new(-0.41, 0.53, 0.0), 1e-4),
+        "{descanso}"
+    );
+    let golpe = s.animation("golpe").unwrap();
+    let alto = mao(&s.pose(golpe, 0.12));
+    let frente = mao(&s.pose(golpe, 0.22));
+    assert!(alto.y > 1.35 && alto.z < 0.1, "levanta: {alto}");
+    assert!(
+        frente.z > 0.3 && frente.y < 1.0,
+        "desce na frente: {frente}"
+    );
+    let atirar = s.animation("atirar").unwrap();
+    let apontando = mao(&s.pose(atirar, 0.1));
+    assert!(
+        apontando.z > 0.4 && (apontando.y - 1.0).abs() < 0.15,
+        "{apontando}"
+    );
     // O bicho também.
     let b = modelo_ilha("bicho.glb");
     let names: Vec<String> = b
@@ -609,7 +637,7 @@ fn heroi_gerado_tem_esqueleto_e_animacoes() {
         .into_iter()
         .map(|a| a.name)
         .collect();
-    assert_eq!(names, ["parado", "andar"]);
+    assert_eq!(names, ["parado", "andar", "golpe"]);
 }
 
 #[test]

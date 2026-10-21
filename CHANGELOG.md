@@ -2,6 +2,29 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### Caminhos
+
+- **Inimigos que contornam paredes:** o Inimigo 3D e o Perseguir (voando, ou num jogo visto de cima) acham um caminho em volta de paredes, árvores, cenário e tiles sólidos, em vez de ir reto e ficar presos. No 3D, também não entram em buracos, barrancos nem na água dos terrenos. A opção **Contorna paredes** vem ligada (desligue para o jeito de antes).
+- **Grade de caminhos** de cada cena, montada sozinha a partir dos corpos parados (e dos terrenos, no 3D) na primeira vez que alguém pede, e de novo quando um corpo parado aparece ou some. No 3D, vale o chão debaixo de uma plataforma no ar e uma ponte por cima da água.
+- **🧭 Caminhos** no NN Studio (na barra da cena, com o jogo aberto): mostra no jogo o chão por onde dá para andar e o caminho que cada inimigo segue. Pelo terminal, `NN_CAMINHOS=1`.
+- **No Lua:** `scene:path(a, b)`, `scene:steer(...)` (para comportamentos seus), `scene:nav()` com `nav:path`, `nav:walkable`, `nav:sight`, `nav:floor`, `nav:block` e `nav:unblock`, e `mundo:nav(opts)` no `nn.physics` e no `nn.physics3d`.
+- No modelo **Aventura**, as lesmas (que perseguem voando) contornam o lago e a parede de tijolos; no **Vale 3D**, os besouros não entram mais no lago, e na **ilha**, não caem no mar.
+- Crate novo `nn-nav` (a grade e o A*, sem depender do resto da engine).
+
+### Combate 3D
+
+- **Golpe** (comportamento novo, 3D): ataque de perto. O jogador golpeia com o clique (ou J, ou o X do controle); um inimigo, sozinho, quando o herói chega perto (para, vira e golpeia). Toca a animação `golpe` e, no instante do acerto, tira vida de quem está na frente (alcance e largura ajustáveis) e empurra. Com um Golpe, o Inimigo 3D não machuca mais só de encostar.
+- **Atirar no 3D:** com **para o meio da tela** (o padrão no 3D), o tiro vai para onde a câmera olha, também para cima e para baixo, e pode sair de um osso (a mão). Uma mira aparece no meio da tela, e a câmera do Jogador 3D vai para o ombro (**Câmera de lado**). A tecla padrão no 3D é o botão direito do mouse (no controle, o RT ou o RB), e o herói toca a animação `atirar`.
+- **Projétil** (comportamento novo, 3D), para o prefab do tiro: tira vida de quem acerta, empurra, some ao bater numa parede (com faíscas) e não acerta quem atirou; pode cair em arco ou atravessar.
+- **Preso a um osso** (componente novo): uma espada ou um cajado na mão do personagem, que acompanha a animação. No NN Studio, a arma já aparece na mão na vista 3D, e a lista mostra os ossos do modelo do pai (vem com a mão direita).
+- **Vida:** números do dano subindo (**Mostrar o dano**), o modelo fica vermelho um instante a cada dano e a câmera pode tremer (**Treme a câmera ao levar dano**). A ação **Tremer a câmera** também funciona no 3D.
+- **Eventos:** **Acertar** e **Derrotar** (com o alvo); no **Levar dano**, o `@outro` é quem bateu.
+- **Modelos:** o herói ganha os ossos das mãos (`mao_e`, `mao_d`) e as animações `golpe` e `atirar`; o besouro, a mordida (`golpe`). Novos: `espada.glb` e `cajado.glb`, nos modelos de projeto 3D.
+- **Vale 3D:** o herói vem com a espada (clique para golpear); os besouros têm 2 de vida, com barra e números, e mordem; derrotar um dá 3 moedas. Traz também o `magia.prefab` (uma bola com Projétil, para um Atirar).
+- **No Lua:** `scene:hit(alvo, dano, quem, opts)`, `scene:foes(quem)`, `scene:damage_number(obj, n)`, `scene:shake(forca, tempo)`, `anim:bones()`, o componente `bone` e a opção `shoulder` da câmera em terceira pessoa. A Vida recebe `dano(n, quem)` e manda `derrotou` para quem bateu por último.
+
 ## 0.2.1
 
 Correção da 0.2.0.
