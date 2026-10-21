@@ -43,6 +43,8 @@ pub enum HierarchyAction {
     Saved(String),
     /// Algo deu errado: avisa no Console.
     Error(String),
+    /// Mandar um arquivo para a lixeira (perguntando antes).
+    AskDelete(String),
 }
 
 /// Um botão de menu com o atalho à direita.
@@ -123,10 +125,16 @@ pub fn object_menu(
         };
         let entries = crate::catalog::with_favorites(entries, root, three_d);
         let kind = if doc.data.three_d { "3d" } else { "2d" };
-        if let Some(crate::catalog::Picked::Object(new)) = crate::catalog::menu(ui, &entries, kind)
-        {
-            doc.add_child(id, new);
-            ui.close();
+        match crate::catalog::menu(ui, &entries, kind) {
+            Some(crate::catalog::Picked::Object(new)) => {
+                doc.add_child(id, new);
+                ui.close();
+            }
+            Some(crate::catalog::Picked::Remove(rel)) => {
+                out.push(HierarchyAction::AskDelete(rel));
+                ui.close();
+            }
+            _ => {}
         }
     });
     child
@@ -213,6 +221,7 @@ fn create_menu(
             doc.add_prepared(o, x, y);
         }
         Some(Picked::NewMap) => out.push(HierarchyAction::NewMap),
+        Some(Picked::Remove(rel)) => out.push(HierarchyAction::AskDelete(rel)),
         Some(Picked::File(_)) | None => {}
     }
 }

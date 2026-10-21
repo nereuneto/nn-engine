@@ -306,6 +306,24 @@ mod tests {
         d
     }
 
+    /// As preferências gravadas pelo NN Studio 0.4 abrem na 0.5 sem perder
+    /// nada, com o novo no padrão.
+    #[test]
+    fn preferencias_da_0_4_abrem() {
+        let dir = temp("da-0-4");
+        let path = dir.join(SETTINGS_FILE);
+        std::fs::write(&path, include_str!("../tests/dados/preferencias-0.4.json")).unwrap();
+        let s = Settings::load(&path);
+        assert_eq!(s.recent.len(), 1);
+        assert_eq!(s.recent[0].title, "Visual");
+        assert_eq!(s.layouts.len(), 1, "o layout do projeto ficou");
+        assert_eq!(s.accent, Accent::Azul);
+        assert!(s.animations && s.celebrations && !s.ui_sounds);
+        assert!(s.celebrated.is_empty());
+        // Nada foi guardado ao lado como estragado.
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    }
+
     #[test]
     fn recentes_sem_repetir_e_com_limite() {
         let dir = temp("recentes");

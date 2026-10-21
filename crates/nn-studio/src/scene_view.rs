@@ -261,6 +261,8 @@ pub struct SceneDoc {
     pub reveal: Option<u32>,
     /// O menu do botão direito na vista: em cima de quem e onde.
     view_menu: Option<ViewMenu>,
+    /// Um segundo botão direito com o menu aberto: reabre no quadro seguinte.
+    view_menu_reopen: Option<ViewMenu>,
     /// A busca rápida para criar (Shift+A), aberta.
     pub quick_add: Option<crate::catalog::QuickAdd>,
     /// 3D: a câmera voou (WASD) com o botão direito segurado: soltar o botão
@@ -310,6 +312,8 @@ struct ViewMenu {
     at2: (f64, f64),
     /// O ponto no mundo 3D (no objeto, ou no chão).
     at3: glam::Vec3,
+    /// O alvo é um chão (o menu é de criar em cima dele).
+    ground: bool,
 }
 
 /// Onde um objeto está no mundo (no 2D e no HUD, em pixels e z = 0). Também
@@ -597,6 +601,7 @@ impl SceneDoc {
             focus_request: false,
             reveal: None,
             view_menu: None,
+            view_menu_reopen: None,
             quick_add: None,
             fly_moved: false,
             last_dup: None,
@@ -2311,6 +2316,12 @@ impl SceneDoc {
                 actions.push(SceneAction::NewMap);
                 None
             }
+            Picked::Remove(rel) => {
+                actions.push(SceneAction::Object(
+                    crate::hierarchy::HierarchyAction::AskDelete(rel),
+                ));
+                None
+            }
         }
     }
 
@@ -2329,6 +2340,7 @@ impl SceneDoc {
                 target: self.hit(env, rect, p),
                 at2: self.camera.to_world(rect, p),
                 at3: glam::Vec3::ZERO,
+                ground: false,
             })
         } else {
             None
@@ -2336,15 +2348,29 @@ impl SceneDoc {
         self.view_menu(response, open, env, actions);
     }
 
-    /// Um chão (plano, terreno, mapa de tiles): o botão direito nele é
-    /// para criar em cima.
-    fn is_ground(&self, id: u32) -> bool {
-        self.data.find(id).is_some_and(|o| {
-            o.component("terrain").is_some()
-                || o.component("map").is_some()
-                || o.component("shape3d")
-                    .is_some_and(|c| c.str("shape") == "plane")
-        })
+    /// Um chão: plano, terreno, mapa de tiles, ou (no 3D) algo grande e
+    /// baixo, como uma ilha (pelo menos 12 × 12 m, e menos alto que a metade
+    /// da largura). O botão direito nele é para criar em cima.
+    pub(super) fn is_ground(&self, id: u32, env: &mut SceneEnv) -> bool {
+        let Some(o) = self.data.find(id) else {
+            return false;
+        };
+        if o.component("terrain").is_some()
+            || o.component("map").is_some()
+            || o.component("shape3d")
+                .is_some_and(|c| c.str("shape") == "plane")
+        {
+            return true;
+        }
+        if !self.data.three_d || self.on_screen3(id) {
+            return false;
+        }
+        let Some(m) = self.data.world_matrix3(id) else {
+            return false;
+        };
+        let (a, b) = scene_render::bounds3(o, env.root, env.sizes);
+        let size = (b - a) * m.to_scale_rotation_translation().0.abs();
+        size.x >= 12.0 && size.z >= 12.0 && size.y < size.x.min(size.z) * 0.5
     }
 
     /// O menu do botão direito na vista (2D e 3D). `open`: o clique que abre
@@ -2357,9 +2383,23 @@ impl SceneDoc {
         env: &mut SceneEnv,
         actions: &mut Vec<SceneAction>,
     ) {
-        let command = if let Some(m) = open {
+        let popup_id = egui::Popup::default_response_id(response);
+        let was_open = egui::Popup::is_id_open(&response.ctx, popup_id);
+        // Botão direito em outro lugar com o menu aberto: o egui fecha o
+        // menu nesse clique; ele reabre no quadro seguinte, no ponto novo.
+        let open = match open {
+            Some(m) if was_open => {
+                self.view_menu_reopen = Some(m);
+                response.ctx.request_repaint();
+                None
+            }
+            Some(m) => Some(m),
+            None => self.view_menu_reopen.take(),
+        };
+        let command = if let Some(mut m) = open {
+            m.ground = m.target.is_some_and(|id| self.is_ground(id, env));
             if let Some(id) = m.target
-                && !self.is_ground(id)
+                && !m.ground
                 && !self.selection.contains(&id)
             {
                 self.selection = vec![id];
@@ -2393,7 +2433,7 @@ impl SceneDoc {
                 ui.set_min_width(170.0);
                 let target = m.target.and_then(|id| {
                     let name = self.data.find(id)?.name.clone();
-                    Some((id, name, self.is_ground(id)))
+                    Some((id, name, m.ground))
                 });
                 match target {
                     Some((id, name, false)) => {
@@ -2501,7 +2541,7 @@ impl SceneDoc {
             return;
         }
         if response.hovered()
-            && !ui.ctx().text_edit_focused()
+            && !busy(ui)
             && pointer.is_some()
             && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::D))
         {
@@ -2510,7 +2550,7 @@ impl SceneDoc {
             return;
         }
         // Ctrl+C, Ctrl+X e Ctrl+V (colar onde o mouse está).
-        if response.hovered() && !ui.ctx().text_edit_focused() && self.quick_add.is_none() {
+        if response.hovered() && !busy(ui) && self.quick_add.is_none() {
             let at = p2.map(|(x, y)| WorldPos {
                 three_d: false,
                 pos: [x, y, 0.0],
@@ -2519,7 +2559,7 @@ impl SceneDoc {
         }
         // Shift+A: a busca rápida para criar, onde o mouse está.
         if response.hovered()
-            && !ui.ctx().text_edit_focused()
+            && !busy(ui)
             && let Some(p) = pointer
             && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::A))
         {
@@ -2529,7 +2569,7 @@ impl SceneDoc {
             q.at = [x, y, 0.0];
             self.quick_add = Some(q);
         }
-        if self.quick_add.is_none() && (response.hovered() || response.has_focus()) {
+        if self.quick_add.is_none() && !busy(ui) && (response.hovered() || response.has_focus()) {
             self.keyboard(ui, rect, env, actions);
         }
 
@@ -3315,6 +3355,12 @@ fn renumber(o: &mut Object, next: &mut u32) {
     for c in &mut o.children {
         renumber(c, next);
     }
+}
+
+/// Um campo de texto com o foco ou um menu aberto: os atalhos da vista
+/// esperam (o Esc é do menu, as letras são do campo).
+pub(crate) fn busy(ui: &egui::Ui) -> bool {
+    ui.ctx().text_edit_focused() || egui::Popup::is_any_open(ui.ctx())
 }
 
 /// "1 objeto apagado", "3 objetos apagados".

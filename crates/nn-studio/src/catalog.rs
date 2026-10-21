@@ -15,6 +15,8 @@ pub enum Make {
     NewMap,
     /// Um arquivo do projeto (prefab ou modelo), como se fosse solto na cena.
     File(String),
+    /// Mandar um arquivo para a lixeira (tirar um favorito), perguntando antes.
+    Remove(String),
 }
 
 impl std::fmt::Debug for Make {
@@ -23,6 +25,7 @@ impl std::fmt::Debug for Make {
             Make::Object(_) => f.write_str("Object"),
             Make::NewMap => f.write_str("NewMap"),
             Make::File(rel) => f.debug_tuple("File").field(rel).finish(),
+            Make::Remove(rel) => f.debug_tuple("Remove").field(rel).finish(),
         }
     }
 }
@@ -70,6 +73,7 @@ impl Item {
             Make::Object(f) => Picked::Object(f()),
             Make::NewMap => Picked::NewMap,
             Make::File(rel) => Picked::File(rel.clone()),
+            Make::Remove(rel) => Picked::Remove(rel.clone()),
         }
     }
 }
@@ -93,6 +97,8 @@ pub enum Picked {
     Object(Object),
     NewMap,
     File(String),
+    /// Tirar o favorito (o arquivo vai para a lixeira, perguntando antes).
+    Remove(String),
 }
 
 fn item(label: &str, make: impl Fn() -> Object + 'static) -> Item {
@@ -673,9 +679,12 @@ pub fn with_favorites(
     root: &std::path::Path,
     three_d: bool,
 ) -> Vec<Entry> {
-    let favs: Vec<Entry> = favorites(root)
+    let mine: Vec<Favorite> = favorites(root)
         .into_iter()
         .filter(|f| f.three_d == three_d)
+        .collect();
+    let mut favs: Vec<Entry> = mine
+        .iter()
         .map(|f| {
             let object = f.object.clone();
             let mut it = item(&f.name, move || object.clone())
@@ -685,7 +694,21 @@ pub fn with_favorites(
             it.into()
         })
         .collect();
-    if !favs.is_empty() {
+    if !mine.is_empty() {
+        let remove: Vec<Entry> = mine
+            .iter()
+            .map(|f| {
+                Entry::Item(Item {
+                    label: f.name.clone(),
+                    tip: format!("Manda {} para a lixeira (pergunta antes)", f.rel),
+                    words: "",
+                    anchor: None,
+                    make: Make::Remove(f.rel.clone()),
+                })
+            })
+            .collect();
+        favs.push(Entry::Sep);
+        favs.push(sub("🗑 Tirar dos favoritos", None, remove));
         entries.insert(0, sub("⭐ Favoritos", Some("cena.objeto:favoritos"), favs));
         entries.insert(1, Entry::Sep);
     }
@@ -761,6 +784,8 @@ pub fn flatten(entries: &[Entry]) -> Vec<Flat<'_>> {
     fn walk<'a>(entries: &'a [Entry], key: &str, path: &str, out: &mut Vec<Flat<'a>>) {
         for e in entries {
             match e {
+                // Tirar dos favoritos não é algo para criar.
+                Entry::Item(it) if matches!(it.make, Make::Remove(_)) => {}
                 Entry::Item(it) => out.push(Flat {
                     key: format!("{key}{}", it.label),
                     path: path.to_string(),
