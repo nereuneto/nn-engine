@@ -45,6 +45,9 @@ pub struct ParticleConfig3 {
     /// meia esfera; 360 = todas as direções).
     pub spread: f32,
     pub gravity: Vec3,
+    /// O vento: as partículas vivas são levadas com esta velocidade (m/s),
+    /// além da delas.
+    pub wind: Vec3,
     /// Perda de velocidade por segundo (0 = nenhuma; 3 = freia rápido).
     pub drag: f32,
     /// Tamanho (lado do quadrado, em metros) no nascimento e no fim.
@@ -75,6 +78,7 @@ impl Default for ParticleConfig3 {
             direction: Vec3::Y,
             spread: 360.0,
             gravity: Vec3::ZERO,
+            wind: Vec3::ZERO,
             drag: 0.0,
             size: (0.2, 0.0),
             size_variation: 0.0,
@@ -162,13 +166,14 @@ impl ParticleEmitter3 {
         let c = &self.config;
         let damping = (1.0 - c.drag * dt).clamp(0.0, 1.0);
         let gravity = c.gravity;
+        let wind = c.wind;
         self.particles.retain_mut(|p| {
             p.age += dt;
             if p.age >= p.life {
                 return false;
             }
             p.velocity = (p.velocity + gravity * dt) * damping;
-            p.position += p.velocity * dt;
+            p.position += (p.velocity + wind) * dt;
             p.rotation += p.spin * dt;
             true
         });
@@ -378,6 +383,24 @@ mod tests {
         }
         let p = g.positions().next().unwrap();
         assert!(p.x > 0.9 && p.y < -0.5 && p.z.abs() < 1e-4, "{p}");
+    }
+
+    #[test]
+    fn vento_leva_as_particulas() {
+        // Paradas (velocidade 0), o vento as leva para +X: 1 s a 3 m/s.
+        let mut e = ParticleEmitter3::new(ParticleConfig3 {
+            speed: (0.0, 0.0),
+            wind: Vec3::new(3.0, 0.0, 0.0),
+            lifetime: (5.0, 5.0),
+            ..config()
+        });
+        e.burst(5);
+        for _ in 0..10 {
+            e.update(0.1);
+        }
+        for p in e.positions() {
+            assert!((p.x - 3.0).abs() < 0.05 && p.y.abs() < 1e-4, "{p}");
+        }
     }
 
     #[test]

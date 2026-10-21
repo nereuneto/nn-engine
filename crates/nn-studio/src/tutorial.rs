@@ -224,6 +224,7 @@ pub fn all() -> &'static [Tutorial] {
             um_chefe(),
             uma_caverna(),
             dia_e_noite(),
+            um_lago(),
             portas_e_chaves(),
             uma_conversa(),
             eventos(),
@@ -1288,6 +1289,125 @@ fn dia_e_noite() -> Tutorial {
             Step {
                 title: "Pronto: o dia passa!",
                 text: "Você usou o Dia e noite, a Luz e o Brilho só à noite, a variável relogio e o evento de anoitecer. Também dá para Mudar a hora (dormir numa cama), Parar o tempo e Mudar o ambiente (uma tempestade) nas ações. A ilha do modelo 3D tem postes no caminho e o pescador com um lampião de noite.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// Modelos `file` que balançam com o vento.
+fn swaying<'a>(ws: &'a ProjectWorkspace, file: &str) -> Vec<&'a Object> {
+    with_model(ws, file)
+        .into_iter()
+        .filter(|o| o.component("model").is_some_and(|c| c.num("sway") >= 0.5))
+        .collect()
+}
+
+fn um_lago() -> Tutorial {
+    Tutorial {
+        id: "um-lago-com-vida",
+        title: "Um lago com vida",
+        summary: "A beira de um lago: água com ondinhas que refletem o céu, árvores e grama balançando com o vento, vaga-lumes levados pela brisa e o halo do brilho num fim de tarde.",
+        minutes: 10,
+        template: Template::Vazio3D,
+        project: "Um lago",
+        steps: vec![
+            Step {
+                title: "Um lugar vivo",
+                text: "Um mundo parece vivo quando as coisas se mexem sozinhas: a água ondula e reflete o céu, o vento balança as árvores e a grama, e o que brilha ganha um halo.\n\nVamos fazer a beira de um lago.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "O lago",
+                text: "➕ Objeto > Água (lago). É um Plano azul com o Material Água (no Inspetor da Forma 3D): ondinhas, o céu refletido (mais forte olhando de lado) e o brilho do sol. Aumente com a Escala, se quiser.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        o.component("shape3d")
+                            .is_some_and(|c| c.str("material") == "agua")
+                    })
+                }),
+            },
+            Step {
+                title: "O vento",
+                text: "Clique num lugar vazio da cena e, no Inspetor, em ☀ Ambiente, ponha Vento = 1 (uma brisa; 3 é uma ventania). O lado diz para onde ele sopra.",
+                target: Some("inspetor:ambiente:vento"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| doc_of(ws).is_some_and(|d| d.data.env("wind").num() >= 0.5)),
+            },
+            Step {
+                title: "Uma árvore",
+                text: "No painel Arquivos, abra modelos e arraste arvore.glb para a beira do lago.",
+                target: Some("arquivo:modelos/arvore.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| !with_model(ws, "arvore.glb").is_empty()),
+            },
+            Step {
+                title: "Balançando",
+                text: "Com a árvore escolhida, no Inspetor, no Modelo 3D, ponha Balança com o vento = 1: o pé fica parado e a copa balança, com rajadas. Ctrl+D duplica a árvore (com o balanço): faça mais umas.",
+                target: Some("inspetor"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| !swaying(ws, "arvore.glb").is_empty()),
+            },
+            Step {
+                title: "Grama",
+                text: "Arraste modelos/grama.glb para perto da água e ponha Balança com o vento = 1,5 (a grama é leve). Com Ctrl+D e a seta, espalhe uns 3 tufos.",
+                target: Some("arquivo:modelos/grama.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| swaying(ws, "grama.glb").len() >= 3),
+            },
+            Step {
+                title: "Vaga-lumes",
+                text: "➕ Objeto > Partículas > Brilho, em cima do lago (suba 1 m com a seta verde). O vento também leva as partículas: no Inspetor, Levadas pelo vento diz quanto (0 = nada).",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| !with_particles(ws, "").is_empty()),
+            },
+            Step {
+                title: "Fim de tarde",
+                text: "Clique num lugar vazio e, em ☀ Ambiente > Pronto, escolha Entardecer: o lago reflete o céu laranja. (O vento fica como estava.)",
+                target: Some("inspetor:ambiente:entardecer"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    doc_of(ws).is_some_and(|d| {
+                        d.data
+                            .env("sky_horizon")
+                            .str()
+                            .eq_ignore_ascii_case("#F7A35C")
+                    })
+                }),
+            },
+            Step {
+                title: "O halo",
+                text: "O que brilha (os vaga-lumes, o sol, uma forma com Brilho) tem um halo suave em volta. Em ☀ Ambiente, mude o Halo do brilho: 2 é mais forte, 0 tira.",
+                target: Some("inspetor:ambiente:halo"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    doc_of(ws).is_some_and(|d| (d.data.env("bloom").num() - 1.0).abs() >= 0.2)
+                }),
+            },
+            Step {
+                title: "Alguém para ver",
+                text: "➕ Objeto > Jogador 3D, para passear na beira do lago.",
+                target: Some("cena.objeto"),
+                show: None,
+                done: Some(|ws, _| objects(ws).iter().any(|o| has_behavior(o, "nn:jogador3d"))),
+            },
+            Step {
+                title: "Teste!",
+                text: "F6. Olhe a água de lado (o reflexo fica mais forte) e na direção do sol (o brilho dele na água), e veja a grama e as árvores balançando.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: um lago com vida!",
+                text: "Você usou a Água, o Vento, o Balança com o vento, as partículas no vento e o Halo do brilho. Num Terreno, a Água também tem ondas. A ilha do modelo 3D tem o mar, grama e uma bandeira na arena.",
                 target: None,
                 show: None,
                 done: None,

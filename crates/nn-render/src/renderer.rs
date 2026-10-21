@@ -1028,10 +1028,42 @@ impl Renderer {
         joints: &[Mat4],
         glow: crate::d3::Glow,
     ) {
+        self.draw_mesh_skinned_material(
+            mesh,
+            model,
+            color,
+            texture,
+            cast_shadow,
+            joints,
+            crate::d3::Material3D::glow(glow),
+        );
+    }
+
+    /// Como [`Renderer::draw_mesh_skinned`], com o material (brilho, água,
+    /// balançar com o vento).
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_mesh_skinned_material(
+        &mut self,
+        mesh: crate::d3::MeshId,
+        model: Mat4,
+        color: Color,
+        texture: Option<TextureId>,
+        cast_shadow: bool,
+        joints: &[Mat4],
+        material: crate::d3::Material3D,
+    ) {
         let srgb = self.format.is_srgb();
         let texture = texture.unwrap_or(self.white);
-        self.d3
-            .draw_skinned(mesh, model, color, texture, cast_shadow, srgb, joints, glow);
+        self.d3.draw_skinned(
+            mesh,
+            model,
+            color,
+            texture,
+            cast_shadow,
+            srgb,
+            joints,
+            material,
+        );
     }
 
     /// Desenha a malha no mundo 3D com a matriz `model` (posição, rotação e
@@ -1083,10 +1115,57 @@ impl Renderer {
         cast_shadow: bool,
         glow: crate::d3::Glow,
     ) {
+        self.draw_mesh_material(
+            mesh,
+            model,
+            color,
+            texture,
+            cast_shadow,
+            crate::d3::Material3D::glow(glow),
+        );
+    }
+
+    /// Como [`Renderer::draw_mesh_with`], com o material: brilho, água (ondas
+    /// e o céu refletido) e balançar com o vento (veja
+    /// [`Material3D`](crate::d3::Material3D)).
+    pub fn draw_mesh_material(
+        &mut self,
+        mesh: crate::d3::MeshId,
+        model: Mat4,
+        color: Color,
+        texture: Option<TextureId>,
+        cast_shadow: bool,
+        material: crate::d3::Material3D,
+    ) {
         let srgb = self.format.is_srgb();
         let texture = texture.unwrap_or(self.white);
         self.d3
-            .draw(mesh, model, color, texture, cast_shadow, srgb, glow);
+            .draw(mesh, model, color, texture, cast_shadow, srgb, material);
+    }
+
+    /// O halo do brilho (bloom) no mundo 3D: o que brilha ganha um halo
+    /// suave em volta. Ligado por padrão.
+    pub fn set_bloom3d(&mut self, bloom: crate::d3::Bloom) {
+        self.d3.bloom = bloom;
+    }
+
+    pub fn bloom3d(&self) -> crate::d3::Bloom {
+        self.d3.bloom
+    }
+
+    /// O vento do mundo 3D (vale até ser trocado).
+    pub fn set_wind3d(&mut self, wind: crate::d3::Wind3D) {
+        self.d3.wind = wind;
+    }
+
+    pub fn wind3d(&self) -> crate::d3::Wind3D {
+        self.d3.wind
+    }
+
+    /// Os segundos que as ondas e o vento usam (`None`: o relógio desde que
+    /// o renderer foi criado). Fixe para tirar imagens iguais.
+    pub fn set_time3d(&mut self, seconds: Option<f32>) {
+        self.d3.time = seconds;
     }
 
     /// Uma lâmpada ou um holofote no mundo 3D, só para este frame (chame a
@@ -1284,18 +1363,50 @@ impl Renderer {
         glow: crate::d3::Glow,
         joints: Option<&[Mat4]>,
     ) {
+        self.draw_model_material(
+            model,
+            matrix,
+            color,
+            cast_shadow,
+            crate::d3::Material3D::glow(glow),
+            joints,
+        );
+    }
+
+    /// Como [`Renderer::draw_model_glow`], com o material inteiro (brilho,
+    /// água, balançar com o vento).
+    pub fn draw_model_material(
+        &mut self,
+        model: &crate::d3::Model,
+        matrix: Mat4,
+        color: Color,
+        cast_shadow: bool,
+        material: crate::d3::Material3D,
+        joints: Option<&[Mat4]>,
+    ) {
         let rest = model.rest_joints.clone();
         let joints = joints.unwrap_or(&rest);
-        let k = glow.color;
+        let k = material.glow.color;
         for &(mesh, texture, emissive) in &model.parts {
-            let g = crate::d3::Glow {
-                amount: glow.amount,
-                color: Color::rgba(emissive.r * k.r, emissive.g * k.g, emissive.b * k.b, 1.0),
+            let m = crate::d3::Material3D {
+                glow: crate::d3::Glow {
+                    amount: material.glow.amount,
+                    color: Color::rgba(emissive.r * k.r, emissive.g * k.g, emissive.b * k.b, 1.0),
+                },
+                ..material
             };
             if model.skeleton.is_some() {
-                self.draw_mesh_skinned_glow(mesh, matrix, color, texture, cast_shadow, joints, g);
+                self.draw_mesh_skinned_material(
+                    mesh,
+                    matrix,
+                    color,
+                    texture,
+                    cast_shadow,
+                    joints,
+                    m,
+                );
             } else {
-                self.draw_mesh_glow(mesh, matrix, color, texture, cast_shadow, g);
+                self.draw_mesh_material(mesh, matrix, color, texture, cast_shadow, m);
             }
         }
     }

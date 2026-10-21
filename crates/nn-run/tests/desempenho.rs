@@ -441,8 +441,8 @@ fn as_cenas_3d_dos_modelos_rodam_e_cortam_o_que_nao_aparece() {
 }
 
 /// Ferramenta: quanto as luzes pesam, na caverna do Vale 3D (tochas,
-/// cristais, lampião e a fresta): com todas acesas, apagadas e com 32 a
-/// mais espalhadas (`cargo test --release -p nn-run --test desempenho
+/// cristais, lampião e a fresta): com todas acesas, sem o halo do brilho,
+/// apagadas e com 32 a mais espalhadas (`cargo test --release -p nn-run --test desempenho
 /// tempos_da_caverna -- --ignored --nocapture`).
 #[test]
 #[ignore]
@@ -471,8 +471,13 @@ fn tempos_da_caverna() {
     };
     medir("caverna, luzes acesas", "");
     medir(
+        "caverna, sem o halo",
+        "C._data.environment.bloom = 0; C._env_dirty = true",
+    );
+    medir(
         "caverna, luzes apagadas",
-        "for _, o in ipairs(C.object_list) do if o.light3d then o.light3d.on = false end end",
+        "C._data.environment.bloom = 1; C._env_dirty = true
+         for _, o in ipairs(C.object_list) do if o.light3d then o.light3d.on = false end end",
     );
     medir(
         "caverna, 32 lâmpadas a mais",

@@ -644,7 +644,8 @@ uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
 - **Selecionar:** clique no objeto; **Shift** ou **Ctrl** somam à seleção.
   **Esc** limpa, **Del** apaga, **Ctrl+D** duplica, **Ctrl+Z** desfaz.
 - **Forma 3D:** cubo, esfera, cilindro, cone, cápsula ou plano, com cor e
-  "Projeta sombra".
+  "Projeta sombra". O **Material Água** faz ondinhas e reflete o céu
+  ([Água, vento e halo](#água-vento-e-halo)).
 - **Modelo 3D:** um arquivo `.glb` (Blender exporta: *Arquivo > Exportar >
   glTF 2.0*, formato *glb*), parado ou animado. **Cor** tinge o modelo; **Faces retas**
   (no modo Completo) dá a cada face um tom só, o visual low-poly, mesmo que
@@ -689,10 +690,12 @@ continua).
 | Luz ambiente | A luz onde o sol não bate: a que vem de cima e a que vem de baixo |
 | Névoa | O que está longe some na cor do horizonte, entre as duas distâncias |
 | Sombras | Sombra do sol até esta distância da câmera |
+| Vento | A força (0 = parado, 1 = brisa, 3 = ventania) e o lado para onde sopra: balança o que tem **Balança com o vento** e leva as partículas ([Água, vento e halo](#água-vento-e-halo)) |
+| Halo do brilho | O halo suave em volta do que brilha (0 = sem halo, 1 = o normal) |
 
 **Pronto:** os botões **Dia**, **Amanhecer**, **Entardecer**, **Noite** e
 **Caverna** trocam o céu, o sol, a luz ambiente e a névoa de uma vez (Ctrl+Z
-desfaz). Na Noite e na Caverna, as [luzes](#luzes-e-brilho) aparecem bem; a
+desfaz). O Dia e noite, o Vento e o Halo ficam como estão. Na Noite e na Caverna, as [luzes](#luzes-e-brilho) aparecem bem; a
 Caverna também deixa o fundo escuro.
 
 **Dia e noite:** marcado, a hora anda no jogo. O sol nasce às 6h, cruza o céu
@@ -1023,6 +1026,30 @@ zero.
   **Como: guardando esta (para voltar)**: a de agora fica como está (o
   herói, o que já foi pego) e, na outra, **Fechar esta cena** volta para
   ela. É assim que o Vale 3D leva para a caverna e de volta.
+
+### Água, vento e halo
+
+Três coisas que deixam um mundo 3D mais vivo. O tutorial **Um lago com vida**
+usa as três.
+
+![O lago do Vale 3D e o mar da ilha, com o céu refletido, a grama e as árvores balançando](imagens/agua-e-vento.png)
+
+- **Água:** na Forma 3D, **Material: Água (ondas e reflexo)**. A água tem
+  ondinhas que se mexem, reflete o céu (mais forte olhando de lado, como na
+  vida real) e tem o brilho do sol batendo. Fica bonita num Plano com uma cor
+  um pouco transparente: **➕ Objeto > Água (lago)** já vem assim. A água do
+  **Terreno** também tem ondas, e o mar da ilha usa o mesmo material.
+- **Vento** (☀ [Ambiente](#ambiente)): o que tem **Balança com o vento** (na
+  Forma 3D e no Modelo 3D) balança, com rajadas. Embaixo fica parado, e
+  quanto mais alto, mais balança: 1 serve para uma árvore e 1,5 para a grama.
+  Bom também para bandeiras. As **partículas** são levadas pelo vento; no
+  Inspetor delas, **Levadas pelo vento** diz quanto (0 = nada, 1 = tudo). O
+  modelo **`grama.glb`** (um tufo, nos modelos de projeto 3D) foi feito para
+  espalhar.
+- **Halo do brilho** (☀ Ambiente): o que brilha (o **Brilho** das formas e
+  dos modelos, a chama das tochas, o fogo, o sol e a lua) ganha um halo
+  suave em volta. 0 tira, 2 é mais forte. Num computador sem placa de vídeo,
+  o halo pesa um pouco (veja [Desempenho](3d.md#desempenho)).
 
 ### Comportamentos e eventos no 3D
 

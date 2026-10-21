@@ -449,8 +449,14 @@ impl SceneDoc {
             return self.add_prepared(o, x, y);
         }
         let p = self.spawn_point3();
-        // Formas em pé no chão (a origem delas é o meio).
+        // Formas em pé no chão (a origem delas é o meio). Um plano fica na
+        // altura que veio nele (o lago, um pouco acima do chão).
         let lift = if o
+            .component("shape3d")
+            .is_some_and(|c| c.str("shape") == "plane")
+        {
+            o.y as f32
+        } else if o
             .component("shape3d")
             .is_some_and(|c| c.str("shape") != "plane")
         {
@@ -609,10 +615,17 @@ impl SceneDoc {
                 );
                 // Animações na prévia: a vista se redesenha enquanto houver.
                 let mut animated = false;
+                let vento = self.data.env("wind").num() > 0.0;
                 scene_data::visit(&self.data.objects, &mut |o| {
                     animated |= (o.component("model").is_some()
                         && scene_render::preview_anim3d(o).is_some())
-                        || o.component("particles").is_some();
+                        || o.component("particles").is_some()
+                        // A água e o que balança com o vento mexem.
+                        || o.components.iter().any(|c| {
+                            (c.kind == "shape3d" && c.str("material") == "agua")
+                                || (c.kind == "terrain" && c.bool("water"))
+                                || (vento && c.num("sway") > 0.0)
+                        });
                 });
                 if animated {
                     ui.ctx()
@@ -1669,6 +1682,13 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
             out = Some(o);
         }
     }
+    let r = ui
+        .button("Água (lago)")
+        .on_hover_text("Um plano azul com o Material Água: ondinhas, o céu refletido e o brilho do sol. Ponha um pouco acima do chão, ou num buraco.");
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:agua", r.rect);
+    if r.clicked() {
+        out = Some(water());
+    }
     ui.separator();
     if ui
         .button("Modelo (.glb)")
@@ -1922,6 +1942,21 @@ fn light_menu(ui: &mut egui::Ui) -> Option<Object> {
         out = Some(o);
     }
     out
+}
+
+/// Um lago: um plano azul, um pouco transparente, com o Material Água
+/// (sem sombra e sem corpo: dá para entrar).
+pub fn water() -> Object {
+    let mut o = Object::new(0, "Lago");
+    let mut c = Component::new("shape3d");
+    c.set("shape", Prop::Str("plane".into()));
+    c.set("color", Prop::Str("#2E86C1D9".into()));
+    c.set("shadow", Prop::Bool(false));
+    c.set("material", Prop::Str("agua".into()));
+    o.components.push(c);
+    (o.scale_x, o.scale_z) = (8.0, 8.0);
+    o.y = 0.1;
+    o
 }
 
 /// Uma tocha: o cabo e, no alto, a chama (a luz tremulando e o fogo em

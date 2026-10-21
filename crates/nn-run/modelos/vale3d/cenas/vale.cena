@@ -4,7 +4,7 @@ return {
   format = 1,
   gravity = -20,
   mode = "3d",
-  environment = { sky = true, sky_top = "#4A90D9", sky_horizon = "#D8EEF5", sky_bottom = "#3A6E8E", sun_height = 40, sun_turn = 135, sun_color = "#FFEBCC", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 45, fog_far = 120, shadows = true, shadow_distance = 30, cycle = false, day_length = 4, start_hour = 9 },
+  environment = { sky = true, sky_top = "#4A90D9", sky_horizon = "#D8EEF5", sky_bottom = "#3A6E8E", sun_height = 40, sun_turn = 135, sun_color = "#FFEBCC", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 45, fog_far = 120, shadows = true, shadow_distance = 30, cycle = false, day_length = 4, start_hour = 9, wind = 1.2, wind_turn = 100, bloom = 1 },
   events = {
     { comment = "Começo: zera as estrelas e as moedas; a dica some depois de 4 segundos." },
     { when = {
@@ -54,7 +54,7 @@ return {
       z = 36, rx = 0, ry = 180, rz = 0, scale_z = 1.1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "behavior", script = "nn:jogador3d", agua = "voltar", altura = 0, camera = "atras", distancia = 7, inverter_y = false, prender_mouse = true, pulo = 8, pulos_no_ar = 0, queda = -25, raio = 0, sensibilidade = 0.15, velocidade = 6, virar = true },
         { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, tremer = 6, variavel = "vidas", vidas = 3 },
         { type = "behavior", script = "nn:golpe", acerto = 0.22, alcance = 1.7, alvo = "", angulo = 120, animacao = "golpe", dano = 1, empurrao = 6, intervalo = 0.45, quando = "tecla", som = "assets/sons/golpe.wav", som_acerto = "assets/sons/acerto.wav", tecla = "clique", todos = true },
@@ -79,7 +79,7 @@ return {
           z = 0, rx = 20, ry = 0, rz = 0, scale_z = 1,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/espada.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+            { type = "model", file = "modelos/espada.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
             { type = "bone", bone = "mao_d" },
           },
         },
@@ -88,7 +88,7 @@ return {
           x = 0, y = 0.05, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 14, on_start = false, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 0.8, speed_max = 2, direction = 90, spread = 200, gravity = 0.5, drag = 4, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.35, size_end = 0.6, size_var = 0, color_start = "#E8DCC4CC", color_mid = "", color_end = "#C8B89800", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500 },
+            { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 14, on_start = false, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 0.8, speed_max = 2, direction = 90, spread = 200, gravity = 0.5, drag = 4, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.35, size_end = 0.6, size_var = 0, color_start = "#E8DCC4CC", color_mid = "", color_end = "#C8B89800", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500, wind = 1 },
           },
         },
       },
@@ -99,7 +99,7 @@ return {
       z = -1.67, rx = 0, ry = 262, rz = 0, scale_z = 1.99,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -109,7 +109,7 @@ return {
       z = 2.2, rx = 0, ry = 299, rz = 0, scale_z = 0.91,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -119,7 +119,7 @@ return {
       z = 33.72, rx = 0, ry = 208, rz = 0, scale_z = 1.14,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -129,7 +129,7 @@ return {
       z = -37.27, rx = 0, ry = 59, rz = 0, scale_z = 1.17,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -139,7 +139,7 @@ return {
       z = 35.03, rx = 0, ry = 45, rz = 0, scale_z = 1.94,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -149,7 +149,7 @@ return {
       z = 34.24, rx = 0, ry = 175, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -159,7 +159,7 @@ return {
       z = -34.03, rx = 0, ry = 336, rz = 0, scale_z = 1.87,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -169,7 +169,7 @@ return {
       z = 21.02, rx = 0, ry = 62, rz = 0, scale_z = 1.3,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -179,7 +179,7 @@ return {
       z = -12.7, rx = 0, ry = 149, rz = 0, scale_z = 1.74,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -189,7 +189,7 @@ return {
       z = -3.89, rx = 0, ry = 197, rz = 0, scale_z = 1.45,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -199,7 +199,7 @@ return {
       z = 26.73, rx = 0, ry = 253, rz = 0, scale_z = 1.92,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -209,7 +209,7 @@ return {
       z = -34.39, rx = 0, ry = 292, rz = 0, scale_z = 1.19,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -219,7 +219,7 @@ return {
       z = -25.55, rx = 0, ry = 170, rz = 0, scale_z = 1.55,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -229,7 +229,7 @@ return {
       z = -31.74, rx = 0, ry = 219, rz = 0, scale_z = 2.01,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -239,7 +239,7 @@ return {
       z = 31.9, rx = 0, ry = 83, rz = 0, scale_z = 1.12,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -249,7 +249,7 @@ return {
       z = 7.24, rx = 0, ry = 192, rz = 0, scale_z = 1.17,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -259,7 +259,7 @@ return {
       z = -7.4, rx = 0, ry = 147, rz = 0, scale_z = 0.93,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -269,7 +269,7 @@ return {
       z = -19.36, rx = 0, ry = 87, rz = 0, scale_z = 1.13,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -279,7 +279,7 @@ return {
       z = 29.63, rx = 0, ry = 77, rz = 0, scale_z = 0.98,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -289,7 +289,7 @@ return {
       z = -1.68, rx = 0, ry = 269, rz = 0, scale_z = 1.43,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -299,7 +299,7 @@ return {
       z = -1.67, rx = 0, ry = 187, rz = 0, scale_z = 1.39,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -309,7 +309,7 @@ return {
       z = 30.52, rx = 0, ry = 297, rz = 0, scale_z = 1.13,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -319,7 +319,7 @@ return {
       z = 7.07, rx = 0, ry = 195, rz = 0, scale_z = 1.92,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -329,7 +329,7 @@ return {
       z = 7.49, rx = 0, ry = 299, rz = 0, scale_z = 1.37,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -339,7 +339,7 @@ return {
       z = 24.97, rx = 0, ry = 203, rz = 0, scale_z = 1.34,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -349,7 +349,7 @@ return {
       z = -37.97, rx = 0, ry = 60, rz = 0, scale_z = 0.98,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -359,7 +359,7 @@ return {
       z = -29.88, rx = 0, ry = 252, rz = 0, scale_z = 1.08,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -369,7 +369,7 @@ return {
       z = 9.7, rx = 0, ry = 103, rz = 0, scale_z = 2.06,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -379,7 +379,7 @@ return {
       z = 4, rx = 0, ry = 29, rz = 0, scale_z = 1.91,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -389,7 +389,7 @@ return {
       z = -39.37, rx = 0, ry = 290, rz = 0, scale_z = 0.93,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -399,7 +399,7 @@ return {
       z = -36.65, rx = 0, ry = 151, rz = 0, scale_z = 1.07,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -409,7 +409,7 @@ return {
       z = 24.25, rx = 0, ry = 279, rz = 0, scale_z = 1.22,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -419,7 +419,7 @@ return {
       z = 37.37, rx = 0, ry = 269, rz = 0, scale_z = 1.28,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -429,7 +429,7 @@ return {
       z = -24.84, rx = 0, ry = 103, rz = 0, scale_z = 1.08,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -439,7 +439,7 @@ return {
       z = -14.55, rx = 0, ry = 38, rz = 0, scale_z = 0.96,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -449,7 +449,7 @@ return {
       z = 10.12, rx = 0, ry = 258, rz = 0, scale_z = 1.44,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -459,7 +459,7 @@ return {
       z = -5.29, rx = 0, ry = 207, rz = 0, scale_z = 1.29,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -469,7 +469,7 @@ return {
       z = -9.17, rx = 0, ry = 335, rz = 0, scale_z = 1.25,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -479,7 +479,7 @@ return {
       z = -1.62, rx = 0, ry = 110, rz = 0, scale_z = 1.29,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -489,7 +489,7 @@ return {
       z = 10.14, rx = 0, ry = 310, rz = 0, scale_z = 1.27,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -499,7 +499,7 @@ return {
       z = 14.64, rx = 0, ry = 197, rz = 0, scale_z = 1.4,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -509,7 +509,7 @@ return {
       z = -9.45, rx = 0, ry = 3, rz = 0, scale_z = 1.29,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -519,7 +519,7 @@ return {
       z = 17.31, rx = 0, ry = 267, rz = 0, scale_z = 1.38,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -529,7 +529,7 @@ return {
       z = 35.48, rx = 0, ry = 55, rz = 0, scale_z = 1.15,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -539,7 +539,7 @@ return {
       z = -26.68, rx = 0, ry = 190, rz = 0, scale_z = 1.27,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
@@ -549,181 +549,1441 @@ return {
       z = 14.53, rx = 0, ry = 164, rz = 0, scale_z = 1.42,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 1 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
     {
-      id = 51, name = "estrela",
+      id = 51, name = "grama",
+      x = -2.96, y = 0.3, rotation = 0, scale_x = 1.11, scale_y = 1.11,
+      z = -10.14, rx = 0, ry = 346, rz = 0, scale_z = 1.11,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 52, name = "grama",
+      x = -39.49, y = 1.42, rotation = 0, scale_x = 1.72, scale_y = 1.72,
+      z = 0.22, rx = 0, ry = 41, rz = 0, scale_z = 1.72,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 53, name = "grama",
+      x = -13.28, y = 0.09, rotation = 0, scale_x = 1.56, scale_y = 1.56,
+      z = 34.91, rx = 0, ry = 194, rz = 0, scale_z = 1.56,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 54, name = "grama",
+      x = -26.45, y = 4.23, rotation = 0, scale_x = 1.76, scale_y = 1.76,
+      z = 35.7, rx = 0, ry = 216, rz = 0, scale_z = 1.76,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 55, name = "grama",
+      x = -31.12, y = 0.66, rotation = 0, scale_x = 1.74, scale_y = 1.74,
+      z = 0.5, rx = 0, ry = 302, rz = 0, scale_z = 1.74,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 56, name = "grama",
+      x = -34.93, y = 0.93, rotation = 0, scale_x = 1.63, scale_y = 1.63,
+      z = 15.08, rx = 0, ry = 52, rz = 0, scale_z = 1.63,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 57, name = "grama",
+      x = 33.52, y = 3.93, rotation = 0, scale_x = 1.18, scale_y = 1.18,
+      z = -23.6, rx = 0, ry = 215, rz = 0, scale_z = 1.18,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 58, name = "grama",
+      x = 31.17, y = 6.27, rotation = 0, scale_x = 1.73, scale_y = 1.73,
+      z = 21.81, rx = 0, ry = 203, rz = 0, scale_z = 1.73,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 59, name = "grama",
+      x = -24.04, y = 4.38, rotation = 0, scale_x = 1.7, scale_y = 1.7,
+      z = 30.91, rx = 0, ry = 28, rz = 0, scale_z = 1.7,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 60, name = "grama",
+      x = 31.67, y = 4.86, rotation = 0, scale_x = 1.11, scale_y = 1.11,
+      z = 27.66, rx = 0, ry = 121, rz = 0, scale_z = 1.11,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 61, name = "grama",
+      x = -6.02, y = -0.43, rotation = 0, scale_x = 1.09, scale_y = 1.09,
+      z = 32.51, rx = 0, ry = 305, rz = 0, scale_z = 1.09,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 62, name = "grama",
+      x = -39.69, y = 3.12, rotation = 0, scale_x = 1.16, scale_y = 1.16,
+      z = 21.15, rx = 0, ry = 103, rz = 0, scale_z = 1.16,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 63, name = "grama",
+      x = -13.58, y = 0.25, rotation = 0, scale_x = 1.11, scale_y = 1.11,
+      z = 31.4, rx = 0, ry = 8, rz = 0, scale_z = 1.11,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 64, name = "grama",
+      x = 0.06, y = -0.01, rotation = 0, scale_x = 1.43, scale_y = 1.43,
+      z = 5.84, rx = 0, ry = 101, rz = 0, scale_z = 1.43,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 65, name = "grama",
+      x = -6.39, y = 0.3, rotation = 0, scale_x = 1.51, scale_y = 1.51,
+      z = -8.15, rx = 0, ry = 47, rz = 0, scale_z = 1.51,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 66, name = "grama",
+      x = 16.07, y = 3.55, rotation = 0, scale_x = 1.75, scale_y = 1.75,
+      z = -28.37, rx = 0, ry = 21, rz = 0, scale_z = 1.75,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 67, name = "grama",
+      x = -35.67, y = -0.08, rotation = 0, scale_x = 1.49, scale_y = 1.49,
+      z = 4.4, rx = 0, ry = 76, rz = 0, scale_z = 1.49,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 68, name = "grama",
+      x = 19.61, y = 4.21, rotation = 0, scale_x = 1.46, scale_y = 1.46,
+      z = 18.95, rx = 0, ry = 17, rz = 0, scale_z = 1.46,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 69, name = "grama",
+      x = -30.29, y = 0.94, rotation = 0, scale_x = 1.76, scale_y = 1.76,
+      z = 16.44, rx = 0, ry = 121, rz = 0, scale_z = 1.76,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 70, name = "grama",
+      x = -27.06, y = 1.21, rotation = 0, scale_x = 1.59, scale_y = 1.59,
+      z = 0.39, rx = 0, ry = 345, rz = 0, scale_z = 1.59,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 71, name = "grama",
+      x = 1.76, y = 0.12, rotation = 0, scale_x = 1.55, scale_y = 1.55,
+      z = 5.22, rx = 0, ry = 177, rz = 0, scale_z = 1.55,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 72, name = "grama",
+      x = -31.2, y = 5.75, rotation = 0, scale_x = 1.29, scale_y = 1.29,
+      z = 30.54, rx = 0, ry = 107, rz = 0, scale_z = 1.29,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 73, name = "grama",
+      x = -7.83, y = 0.58, rotation = 0, scale_x = 1.46, scale_y = 1.46,
+      z = 38.89, rx = 0, ry = 9, rz = 0, scale_z = 1.46,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 74, name = "grama",
+      x = -39.95, y = 5.09, rotation = 0, scale_x = 1.18, scale_y = 1.18,
+      z = -31.06, rx = 0, ry = 138, rz = 0, scale_z = 1.18,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 75, name = "grama",
+      x = -14.02, y = 2.72, rotation = 0, scale_x = 1.5, scale_y = 1.5,
+      z = -32.89, rx = 0, ry = 52, rz = 0, scale_z = 1.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 76, name = "grama",
+      x = 1.4, y = 5.47, rotation = 0, scale_x = 1.31, scale_y = 1.31,
+      z = -35.59, rx = 0, ry = 286, rz = 0, scale_z = 1.31,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 77, name = "grama",
+      x = 24.6, y = 0.85, rotation = 0, scale_x = 1.57, scale_y = 1.57,
+      z = -0.21, rx = 0, ry = 127, rz = 0, scale_z = 1.57,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 78, name = "grama",
+      x = 5.28, y = 5.09, rotation = 0, scale_x = 1.52, scale_y = 1.52,
+      z = -34.7, rx = 0, ry = 49, rz = 0, scale_z = 1.52,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 79, name = "grama",
+      x = 37.13, y = 2.21, rotation = 0, scale_x = 1.3, scale_y = 1.3,
+      z = -7.93, rx = 0, ry = 286, rz = 0, scale_z = 1.3,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 80, name = "grama",
+      x = -26.32, y = 4.8, rotation = 0, scale_x = 1.21, scale_y = 1.21,
+      z = 27.46, rx = 0, ry = 25, rz = 0, scale_z = 1.21,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 81, name = "grama",
+      x = 35.16, y = 4.19, rotation = 0, scale_x = 1.21, scale_y = 1.21,
+      z = 24.77, rx = 0, ry = 84, rz = 0, scale_z = 1.21,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 82, name = "grama",
+      x = 38.89, y = 1.89, rotation = 0, scale_x = 1.01, scale_y = 1.01,
+      z = 8.52, rx = 0, ry = 31, rz = 0, scale_z = 1.01,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 83, name = "grama",
+      x = -3.96, y = 0.22, rotation = 0, scale_x = 1.24, scale_y = 1.24,
+      z = 22.93, rx = 0, ry = 7, rz = 0, scale_z = 1.24,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 84, name = "grama",
+      x = 37.31, y = 2.56, rotation = 0, scale_x = 1.11, scale_y = 1.11,
+      z = -11.64, rx = 0, ry = 287, rz = 0, scale_z = 1.11,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 85, name = "grama",
+      x = -17.78, y = 1.48, rotation = 0, scale_x = 1.6, scale_y = 1.6,
+      z = 36.94, rx = 0, ry = 151, rz = 0, scale_z = 1.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 86, name = "grama",
+      x = 15.68, y = 2.09, rotation = 0, scale_x = 1.36, scale_y = 1.36,
+      z = -34.75, rx = 0, ry = 287, rz = 0, scale_z = 1.36,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 87, name = "grama",
+      x = 21.13, y = 5.37, rotation = 0, scale_x = 1.71, scale_y = 1.71,
+      z = -9.36, rx = 0, ry = 86, rz = 0, scale_z = 1.71,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 88, name = "grama",
+      x = 13.06, y = 4.1, rotation = 0, scale_x = 1.48, scale_y = 1.48,
+      z = -18.07, rx = 0, ry = 311, rz = 0, scale_z = 1.48,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 89, name = "grama",
+      x = -0.45, y = 3.53, rotation = 0, scale_x = 1.04, scale_y = 1.04,
+      z = -32.06, rx = 0, ry = 270, rz = 0, scale_z = 1.04,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 90, name = "grama",
+      x = -29.73, y = 4.03, rotation = 0, scale_x = 1.66, scale_y = 1.66,
+      z = 23.87, rx = 0, ry = 83, rz = 0, scale_z = 1.66,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 91, name = "grama",
+      x = 22.41, y = 8.39, rotation = 0, scale_x = 1.01, scale_y = 1.01,
+      z = -22.21, rx = 0, ry = 90, rz = 0, scale_z = 1.01,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 92, name = "grama",
+      x = 3.64, y = 4.65, rotation = 0, scale_x = 1.44, scale_y = 1.44,
+      z = -33.34, rx = 0, ry = 303, rz = 0, scale_z = 1.44,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 93, name = "grama",
+      x = 35.71, y = 1.08, rotation = 0, scale_x = 1.75, scale_y = 1.75,
+      z = 2.83, rx = 0, ry = 14, rz = 0, scale_z = 1.75,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 94, name = "grama",
+      x = 2.16, y = -0.08, rotation = 0, scale_x = 1.64, scale_y = 1.64,
+      z = 11.33, rx = 0, ry = 329, rz = 0, scale_z = 1.64,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 95, name = "grama",
+      x = 5.91, y = 0.8, rotation = 0, scale_x = 1.05, scale_y = 1.05,
+      z = 36.43, rx = 0, ry = 114, rz = 0, scale_z = 1.05,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 96, name = "grama",
+      x = 17.65, y = 2.5, rotation = 0, scale_x = 1.56, scale_y = 1.56,
+      z = -31.74, rx = 0, ry = 232, rz = 0, scale_z = 1.56,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 97, name = "grama",
+      x = -35.16, y = 4.22, rotation = 0, scale_x = 1.58, scale_y = 1.58,
+      z = 31.11, rx = 0, ry = 347, rz = 0, scale_z = 1.58,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 98, name = "grama",
+      x = 8.23, y = 1.22, rotation = 0, scale_x = 1.7, scale_y = 1.7,
+      z = -10.15, rx = 0, ry = 118, rz = 0, scale_z = 1.7,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 99, name = "grama",
+      x = -10.3, y = -0.06, rotation = 0, scale_x = 1.46, scale_y = 1.46,
+      z = 37, rx = 0, ry = 253, rz = 0, scale_z = 1.46,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 100, name = "grama",
+      x = 30.07, y = 1.18, rotation = 0, scale_x = 1.48, scale_y = 1.48,
+      z = -37.12, rx = 0, ry = 313, rz = 0, scale_z = 1.48,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 101, name = "grama",
+      x = -36.25, y = 2.6, rotation = 0, scale_x = 1.47, scale_y = 1.47,
+      z = -7.22, rx = 0, ry = 41, rz = 0, scale_z = 1.47,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 102, name = "grama",
+      x = -25.49, y = 5.15, rotation = 0, scale_x = 1.28, scale_y = 1.28,
+      z = -34.81, rx = 0, ry = 240, rz = 0, scale_z = 1.28,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 103, name = "grama",
+      x = 16.28, y = 2.05, rotation = 0, scale_x = 1.07, scale_y = 1.07,
+      z = -33.97, rx = 0, ry = 164, rz = 0, scale_z = 1.07,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 104, name = "grama",
+      x = -39.31, y = 2.47, rotation = 0, scale_x = 1.47, scale_y = 1.47,
+      z = 36.32, rx = 0, ry = 197, rz = 0, scale_z = 1.47,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 105, name = "grama",
+      x = 38.91, y = 3.36, rotation = 0, scale_x = 1.08, scale_y = 1.08,
+      z = 26.62, rx = 0, ry = 178, rz = 0, scale_z = 1.08,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 106, name = "grama",
+      x = 13.7, y = 1.47, rotation = 0, scale_x = 1.1, scale_y = 1.1,
+      z = -3.88, rx = 0, ry = 113, rz = 0, scale_z = 1.1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 107, name = "grama",
+      x = -31.3, y = 3.95, rotation = 0, scale_x = 1.06, scale_y = 1.06,
+      z = -35.78, rx = 0, ry = 330, rz = 0, scale_z = 1.06,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 108, name = "grama",
+      x = 38.1, y = 2.5, rotation = 0, scale_x = 1.59, scale_y = 1.59,
+      z = -10.21, rx = 0, ry = 239, rz = 0, scale_z = 1.59,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 109, name = "grama",
+      x = 10.12, y = 2.37, rotation = 0, scale_x = 1.7, scale_y = 1.7,
+      z = -23.95, rx = 0, ry = 41, rz = 0, scale_z = 1.7,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 110, name = "grama",
+      x = -21.11, y = 7.81, rotation = 0, scale_x = 1.41, scale_y = 1.41,
+      z = -19.49, rx = 0, ry = 101, rz = 0, scale_z = 1.41,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 111, name = "grama",
+      x = -38.76, y = 7.62, rotation = 0, scale_x = 1.49, scale_y = 1.49,
+      z = -19.74, rx = 0, ry = 52, rz = 0, scale_z = 1.49,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 112, name = "grama",
+      x = 31.91, y = 1.53, rotation = 0, scale_x = 1.25, scale_y = 1.25,
+      z = -1.95, rx = 0, ry = 112, rz = 0, scale_z = 1.25,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 113, name = "grama",
+      x = 11.12, y = 0.14, rotation = 0, scale_x = 1.11, scale_y = 1.11,
+      z = 14.5, rx = 0, ry = 19, rz = 0, scale_z = 1.11,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 114, name = "grama",
+      x = 24.02, y = 1.02, rotation = 0, scale_x = 1.63, scale_y = 1.63,
+      z = 38.04, rx = 0, ry = 206, rz = 0, scale_z = 1.63,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 115, name = "grama",
+      x = 34.45, y = 3.18, rotation = 0, scale_x = 1.74, scale_y = 1.74,
+      z = 30.13, rx = 0, ry = 48, rz = 0, scale_z = 1.74,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 116, name = "grama",
+      x = -37.64, y = 1.75, rotation = 0, scale_x = 1.33, scale_y = 1.33,
+      z = -4.85, rx = 0, ry = 164, rz = 0, scale_z = 1.33,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 117, name = "grama",
+      x = 26.97, y = 4.55, rotation = 0, scale_x = 1.17, scale_y = 1.17,
+      z = -8.07, rx = 0, ry = 141, rz = 0, scale_z = 1.17,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 118, name = "grama",
+      x = -15.93, y = 0.83, rotation = 0, scale_x = 1.74, scale_y = 1.74,
+      z = -2.67, rx = 0, ry = 233, rz = 0, scale_z = 1.74,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 119, name = "grama",
+      x = -7.83, y = 1.48, rotation = 0, scale_x = 1.14, scale_y = 1.14,
+      z = -14, rx = 0, ry = 278, rz = 0, scale_z = 1.14,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 120, name = "grama",
+      x = -37.85, y = 7.78, rotation = 0, scale_x = 1.29, scale_y = 1.29,
+      z = -23.11, rx = 0, ry = 70, rz = 0, scale_z = 1.29,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 121, name = "grama",
+      x = 35.5, y = 1.46, rotation = 0, scale_x = 1.78, scale_y = 1.78,
+      z = -33.13, rx = 0, ry = 310, rz = 0, scale_z = 1.78,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 122, name = "grama",
+      x = 7.96, y = 0.67, rotation = 0, scale_x = 1.54, scale_y = 1.54,
+      z = 35.24, rx = 0, ry = 197, rz = 0, scale_z = 1.54,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 123, name = "grama",
+      x = -13.17, y = 2.64, rotation = 0, scale_x = 1.44, scale_y = 1.44,
+      z = -38.47, rx = 0, ry = 240, rz = 0, scale_z = 1.44,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 124, name = "grama",
+      x = 21.12, y = 5, rotation = 0, scale_x = 1.4, scale_y = 1.4,
+      z = 23.93, rx = 0, ry = 237, rz = 0, scale_z = 1.4,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 125, name = "grama",
+      x = 17.35, y = 7.05, rotation = 0, scale_x = 1.43, scale_y = 1.43,
+      z = -17.23, rx = 0, ry = 36, rz = 0, scale_z = 1.43,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 126, name = "grama",
+      x = -22.1, y = 3.07, rotation = 0, scale_x = 1.25, scale_y = 1.25,
+      z = 38.66, rx = 0, ry = 46, rz = 0, scale_z = 1.25,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 127, name = "grama",
+      x = -32.32, y = 4.82, rotation = 0, scale_x = 1.8, scale_y = 1.8,
+      z = 25.93, rx = 0, ry = 332, rz = 0, scale_z = 1.8,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 128, name = "grama",
+      x = 27.18, y = 5, rotation = 0, scale_x = 1.47, scale_y = 1.47,
+      z = -8.85, rx = 0, ry = 69, rz = 0, scale_z = 1.47,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 129, name = "grama",
+      x = 35.77, y = 2.83, rotation = 0, scale_x = 1.73, scale_y = 1.73,
+      z = -23.84, rx = 0, ry = 290, rz = 0, scale_z = 1.73,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 130, name = "grama",
+      x = 29.47, y = 1.03, rotation = 0, scale_x = 1.01, scale_y = 1.01,
+      z = 5.66, rx = 0, ry = 350, rz = 0, scale_z = 1.01,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 131, name = "grama",
+      x = 31, y = 6.46, rotation = 0, scale_x = 1.42, scale_y = 1.42,
+      z = -17.72, rx = 0, ry = 346, rz = 0, scale_z = 1.42,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 132, name = "grama",
+      x = -5.83, y = 0.3, rotation = 0, scale_x = 1.07, scale_y = 1.07,
+      z = 38.25, rx = 0, ry = 145, rz = 0, scale_z = 1.07,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 133, name = "grama",
+      x = -28.5, y = 2.25, rotation = 0, scale_x = 1.54, scale_y = 1.54,
+      z = -3.88, rx = 0, ry = 118, rz = 0, scale_z = 1.54,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 134, name = "grama",
+      x = -25.67, y = 8.8, rotation = 0, scale_x = 1.54, scale_y = 1.54,
+      z = -28.27, rx = 0, ry = 307, rz = 0, scale_z = 1.54,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 135, name = "grama",
+      x = -35.93, y = 7.97, rotation = 0, scale_x = 1.28, scale_y = 1.28,
+      z = -17.71, rx = 0, ry = 296, rz = 0, scale_z = 1.28,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 136, name = "grama",
+      x = -25.09, y = 2.12, rotation = 0, scale_x = 1.54, scale_y = 1.54,
+      z = 22.28, rx = 0, ry = 49, rz = 0, scale_z = 1.54,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 137, name = "grama",
+      x = 19.83, y = 3.76, rotation = 0, scale_x = 1.34, scale_y = 1.34,
+      z = -29.25, rx = 0, ry = 263, rz = 0, scale_z = 1.34,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 138, name = "grama",
+      x = -6.15, y = -0.01, rotation = 0, scale_x = 1.8, scale_y = 1.8,
+      z = 27.73, rx = 0, ry = 181, rz = 0, scale_z = 1.8,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 139, name = "grama",
+      x = -0.3, y = 4.88, rotation = 0, scale_x = 1.65, scale_y = 1.65,
+      z = -35.13, rx = 0, ry = 204, rz = 0, scale_z = 1.65,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 140, name = "grama",
+      x = 30.93, y = 2.46, rotation = 0, scale_x = 1.58, scale_y = 1.58,
+      z = -5.01, rx = 0, ry = 97, rz = 0, scale_z = 1.58,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 141, name = "grama",
+      x = 4.48, y = 0.4, rotation = 0, scale_x = 1.77, scale_y = 1.77,
+      z = 33.43, rx = 0, ry = 43, rz = 0, scale_z = 1.77,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 142, name = "grama",
+      x = 31.28, y = 6.22, rotation = 0, scale_x = 1.2, scale_y = 1.2,
+      z = -19.18, rx = 0, ry = 240, rz = 0, scale_z = 1.2,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 143, name = "grama",
+      x = 37.53, y = 2.38, rotation = 0, scale_x = 1.42, scale_y = 1.42,
+      z = -25.09, rx = 0, ry = 339, rz = 0, scale_z = 1.42,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 144, name = "grama",
+      x = 37.99, y = 2.35, rotation = 0, scale_x = 1.05, scale_y = 1.05,
+      z = -26.14, rx = 0, ry = 300, rz = 0, scale_z = 1.05,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 145, name = "grama",
+      x = 6.49, y = 1.44, rotation = 0, scale_x = 1.67, scale_y = 1.67,
+      z = -23.97, rx = 0, ry = 145, rz = 0, scale_z = 1.67,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 146, name = "grama",
+      x = -8.35, y = 2.18, rotation = 0, scale_x = 1.66, scale_y = 1.66,
+      z = -33.89, rx = 0, ry = 125, rz = 0, scale_z = 1.66,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 147, name = "grama",
+      x = -3.68, y = 0, rotation = 0, scale_x = 1.03, scale_y = 1.03,
+      z = 37.17, rx = 0, ry = 88, rz = 0, scale_z = 1.03,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 148, name = "grama",
+      x = 27.11, y = 3.69, rotation = 0, scale_x = 1.57, scale_y = 1.57,
+      z = 30.64, rx = 0, ry = 326, rz = 0, scale_z = 1.57,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 149, name = "grama",
+      x = 13.38, y = 0.61, rotation = 0, scale_x = 1.46, scale_y = 1.46,
+      z = 1.86, rx = 0, ry = 256, rz = 0, scale_z = 1.46,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 150, name = "grama",
+      x = -27.83, y = 5.09, rotation = 0, scale_x = 1.77, scale_y = 1.77,
+      z = -9.66, rx = 0, ry = 203, rz = 0, scale_z = 1.77,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 151, name = "grama",
+      x = -28.79, y = 3.45, rotation = 0, scale_x = 1.6, scale_y = 1.6,
+      z = -6.71, rx = 0, ry = 340, rz = 0, scale_z = 1.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 152, name = "grama",
+      x = 10.88, y = 3.26, rotation = 0, scale_x = 1.77, scale_y = 1.77,
+      z = -32.43, rx = 0, ry = 266, rz = 0, scale_z = 1.77,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 153, name = "grama",
+      x = -19.12, y = 3.57, rotation = 0, scale_x = 1.62, scale_y = 1.62,
+      z = -10.1, rx = 0, ry = 177, rz = 0, scale_z = 1.62,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 154, name = "grama",
+      x = 2.95, y = 2, rotation = 0, scale_x = 1.59, scale_y = 1.59,
+      z = 39.86, rx = 0, ry = 331, rz = 0, scale_z = 1.59,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 155, name = "grama",
+      x = 2.29, y = 0.35, rotation = 0, scale_x = 1.68, scale_y = 1.68,
+      z = -15.08, rx = 0, ry = 105, rz = 0, scale_z = 1.68,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 156, name = "grama",
+      x = 28.85, y = 6.19, rotation = 0, scale_x = 1.58, scale_y = 1.58,
+      z = -24.16, rx = 0, ry = 130, rz = 0, scale_z = 1.58,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 157, name = "grama",
+      x = -15.17, y = 4.82, rotation = 0, scale_x = 1.14, scale_y = 1.14,
+      z = -21.96, rx = 0, ry = 325, rz = 0, scale_z = 1.14,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 158, name = "grama",
+      x = 35.45, y = 3.04, rotation = 0, scale_x = 1.45, scale_y = 1.45,
+      z = -12.14, rx = 0, ry = 82, rz = 0, scale_z = 1.45,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 159, name = "grama",
+      x = 4.23, y = 6.63, rotation = 0, scale_x = 1.59, scale_y = 1.59,
+      z = -37.66, rx = 0, ry = 107, rz = 0, scale_z = 1.59,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 160, name = "grama",
+      x = -19.33, y = 2.06, rotation = 0, scale_x = 1.35, scale_y = 1.35,
+      z = 30.64, rx = 0, ry = 180, rz = 0, scale_z = 1.35,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 161, name = "grama",
+      x = -33.96, y = 1.18, rotation = 0, scale_x = 1.57, scale_y = 1.57,
+      z = 16.47, rx = 0, ry = 90, rz = 0, scale_z = 1.57,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 162, name = "grama",
+      x = -35.27, y = -0.07, rotation = 0, scale_x = 1.41, scale_y = 1.41,
+      z = 5.79, rx = 0, ry = 215, rz = 0, scale_z = 1.41,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 163, name = "grama",
+      x = 31.76, y = 4.87, rotation = 0, scale_x = 1.41, scale_y = 1.41,
+      z = -12.1, rx = 0, ry = 209, rz = 0, scale_z = 1.41,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 164, name = "grama",
+      x = -37.27, y = 1.94, rotation = 0, scale_x = 1.25, scale_y = 1.25,
+      z = 37.92, rx = 0, ry = 234, rz = 0, scale_z = 1.25,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 165, name = "grama",
+      x = -16.76, y = 1.52, rotation = 0, scale_x = 1.78, scale_y = 1.78,
+      z = -5.11, rx = 0, ry = 216, rz = 0, scale_z = 1.78,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 166, name = "grama",
+      x = 19.82, y = 2.49, rotation = 0, scale_x = 1.7, scale_y = 1.7,
+      z = -31.69, rx = 0, ry = 348, rz = 0, scale_z = 1.7,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 167, name = "grama",
+      x = -10.81, y = 1.27, rotation = 0, scale_x = 1.79, scale_y = 1.79,
+      z = -10.05, rx = 0, ry = 208, rz = 0, scale_z = 1.79,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 168, name = "grama",
+      x = -34.89, y = 5.79, rotation = 0, scale_x = 1.57, scale_y = 1.57,
+      z = -30.55, rx = 0, ry = 165, rz = 0, scale_z = 1.57,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 169, name = "grama",
+      x = -6.15, y = 4.14, rotation = 0, scale_x = 1.35, scale_y = 1.35,
+      z = -38.47, rx = 0, ry = 199, rz = 0, scale_z = 1.35,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 170, name = "grama",
+      x = -19.3, y = 7.05, rotation = 0, scale_x = 1.47, scale_y = 1.47,
+      z = -24.39, rx = 0, ry = 241, rz = 0, scale_z = 1.47,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 171, name = "grama",
+      x = -26.49, y = 4.15, rotation = 0, scale_x = 1.23, scale_y = 1.23,
+      z = -37.63, rx = 0, ry = 4, rz = 0, scale_z = 1.23,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 172, name = "grama",
+      x = 1.5, y = 0.04, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 7.42, rx = 0, ry = 225, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 173, name = "grama",
+      x = 8.86, y = 1.35, rotation = 0, scale_x = 1.22, scale_y = 1.22,
+      z = -9.55, rx = 0, ry = 95, rz = 0, scale_z = 1.22,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 174, name = "grama",
+      x = 37.77, y = 1.7, rotation = 0, scale_x = 1.42, scale_y = 1.42,
+      z = -34.09, rx = 0, ry = 157, rz = 0, scale_z = 1.42,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 175, name = "grama",
+      x = -28.48, y = 1.74, rotation = 0, scale_x = 1.71, scale_y = 1.71,
+      z = 19.6, rx = 0, ry = 101, rz = 0, scale_z = 1.71,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 176, name = "grama",
+      x = -15.59, y = 4.46, rotation = 0, scale_x = 1.58, scale_y = 1.58,
+      z = -17.26, rx = 0, ry = 258, rz = 0, scale_z = 1.58,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 177, name = "grama",
+      x = 14.49, y = 1.6, rotation = 0, scale_x = 1.37, scale_y = 1.37,
+      z = 21.85, rx = 0, ry = 302, rz = 0, scale_z = 1.37,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 178, name = "grama",
+      x = 25.65, y = 1.67, rotation = 0, scale_x = 1.6, scale_y = 1.6,
+      z = -33.48, rx = 0, ry = 172, rz = 0, scale_z = 1.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 179, name = "grama",
+      x = -34.06, y = 0.72, rotation = 0, scale_x = 1.47, scale_y = 1.47,
+      z = -1.75, rx = 0, ry = 272, rz = 0, scale_z = 1.47,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 180, name = "grama",
+      x = 8.77, y = 1.97, rotation = 0, scale_x = 1.39, scale_y = 1.39,
+      z = 39.38, rx = 0, ry = 211, rz = 0, scale_z = 1.39,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 181, name = "grama",
+      x = 2.86, y = 0.35, rotation = 0, scale_x = 1.46, scale_y = 1.46,
+      z = 35.17, rx = 0, ry = 6, rz = 0, scale_z = 1.46,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 182, name = "grama",
+      x = 16.27, y = 2.05, rotation = 0, scale_x = 1.47, scale_y = 1.47,
+      z = -4.96, rx = 0, ry = 291, rz = 0, scale_z = 1.47,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 183, name = "grama",
+      x = 15.92, y = 2.31, rotation = 0, scale_x = 1.14, scale_y = 1.14,
+      z = 21.2, rx = 0, ry = 3, rz = 0, scale_z = 1.14,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 184, name = "grama",
+      x = 27.56, y = 7.53, rotation = 0, scale_x = 1.59, scale_y = 1.59,
+      z = -13.62, rx = 0, ry = 265, rz = 0, scale_z = 1.59,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 185, name = "grama",
+      x = 36.25, y = 2.59, rotation = 0, scale_x = 1.26, scale_y = 1.26,
+      z = 39.92, rx = 0, ry = 89, rz = 0, scale_z = 1.26,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 186, name = "grama",
+      x = -27.05, y = 3.9, rotation = 0, scale_x = 1.56, scale_y = 1.56,
+      z = 38.42, rx = 0, ry = 163, rz = 0, scale_z = 1.56,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 187, name = "grama",
+      x = -13.53, y = 2.48, rotation = 0, scale_x = 1.63, scale_y = 1.63,
+      z = -33.44, rx = 0, ry = 357, rz = 0, scale_z = 1.63,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 188, name = "grama",
+      x = -17.32, y = 3.96, rotation = 0, scale_x = 1.45, scale_y = 1.45,
+      z = -32.49, rx = 0, ry = 153, rz = 0, scale_z = 1.45,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 189, name = "grama",
+      x = 23.58, y = 1.55, rotation = 0, scale_x = 1.65, scale_y = 1.65,
+      z = 8.69, rx = 0, ry = 35, rz = 0, scale_z = 1.65,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 190, name = "grama",
+      x = -15.55, y = 5, rotation = 0, scale_x = 1.24, scale_y = 1.24,
+      z = -21.39, rx = 0, ry = 192, rz = 0, scale_z = 1.24,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/grama.glb", color = "#FFFFFF", flat = false, shadow = false, glow = 0, glow_night = false, sway = 1.5 },
+      },
+    },
+    {
+      id = 191, name = "estrela",
       x = 24, y = 10.17, rotation = 0, scale_x = 1, scale_y = 1,
       z = -18, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 52, name = "estrela",
+      id = 192, name = "estrela",
       x = -28, y = 11.35, rotation = 0, scale_x = 1, scale_y = 1,
       z = -22, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 53, name = "estrela",
+      id = 193, name = "estrela",
       x = 28, y = 7.74, rotation = 0, scale_x = 1, scale_y = 1,
       z = 22, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 54, name = "estrela",
+      id = 194, name = "estrela",
       x = -30, y = 6.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 30, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 55, name = "estrela",
+      id = 195, name = "estrela",
       x = 2, y = 8.64, rotation = 0, scale_x = 1, scale_y = 1,
       z = -40, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 56, name = "moeda",
+      id = 196, name = "moeda",
       x = 0, y = 0.63, rotation = 0, scale_x = 1, scale_y = 1,
       z = 35.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 57, name = "moeda",
+      id = 197, name = "moeda",
       x = 0, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 31, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 58, name = "moeda",
+      id = 198, name = "moeda",
       x = 0, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 26.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 59, name = "moeda",
+      id = 199, name = "moeda",
       x = 1.5, y = 0.54, rotation = 0, scale_x = 1, scale_y = 1,
       z = 18.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 60, name = "moeda",
+      id = 200, name = "moeda",
       x = 3, y = 0.51, rotation = 0, scale_x = 1, scale_y = 1,
       z = 15, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 61, name = "moeda",
+      id = 201, name = "moeda",
       x = 4.5, y = 0.55, rotation = 0, scale_x = 1, scale_y = 1,
       z = 11.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 62, name = "moeda",
+      id = 202, name = "moeda",
       x = 5.5, y = 0.82, rotation = 0, scale_x = 1, scale_y = 1,
       z = 4.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 63, name = "moeda",
+      id = 203, name = "moeda",
       x = 5, y = 0.9, rotation = 0, scale_x = 1, scale_y = 1,
       z = 1, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 64, name = "moeda",
+      id = 204, name = "moeda",
       x = 4.5, y = 0.84, rotation = 0, scale_x = 1, scale_y = 1,
       z = -2.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 65, name = "moeda",
+      id = 205, name = "moeda",
       x = 1.5, y = 0.71, rotation = 0, scale_x = 1, scale_y = 1,
       z = -9, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 66, name = "moeda",
+      id = 206, name = "moeda",
       x = -1, y = 0.78, rotation = 0, scale_x = 1, scale_y = 1,
       z = -12, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 67, name = "moeda",
+      id = 207, name = "moeda",
       x = -3.5, y = 1.01, rotation = 0, scale_x = 1, scale_y = 1,
       z = -15, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 68, name = "moeda",
+      id = 208, name = "moeda",
       x = -5.5, y = 1.45, rotation = 0, scale_x = 1, scale_y = 1,
       z = -22, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 69, name = "moeda",
+      id = 209, name = "moeda",
       x = -5, y = 1.52, rotation = 0, scale_x = 1, scale_y = 1,
       z = -26, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 70, name = "moeda",
+      id = 210, name = "moeda",
       x = -4.5, y = 1.41, rotation = 0, scale_x = 1, scale_y = 1,
       z = -30, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 73, name = "Fogueira",
+      id = 213, name = "Fogueira",
       x = -4, y = -0.81, rotation = 0, scale_x = 0.9, scale_y = 0.15,
       z = 4, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cylinder", color = "#5B3A29", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cylinder", color = "#5B3A29", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
         { type = "sound", sound = "assets/sons/fogueira.wav", autoplay = true, loop = true, volume = 1, channel = "effects", spatial = true, distance = 14 },
       },
       children = {
         {
-          id = 71, name = "Fogo",
+          id = 211, name = "Fogo",
           x = 0, y = 1, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "continuo", rate = 60, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.8, lifetime_var = 0.4, speed_min = 0.6, speed_max = 1.6, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.25, size_start = 0.5, size_end = 0.1, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+            { type = "particles", mode = "continuo", rate = 60, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.8, lifetime_var = 0.4, speed_min = 0.6, speed_max = 1.6, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.25, size_start = 0.5, size_end = 0.1, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1 },
           },
         },
         {
-          id = 72, name = "Fumaça",
+          id = 212, name = "Fumaça",
           x = 0, y = 8, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "continuo", rate = 8, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 3, lifetime_var = 0.3, speed_min = 0.5, speed_max = 1, direction = 90, spread = 30, gravity = 0.4, drag = 0.3, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.2, size_start = 0.4, size_end = 1.8, size_var = 0, color_start = "#9A9A9AAA", color_mid = "", color_end = "#5A5A5A00", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 30, blend = "alpha", follow = false, max = 500 },
+            { type = "particles", mode = "continuo", rate = 8, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 3, lifetime_var = 0.3, speed_min = 0.5, speed_max = 1, direction = 90, spread = 30, gravity = 0.4, drag = 0.3, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.2, size_start = 0.4, size_end = 1.8, size_var = 0, color_start = "#9A9A9AAA", color_mid = "", color_end = "#5A5A5A00", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 30, blend = "alpha", follow = false, max = 500, wind = 1 },
           },
         },
       },
     },
     {
-      id = 74, name = "Lago",
+      id = 214, name = "Lago",
       x = -14, y = -1.2, rotation = 0, scale_x = 1, scale_y = 1,
       z = 12, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -732,26 +1992,26 @@ return {
       },
     },
     {
-      id = 77, name = "Placa",
+      id = 217, name = "Placa",
       x = 2.6, y = 1.74, rotation = 0, scale_x = 2.6, scale_y = 0.75,
       z = 31, rx = 0, ry = 0, rz = 0, scale_z = 0.1,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "cube", color = "#9C6B43", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "cube", color = "#9C6B43", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
       children = {
         {
-          id = 75, name = "Poste",
+          id = 215, name = "Poste",
           x = 0, y = -1.25, rotation = 0, scale_x = 0.06, scale_y = 2.1,
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 1.2,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cylinder", color = "#7A5232", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cylinder", color = "#7A5232", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
           },
         },
         {
-          id = 76, name = "Letreiro",
+          id = 216, name = "Letreiro",
           x = 0, y = 0, rotation = 0, scale_x = 0.385, scale_y = 1.333,
           z = 0.6, rx = 0, ry = 0, rz = 0, scale_z = 10,
           visible = true, layer = 0,
@@ -762,133 +2022,133 @@ return {
       },
     },
     {
-      id = 92, name = "Caverna",
+      id = 232, name = "Caverna",
       x = 15, y = 4.03, rotation = 0, scale_x = 1, scale_y = 1,
       z = -11, rx = 0, ry = -66, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       children = {
         {
-          id = 78, name = "Pilar esquerdo",
+          id = 218, name = "Pilar esquerdo",
           x = -1.9, y = 1.4, rotation = 0, scale_x = 1.3, scale_y = 4.2,
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.2,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 79, name = "Pilar direito",
+          id = 219, name = "Pilar direito",
           x = 1.9, y = 1.4, rotation = 0, scale_x = 1.3, scale_y = 4.2,
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.2,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 80, name = "Topo",
+          id = 220, name = "Topo",
           x = 0, y = 3.9, rotation = 0, scale_x = 5.2, scale_y = 1.2,
           z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.4,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#6E6A72", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 81, name = "Fundo",
+          id = 221, name = "Fundo",
           x = 0, y = 1.4, rotation = 0, scale_x = 2.6, scale_y = 4.2,
           z = -1.2, rx = 0, ry = 0, rz = 0, scale_z = 0.4,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#050507", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#050507", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 82, name = "Encosta",
+          id = 222, name = "Encosta",
           x = 0, y = 1, rotation = 0, scale_x = 7.5, scale_y = 6,
           z = -3.4, rx = 0, ry = 0, rz = 0, scale_z = 4,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#5E5A63", shadow = true, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#5E5A63", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 83, name = "pedra",
+          id = 223, name = "pedra",
           x = -3.4, y = 0.5, rotation = 0, scale_x = 2.6, scale_y = 2.6,
           z = -0.6, rx = 0, ry = 30, rz = 0, scale_z = 2.6,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 84, name = "pedra",
+          id = 224, name = "pedra",
           x = 3.5, y = 0.4, rotation = 0, scale_x = 2.3, scale_y = 2.3,
           z = -0.3, rx = 0, ry = 200, rz = 0, scale_z = 2.3,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 85, name = "pedra",
+          id = 225, name = "pedra",
           x = -2.2, y = 4.6, rotation = 0, scale_x = 2.4, scale_y = 2.4,
           z = -1.3, rx = 0, ry = 80, rz = 0, scale_z = 2.4,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 86, name = "pedra",
+          id = 226, name = "pedra",
           x = 2.3, y = 4.5, rotation = 0, scale_x = 2.8, scale_y = 2.8,
           z = -1.5, rx = 0, ry = 140, rz = 0, scale_z = 2.8,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 87, name = "pedra",
+          id = 227, name = "pedra",
           x = 0.2, y = 5.3, rotation = 0, scale_x = 3.4, scale_y = 3.4,
           z = -3, rx = 0, ry = 260, rz = 0, scale_z = 3.4,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 88, name = "pedra",
+          id = 228, name = "pedra",
           x = -3.8, y = 2.6, rotation = 0, scale_x = 3, scale_y = 3,
           z = -2.6, rx = 0, ry = 10, rz = 0, scale_z = 3,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 89, name = "pedra",
+          id = 229, name = "pedra",
           x = 3.9, y = 2.4, rotation = 0, scale_x = 3.2, scale_y = 3.2,
           z = -2.8, rx = 0, ry = 300, rz = 0, scale_z = 3.2,
           visible = true, layer = 0,
           components = {
-            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+            { type = "model", file = "modelos/pedra.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
             { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
           },
         },
         {
-          id = 90, name = "Placa da caverna",
+          id = 230, name = "Placa da caverna",
           x = 0, y = 4, rotation = 0, scale_x = 1, scale_y = 1,
           z = 1.25, rx = 0, ry = 0, rz = 0, scale_z = 1,
           visible = true, layer = 0,
@@ -897,59 +2157,59 @@ return {
           },
         },
         {
-          id = 91, name = "Entrada da caverna",
+          id = 231, name = "Entrada da caverna",
           x = 0, y = 1.5, rotation = 0, scale_x = 2.4, scale_y = 3,
           z = 0.4, rx = 0, ry = 0, rz = 0, scale_z = 1.2,
           visible = true, layer = 0,
           components = {
-            { type = "shape3d", shape = "cube", color = "#FFD16640", shadow = false, glow = 0, glow_night = false },
+            { type = "shape3d", shape = "cube", color = "#FFD16640", shadow = false, glow = 0, glow_night = false, material = "normal", sway = 0 },
             { type = "behavior", script = "nn:gatilho", alvo = "", invisivel = true, mensagem = "", mensagem_saida = "", quem = "", som = "", uma_vez = false },
           },
         },
       },
     },
     {
-      id = 94, name = "Tocha da entrada",
+      id = 234, name = "Tocha da entrada",
       x = 12.38, y = 3.26, rotation = 0, scale_x = 1, scale_y = 1,
       z = -13.45, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
       },
       children = {
         {
-          id = 93, name = "Chama",
+          id = 233, name = "Chama",
           x = 0, y = 1.15, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
             { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true, night = false },
-            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1 },
           },
         },
       },
     },
     {
-      id = 96, name = "Tocha da entrada",
+      id = 236, name = "Tocha da entrada",
       x = 15.06, y = 2.75, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7.42, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
       },
       children = {
         {
-          id = 95, name = "Chama",
+          id = 235, name = "Chama",
           x = 0, y = 1.15, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
             { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true, night = false },
-            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1 },
           },
         },
       },
     },
     {
-      id = 97, name = "Placar",
+      id = 237, name = "Placar",
       x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -958,7 +2218,7 @@ return {
       },
     },
     {
-      id = 98, name = "Dica",
+      id = 238, name = "Dica",
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top",
       components = {
@@ -966,7 +2226,7 @@ return {
       },
     },
     {
-      id = 99, name = "Corações",
+      id = 239, name = "Corações",
       x = 40, y = -90, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -974,35 +2234,35 @@ return {
       },
     },
     {
-      id = 100, name = "Besouro",
+      id = 240, name = "Besouro",
       x = 8, y = 0.8, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "behavior", script = "nn:inimigo3d", andar = "vagar", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 0, z = 0 },
         { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
         { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/acerto.wav" },
       },
     },
     {
-      id = 101, name = "Besouro",
+      id = 241, name = "Besouro",
       x = -8, y = 1.97, rotation = 0, scale_x = 1, scale_y = 1,
       z = -26, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "behavior", script = "nn:inimigo3d", andar = "patrulha", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 8, z = 0 },
         { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
         { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/acerto.wav" },
       },
     },
     {
-      id = 102, name = "Besouro",
+      id = 242, name = "Besouro",
       x = 14, y = 2.94, rotation = 0, scale_x = 1, scale_y = 1,
       z = -30, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       components = {
-        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false },
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },
         { type = "behavior", script = "nn:inimigo3d", andar = "vagar", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 0, z = 0 },
         { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
         { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/acerto.wav" },

@@ -331,6 +331,13 @@ impl UserData for LParticles {
             }
             Ok(())
         });
+        // 3D: o vento que leva as partículas (m/s).
+        m.add_method_mut("set_wind", |_, this, (x, y, z): (f32, f32, f32)| {
+            if let Self::D3(e) = this {
+                e.config.wind = Vec3::new(x, y, z);
+            }
+            Ok(())
+        });
         m.add_method_mut("update", |_, this, dt: f32| {
             match this {
                 Self::D2(e) => e.update(dt),

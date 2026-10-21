@@ -17,6 +17,7 @@
 //! # }
 //! ```
 
+mod bloom;
 mod gpu;
 mod mesh;
 mod model;
@@ -28,6 +29,7 @@ mod terrain;
 use glam::{Mat4, Quat, Vec2, Vec3};
 use nn_core::Color;
 
+pub use bloom::Bloom;
 pub use gpu::Stats3;
 pub(crate) use gpu::{Quad3, Renderer3D};
 pub use mesh::{Mesh, Vertex3};
@@ -297,6 +299,47 @@ impl Glow {
 
     pub fn is_none(&self) -> bool {
         self.amount <= 0.0 && self.color.r <= 0.0 && self.color.g <= 0.0 && self.color.b <= 0.0
+    }
+}
+
+/// Como a superfície de uma malha é desenhada: o brilho, se é água (ondas
+/// e o céu refletido) e quanto ela balança com o vento.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Material3D {
+    pub glow: Glow,
+    /// Água: ondinhas que se mexem, o céu refletido (mais forte olhando de
+    /// lado) e o reflexo do sol ou da lua.
+    pub water: bool,
+    /// Quanto balança com o vento (0 = nada, 1 = uma árvore): embaixo fica
+    /// parado, em cima balança mais.
+    pub sway: f32,
+}
+
+impl Material3D {
+    pub fn glow(glow: Glow) -> Self {
+        Self {
+            glow,
+            ..Self::default()
+        }
+    }
+}
+
+/// O vento do mundo 3D: o que tem `sway` balança, e as partículas com vento
+/// são levadas.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Wind3D {
+    /// Para onde ele sopra, no chão (x, z).
+    pub direction: Vec2,
+    /// Força: 0 = parado, 1 = uma brisa, 3 = ventania.
+    pub strength: f32,
+}
+
+impl Default for Wind3D {
+    fn default() -> Self {
+        Self {
+            direction: Vec2::new(1.0, 0.3),
+            strength: 0.0,
+        }
     }
 }
 

@@ -59,7 +59,7 @@ M.FIELDS = {
     { "size_start", 12 }, { "size_end", 0 }, { "size_var", 0 },
     { "color_start", "#FFFFFF" }, { "color_mid", "" }, { "color_end", "#FFFFFF00" },
     { "image", "" }, { "frame", 1 }, { "frame_w", 0 }, { "frame_h", 0 }, { "spin", 0 },
-    { "blend", "alpha" }, { "follow", false }, { "max", 500 },
+    { "blend", "alpha" }, { "follow", false }, { "max", 500 }, { "wind", 1 },
   },
   -- Interface (menus e HUD). Cores vazias ("") usam o tema do projeto
   -- (config.lua, `theme`).
@@ -110,11 +110,13 @@ M.FIELDS = {
   -- 3D: um modelo .glb/.gltf, uma forma pronta e a câmera do jogo.
   model = {
     { "file", "" }, { "color", "#FFFFFF" }, { "flat", false }, { "shadow", true },
-    { "glow", 0 }, { "glow_night", false },
+    { "glow", 0 }, { "glow_night", false }, { "sway", 0 },
   },
+  -- material: "normal" ou "agua" (ondinhas, o céu refletido, o brilho do
+  -- sol). sway: quanto balança com o vento (0 a 1).
   shape3d = {
     { "shape", "cube" }, { "color", "#7BC86C" }, { "shadow", true }, { "glow", 0 },
-    { "glow_night", false },
+    { "glow_night", false }, { "material", "normal" }, { "sway", 0 },
   },
   -- Luz: uma lâmpada (ilumina em volta, até o alcance) ou um holofote
   -- (ilumina num cone, para a frente do objeto, -Z). "flicker" faz a luz
@@ -176,6 +178,11 @@ M.ENVIRONMENT = {
   -- Dia e noite: o sol anda no céu e as cores mudam com a hora. Um dia do
   -- jogo dura `day_length` minutos; o jogo começa na hora `start_hour`.
   { "cycle", false }, { "day_length", 4 }, { "start_hour", 9 },
+  -- Vento: força (0 = parado, 1 = brisa, 3 = ventania) e para onde sopra
+  -- (graus: 0 = para -Z, 90 = para +X).
+  { "wind", 0 }, { "wind_turn", 60 },
+  -- Halo do brilho: quanto o que brilha ganha de halo (0 = nada, 1 = o normal).
+  { "bloom", 1 },
 }
 
 -- Ambientes prontos (o NN Studio aplica com um clique): o que muda em cada
@@ -1855,6 +1862,14 @@ local function update_particles(scene, dt)
     elseif o.alive and o.particles then
       local fx = o.particles
       place_particles(o, fx)
+      -- 3D: o vento leva as partículas (o "wind" do componente, de 0 a 1).
+      local env = scene._3d and scene._environment
+      if env then
+        local c0 = o:component("particles")
+        local k = (tonumber(env.wind) or 0) * 1.5 * (c0 and tonumber(c0.wind) or 1)
+        local t = (tonumber(env.wind_turn) or 60) * DEG
+        fx:set_wind(math.sin(t) * k, 0, -math.cos(t) * k)
+      end
       fx:update(dt)
       local c = o:component("particles")
       if c and c._fx == fx then
@@ -2519,6 +2534,8 @@ function M.apply_environment(env)
     fog = e.fog and { near = e.fog_near, far = e.fog_far } or false,
   })
   nn.d3.shadows(e.shadows and { distance = e.shadow_distance } or false)
+  nn.d3.wind({ strength = e.wind, turn = e.wind_turn })
+  nn.d3.bloom({ strength = e.bloom })
   return e
 end
 
@@ -2603,6 +2620,7 @@ function M.environment_at(env, h)
     -- Os campos de ligar (céu, névoa, sombras) e a distância das sombras
     -- são sempre os da cena.
     c.sky, c.fog, c.shadows, c.shadow_distance = base.sky, base.fog, base.shadows, base.shadow_distance
+    c.wind, c.wind_turn, c.bloom = base.wind, base.wind_turn, base.bloom
     c.cycle, c.day_length, c.start_hour = base.cycle, base.day_length, base.start_hour
     c.stars = STARS[name] or 0
     return c
@@ -2745,6 +2763,10 @@ function M.change_environment(scene, preset, seconds)
     -- O dia é o da própria cena.
     e = M.environment_at(scene._data.environment, 12)
     e.cycle = false
+  elseif type(preset) ~= "table" then
+    -- Um pronto: o vento continua o da cena.
+    local base = scene._data.environment or {}
+    e.wind, e.wind_turn, e.bloom = base.wind or 0, base.wind_turn or 60, base.bloom or 1
   end
   local from = scene._environment
   scene._env_now = e
@@ -3341,6 +3363,8 @@ local function draw_object(o, alpha)
       local dia = c.glow_night and not (o.scene and o.scene._night)
       d.glow = dia and 0 or c.glow
       d.emissive = not dia
+      d.sway = c.sway
+      d.material = c.material == "agua" and "water" or nil
       nn.d3.draw(c._model or c._mesh, d)
     elseif c.type == "light3d" and o.scene and o.scene._3d then
       m3 = m3 or o:matrix3d(alpha)
@@ -3359,7 +3383,7 @@ local function draw_object(o, alpha)
       if c.water then
         M._water_mesh = M._water_mesh or nn.d3.plane()
         nn.d3.draw(M._water_mesh, { x = x, y = y + c.water_level, z = z, sx = c.width, sz = c.depth,
-          color = c.water_color, shadow = false })
+          color = c.water_color, shadow = false, material = "water" })
       end
     end
   end

@@ -567,7 +567,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.draw",
         "(malha, opts)",
-        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator(), glow = 0 a 1: a própria cor brilha, mesmo no escuro; emissive = false apaga o brilho que o modelo traz no arquivo).",
+        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator(), glow = 0 a 1: a própria cor brilha, mesmo no escuro; emissive = false apaga o brilho que o modelo traz no arquivo, material = \"water\": ondinhas e o céu refletido, sway = 0 a 1: balança com o vento).",
     ),
     d(
         "nn.d3.text",
@@ -598,6 +598,16 @@ pub const API_DOCS: &[ApiDoc] = &[
         "nn.d3.lamp",
         "(opts)",
         "Uma lâmpada só neste quadro (chame no draw): x, y, z, color, intensity = 1, range = 8 (metros). Com direction = {x, y, z}, vira um holofote (angle = 30, meia abertura em graus; soft = 0.25, a borda que apaga aos poucos). Valem as 32 mais perto da câmera; não fazem sombra.",
+    ),
+    d(
+        "nn.d3.bloom",
+        "(opts)",
+        "O halo do brilho (bloom): o que brilha (glow, a chama das tochas, o fogo, o sol) ganha um halo suave em volta. false desliga (bom numa opção para PCs fracos), true liga, { strength = 1 } muda a força. Devolve se está ligado.",
+    ),
+    d(
+        "nn.d3.wind",
+        "(opts)",
+        "O vento (opts: strength = 0 parado, 1 brisa, 3 ventania; turn = para onde sopra, em graus, 0 = para -Z e 90 = para +X; ou direction = {x, y, z}). O que é desenhado com sway balança, com rajadas. Devolve { strength, x, z }.",
     ),
     d(
         "nn.d3.sky",

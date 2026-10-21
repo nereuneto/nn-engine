@@ -20,7 +20,8 @@ BASE = os.path.join(RAIZ, 'crates', 'nn-run', 'modelos')
 
 # ---------------------------------------------------------------- visual3d
 c = Cena()
-c.obj('Mar', [comp('shape3d', shape='plane', color='#3FA7D6', shadow=False)], y=-0.4, scale_x=400, scale_z=400)
+# O mar: Material Água (ondinhas, o céu refletido e o brilho do sol).
+c.obj('Mar', [comp('shape3d', shape='plane', color='#2E86C1', shadow=False, material='agua')], y=-0.4, scale_x=400, scale_z=400)
 c.obj('Areia', [comp('shape3d', shape='cylinder', color='#F2D49B', shadow=False)], y=-0.55, scale_x=29.5, scale_z=29.5)
 c.obj('Ilha', [comp('shape3d', shape='cylinder', color='#7BC86C'), comp('body3d', body='static')],
       y=-2, scale_x=28, scale_y=4, scale_z=28)
@@ -113,8 +114,21 @@ plat('Elevador', 3.2, 0.3, 0, 2, 2, '#FFE6B0', 'kinematic',
 arvores = [(-9, -6, 1.3, 20), (-11, 3, 1.1, 80), (-5, 9, 1.4, 140), (6, -5, 1.2, 200), (9, 4, 1.0, 260),
            (-2, -11, 1.5, 300), (12, -2, 1.3, 40), (-12, -2, 1.2, 110)]
 for (x, z, s, r) in arvores:
-    c.obj('Árvore', [comp('model', file='modelos/arvore.glb', color='#FFFFFF', flat=False, shadow=True),
+    c.obj('Árvore', [comp('model', file='modelos/arvore.glb', color='#FFFFFF', flat=False, shadow=True, sway=1),
                      comp('body3d', body='static')], x=x, z=z, ry=r, scale_x=s, scale_y=s, scale_z=s)
+# Grama: tufos espalhados, balançando com o vento.
+rg = random.Random(5)
+gramas = 0
+while gramas < 70:
+    a, r = rg.uniform(0, 2 * math.pi), 13 * math.sqrt(rg.random())
+    x, z = round(math.cos(a) * r, 2), round(math.sin(a) * r, 2)
+    # Longe do cofre, da fogueira, do pescador e do começo do herói.
+    if any(math.hypot(x - px, z - pz) < d for px, pz, d in [(7.5, 7.5, 3.2), (-4, 6.5, 1.5), (1.8, 4.8, 1.2), (0, 9, 1.5)]):
+        continue
+    gramas += 1
+    s = round(rg.uniform(0.9, 1.6), 2)
+    c.obj('Grama', [comp('model', file='modelos/grama.glb', color='#FFFFFF', flat=False, shadow=False, sway=1.5)],
+          x=x, z=z, ry=rg.randrange(0, 360), scale_x=s, scale_y=s, scale_z=s)
 for (x, z, s, r) in [(-7, 6, 1.8, 30), (3.5, 11.5, 1.5, 90), (11.5, 3, 2.2, 150), (-10, -9, 1.7, 220)]:
     c.obj('Pedra', [comp('model', file='modelos/pedra.glb', color='#FFFFFF', flat=False, shadow=True),
                     comp('body3d', body='static')], x=x, y=0.26 * s, z=z, ry=r, scale_x=s, scale_y=s, scale_z=s)
@@ -173,6 +187,11 @@ c.obj('Zona da arena', [comp('shape3d', shape='cube', color='#FFD16640', shadow=
                         comp('behavior', script='nn:gatilho', quem='', alvo='', mensagem='', mensagem_saida='',
                              uma_vez=False, som='', invisivel=True)],
       x=AX, y=1.5, z=0, scale_x=12, scale_y=3, scale_z=12)
+# Uma bandeira no alto de um mastro, na arena (balança com o vento).
+c.obj('Mastro', [comp('shape3d', shape='cylinder', color='#5A5462', shadow=True), comp('body3d', body='static')],
+      x=AX - 6, y=2.5, z=-4, scale_x=0.12, scale_y=5, scale_z=0.12)
+c.obj('Bandeira', [comp('shape3d', shape='cube', color='#E63946', shadow=True, sway=2)],
+      x=AX - 6, y=4.55, z=-3.35, scale_x=0.04, scale_y=0.8, scale_z=1.2)
 pontos = [c.child('Saída', [], x=round(math.cos(a) * 6, 2), z=round(math.sin(a) * 6, 2))
           for a in (math.radians(d) for d in (60, 130, 230, 300))]
 c.obj('Ondas da arena', [comp('behavior', script='nn:ondas', prefab='prefabs/besouro.prefab', prefab_forte='',
@@ -326,7 +345,7 @@ ILHA_ENV = env(sky=True, sky_top="#3F8FD8", sky_horizon="#CDEBF5", sky_bottom="#
                sun_height=53, sun_turn=48, sun_color="#FFF1D6", sun_size=4,
                ambient_sky="#93AFCF", ambient_ground="#5E6B52",
                fog=True, fog_near=35, fog_far=90, shadows=True, shadow_distance=25,
-               cycle=True, day_length=4, start_hour=9)
+               cycle=True, day_length=4, start_hour=9, wind=1, wind_turn=60)
 text = HEADER + 'return {\n  format = 1,\n  mode = "3d",\n  gravity = -20,\n  ' + ILHA_ENV + ',\n' + scene_events + '  objects = {\n' + '\n'.join(c.objs) + '\n  },\n}\n'
 write(BASE + '/visual3d/cenas/ilha.cena', text)
 

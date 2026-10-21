@@ -197,6 +197,7 @@ return {
     fog = true, fog_near = 30, fog_far = 90,
     shadows = true, shadow_distance = 30,
     cycle = false, day_length = 4, start_hour = 9,
+    wind = 0, wind_turn = 60, bloom = 1,
   },
   objects = {
     { id = 1, name = "Câmera", y = 5, z = 10, rx = -22, components = { { type = "camera3d", fov = 60 } } },
@@ -205,7 +206,7 @@ return {
 }
 ```
 
-`sun_height` é a altura do sol em graus (90 = meio-dia) e `sun_turn` o lado de onde ele vem.
+`sun_height` é a altura do sol em graus (90 = meio-dia) e `sun_turn` o lado de onde ele vem. `wind` é a força do vento (0 = parado, 1 = brisa, 3 = ventania) e `wind_turn` o lado para onde ele sopra, em graus (0 = para -Z, 90 = para +X): balança o que tem `sway` e leva as partículas. `bloom` é o halo em volta do que brilha (0 = sem, 1 = o normal). Mudar o ambiente (`scene:environment`) não mexe no vento nem no halo.
 
 **Dia e noite.** Com `cycle = true`, a hora anda: um dia do jogo dura `day_length` minutos, e o jogo começa na hora `start_hour` (0 a 24). O sol nasce às 6h, fica na altura `sun_height` ao meio-dia e se põe às 18h; de noite, a lua faz o mesmo, com uma luz azulada fraca, e aparecem estrelas. As cores passam pelos ambientes prontos *amanhecer* (por volta das 6h30), o da própria cena (o dia, das 8h30 às 16h), *entardecer* (18h) e *noite* (das 19h30 às 5h). O relógio vai para as variáveis `hora` (o número, de 0 a 23), `relogio` ("14:30", para o placar) e `dia` (1, 2, ...). De noite, das 18h às 6h, acendem as Luzes com `night = true` e os brilhos com `glow_night = true`; sem o ciclo, "de noite" é um ambiente escuro (o pronto *noite* ou *caverna*).
 
@@ -221,8 +222,8 @@ Os componentes 3D:
 
 | `type` | Campos (padrão) |
 |---|---|
-| `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; as partes que o `.glb` faz brilhar, com `emissiveFactor`, brilham sempre), `glow_night` (false: o brilho, e o do arquivo, só de noite) |
-| `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; não ilumina em volta), `glow_night` (false: só de noite) |
+| `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; as partes que o `.glb` faz brilhar, com `emissiveFactor`, brilham sempre), `glow_night` (false: o brilho, e o do arquivo, só de noite), `sway` (0: quanto balança com o vento; 1 = uma árvore) |
+| `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; não ilumina em volta), `glow_night` (false: só de noite), `material` ("normal" ou "agua": ondinhas, o céu refletido e o brilho do sol), `sway` (0: quanto balança com o vento) |
 | `light3d` | Uma luz: `kind` ("point": ilumina em volta; "spot": um holofote, num cone para a frente do objeto, −Z), `color`, `intensity` (1.5), `range` (8 m: até onde chega), `angle` (30°: metade da abertura do holofote), `soft` (0.3: a borda do cone que apaga aos poucos), `flicker` (0 a 1: tremula como fogo), `on` (true), `night` (false: acesa só de noite). Valem as 32 mais perto da câmera; só o sol faz sombra. `obj.light3d.on = false` apaga. |
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
 | `anim3d` | `animation` ("": nenhuma), `speed` (1), `loop` (true): a animação que o `model` do objeto toca desde o começo |
@@ -273,7 +274,7 @@ No script, `obj.button`, `obj.bar`, `obj.slider`... são os componentes (`obj.bu
 | `camera` | `follow` (nome do objeto a seguir), `smooth` (6), `zoom` (1), `limit_to_map` (true) |
 | `sound` | `sound`, `autoplay` (true), `loop`, `volume` (1), `channel` ("effects" ou "music"), e numa cena 3D `spatial` (true: o som sai do objeto) e `distance` (30 m: mais longe, não se ouve) |
 | `behavior` | `script` (`"nn:plataforma"` para um [pronto](#comportamentos-prontos) ou o caminho de um `.lua`) e as propriedades dele, soltas: `{ type = "behavior", script = "nn:patrulha", velocidade = 60 }` |
-| `particles` | `mode` ("continuo" ou "explosao"), `rate` (20 por segundo), `emitting` (true), `amount` (30, de uma vez), `on_start` (true: solta ao começar), `interval` (0: repetir a explosão a cada N s), `when_done` ("nada" ou "destruir": o objeto some quando as partículas acabam), `lifetime` (1), `lifetime_var` (0 a 1), `speed_min`, `speed_max`, `direction` (90, em graus), `spread` (360), `gravity` (negativa cai), `drag`, `area` ("ponto", "retangulo", "circulo"), `area_w`, `area_h`, `area_radius`, `size_start`, `size_end`, `size_var`, `color_start`, `color_mid` ("" = sem), `color_end`, `image`, `frame`, `frame_w`, `frame_h`, `spin` (graus por segundo), `blend` ("alpha" ou "add"), `follow` (false: as partículas acompanham o objeto), `max` (500). Numa cena 3D, os números são em metros, as partículas saem para o "cima" do objeto (gire o objeto para apontar; `direction` não conta), `spread` é um cone em graus e as áreas ficam deitadas (`area_w` × `area_h` no chão, ou um círculo no chão) |
+| `particles` | `mode` ("continuo" ou "explosao"), `rate` (20 por segundo), `emitting` (true), `amount` (30, de uma vez), `on_start` (true: solta ao começar), `interval` (0: repetir a explosão a cada N s), `when_done` ("nada" ou "destruir": o objeto some quando as partículas acabam), `lifetime` (1), `lifetime_var` (0 a 1), `speed_min`, `speed_max`, `direction` (90, em graus), `spread` (360), `gravity` (negativa cai), `drag`, `area` ("ponto", "retangulo", "circulo"), `area_w`, `area_h`, `area_radius`, `size_start`, `size_end`, `size_var`, `color_start`, `color_mid` ("" = sem), `color_end`, `image`, `frame`, `frame_w`, `frame_h`, `spin` (graus por segundo), `blend` ("alpha" ou "add"), `follow` (false: as partículas acompanham o objeto), `max` (500), `wind` (1: no 3D, quanto o vento do ambiente leva as partículas; 0 = nada). Numa cena 3D, os números são em metros, as partículas saem para o "cima" do objeto (gire o objeto para apontar; `direction` não conta), `spread` é um cone em graus e as áreas ficam deitadas (`area_w` × `area_h` no chão, ou um círculo no chão) |
 
 **O script da cena** é um arquivo `.lua` que devolve uma tabela com os callbacks de sempre (`enter`, `fixed_update`, `update`, `draw`, `exit`, `resume`, `reload`), chamados depois do que a engine faz sozinha. Os objetos já existem quando o `enter` roda:
 
@@ -1228,6 +1229,9 @@ Os modelos dos exemplos e dos modelos de projeto 3D trazem o `heroi.glb` (as ani
 | `body` | Um corpo de [`nn.physics3d`](#nnphysics3d-física-3d): desenha na posição e rotação dele (a escala continua vindo de `scale`). |
 | `matrix` | Uma matriz de `nn.d3.matrix` (no lugar de posição, rotação e escala). |
 | `animator` | Um modelo animado na pose de `modelo:animator()` ([animações](#animações-personagens-com-esqueleto)). |
+| `glow` | De 0 a 1: a própria cor brilha, mesmo no escuro ([brilho](#lâmpadas-holofotes-e-brilho)). `emissive = false` apaga o brilho que vem no arquivo do modelo. |
+| `material` | `"water"` (ou `"agua"`): ondinhas que se mexem, o céu refletido (mais forte olhando de lado) e o brilho do sol. Fica bonito num plano com uma cor um pouco transparente. Padrão `"normal"`. |
+| `sway` | Quanto balança com o [vento](#vento-e-halo) (0 = nada; 1 = uma árvore; 1.5 = grama). Embaixo (o y 0 da malha) fica parado e, quanto mais alto, mais balança. |
 
 `nn.d3.text(texto, opts)` escreve no mundo 3D: nomes em cima dos personagens, placas, avisos. Sempre virado para a câmera, em `x`, `y`, `z`, com `size` (0.5 m: a altura das letras), `color`, `font`, `anchor` ("center"), `align`, `background` (uma cor: um retângulo atrás) e `outline` (uma cor: contorno em volta das letras). Com `matrix = nn.d3.matrix({...})`, fica preso como uma placa (nos eixos X e Y da matriz, com a escala; lido de frente pelo +Z e espelhado quando visto de trás); `face_camera = true` usa só a posição e a escala da matriz. Como as partículas, aparece atrás das paredes e com névoa.
 
@@ -1336,6 +1340,30 @@ Para escurecer o mundo, apague o sol e a luz ambiente (o ambiente pronto **Caver
 nn.d3.sky(false)
 nn.d3.light({ sun_color = "#000000", sky = "#1C1C26", ground = "#0C0B0A", fog = { near = 8, far = 35 } })
 ```
+
+#### Vento e halo
+
+O **vento** balança o que é desenhado com `sway` (árvores, grama, bandeiras), com rajadas, e é o mesmo para o mundo todo. O **halo** (*bloom*) é uma luz suave em volta do que brilha: o `glow`, as partes do `.glb` que brilham, o fogo e as faíscas, o sol e a lua. Os dois ficam valendo até mudar (não é a cada quadro, como as lâmpadas).
+
+```lua
+function cena:enter()
+  nn.d3.wind({ strength = 1.2, turn = 90 })  -- uma brisa soprando para +X
+  nn.d3.bloom({ strength = 1.5 })            -- halo um pouco mais forte
+end
+
+function cena:draw()
+  nn.d3.draw(self.arvore, { x = 3, sway = 1 })
+  nn.d3.draw(nn.d3.plane(), { y = 0.1, scale = 12, color = "#2E86C1D9", material = "water", shadow = false })
+end
+```
+
+| Função | Descrição |
+|---|---|
+| `nn.d3.wind(opts)` | `strength` (0 = parado, 1 = brisa, 3 = ventania), `turn` (para onde sopra, em graus: 0 = para -Z, 90 = para +X) ou `direction` (`{x, y, z}`). Sem `opts`, só lê. Devolve `{ strength =, x =, z = }`. |
+| `nn.d3.bloom(v)` | `false` desliga o halo, `true` liga; `{ strength =, enabled = }` muda a força (0 a 4, padrão 1). Devolve se está ligado. Bom para uma opção no menu: sem placa de vídeo, o halo pesa. |
+| `emissor:set_wind(x, y, z)` | O vento que leva as partículas de um emissor 3D, em m/s (nas cenas do NN Studio, vem do ambiente). |
+
+Numa cena do NN Studio, o vento e o halo vêm do `environment` (`wind`, `wind_turn` e `bloom`) e o balanço, do `sway` das formas e dos modelos.
 
 #### Céu
 

@@ -4,13 +4,16 @@ use glam::{Mat3, Mat4, UVec2, Vec3, Vec4};
 use nn_core::Color;
 
 use super::{
-    Camera3D, Glow, Lamp3D, Light3D, MAX_JOINTS, MAX_LAMPS, MeshId, Shadows, SkinVertex, Sky3D,
-    Vertex3,
+    Camera3D, Glow, Lamp3D, Light3D, MAX_JOINTS, MAX_LAMPS, Material3D, MeshId, Shadows,
+    SkinVertex, Sky3D, Vertex3, Wind3D,
 };
 use crate::TextureId;
 use crate::texture::GpuTexture;
 
 pub(crate) const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+/// O alvo com o que brilha (o halo do brilho é feito dele).
+pub(crate) const GLOW_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 /// Bytes das matrizes dos ossos de um desenho (o shader lê `MAX_JOINTS`).
 const JOINT_SLOT: u64 = (MAX_JOINTS * 64) as u64;
@@ -36,6 +39,8 @@ struct ViewUniform3 {
     /// Direita e cima da câmera (para as partículas virarem para ela).
     cam_right: [f32; 4],
     cam_up: [f32; 4],
+    /// x = segundos (ondas, vento), y = força do vento, zw = direção dele.
+    time_wind: [f32; 4],
 }
 
 /// Uma lâmpada como o shader lê.
@@ -104,6 +109,8 @@ pub(crate) struct Instance3 {
     color: [f32; 4],
     /// Brilho: rgb = a cor que brilha por cima, a = quanto da própria cor.
     glow: [f32; 4],
+    /// x = 1 na água, y = quanto balança com o vento.
+    material: [f32; 4],
 }
 
 impl Instance3 {
@@ -116,7 +123,14 @@ impl Instance3 {
             normal: [col(n.x_axis), col(n.y_axis), col(n.z_axis)],
             color: [color.r, color.g, color.b, color.a],
             glow: [0.0; 4],
+            material: [0.0; 4],
         }
+    }
+
+    pub(crate) fn with_material(self, m: Material3D, srgb: bool) -> Self {
+        let mut i = self.with_glow(m.glow, srgb);
+        i.material = [if m.water { 1.0 } else { 0.0 }, m.sway.max(0.0), 0.0, 0.0];
+        i
     }
 
     pub(crate) fn with_glow(mut self, glow: Glow, srgb: bool) -> Self {
@@ -197,6 +211,12 @@ pub(crate) struct Renderer3D {
     pub light: Light3D,
     pub sky: Option<Sky3D>,
     pub shadows: Shadows,
+    pub wind: Wind3D,
+    pub bloom: super::Bloom,
+    bloom_pass: super::bloom::BloomPass,
+    /// Os segundos das ondas e do vento (`None`: o relógio desde o começo).
+    pub time: Option<f32>,
+    clock: std::time::Instant,
     /// Quantas malhas foram desenhadas no último frame.
     pub last_count: u32,
     /// O que o último frame desenhou de fato (veja [`Stats3`]).
@@ -359,7 +379,7 @@ impl Renderer3D {
         let instance_attrs = wgpu::vertex_attr_array![
             4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4,
             8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4,
-            14 => Float32x4
+            14 => Float32x4, 15 => Float32x4
         ];
         let buffers = [
             Some(wgpu::VertexBufferLayout {
@@ -436,11 +456,19 @@ impl Renderer3D {
                 module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                targets: &[
+                    Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                    // O que brilha (para o halo).
+                    Some(wgpu::ColorTargetState {
+                        format: GLOW_FORMAT,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                ],
             }),
             multiview_mask: None,
             cache: None,
@@ -502,11 +530,19 @@ impl Renderer3D {
                 module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                targets: &[
+                    Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                    // O que brilha (para o halo).
+                    Some(wgpu::ColorTargetState {
+                        format: GLOW_FORMAT,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                ],
             }),
             multiview_mask: None,
             cache: None,
@@ -543,11 +579,19 @@ impl Renderer3D {
                 module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                targets: &[
+                    Some(wgpu::ColorTargetState {
+                        format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                    // O que brilha (para o halo).
+                    Some(wgpu::ColorTargetState {
+                        format: GLOW_FORMAT,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                ],
             }),
             multiview_mask: None,
             cache: None,
@@ -623,11 +667,19 @@ impl Renderer3D {
                     module: &shader,
                     entry_point: Some(fs),
                     compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format,
-                        blend: Some(blend),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
+                    targets: &[
+                        Some(wgpu::ColorTargetState {
+                            format,
+                            blend: Some(blend),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }),
+                        // O que brilha (para o halo).
+                        Some(wgpu::ColorTargetState {
+                            format: GLOW_FORMAT,
+                            blend: Some(blend),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }),
+                    ],
                 }),
                 multiview_mask: None,
                 cache: None,
@@ -676,11 +728,19 @@ impl Renderer3D {
                 module: &shader,
                 entry_point: Some("fs_sky"),
                 compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+                targets: &[
+                    Some(wgpu::ColorTargetState {
+                        format,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                    // O que brilha (para o halo).
+                    Some(wgpu::ColorTargetState {
+                        format: GLOW_FORMAT,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    }),
+                ],
             }),
             multiview_mask: None,
             cache: None,
@@ -735,6 +795,11 @@ impl Renderer3D {
             light: Light3D::default(),
             sky: None,
             shadows: Shadows::default(),
+            wind: Wind3D::default(),
+            bloom: super::Bloom::default(),
+            bloom_pass: super::bloom::BloomPass::new(device, format),
+            time: None,
+            clock: std::time::Instant::now(),
             last_count: 0,
         }
     }
@@ -977,15 +1042,20 @@ impl Renderer3D {
         texture: TextureId,
         cast_shadow: bool,
         srgb: bool,
-        glow: Glow,
+        material: Material3D,
     ) {
         if let Some(m) = self.meshes.get(mesh.0 as usize) {
+            // Balançando, a caixa cresce um pouco (para não sumir da câmera).
+            let pad = material.sway.min(4.0) * 0.6;
             let draw = Draw3 {
                 mesh,
                 texture,
                 cast_shadow,
-                instance: Instance3::new(model, color, srgb).with_glow(glow, srgb),
-                bounds: m.bounds.map(|b| world_bounds(&model, b)),
+                instance: Instance3::new(model, color, srgb).with_material(material, srgb),
+                bounds: m.bounds.map(|b| {
+                    let (a, c) = world_bounds(&model, b);
+                    (a - Vec3::splat(pad), c + Vec3::splat(pad))
+                }),
                 joints: None,
             };
             if color.a < 0.999 {
@@ -1011,13 +1081,13 @@ impl Renderer3D {
         cast_shadow: bool,
         srgb: bool,
         joints: &[Mat4],
-        glow: Glow,
+        material: Material3D,
     ) {
         let Some(m) = self.meshes.get(mesh.0 as usize) else {
             return;
         };
         if m.skin.is_none() {
-            self.draw(mesh, model, color, texture, cast_shadow, srgb, glow);
+            self.draw(mesh, model, color, texture, cast_shadow, srgb, material);
             return;
         }
         let slot = (self.joint_data.len() / MAX_JOINTS) as u32;
@@ -1030,7 +1100,7 @@ impl Renderer3D {
             mesh,
             texture,
             cast_shadow,
-            instance: Instance3::new(model, color, srgb).with_glow(glow, srgb),
+            instance: Instance3::new(model, color, srgb).with_material(material, srgb),
             bounds,
             joints: Some(slot),
         });
@@ -1226,6 +1296,16 @@ impl Renderer3D {
             ],
             cam_right: cam_right.extend(0.0).to_array(),
             cam_up: cam_up.extend(0.0).to_array(),
+            time_wind: {
+                let d = self.wind.direction.normalize_or(glam::Vec2::X);
+                [
+                    self.time
+                        .unwrap_or_else(|| self.clock.elapsed().as_secs_f32()),
+                    self.wind.strength.max(0.0),
+                    d.x,
+                    d.y,
+                ]
+            },
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&view));
         let lamps = self.lamps_uniform(&Frustum::of(view_proj), srgb);
@@ -1391,19 +1471,31 @@ impl Renderer3D {
             }
         }
 
-        // 2. O céu e as malhas.
+        // 2. O céu e as malhas (e, no segundo alvo, o que brilha).
+        self.bloom_pass.resize(device, size);
         let depth = &self.depth.as_ref().expect("profundidade").1;
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("nn 3d pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: target,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
+            color_attachments: &[
+                Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                }),
+                Some(wgpu::RenderPassColorAttachment {
+                    view: self.bloom_pass.glow_view(),
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                }),
+            ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 view: depth,
                 depth_ops: Some(wgpu::Operations {
@@ -1495,6 +1587,11 @@ impl Renderer3D {
             }
         }
         drop(pass);
+        // 5. O halo do brilho, por cima.
+        if self.bloom.enabled && self.bloom.strength > 0.0 {
+            self.bloom_pass
+                .apply(queue, encoder, target, area, self.bloom);
+        }
         self.last_count = (self.draws.len() + self.transparent.len()) as u32 + culled_transparent;
         self.last_stats = Stats3 {
             meshes: self.last_count,

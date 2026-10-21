@@ -53,7 +53,7 @@ return {
           x = -34, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 2,
           components = {
-            { type = "particles", mode = "continuo", rate = 70, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.35, lifetime_var = 0.4, speed_min = 140, speed_max = 220, direction = 180, spread = 18, gravity = 0, drag = 0, area = "retangulo", area_w = 4, area_h = 14, area_radius = 50, size_start = 16, size_end = 2, size_var = 0, color_start = "#FFFFFF", color_mid = "#4FC3F7", color_end = "#1E88E500", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+            { type = "particles", mode = "continuo", rate = 70, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.35, lifetime_var = 0.4, speed_min = 140, speed_max = 220, direction = 180, spread = 18, gravity = 0, drag = 0, area = "retangulo", area_w = 4, area_h = 14, area_radius = 50, size_start = 16, size_end = 2, size_var = 0, color_start = "#FFFFFF", color_mid = "#4FC3F7", color_end = "#1E88E500", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1 },
           },
         },
       },

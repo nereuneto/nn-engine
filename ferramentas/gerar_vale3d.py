@@ -196,9 +196,24 @@ while len(postas) < 46 and tentativas < 4000:
                         comp('body3d', body='static')],
               x=round(x, 2), y=round(h + 0.2 * s, 2), z=round(z, 2), ry=ry, scale_x=s, scale_y=s, scale_z=s)
     else:
-        c.obj('arvore', [comp('model', file='modelos/arvore.glb', color='#FFFFFF', flat=False, shadow=True),
+        c.obj('arvore', [comp('model', file='modelos/arvore.glb', color='#FFFFFF', flat=False, shadow=True, sway=1),
                          comp('body3d', body='static')],
               x=round(x, 2), y=round(h - 0.05, 2), z=round(z, 2), ry=ry, scale_x=s, scale_y=s, scale_z=s)
+
+# Grama nos morros e na beira da trilha (balança com o vento).
+rg = random.Random(9)
+gramas = 0
+while gramas < 140:
+    x, z = rg.uniform(-40, 40), rg.uniform(-40, 40)
+    if math.hypot(x - LAGO[0], z - LAGO[1]) < LAGO[2] * 1.5 or dist_trilha(x, z) < 2.2:
+        continue
+    if math.hypot(x - EX, z - EZ) < 6 or chao(x, z) > 9:
+        continue
+    gramas += 1
+    s = round(rg.uniform(1.0, 1.8), 2)
+    c.obj('grama', [comp('model', file='modelos/grama.glb', color='#FFFFFF', flat=False, shadow=False, sway=1.5)],
+          x=round(x, 2), y=round(chao(x, z) - 0.03, 2), z=round(z, 2), ry=rg.randrange(0, 360),
+          scale_x=s, scale_y=s, scale_z=s)
 
 # Estrelas: nos topos dos morros.
 for (cx, cz, r, a) in MORROS:
@@ -332,7 +347,7 @@ eventos = '''  events = {
 VALE_ENV = env(sky=True, sky_top="#4A90D9", sky_horizon="#D8EEF5", sky_bottom="#3A6E8E",
                sun_height=40, sun_turn=135, sun_color="#FFEBCC", sun_size=4,
                ambient_sky="#93AFCF", ambient_ground="#5E6B52",
-               fog=True, fog_near=45, fog_far=120, shadows=True, shadow_distance=30)
+               fog=True, fog_near=45, fog_far=120, shadows=True, shadow_distance=30, wind=1.2, wind_turn=100)
 text = HEADER + 'return {\n  format = 1,\n  mode = "3d",\n  gravity = -20,\n  ' + VALE_ENV + ',\n' + eventos + '  objects = {\n' + '\n'.join(c.objs) + '\n  },\n}\n'
 write(os.path.join(DEST, 'cenas', 'vale.cena'), text)
 print('vale ok:', len(postas), 'árvores e pedras')

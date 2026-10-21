@@ -20,6 +20,7 @@ struct View {
     shadow: vec4<f32>,       // x = 1 com sombra, y = texel no mundo, z = força
     cam_right: vec4<f32>,    // direita da câmera (partículas)
     cam_up: vec4<f32>,       // cima da câmera
+    time_wind: vec4<f32>,    // x = segundos, y = força do vento, zw = direção dele
 };
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -58,6 +59,8 @@ struct VertexIn {
     @location(11) tint: vec4<f32>,
     // Brilho: rgb = cor que brilha por cima, a = quanto da própria cor.
     @location(14) glow: vec4<f32>,
+    // x = 1 na água, y = quanto balança com o vento.
+    @location(15) material: vec4<f32>,
 };
 
 struct VertexOut {
@@ -67,13 +70,30 @@ struct VertexOut {
     @location(2) world: vec3<f32>,
     @location(3) uv: vec2<f32>,
     @location(4) glow: vec4<f32>,
+    @location(5) material: vec4<f32>,
 };
+
+// O vento: o ponto do mundo balança na direção do vento, mais quanto mais
+// alto em relação à base do objeto (embaixo fica parado), com rajadas.
+fn sway(world: vec4<f32>, base: vec3<f32>, amount: f32) -> vec4<f32> {
+    let strength = view.time_wind.y;
+    if (amount <= 0.0 || strength <= 0.0) {
+        return world;
+    }
+    let h = max(world.y - base.y, 0.0);
+    let t = view.time_wind.x;
+    let phase = dot(base.xz, vec2<f32>(0.37, 0.23));
+    let gust = 0.55 + 0.45 * sin(t * 0.7 + phase * 0.5);
+    let wave = 0.6 + 0.4 * sin(t * 1.9 + phase + h * 0.6);
+    let k = amount * strength * 0.05 * pow(h, 1.4) * gust * wave;
+    return vec4<f32>(world.x + view.time_wind.z * k, world.y - k * 0.15 * h * 0.1, world.z + view.time_wind.w * k, world.w);
+}
 
 @vertex
 fn vs_main(v: VertexIn) -> VertexOut {
     let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
     let normal_m = mat3x3<f32>(v.n0.xyz, v.n1.xyz, v.n2.xyz);
-    let world = model * vec4<f32>(v.position, 1.0);
+    let world = sway(model * vec4<f32>(v.position, 1.0), v.m3.xyz, v.material.y);
     var out: VertexOut;
     out.clip = view.view_proj * world;
     out.normal = normalize(normal_m * v.normal);
@@ -81,6 +101,7 @@ fn vs_main(v: VertexIn) -> VertexOut {
     out.world = world.xyz;
     out.uv = v.uv;
     out.glow = v.glow;
+    out.material = v.material;
     return out;
 }
 
@@ -138,8 +159,39 @@ fn sunlit(world: vec3<f32>, n: vec3<f32>) -> f32 {
     return mix(mix(1.0, lit, view.shadow.z), 1.0, fade);
 }
 
+// As ondinhas da água: a normal da superfície mexendo com o tempo (somas de
+// senos em direções diferentes).
+fn wave(p: vec2<f32>, t: f32, dir: vec2<f32>, freq: f32, speed: f32, amp: f32) -> vec2<f32> {
+    return dir * (cos(dot(dir, p) * freq + t * speed) * amp * freq);
+}
+
+fn water_normal(p: vec2<f32>, t: f32) -> vec3<f32> {
+    let d = wave(p, t, vec2<f32>(0.8, 0.6), 1.3, 1.1, 0.09)
+        + wave(p, t, vec2<f32>(-0.5, 0.9), 2.1, 1.5, 0.06)
+        + wave(p, t, vec2<f32>(0.97, -0.24), 3.4, 2.0, 0.035)
+        + wave(p, t, vec2<f32>(-0.3, -0.95), 5.2, 2.6, 0.02);
+    return normalize(vec3<f32>(-d.x, 1.0, -d.y));
+}
+
+// A cor e, no segundo alvo, só o que brilha (para o halo do brilho).
+struct FragOut {
+    @location(0) color: vec4<f32>,
+    @location(1) glow: vec4<f32>,
+};
+
+fn fog_amount(world: vec3<f32>) -> f32 {
+    if (view.fog_range.y > view.fog_range.x) {
+        let d = distance(world, view.camera.xyz);
+        return clamp((d - view.fog_range.x) / (view.fog_range.y - view.fog_range.x), 0.0, 1.0);
+    }
+    return 0.0;
+}
+
 @fragment
-fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
+fn fs_main(in: VertexOut) -> FragOut {
+    if (in.material.x > 0.5) {
+        return water(in);
+    }
     let n = normalize(in.normal);
     let albedo = in.color * textureSample(tex, samp, in.uv);
     var sun = max(dot(n, -view.sun_dir.xyz), 0.0);
@@ -150,13 +202,51 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let ambient = mix(view.ground.rgb, view.sky.rgb, up);
     var rgb = albedo.rgb * (ambient + view.sun_color.rgb * sun + lamp_light(in.world, n));
     // O brilho próprio: aparece mesmo no escuro.
-    rgb = rgb + albedo.rgb * in.glow.a + in.glow.rgb;
-    if (view.fog_range.y > view.fog_range.x) {
-        let d = distance(in.world, view.camera.xyz);
-        let f = clamp((d - view.fog_range.x) / (view.fog_range.y - view.fog_range.x), 0.0, 1.0);
-        rgb = mix(rgb, view.fog.rgb, f);
+    let own = albedo.rgb * in.glow.a + in.glow.rgb;
+    rgb = rgb + own;
+    let f = fog_amount(in.world);
+    rgb = mix(rgb, view.fog.rgb, f);
+    var out: FragOut;
+    out.color = vec4<f32>(rgb, albedo.a);
+    out.glow = vec4<f32>(min(own, vec3<f32>(1.0)) * (1.0 - f), albedo.a);
+    return out;
+}
+
+// A água: a cor dela com a luz, o céu refletido (mais forte olhando de
+// lado, pela direção da onda) e o brilho do sol ou da lua.
+fn water(in: VertexOut) -> FragOut {
+    let albedo = in.color * textureSample(tex, samp, in.uv);
+    let n = water_normal(in.world.xz, view.time_wind.x);
+    let v = normalize(view.camera.xyz - in.world);
+    var sun = max(dot(n, -view.sun_dir.xyz), 0.0);
+    if (sun > 0.0) {
+        sun = sun * sunlit(in.world, vec3<f32>(0.0, 1.0, 0.0));
     }
-    return vec4<f32>(rgb, albedo.a);
+    let ambient = mix(view.ground.rgb, view.sky.rgb, 0.85);
+    var rgb = albedo.rgb * (ambient + view.sun_color.rgb * sun * 0.8 + lamp_light(in.world, n));
+    let r = reflect(-v, n);
+    let fresnel = 0.1 + 0.55 * pow(1.0 - max(dot(n, v), 0.0), 3.0);
+    // O céu refletido puxa um pouco para a cor de cima (a água não fica
+    // branca de longe).
+    var refl = mix(sky_color(vec3<f32>(r.x, abs(r.y), r.z)), view.sky_top.rgb, 0.35);
+    if (view.sky_params.y < 0.5) {
+        refl = view.sky.rgb;
+    }
+    rgb = mix(rgb, refl, fresnel);
+    // O brilho do sol (ou da lua) nas ondas.
+    let glint = pow(max(dot(r, -view.sun_dir.xyz), 0.0), 180.0) * 2.5;
+    let sparkle = view.sun_color.rgb * glint * sunlit(in.world, vec3<f32>(0.0, 1.0, 0.0));
+    let own = albedo.rgb * in.glow.a + in.glow.rgb;
+    rgb = rgb + sparkle + own;
+    var alpha = mix(albedo.a, 1.0, fresnel * 0.6);
+    let f = fog_amount(in.world);
+    rgb = mix(rgb, view.fog.rgb, f);
+    alpha = mix(alpha, 1.0, f);
+    var out: FragOut;
+    out.color = vec4<f32>(rgb, alpha);
+    // O brilho do sol nas ondas também ganha halo.
+    out.glow = vec4<f32>(min(own + sparkle * 0.5, vec3<f32>(1.0)) * (1.0 - f), alpha);
+    return out;
 }
 
 // --- Mapa de sombras: só a profundidade, vista do sol ---------------------
@@ -164,7 +254,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 @vertex
 fn vs_shadow(v: VertexIn) -> @builtin(position) vec4<f32> {
     let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
-    return view.light_view_proj * model * vec4<f32>(v.position, 1.0);
+    return view.light_view_proj * sway(model * vec4<f32>(v.position, 1.0), v.m3.xyz, v.material.y);
 }
 
 // --- Malhas com ossos (modelos animados) ----------------------------------
@@ -191,7 +281,7 @@ fn vs_skinned(v: VertexIn, s: SkinIn) -> VertexOut {
     let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
     let normal_m = mat3x3<f32>(v.n0.xyz, v.n1.xyz, v.n2.xyz);
     let skin_n = mat3x3<f32>(skin[0].xyz, skin[1].xyz, skin[2].xyz);
-    let world = model * skin * vec4<f32>(v.position, 1.0);
+    let world = sway(model * skin * vec4<f32>(v.position, 1.0), v.m3.xyz, v.material.y);
     var out: VertexOut;
     out.clip = view.view_proj * world;
     out.normal = normalize(normal_m * (skin_n * v.normal));
@@ -199,13 +289,14 @@ fn vs_skinned(v: VertexIn, s: SkinIn) -> VertexOut {
     out.world = world.xyz;
     out.uv = v.uv;
     out.glow = v.glow;
+    out.material = v.material;
     return out;
 }
 
 @vertex
 fn vs_shadow_skinned(v: VertexIn, s: SkinIn) -> @builtin(position) vec4<f32> {
     let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
-    return view.light_view_proj * model * skin_matrix(s) * vec4<f32>(v.position, 1.0);
+    return view.light_view_proj * sway(model * skin_matrix(s) * vec4<f32>(v.position, 1.0), v.m3.xyz, v.material.y);
 }
 
 // --- Céu: um triângulo que cobre a tela -----------------------------------
@@ -225,22 +316,26 @@ fn vs_sky(@builtin(vertex_index) i: u32) -> SkyOut {
     return out;
 }
 
+// O degradê do céu numa direção (sem o sol e as estrelas).
+fn sky_color(dir: vec3<f32>) -> vec3<f32> {
+    let h = dir.y;
+    if (h >= 0.0) {
+        return mix(view.sky_horizon.rgb, view.sky_top.rgb, pow(h, 0.6));
+    }
+    return mix(view.sky_horizon.rgb, view.sky_bottom.rgb, pow(min(-h * 4.0, 1.0), 0.7));
+}
+
 fn star_hash(p: vec3<f32>) -> f32 {
     return fract(sin(dot(p, vec3<f32>(12.9898, 78.233, 37.719))) * 43758.5453);
 }
 
 @fragment
-fn fs_sky(in: SkyOut) -> @location(0) vec4<f32> {
+fn fs_sky(in: SkyOut) -> FragOut {
     let far = view.inv_view_proj * vec4<f32>(in.ndc, 1.0, 1.0);
     let near = view.inv_view_proj * vec4<f32>(in.ndc, 0.0, 1.0);
     let dir = normalize(far.xyz / far.w - near.xyz / near.w);
     let h = dir.y;
-    var c: vec3<f32>;
-    if (h >= 0.0) {
-        c = mix(view.sky_horizon.rgb, view.sky_top.rgb, pow(h, 0.6));
-    } else {
-        c = mix(view.sky_horizon.rgb, view.sky_bottom.rgb, pow(min(-h * 4.0, 1.0), 0.7));
-    }
+    var c = sky_color(dir);
     // As estrelas: pontinhos sorteados pela direção, só acima do horizonte.
     let stars = view.sky_params.z;
     if (stars > 0.0 && h > 0.0) {
@@ -255,15 +350,22 @@ fn fs_sky(in: SkyOut) -> @location(0) vec4<f32> {
     }
     let s = dot(dir, -view.sun_dir.xyz);
     let cos_r = view.sky_params.x;
+    var halo = vec3<f32>(0.0);
     if (cos_r < 1.0) {
         // Brilho em volta do sol e o disco.
         let glow = pow(max(s, 0.0), 48.0) * 0.35;
         c = c + view.sun_color.rgb * glow;
         let w = (1.0 - cos_r) * 0.25;
         let disk = smoothstep(cos_r - w, cos_r + w, s);
-        c = mix(c, min(view.sun_color.rgb * 1.1 + vec3<f32>(0.25), vec3<f32>(1.0)), disk);
+        let sol = min(view.sun_color.rgb * 1.1 + vec3<f32>(0.25), vec3<f32>(1.0));
+        c = mix(c, sol, disk);
+        // O disco (o sol ou a lua) ganha halo.
+        halo = sol * disk * 0.8 * (1.0 - fog_amount(view.camera.xyz + dir * 1000.0));
     }
-    return vec4<f32>(c, 1.0);
+    var out: FragOut;
+    out.color = vec4<f32>(c, 1.0);
+    out.glow = vec4<f32>(halo, 1.0);
+    return out;
 }
 
 // --- Partículas: quadrados virados para a câmera ----------------------------
@@ -323,17 +425,24 @@ fn particle_fog(world: vec3<f32>) -> f32 {
 }
 
 @fragment
-fn fs_particle(in: ParticleOut) -> @location(0) vec4<f32> {
+fn fs_particle(in: ParticleOut) -> FragOut {
     let c = in.color * textureSample(tex, samp, in.uv);
     // A luz do mundo (o céu e o sol, mais as lâmpadas), no máximo 1: de dia,
     // como antes; de noite, a fumaça fica escura (ou da cor da tocha perto).
     let luz = view.sky.rgb + view.sun_color.rgb + lamp_light(in.world, vec3<f32>(0.0, 1.0, 0.0));
     let k = mix(vec3<f32>(1.0), clamp(luz, vec3<f32>(0.18), vec3<f32>(1.0)), in.lit);
-    return vec4<f32>(mix(c.rgb * k, view.fog.rgb, particle_fog(in.world)), c.a);
+    var out: FragOut;
+    out.color = vec4<f32>(mix(c.rgb * k, view.fog.rgb, particle_fog(in.world)), c.a);
+    out.glow = vec4<f32>(0.0, 0.0, 0.0, c.a);
+    return out;
 }
 
 @fragment
-fn fs_particle_add(in: ParticleOut) -> @location(0) vec4<f32> {
+fn fs_particle_add(in: ParticleOut) -> FragOut {
     let c = in.color * textureSample(tex, samp, in.uv);
-    return vec4<f32>(c.rgb * (1.0 - particle_fog(in.world)), c.a);
+    var out: FragOut;
+    out.color = vec4<f32>(c.rgb * (1.0 - particle_fog(in.world)), c.a);
+    // O fogo e as faíscas (que somam luz) ganham halo.
+    out.glow = vec4<f32>(c.rgb * 0.6 * (1.0 - particle_fog(in.world)), c.a);
+    return out;
 }

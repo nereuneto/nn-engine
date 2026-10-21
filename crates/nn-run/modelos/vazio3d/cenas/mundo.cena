@@ -4,7 +4,7 @@ return {
   format = 1,
   gravity = -20,
   mode = "3d",
-  environment = { sky = true, sky_top = "#3F8FD8", sky_horizon = "#CDEBF5", sky_bottom = "#2E6F9E", sun_height = 53, sun_turn = 48, sun_color = "#FFF1D6", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 35, fog_far = 90, shadows = true, shadow_distance = 25, cycle = false, day_length = 4, start_hour = 9 },
+  environment = { sky = true, sky_top = "#3F8FD8", sky_horizon = "#CDEBF5", sky_bottom = "#2E6F9E", sun_height = 53, sun_turn = 48, sun_color = "#FFF1D6", sun_size = 4, ambient_sky = "#93AFCF", ambient_ground = "#5E6B52", fog = true, fog_near = 35, fog_far = 90, shadows = true, shadow_distance = 25, cycle = false, day_length = 4, start_hour = 9, wind = 0, wind_turn = 60, bloom = 1 },
   objects = {
     {
       id = 1, name = "Câmera",
@@ -21,7 +21,7 @@ return {
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 30,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "plane", color = "#7BC86C", shadow = true, glow = 0, glow_night = false },
+        { type = "shape3d", shape = "plane", color = "#7BC86C", shadow = true, glow = 0, glow_night = false, material = "normal", sway = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },
