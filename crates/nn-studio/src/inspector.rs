@@ -2758,8 +2758,10 @@ impl Inspector {
                             &current,
                             files,
                             names,
-                            &anims,
-                            &bones,
+                            Lists {
+                                anims: &anims,
+                                bones: &bones,
+                            },
                             (id, ci),
                         ) {
                             changes.push((p.key.clone(), new));
@@ -2948,9 +2950,18 @@ impl Inspector {
                         is_instance && obj.is_some_and(|x| x.is_overridden(ci, &spec.key));
                     field_row(ui, &spec, overridden, &mut reverts);
                     let current = comp.get(&spec.key).cloned().unwrap_or(Prop::Num(0.0));
-                    if let Some(new) =
-                        field_widget(ui, &spec, &current, files, names, &anims, &bones, (id, ci))
-                    {
+                    if let Some(new) = field_widget(
+                        ui,
+                        &spec,
+                        &current,
+                        files,
+                        names,
+                        Lists {
+                            anims: &anims,
+                            bones: &bones,
+                        },
+                        (id, ci),
+                    ) {
                         changes.push((spec.key.clone(), new));
                     }
                     ui.end_row();
@@ -3190,10 +3201,10 @@ fn field_widget(
     current: &Prop,
     files: &FileTree,
     names: &[String],
-    anims: &[String],
-    bones: &[String],
+    lists: Lists<'_>,
     salt: (u32, usize),
 ) -> Option<Prop> {
+    let Lists { anims, bones } = lists;
     let width = ui.available_width().clamp(80.0, 180.0);
     match &spec.w {
         Wd::Num {
@@ -3561,6 +3572,14 @@ pub fn hand_bone(bones: &[String]) -> Option<String> {
             })
         })
         .cloned()
+}
+
+/// As listas que alguns campos oferecem: as animações (da imagem ou do modelo)
+/// e os ossos de um modelo 3D.
+#[derive(Debug, Clone, Copy)]
+struct Lists<'a> {
+    anims: &'a [String],
+    bones: &'a [String],
 }
 
 /// Um osso de um modelo: a lista dos ossos (ou texto, se o editor não

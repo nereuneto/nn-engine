@@ -843,6 +843,8 @@ O modelo **Vale 3D** já vem pronto: o herói com uma espada na mão (clique
 para golpear) e besouros com 2 de vida que mordem quando ele chega perto.
 Derrotar um besouro dá 3 moedas (um evento **Derrotar**).
 
+![O herói do Vale 3D acertando um besouro com a espada: o besouro fica vermelho e o número do dano sobe](imagens/jogo-combate-3d.png)
+
 - **Golpe** (Ações): um ataque de perto. Com **Golpeia: ao apertar**, o
   jogador golpeia com o **clique** (ou J, ou o X do controle): toca a
   animação *golpe* do modelo e, no instante do acerto (**Acerta depois de**),

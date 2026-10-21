@@ -101,7 +101,7 @@ end
 function B:golpear()
   if self.tempo or self.espera > 0 then return false end
   self.tempo = 0
-  self.acertou = false
+  self.ja_acertou = false
   self.espera = self.intervalo
   -- O Jogador 3D e o Inimigo 3D param (e não trocam a animação) enquanto isso.
   self.obj._golpeando = { parar = self.parar }
@@ -125,8 +125,8 @@ function B:update(dt)
   local scene = self.scene
   if self.tempo then
     self.tempo = self.tempo + dt
-    if not self.acertou and self.tempo >= self.acerto then
-      self.acertou = true
+    if not self.ja_acertou and self.tempo >= self.acerto then
+      self.ja_acertou = true
       self:acertar()
     end
     if self.tempo >= self.duracao then

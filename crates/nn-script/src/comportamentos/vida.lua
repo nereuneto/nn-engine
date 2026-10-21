@@ -120,7 +120,17 @@ function B:draw()
   local w, h = 46, 7
   if self.scene._3d then
     local x0, y0, z0, x1, y1, z1 = o:bounds3d()
-    local sx, sy = nn.d3.to_screen((x0 + x1) / 2, y1 + 0.35, (z0 + z1) / 2)
+    local bx, by, bz = (x0 + x1) / 2, y1 + 0.35, (z0 + z1) / 2
+    -- Longe ou atrás de um morro (ou de uma parede), a barra não aparece.
+    local c = nn.d3.camera()
+    local dx, dy, dz = bx - c.x, by - c.y, bz - c.z
+    local dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+    if dist > 25 then return end
+    if dist > 1e-3 and self.scene._world3 then
+      local hit = self.scene._world3:raycast(c.x, c.y, c.z, dx / dist, dy / dist, dz / dist, dist, o.body)
+      if hit and hit.distance < dist - 0.6 and not hit.body.is_character then return end
+    end
+    local sx, sy = nn.d3.to_screen(bx, by, bz)
     if not sx then return end
     nn.screen.panel(sx - w / 2 - 2, sy - h / 2 - 2, w + 4, h + 4, { color = "#000000AA", radius = 3 })
     nn.screen.panel(sx - w / 2, sy - h / 2, w * self.atual / self.vidas, h,
