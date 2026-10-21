@@ -196,7 +196,7 @@ return {
       x = -32, y = -40, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 5, anchor = "top_right",
       components = {
-        { type = "text", text = "Chaves: 0", size = 30, color = "#FFFFFF", anchor = "right", font = "", hud = true },
+        { type = "text", text = "Chaves: 0", size = 30, color = "#FFFFFF", anchor = "right", font = "", hud = true, outline = "" },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Chaves: {chaves}" },
       },
     },
@@ -205,7 +205,7 @@ return {
       x = 0, y = -300, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 5,
       components = {
-        { type = "text", text = "", size = 28, color = "#FFD166", anchor = "center", font = "", hud = true },
+        { type = "text", text = "", size = 28, color = "#FFD166", anchor = "center", font = "", hud = true, outline = "" },
       },
     },
   },

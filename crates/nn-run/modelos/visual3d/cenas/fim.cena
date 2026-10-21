@@ -10,7 +10,7 @@ return {
       x = 0, y = 110, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Você achou as 5 estrelas!", size = 60, color = "#FFD93D", anchor = "center", font = "", hud = false },
+        { type = "text", text = "Você achou as 5 estrelas!", size = 60, color = "#FFD93D", anchor = "center", font = "", hud = false, outline = "" },
       },
     },
     {
@@ -18,7 +18,7 @@ return {
       x = 0, y = 20, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "", size = 34, color = "#FFFFFF", anchor = "center", font = "", hud = false },
+        { type = "text", text = "", size = 34, color = "#FFFFFF", anchor = "center", font = "", hud = false, outline = "" },
         { type = "behavior", script = "nn:mostrar_valor", texto = "E pegou {moedas} moedas pelo caminho." },
       },
     },

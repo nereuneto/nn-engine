@@ -2082,6 +2082,31 @@ impl SceneRenderer {
                     }
                     "text" => {
                         let content = c.str("text").to_string();
+                        let size = (c.num("size") * w.scale_y.abs()) as f32;
+                        let outline = c.str("outline").to_string();
+                        if !outline.is_empty() {
+                            let d = (size / 16.0).max(1.0);
+                            for (dx, dy) in [
+                                (-1.0, -1.0),
+                                (0.0, -1.0),
+                                (1.0, -1.0),
+                                (-1.0, 0.0),
+                                (1.0, 0.0),
+                                (-1.0, 1.0),
+                                (0.0, 1.0),
+                                (1.0, 1.0),
+                            ] {
+                                self.draw_label(
+                                    root,
+                                    &content,
+                                    pos + Vec2::new(dx, dy) * d,
+                                    size,
+                                    &outline,
+                                    c.str("font"),
+                                    anchor_of(c.str("anchor")),
+                                );
+                            }
+                        }
                         self.draw_label(
                             root,
                             &content,

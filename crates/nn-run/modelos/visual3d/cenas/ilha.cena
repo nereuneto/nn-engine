@@ -150,7 +150,7 @@ return {
           x = 0, y = 6, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "continuo", rate = 60, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.8, lifetime_var = 0.4, speed_min = 0.6, speed_max = 1.6, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.25, size_start = 0.5, size_end = 0.1, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1 },
+            { type = "particles", mode = "continuo", rate = 40, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.8, lifetime_var = 0.4, speed_min = 0.6, speed_max = 1.6, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.4, size_end = 0.1, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 0.3 },
             { type = "light3d", kind = "point", color = "#FF9A3C", intensity = 1.6, range = 8, angle = 30, soft = 0.3, flicker = 0.6, on = true, night = false },
           },
         },
@@ -1926,7 +1926,7 @@ return {
       x = -40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = false, layer = 0, anchor = "top_right",
       components = {
-        { type = "text", text = "", size = 30, color = "#FFFFFF", anchor = "right", font = "", hud = true },
+        { type = "text", text = "", size = 30, color = "#FFFFFF", anchor = "right", font = "", hud = true, outline = "#00000099" },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Onda {onda} / 3     Faltam {restantes}" },
       },
     },
@@ -2077,7 +2077,7 @@ return {
       x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
-        { type = "text", text = "", size = 30, color = "#FFD93D", anchor = "left", font = "", hud = true },
+        { type = "text", text = "", size = 30, color = "#FFD93D", anchor = "left", font = "", hud = true, outline = "#00000099" },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Estrelas {estrelas} / 6     Moedas {moedas}     {relogio}" },
       },
     },
@@ -2086,7 +2086,7 @@ return {
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top",
       components = {
-        { type = "text", text = "Ache as 6 estrelas! Uma é do besouro-rei, na arena. (Esc solta o mouse)", size = 30, color = "#FFFFFF", anchor = "center", font = "", hud = true },
+        { type = "text", text = "Ache as 6 estrelas! Uma é do besouro-rei, na arena. (Esc solta o mouse)", size = 30, color = "#FFFFFF", anchor = "center", font = "", hud = true, outline = "#00000099" },
       },
     },
     {

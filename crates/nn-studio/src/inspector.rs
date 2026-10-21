@@ -177,6 +177,10 @@ const TEXT_FIELDS: &[F] = &[
         "Qual ponto do texto fica na posição do objeto.",
     ),
     FONT,
+    help(
+        f("outline", "Contorno", W::OptColor),
+        "Uma borda em volta das letras, nesta cor: o texto lê bem em cima de qualquer fundo (um placar em cima do céu).",
+    ),
     HUD,
 ];
 

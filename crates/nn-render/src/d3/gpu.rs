@@ -238,6 +238,9 @@ pub struct Stats3 {
     /// Lâmpadas que valeram (as que a câmera pode ver, até
     /// [`MAX_LAMPS`](super::MAX_LAMPS)).
     pub lamps: u32,
+    /// Se o halo do brilho foi desenhado (ligado e com algo brilhando na
+    /// tela: sem nada brilhando, o passe do halo é pulado).
+    pub halo: bool,
 }
 
 /// Os seis planos de uma câmera (ou da luz): x · n + d ≥ 0 é dentro.
@@ -1587,8 +1590,21 @@ impl Renderer3D {
             }
         }
         drop(pass);
-        // 5. O halo do brilho, por cima.
-        if self.bloom.enabled && self.bloom.strength > 0.0 {
+        // 5. O halo do brilho, por cima: só se algo na tela brilha (o
+        // brilho das malhas, a água, o fogo, o disco do sol ou da lua).
+        let glows = |i: &Instance3| i.glow.iter().any(|&g| g > 0.0) || i.material[0] > 0.5;
+        let sun_seen = self.sky.is_some_and(|s| s.sun_size > 0.0) && {
+            let d = -self.light.sun_direction.normalize_or(Vec3::NEG_Y);
+            let c = view_proj * d.extend(0.0);
+            c.w > 0.0 && (c.x / c.w).abs() < 1.25 && (c.y / c.w).abs() < 1.25
+        };
+        let halo = self.bloom.enabled
+            && self.bloom.strength > 0.0
+            && (sun_seen
+                || self.billboards.iter().any(|b| b.additive)
+                || visible.iter().any(|&i| glows(&self.draws[i].instance))
+                || self.transparent.iter().any(|d| glows(&d.instance)));
+        if halo {
             self.bloom_pass
                 .apply(queue, encoder, target, area, self.bloom);
         }
@@ -1599,6 +1615,7 @@ impl Renderer3D {
             shadow: shadow.len() as u32,
             draw_calls: calls + self.transparent.len() as u32,
             lamps: lamps.count[0],
+            halo,
         };
         self.draws.clear();
         self.joint_data.clear();

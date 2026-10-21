@@ -10,7 +10,7 @@ return {
       x = 0, y = 150, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "Fim de jogo", size = 64, color = "#FF6B6B", anchor = "center", font = "", hud = false },
+        { type = "text", text = "Fim de jogo", size = 64, color = "#FF6B6B", anchor = "center", font = "", hud = false, outline = "" },
       },
     },
     {
@@ -18,7 +18,7 @@ return {
       x = 0, y = 50, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "", size = 36, color = "#FFFFFF", anchor = "center", font = "", hud = false },
+        { type = "text", text = "", size = 36, color = "#FFFFFF", anchor = "center", font = "", hud = false, outline = "" },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Pontos: {pontos}" },
       },
     },
@@ -27,7 +27,7 @@ return {
       x = 0, y = -10, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "text", text = "", size = 30, color = "#FFD166", anchor = "center", font = "", hud = false },
+        { type = "text", text = "", size = 30, color = "#FFD166", anchor = "center", font = "", hud = false, outline = "" },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Recorde: {recorde}" },
       },
     },

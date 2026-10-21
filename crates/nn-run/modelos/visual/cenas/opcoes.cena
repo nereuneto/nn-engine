@@ -27,7 +27,7 @@ return {
           x = 0, y = 160, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 1,
           components = {
-            { type = "text", text = "Opções", size = 48, color = "#FFD166", anchor = "center", font = "", hud = true },
+            { type = "text", text = "Opções", size = 48, color = "#FFD166", anchor = "center", font = "", hud = true, outline = "" },
           },
         },
         {
@@ -35,7 +35,7 @@ return {
           x = -200, y = 80, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 1,
           components = {
-            { type = "text", text = "Música", size = 28, color = "#FFFFFF", anchor = "left", font = "", hud = true },
+            { type = "text", text = "Música", size = 28, color = "#FFFFFF", anchor = "left", font = "", hud = true, outline = "" },
           },
         },
         {
@@ -51,7 +51,7 @@ return {
           x = -200, y = 10, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 1,
           components = {
-            { type = "text", text = "Efeitos", size = 28, color = "#FFFFFF", anchor = "left", font = "", hud = true },
+            { type = "text", text = "Efeitos", size = 28, color = "#FFFFFF", anchor = "left", font = "", hud = true, outline = "" },
           },
         },
         {

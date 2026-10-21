@@ -292,6 +292,8 @@ pub const PRESETS_3D: &[Preset] = &[
             ("color_mid", S("#FF7A1A")),
             ("color_end", S("#B0201000")),
             ("blend", S("add")),
+            // Uma chama inclina com o vento, mas não voa com ele.
+            ("wind", N(0.3)),
         ],
     },
     Preset {

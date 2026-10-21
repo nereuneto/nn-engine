@@ -642,7 +642,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.stats",
         "()",
-        "O que o último quadro 3D desenhou: { meshes = pedidas, visible = na frente da câmera (as outras nem vão para a GPU), shadow = no mapa de sombras, draw_calls = chamadas de desenho, lamps = lâmpadas que valeram }.",
+        "O que o último quadro 3D desenhou: { meshes = pedidas, visible = na frente da câmera (as outras nem vão para a GPU), shadow = no mapa de sombras, draw_calls = chamadas de desenho, lamps = lâmpadas que valeram, halo = se o halo do brilho foi desenhado (só quando algo brilha na tela) }.",
     ),
     d(
         "nn.d3.matrix",

@@ -26,7 +26,7 @@ M.FIELDS = {
   },
   text = {
     { "text", "Texto" }, { "size", 32 }, { "color", "#FFFFFF" }, { "anchor", "center" },
-    { "font", "" }, { "hud", false },
+    { "font", "" }, { "hud", false }, { "outline", "" },
   },
   shape = {
     { "shape", "rect" }, { "w", 64 }, { "h", 64 }, { "radius", 32 }, { "color", "#3FA7D6" },
@@ -3343,6 +3343,9 @@ function M.draw_light(o, c, m)
   nn.d3.lamp(d)
 end
 
+-- As oito direções do contorno de um texto.
+local OUTLINE = { { -1, -1 }, { 0, -1 }, { 1, -1 }, { -1, 0 }, { 1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 } }
+
 local function draw_object(o, alpha)
   -- 3D: modelos e formas, com a posição, a rotação e a escala 3D.
   local m3
@@ -3452,11 +3455,19 @@ local function draw_object(o, alpha)
       end
     elseif t == "text" then
       local opts = { size = c.size * math.abs(sy), color = c.color, anchor = c.anchor, font = M.font(c.font) }
-      if hud then
-        nn.screen.text(c.text, hx, hy, opts)
-      else
-        nn.draw.text(c.text, x, y, opts)
+      local draw, px, py = nn.draw, x, y
+      if hud then draw, px, py = nn.screen, hx, hy end
+      -- O contorno: o texto na cor dele, em volta (lê bem em cima do céu).
+      if (c.outline or "") ~= "" then
+        local d = math.max(1, opts.size / 16)
+        local main = opts.color
+        opts.color = c.outline
+        for _, k in ipairs(OUTLINE) do
+          draw.text(c.text, px + k[1] * d, py + k[2] * d, opts)
+        end
+        opts.color = main
       end
+      draw.text(c.text, px, py, opts)
     elseif t == "map" and o.map then
       o.map:draw()
     elseif t == "particles" and o.particles then

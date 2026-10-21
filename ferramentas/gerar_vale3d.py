@@ -134,7 +134,7 @@ def chama(c, y, cor='#FFA347', forca=1.6, alcance=7, tremular=0.5, fogo=True, ta
             rate=30, lifetime=0.5, lifetime_var=0.4, speed_min=0.3, speed_max=0.8, spread=25,
             gravity=1.5, area="circulo", area_radius=0.06 * tamanho, size_start=0.22 * tamanho,
             size_end=0.04, size_var=0.3, color_start="#FFE066", color_mid="#FF7A1A",
-            color_end="#B0201000", blend="add"))
+            color_end="#B0201000", blend="add", wind=0.3))
     return c.child('Chama', comps, y=y)
 
 def heroi(c, x, y, z, ry=180, tocha=False, distancia=7):
@@ -232,10 +232,10 @@ c.obj('Fogueira', [comp('shape3d', shape='cylinder', color='#5B3A29', shadow=Tru
       x=fx, y=round(chao(fx, fz) + 0.05, 2), z=fz, scale_x=0.9, scale_y=0.15, scale_z=0.9,
       children=[
           c.child('Fogo', [particulas(
-              rate=60, lifetime=0.8, lifetime_var=0.4, speed_min=0.6, speed_max=1.6, spread=25,
-              gravity=1.5, area="circulo", area_radius=0.25, size_start=0.5, size_end=0.1,
+              rate=40, lifetime=0.8, lifetime_var=0.4, speed_min=0.6, speed_max=1.6, spread=25,
+              gravity=1.5, area="circulo", area_radius=0.3, size_start=0.4, size_end=0.1,
               size_var=0.3, color_start="#FFE066", color_mid="#FF7A1A", color_end="#B0201000",
-              blend="add")], y=1),
+              blend="add", wind=0.3)], y=1),
           c.child('Fumaça', [particulas(
               rate=8, lifetime=3, lifetime_var=0.3, speed_min=0.5, speed_max=1, spread=30,
               gravity=0.4, drag=0.3, area="circulo", area_radius=0.2, size_start=0.4,
@@ -298,10 +298,10 @@ for lado in (-1, 1):
     x, z = round(EX + ox, 2), round(EZ + oz, 2)
     tocha_de_pe(c, 'Tocha da entrada', x, round(chao(x, z), 2), z)
 
-c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
+c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True, outline='#00000099'),
                  comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 6     Moedas {moedas}')],
       x=40, y=-44, anchor='top_left')
-c.obj('Dica', [comp('text', text='Ache as 6 estrelas (uma na caverna)! Clique para golpear (Esc solta o mouse)', size=30, color='#FFFFFF', anchor='center', font='', hud=True)],
+c.obj('Dica', [comp('text', text='Ache as 6 estrelas (uma na caverna)! Clique para golpear (Esc solta o mouse)', size=30, color='#FFFFFF', anchor='center', font='', hud=True, outline='#00000099')],
       y=-120, anchor='top')
 coracoes(c)
 
@@ -446,11 +446,11 @@ c.obj('Saída', [comp('shape3d', shape='cube', color='#FFD16640', shadow=False, 
                      quem='', som='', uma_vez=False)],
       x=0, y=1.5, z=3.0, scale_x=3, scale_y=3, scale_z=0.6)
 
-c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
+c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True, outline='#00000099'),
                  comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 6     Moedas {moedas}')],
       x=40, y=-44, anchor='top_left')
 c.obj('Dica', [comp('text', text='Uma caverna escura! A estrela está lá no fundo. (Para sair, volte para a luz.)',
-                    size=32, color='#FFFFFF', anchor='center', font='', hud=True)],
+                    size=32, color='#FFFFFF', anchor='center', font='', hud=True, outline='#00000099')],
       y=-120, anchor='top')
 coracoes(c)
 

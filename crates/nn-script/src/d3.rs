@@ -844,6 +844,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             t.set("shadow", s.shadow)?;
             t.set("draw_calls", s.draw_calls)?;
             t.set("lamps", s.lamps)?;
+            t.set("halo", s.halo)?;
             Ok(t)
         })?,
     )?;

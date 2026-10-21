@@ -145,7 +145,7 @@ return {
       x = -32, y = -40, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 5, anchor = "top_right",
       components = {
-        { type = "text", text = "Moedas: 0", size = 30, color = "#FFFFFF", anchor = "right", font = "", hud = true },
+        { type = "text", text = "Moedas: 0", size = 30, color = "#FFFFFF", anchor = "right", font = "", hud = true, outline = "" },
         { type = "behavior", script = "nn:mostrar_valor", texto = "Moedas: {moedas}" },
       },
     },

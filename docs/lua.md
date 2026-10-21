@@ -175,7 +175,7 @@ Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), 
 | `type` | Campos (padrão) |
 |---|---|
 | `sprite` | `image`, `frame_w`, `frame_h` (0 = imagem inteira, ou o tamanho do `.anim` da imagem), `frame` (1), `w`, `h` (0 = tamanho da imagem), `color` ("#FFFFFF"), `flip_x`, `flip_y`, `pixel_art` (true), `fill` ("stretch" ou "repeat": repete a imagem lado a lado; `w` e `h` são o tamanho de cada cópia e a escala do objeto diz quantas cabem), `animation` ("": uma [animação](#animações-anim) da imagem para tocar desde o começo) |
-| `text` | `text`, `size` (32), `color`, `anchor` ("center", "left", "right"...), `font` ("": a do tema) |
+| `text` | `text`, `size` (32), `color`, `anchor` ("center", "left", "right"...), `font` ("": a do tema), `outline` ("": uma cor para a borda em volta das letras, que deixa o texto legível em cima de qualquer fundo) |
 | `shape` | `shape` ("rect" ou "circle"), `w`, `h` (64), `radius` (32), `color` |
 | `body` | `body` ("dynamic", "static" ou "kinematic"), `shape` ("box" ou "circle"), `w`, `h` (32), `radius` (16), `sensor`, `one_way`, `bounce` (0), `gravity_scale` (1), `tag` (padrão: o nome do objeto) |
 | `map` | `map` (arquivo .tmj), `scale` (1), `collision` (true) |
@@ -1391,7 +1391,7 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | `nn.d3.ground_point(x, y, altura)` | Onde o ponto da tela toca o chão na `altura` dada (padrão 0): `x, y, z`, ou `nil` se olhar para o céu. |
 | `nn.d3.ray(x, y)` | O raio que sai da câmera pelo ponto da tela: origem e direção (seis números). |
 | `nn.d3.count()` | Quantas malhas foram pedidas no último quadro (com as que ficaram fora da tela). |
-| `nn.d3.stats()` | O que o último quadro 3D desenhou: `meshes` (pedidas), `visible` (na frente da câmera), `shadow` (no mapa de sombras) e `draw_calls` (chamadas de desenho). |
+| `nn.d3.stats()` | O que o último quadro 3D desenhou: `meshes` (pedidas), `visible` (na frente da câmera), `shadow` (no mapa de sombras), `draw_calls` (chamadas de desenho), `lamps` (as lâmpadas que valeram) e `halo` (se o halo do brilho foi desenhado: sem nada brilhando na tela, ele é pulado). |
 
 O que fica fora da vista da câmera nem vai para a GPU, e o mapa de sombras só recebe o que o sol "vê" perto da câmera: dá para pedir milhares de coisas por quadro e pagar só pelas que aparecem. Cópias da mesma malha (mil árvores iguais) viram uma chamada de desenho só. Para conferir, mostre `nn.d3.stats()` na tela.
 
