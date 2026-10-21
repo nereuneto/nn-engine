@@ -2788,6 +2788,22 @@ fn create_image(root: &Path, rel: &str, w: u32, h: u32, frames: u32) -> Result<S
 }
 
 /// Desenha cada aba.
+/// Um pedido da Hierarquia (ou do menu do objeto na vista da cena).
+fn hierarchy_action(actions: &mut Vec<Action>, a: HierarchyAction) {
+    match a {
+        HierarchyAction::CreatePrefab { id, dir } => {
+            actions.push(Action::CreatePrefab { id, dir });
+        }
+        HierarchyAction::OpenFile(rel) => {
+            actions.push(Action::OpenFile { rel, line: None });
+        }
+        HierarchyAction::NewMap => actions.push(Action::NewMap),
+        HierarchyAction::ShowHierarchy => {
+            actions.push(Action::Command(Command::ShowHierarchy));
+        }
+    }
+}
+
 struct Viewer<'a> {
     root: &'a Path,
     title: &'a str,
@@ -3144,15 +3160,7 @@ impl TabViewer for Viewer<'_> {
                     .as_deref()
                     .and_then(|r| self.scenes.get_mut(r));
                 for a in self.hierarchy.ui(ui, doc) {
-                    match a {
-                        HierarchyAction::CreatePrefab { id, dir } => {
-                            self.actions.push(Action::CreatePrefab { id, dir });
-                        }
-                        HierarchyAction::OpenFile(rel) => {
-                            self.actions.push(Action::OpenFile { rel, line: None });
-                        }
-                        HierarchyAction::NewMap => self.actions.push(Action::NewMap),
-                    }
+                    hierarchy_action(self.actions, a);
                 }
             }
             Tab::Events => {
@@ -3374,6 +3382,7 @@ impl Viewer<'_> {
                 SceneAction::OpenAsText => self.actions.push(Action::OpenAsText(rel.to_string())),
                 SceneAction::Game(cmd) => self.actions.push(Action::GameCommand(cmd)),
                 SceneAction::NewMap => self.actions.push(Action::NewMap),
+                SceneAction::Object(a) => hierarchy_action(self.actions, a),
             }
         }
         // Objetos com animação tocam na cena do editor também.

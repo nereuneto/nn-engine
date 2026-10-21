@@ -434,6 +434,18 @@ fn mundo_3d() -> Tutorial {
                 done: None,
             },
             Step {
+                title: "Criar com o botão direito",
+                text: "Agora clique e solte o botão direito no chão, sem arrastar: abre o menu de criar. Escolha Cubo e ele aparece ali, em pé.\n\nOutro jeito: com o mouse na cena, Shift+A abre uma busca. Digite \"esfera\" e aperte Enter. Num objeto, o botão direito mostra o menu dele (duplicar, focar, excluir...).",
+                target: Some("cena"),
+                show: None,
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        o.component("shape3d")
+                            .is_some_and(|c| c.str("shape") != "plane")
+                    })
+                }),
+            },
+            Step {
                 title: "O herói",
                 text: "No painel Arquivos, abra a pasta modelos e arraste heroi.glb para o meio do chão. Os modelos caem em pé onde o mouse aponta.",
                 target: Some("arquivo:modelos/heroi.glb"),

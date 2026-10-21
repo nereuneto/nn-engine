@@ -16,7 +16,8 @@ use std::path::Path;
 use eframe::egui::{self, Color32, Key, Modifiers, Pos2, Rect, Sense, Stroke};
 use glam::{Mat4, Quat, Vec2, Vec3};
 
-use super::{FileDrag, SceneAction, SceneDoc, SceneEnv, Tool};
+use super::{FileDrag, SceneAction, SceneDoc, SceneEnv, Tool, ViewMenu};
+use crate::catalog::{self, Picked, QuickResult};
 use crate::scene_data::{self, Component, Object, Prop};
 use crate::scene_render::{self, Sizes};
 
@@ -232,7 +233,7 @@ impl SceneDoc {
 
     /// Preso à tela (HUD, menus): ele ou um dos pais. Na cena 3D, esses
     /// objetos não estão no mundo; aparecem por cima da vista.
-    fn on_screen3(&self, id: u32) -> bool {
+    pub(super) fn on_screen3(&self, id: u32) -> bool {
         let mut cur = Some(id);
         while let Some(i) = cur {
             let Some(o) = self.data.find(i) else {
@@ -444,19 +445,21 @@ impl SceneDoc {
     /// Põe na cena um objeto do menu ➕: os do mundo onde a câmera olha (em
     /// pé no chão), os do HUD no meio da tela do jogo.
     pub fn add_from_menu3(&mut self, o: Object) -> u32 {
+        let p = self.spawn_point3();
+        self.add_at3(o, p)
+    }
+
+    /// Põe um objeto do menu em pé no ponto `p` do chão (os do HUD vão para
+    /// o meio da tela do jogo).
+    pub fn add_at3(&mut self, o: Object, p: Vec3) -> u32 {
         if self.data.is_screen(&o) {
             let (x, y) = self.view_center();
             return self.add_prepared(o, x, y);
         }
-        let p = self.spawn_point3();
-        // Formas em pé no chão (a origem delas é o meio). Um plano fica na
-        // altura que veio nele (o lago, um pouco acima do chão).
+        // Formas em pé no chão (a origem delas é o meio). O resto fica na
+        // altura que veio nele (o lago um pouco acima do chão, a lâmpada no
+        // alto).
         let lift = if o
-            .component("shape3d")
-            .is_some_and(|c| c.str("shape") == "plane")
-        {
-            o.y as f32
-        } else if o
             .component("shape3d")
             .is_some_and(|c| c.str("shape") != "plane")
         {
@@ -464,9 +467,44 @@ impl SceneDoc {
         } else if o.component("text3d").is_some() {
             1.5
         } else {
-            0.0
+            o.y as f32
         };
         self.add_object3(o, p + Vec3::Y * lift)
+    }
+
+    /// Cria o que foi escolhido num menu ou na busca rápida, em `at` (ou
+    /// onde a câmera olha).
+    pub(super) fn place_picked3(
+        &mut self,
+        env: &mut SceneEnv,
+        picked: Picked,
+        at: Option<Vec3>,
+        actions: &mut Vec<SceneAction>,
+    ) -> Option<u32> {
+        match picked {
+            Picked::Object(o) => Some(match at {
+                Some(p) => self.add_at3(o, p),
+                None => self.add_from_menu3(o),
+            }),
+            Picked::File(rel) => {
+                let p = at.unwrap_or_else(|| self.spawn_point3());
+                self.drop_file3(env, &rel, p)
+            }
+            Picked::NewMap => {
+                actions.push(SceneAction::NewMap);
+                None
+            }
+        }
+    }
+
+    /// O ponto do mundo embaixo do mouse: em cima do objeto apontado, ou no
+    /// chão (perto), ou onde a câmera olha.
+    fn point_under3(&self, env: &mut SceneEnv, rect: Rect, p: Pos2) -> Vec3 {
+        let (o, d) = ray(&self.cam3, rect, p);
+        self.pick3(env.root, env.sizes, o, d)
+            .map(|(_, t)| o + d * t)
+            .or_else(|| ray_plane(o, d, 0.0).filter(|h| (*h - o).length() < 200.0))
+            .unwrap_or_else(|| self.spawn_point3())
     }
 
     /// Ao abrir a cena: olha para o Jogador 3D de perto, como no começo do
@@ -592,6 +630,9 @@ impl SceneDoc {
         self.view_rect = Some(rect);
         // A câmera 2D do HUD (para desenhar, clicar e arrastar o HUD).
         self.camera = self.hud_camera(rect);
+        if std::mem::take(&mut self.focus_request) {
+            self.frame3(env.root, env.sizes);
+        }
         crate::tutorial::anchor(ui.ctx(), "cena", rect);
         if !self.framed {
             self.framed = true;
@@ -667,6 +708,17 @@ impl SceneDoc {
 
         self.input3(ui, &response, rect, env, &mut actions);
         self.overlays3(&painter, rect, env);
+        self.view_menu3(&response, rect, env, &mut actions);
+        if let Some(mut q) = self.quick_add.take() {
+            match catalog::quick_add_ui(ui.ctx(), &mut q, &catalog::catalog3()) {
+                QuickResult::Open => self.quick_add = Some(q),
+                QuickResult::Close => {}
+                QuickResult::Pick(p) => {
+                    let at = Vec3::new(q.at[0] as f32, q.at[1] as f32, q.at[2] as f32);
+                    self.place_picked3(env, p, Some(at), &mut actions);
+                }
+            }
+        }
 
         // Arquivo solto em cima da vista: vira objeto onde o mouse aponta.
         if response.dnd_hover_payload::<FileDrag>().is_some() {
@@ -869,12 +921,14 @@ impl SceneDoc {
             }
             ui.separator();
             let menu = ui.menu_button("➕ Objeto", |ui| {
-                if let Some(o) = add_menu3(ui) {
-                    self.add_from_menu3(o);
-                    ui.close();
+                if let Some(p) = add_menu3(ui) {
+                    self.place_picked3(env, p, None, actions);
                 }
             });
             crate::tutorial::anchor(ui.ctx(), "cena.objeto", menu.response.rect);
+            menu.response.on_hover_text(
+                "Criar um objeto. Com o mouse na cena: o botão direito cria onde você clicar, e Shift+A abre a busca.",
+            );
             let r = ui
                 .button("☀ Ambiente")
                 .on_hover_text("Céu, sol, névoa e sombras da cena (no Inspetor)");
@@ -1019,6 +1073,10 @@ impl SceneDoc {
         });
         let hovered = response.hovered() || response.dragged();
 
+        // Apertar o botão direito: ainda não voou (soltar sem voar abre o menu).
+        if ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Secondary)) {
+            self.fly_moved = false;
+        }
         // Voar: botão direito segurado + WASD / QE.
         let flying = secondary
             && (hovered || matches!(self.drag3.as_ref().map(|d| &d.kind), Some(Drag3Kind::Look)));
@@ -1043,6 +1101,7 @@ impl SceneDoc {
                 mv += Vec3::Y * (k(Key::E) - k(Key::Q));
             });
             if mv != Vec3::ZERO {
+                self.fly_moved = true;
                 let fast = if mods.shift { 3.0 } else { 1.0 };
                 self.cam3.pos += mv.normalize() * self.cam3.speed * fast * dt;
                 self.cam3_set = true;
@@ -1201,9 +1260,50 @@ impl SceneDoc {
             self.pick3(env.root, env.sizes, o, d).map(|(id, _)| id)
         });
 
-        if response.hovered() || response.has_focus() || response.dragged() {
+        // Shift+A: a busca rápida para criar, onde o mouse está.
+        if response.hovered()
+            && !secondary
+            && !ui.ctx().text_edit_focused()
+            && let Some(p) = response.hover_pos()
+            && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::A))
+        {
+            let at = self.point_under3(env, rect, p);
+            let mut q = catalog::QuickAdd::new(p, scatter_files(env.root), "3d");
+            q.at = [f64::from(at.x), f64::from(at.y), f64::from(at.z)];
+            self.quick_add = Some(q);
+        }
+
+        if self.quick_add.is_none()
+            && (response.hovered() || response.has_focus() || response.dragged())
+        {
             self.keyboard3(ui, env, actions, secondary);
         }
+    }
+
+    /// O menu do botão direito: clicar e soltar (sem voar) abre.
+    fn view_menu3(
+        &mut self,
+        response: &egui::Response,
+        rect: Rect,
+        env: &mut SceneEnv,
+        actions: &mut Vec<SceneAction>,
+    ) {
+        let painting = self.terrain_tool.active;
+        let open = if response.secondary_clicked() && !self.fly_moved && !painting {
+            let p = response.interact_pointer_pos().unwrap_or(rect.center());
+            let target = self.hit_screen3(env, rect, p).or_else(|| {
+                let (o, d) = ray(&self.cam3, rect, p);
+                self.pick3(env.root, env.sizes, o, d).map(|(id, _)| id)
+            });
+            Some(ViewMenu {
+                target,
+                at2: self.camera.to_world(rect, p),
+                at3: self.point_under3(env, rect, p),
+            })
+        } else {
+            None
+        };
+        self.view_menu(response, open, env, actions);
     }
 
     fn continue_drag3(&mut self, drag: &mut Drag3, p: Pos2, rect: Rect, mods: Modifiers) {
@@ -1376,6 +1476,14 @@ impl SceneDoc {
         }
         if pressed(ui, Modifiers::COMMAND, Key::D) {
             self.duplicate_selection3();
+        }
+        if pressed(ui, Modifiers::NONE, Key::F2)
+            && let Some(&id) = self.selection.last()
+        {
+            self.start_rename(id);
+            actions.push(SceneAction::Object(
+                crate::hierarchy::HierarchyAction::ShowHierarchy,
+            ));
         }
         if pressed(ui, Modifiers::NONE, Key::Escape) {
             self.selection.clear();
@@ -1628,320 +1736,9 @@ fn arrow(painter: &egui::Painter, from: Pos2, to: Pos2, color: Color32) {
 /// Itens do menu "➕ Objeto" de uma cena 3D.
 /// O menu ➕ da cena 3D: os objetos do mundo e, num submenu, os da tela
 /// (HUD e menus, que ficam por cima do mundo).
-pub fn add_menu3(ui: &mut egui::Ui) -> Option<Object> {
-    let mut out = add_object3_menu(ui);
-    ui.separator();
-    let r = ui.menu_button("Na tela (HUD)", |ui| {
-        let r = ui
-            .button("Texto na tela")
-            .on_hover_text("Um texto preso à tela: placar, dicas, avisos");
-        if r.clicked() {
-            let mut o = Object::new(0, "texto");
-            let mut c = Component::new("text");
-            c.set("hud", Prop::Bool(true));
-            o.components.push(c);
-            out = Some(o);
-            ui.close();
-        }
-        ui.separator();
-        if let Some(o) = super::interface_menu(ui) {
-            out = Some(o);
-            ui.close();
-        }
-    });
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:hud", r.response.rect);
-    out
-}
-
-pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
-    let mut out = None;
-    let shape = |name: &str, shape: &str, color: &str| {
-        let mut o = Object::new(0, name);
-        let mut c = Component::new("shape3d");
-        c.set("shape", Prop::Str(shape.into()));
-        c.set("color", Prop::Str(color.into()));
-        o.components.push(c);
-        o
-    };
-    for (label, name, s, color) in [
-        ("Cubo", "Cubo", "cube", "#FF8C42"),
-        ("Esfera", "Esfera", "sphere", "#3FA7D6"),
-        ("Cilindro", "Cilindro", "cylinder", "#C77DFF"),
-        ("Cone", "Cone", "cone", "#FFD166"),
-        ("Cápsula", "Cápsula", "capsule", "#06D6A0"),
-        ("Plano (chão)", "Plano", "plane", "#7BC86C"),
-    ] {
-        if ui.button(label).clicked() {
-            let mut o = shape(name, s, color);
-            if s == "plane" {
-                o.scale_x = 10.0;
-                o.scale_z = 10.0;
-                // Um chão: já vem com um Corpo 3D parado.
-                o.components.push(Component::new("body3d"));
-            }
-            out = Some(o);
-        }
-    }
-    let r = ui
-        .button("Água (lago)")
-        .on_hover_text("Um plano azul com o Material Água: ondinhas, o céu refletido e o brilho do sol. Ponha um pouco acima do chão, ou num buraco.");
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:agua", r.rect);
-    if r.clicked() {
-        out = Some(water());
-    }
-    ui.separator();
-    if ui
-        .button("Modelo (.glb)")
-        .on_hover_text("Um objeto com um modelo 3D: escolha o arquivo no Inspetor, ou arraste um .glb do painel Arquivos para a cena.")
-        .clicked()
-    {
-        let mut o = Object::new(0, "Modelo");
-        o.components.push(Component::new("model"));
-        out = Some(o);
-    }
-    if ui
-        .button("Câmera 3D")
-        .on_hover_text("A câmera do jogo: ele mostra o que ela vê.")
-        .clicked()
-    {
-        let mut o = Object::new(0, "Câmera");
-        o.components.push(Component::new("camera3d"));
-        out = Some(o);
-    }
-    if ui
-        .button("Vazio")
-        .on_hover_text("Um objeto sem nada, para agrupar outros")
-        .clicked()
-    {
-        out = Some(Object::new(0, "Grupo"));
-    }
-    let r = ui.menu_button("Luz", |ui| {
-        if let Some(o) = light_menu(ui) {
-            out = Some(o);
-            ui.close();
-        }
-    });
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:luz", r.response.rect);
-    ui.separator();
-    if ui
-        .button("Terreno")
-        .on_hover_text(
-            "Um chão de 64 × 64 m para pintar morros, vales, cores e água (✏ Pintar terreno)",
-        )
-        .clicked()
-    {
-        let mut o = Object::new(0, "Terreno");
-        o.components.push(Component::new("terrain"));
-        out = Some(o);
-    }
-    ui.menu_button("Partículas", |ui| {
-        let r = ui
-            .button("Vazias")
-            .on_hover_text("Um emissor para ajustar do zero no Inspetor");
-        if r.clicked() {
-            let mut o = Object::new(0, "particulas");
-            o.components.push(crate::particle_presets::component_3d());
-            out = Some(o);
-            ui.close();
-        }
-        ui.separator();
-        for p in crate::particle_presets::PRESETS_3D {
-            let r = ui.button(p.label).on_hover_text(p.tip);
-            crate::tutorial::anchor(ui.ctx(), &format!("cena.objeto:fx:{}", p.id), r.rect);
-            if r.clicked() {
-                let mut o = Object::new(0, p.id);
-                o.components.push(p.component());
-                out = Some(o);
-                ui.close();
-            }
-        }
-    });
-    ui.menu_button("Portas e itens", |ui| {
-        let behavior = |script: &str, set: &[(&str, Prop)]| {
-            let mut c = match crate::behaviors::builtins()
-                .iter()
-                .find(|b| b.script == script)
-            {
-                Some(info) => Component::behavior(script, &info.defaults_for(true)),
-                None => Component::behavior(script, &[]),
-            };
-            for (k, v) in set {
-                c.set(k, v.clone());
-            }
-            c
-        };
-        let items: [(&str, &str, &str); 6] = [
-            (
-                "porta",
-                "Porta",
-                "Uma porta que abre com E (girando na dobradiça). Ponha um nome de item em \"Precisa do item\" para trancar.",
-            ),
-            (
-                "chave",
-                "Chave",
-                "Um item que vai para o inventário (\"chave\") quando o jogador encosta. Abre portas trancadas.",
-            ),
-            (
-                "zona",
-                "Zona de gatilho",
-                "Uma área invisível no jogo que avisa quando o jogador entra ou sai (abre uma porta, liga uma armadilha...).",
-            ),
-            (
-                "texto3d",
-                "Texto 3D",
-                "Um texto no mundo: placa, nome, aviso. Sempre virado para a câmera (ou preso como placa).",
-            ),
-            (
-                "inventario",
-                "Mostrar inventário",
-                "Os itens que o jogador carrega, num canto da tela.",
-            ),
-            (
-                "personagem",
-                "Personagem que fala",
-                "Alguém para conversar: perto dele aparece \"E falar\" e abre uma conversa (.dialogo) numa caixa de fala.",
-            ),
-        ];
-        for (id, label, tip) in items {
-            let r = ui.button(label).on_hover_text(tip);
-            crate::tutorial::anchor(ui.ctx(), &format!("cena.objeto:{id}"), r.rect);
-            if !r.clicked() {
-                continue;
-            }
-            let mut o;
-            match id {
-                "porta" => {
-                    o = shape("Porta", "cube", "#9C6B43");
-                    (o.scale_x, o.scale_y, o.scale_z) = (1.2, 2.2, 0.15);
-                    let mut body = Component::new("body3d");
-                    body.set("body", Prop::Str("kinematic".into()));
-                    o.components.push(body);
-                    o.components.push(behavior("nn:porta3d", &[]));
-                }
-                "chave" => {
-                    o = shape("Chave", "cube", "#FFD166");
-                    (o.scale_x, o.scale_y, o.scale_z) = (0.35, 0.35, 0.35);
-                    o.components.push(behavior(
-                        "nn:coletavel",
-                        &[
-                            ("variavel", Prop::Str(String::new())),
-                            ("item", Prop::Str("chave".into())),
-                        ],
-                    ));
-                    o.components.push(behavior("nn:girar3d", &[]));
-                }
-                "zona" => {
-                    o = shape("Zona", "cube", "#3FA7D640");
-                    (o.scale_x, o.scale_y, o.scale_z) = (3.0, 2.0, 3.0);
-                    if let Some(c) = o.components.first_mut() {
-                        c.set("shadow", Prop::Bool(false));
-                    }
-                    o.components.push(behavior("nn:gatilho", &[]));
-                }
-                "texto3d" => {
-                    o = Object::new(0, "Texto");
-                    let mut c = Component::new("text3d");
-                    c.set("text", Prop::Str("Olá!".into()));
-                    o.components.push(c);
-                }
-                "personagem" => {
-                    o = shape("Personagem", "capsule", "#4CC9F0");
-                    o.components.push(behavior("nn:dialogo", &[]));
-                }
-                _ => {
-                    o = Object::new(0, "Inventário");
-                    o.components.push(behavior("nn:inventario", &[]));
-                }
-            }
-            out = Some(o);
-            ui.close();
-        }
-    });
-    let r = ui
-        .button("Ondas de inimigos")
-        .on_hover_text("Cria inimigos (um prefab) em ondas: onda 1, 2, 3... Os quatro filhos são de onde eles saem: arraste-os pela arena.");
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:ondas", r.rect);
-    if r.clicked() {
-        let mut o = Object::new(0, "Ondas");
-        let defaults = crate::behaviors::builtins()
-            .iter()
-            .find(|b| b.script == "nn:ondas")
-            .map(|info| info.defaults_for(true))
-            .unwrap_or_default();
-        o.components
-            .push(Component::behavior("nn:ondas", &defaults));
-        for (x, z) in [(5.0, 0.0), (-5.0, 0.0), (0.0, 5.0), (0.0, -5.0)] {
-            let mut p = Object::new(0, "Saída");
-            (p.x, p.z) = (x, z);
-            o.children.push(p);
-        }
-        out = Some(o);
-        ui.close();
-    }
-    ui.separator();
-    if ui
-        .button("Jogador 3D")
-        .on_hover_text("Uma cápsula que anda, pula e leva a câmera atrás dela. Troque a forma por um modelo .glb no Inspetor.")
-        .clicked()
-    {
-        let mut o = shape("Jogador", "capsule", "#FF8C42");
-        if let Some(info) = crate::behaviors::builtins()
-            .iter()
-            .find(|b| b.script == "nn:jogador3d")
-        {
-            o.components
-                .push(Component::behavior(&info.script, &info.defaults_for(true)));
-        }
-        out = Some(o);
-    }
-    out
-}
-
-/// O submenu ➕ Objeto > Luz: lâmpada, tocha (com a chama) e holofote.
-fn light_menu(ui: &mut egui::Ui) -> Option<Object> {
-    let light = |set: &[(&str, Prop)]| {
-        let mut c = Component::new("light3d");
-        for (k, v) in set {
-            c.set(k, v.clone());
-        }
-        c
-    };
-    let mut out = None;
-    let r = ui
-        .button("Lâmpada")
-        .on_hover_text("Ilumina para todos os lados, até o Alcance.");
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:luz:lampada", r.rect);
-    if r.clicked() {
-        let mut o = Object::new(0, "Lâmpada");
-        o.y = 2.0;
-        o.components.push(light(&[]));
-        out = Some(o);
-    }
-    let r = ui.button("Tocha").on_hover_text(
-        "Um cabo com a chama em cima: a luz tremula como fogo, com partículas de fogo.",
-    );
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:luz:tocha", r.rect);
-    if r.clicked() {
-        out = Some(torch());
-    }
-    let r = ui.button("Holofote").on_hover_text(
-        "Ilumina num cone, para a frente do objeto (a seta azul). Gire para apontar.",
-    );
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:luz:holofote", r.rect);
-    if r.clicked() {
-        let mut o = Object::new(0, "Holofote");
-        o.y = 4.0;
-        o.rx = -70.0;
-        o.components.push(light(&[
-            ("kind", Prop::Str("spot".into())),
-            ("color", Prop::Str("#FFF4D6".into())),
-            ("intensity", Prop::Num(2.5)),
-            ("range", Prop::Num(14.0)),
-            ("angle", Prop::Num(25.0)),
-        ]));
-        out = Some(o);
-    }
-    out
+/// O menu ➕ Objeto do 3D (a lista fica em [`crate::catalog::catalog3`]).
+pub fn add_menu3(ui: &mut egui::Ui) -> Option<Picked> {
+    catalog::menu(ui, &catalog::catalog3(), "3d")
 }
 
 /// Um lago: um plano azul, um pouco transparente, com o Material Água
@@ -2019,34 +1816,8 @@ fn stem_of(path: &str) -> String {
 }
 
 /// Os modelos (.glb, .gltf) e prefabs do projeto, para o 🌲 Espalhar.
-fn scatter_files(root: &Path) -> Vec<String> {
-    fn walk(root: &Path, dir: &Path, depth: u32, out: &mut Vec<String>) {
-        let Ok(list) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for e in list.flatten() {
-            let p = e.path();
-            let name = e.file_name().to_string_lossy().to_string();
-            if name.starts_with('.') || name == "target" || name == "exportado" {
-                continue;
-            }
-            if p.is_dir() {
-                if depth < 4 {
-                    walk(root, &p, depth + 1, out);
-                }
-            } else if matches!(
-                p.extension().and_then(|x| x.to_str()),
-                Some("glb" | "gltf" | "prefab")
-            ) && let Ok(rel) = p.strip_prefix(root)
-            {
-                out.push(rel.to_string_lossy().replace('\\', "/"));
-            }
-        }
-    }
-    let mut out = Vec::new();
-    walk(root, root, 0, &mut out);
-    out.sort();
-    out
+pub(crate) fn scatter_files(root: &Path) -> Vec<String> {
+    catalog::project_files(root, &["glb", "gltf", "prefab"])
 }
 
 #[cfg(test)]

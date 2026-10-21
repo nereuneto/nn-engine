@@ -2921,47 +2921,54 @@ fn tutorial_mundo_3d_avanca_sozinho_ate_o_fim() {
         c.set("body", Prop::Str(kind.into()));
         c
     };
+    // O botão direito no chão > Cubo (como o menu faz).
+    let mut cubo = Object::new(9, "Cubo");
+    let mut forma = Component::new("shape3d");
+    forma.set("shape", Prop::Str("cube".into()));
+    cubo.components.push(forma);
+    doc(&mut h).data.objects.push(cubo);
+    espera(&mut h, 3);
     doc(&mut h)
         .data
         .objects
         .push(modelo(10, "heroi", "modelos/heroi.glb"));
-    espera(&mut h, 3);
+    espera(&mut h, 4);
     let n = doc(&mut h).data.objects.len() - 1;
     doc(&mut h).data.objects[n]
         .components
         .push(Component::behavior("nn:jogador3d", &[]));
-    espera(&mut h, 4);
-    h.get_by_label("▶ Testar daqui").click();
     espera(&mut h, 5);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 6);
     let mut arvore = modelo(11, "arvore", "modelos/arvore.glb");
     arvore.components.push(corpo("static"));
     doc(&mut h).data.objects.push(arvore);
-    espera(&mut h, 6);
+    espera(&mut h, 7);
     let mut caixote = modelo(12, "caixote", "modelos/caixote.glb");
     caixote.components.push(corpo("dynamic"));
     doc(&mut h).data.objects.push(caixote);
-    espera(&mut h, 7);
+    espera(&mut h, 8);
     let mut bicho = modelo(15, "bicho", "modelos/bicho.glb");
     let mut anim = Component::new("anim3d");
     anim.set("animation", Prop::Str("andar".into()));
     bicho.components.push(anim);
     doc(&mut h).data.objects.push(bicho);
-    espera(&mut h, 8);
+    espera(&mut h, 9);
     let mut estrela = modelo(13, "estrela", "modelos/estrela.glb");
     estrela
         .components
         .push(Component::behavior("nn:coletavel", &[]));
     doc(&mut h).data.objects.push(estrela);
-    espera(&mut h, 9);
+    espera(&mut h, 10);
     let mut plat = modelo(14, "plataforma", "modelos/plataforma.glb");
     plat.components.push(corpo("kinematic"));
     plat.components
         .push(Component::behavior("nn:plataforma3d", &[]));
     doc(&mut h).data.objects.push(plat);
-    espera(&mut h, 10);
+    espera(&mut h, 11);
     // O passo do Ambiente: o sol mais baixo.
     doc(&mut h).data.set_env("sun_height", Prop::Num(15.0));
-    espera(&mut h, 11);
+    espera(&mut h, 12);
     assert!(tabs(&h).contains(&Tab::Events));
     let cat = nn_studio::events::catalog();
     let mut acabou = cat.condition("acabaram").unwrap().new_item(false);
@@ -2971,9 +2978,9 @@ fn tutorial_mundo_3d_avanca_sozinho_ate_o_fim() {
         actions: vec![cat.action("reiniciar").unwrap().new_item(false)],
         ..Default::default()
     });
-    espera(&mut h, 12);
-    h.get_by_label("▶ Testar daqui").click();
     espera(&mut h, 13);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 14);
     let text = std::fs::read_to_string(proj.join("cenas/mundo.cena")).unwrap();
     assert!(
         text.contains("nn:jogador3d") && text.contains("sun_height = 15"),
@@ -4688,4 +4695,332 @@ fn tutorial_um_lago_avanca_sozinho_ate_o_fim() {
     h.get_by_label("Concluir").click();
     h.run_steps(3);
     assert!(h.state().tutorial.is_none());
+}
+
+// Botão direito e busca rápida (S43) ------------------------------------------
+
+/// Botão direito com o mouse parado em `p` (aperta e solta).
+fn clique_direito(h: &mut Harness<'_, StudioApp>, p: egui::Pos2) {
+    h.hover_at(p);
+    h.run();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: p,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.step();
+    }
+    h.run();
+}
+
+/// Arrasta com o botão direito (move a câmera, não abre o menu).
+fn arrastar_direito(h: &mut Harness<'_, StudioApp>, from: egui::Pos2, to: egui::Pos2) {
+    h.hover_at(from);
+    h.run();
+    h.event(egui::Event::PointerButton {
+        pos: from,
+        button: egui::PointerButton::Secondary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    h.step();
+    for i in 1..=6 {
+        let t = i as f32 / 6.0;
+        h.hover_at(from + (to - from) * t);
+        h.step();
+    }
+    h.event(egui::Event::PointerButton {
+        pos: to,
+        button: egui::PointerButton::Secondary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+}
+
+/// Passa o mouse num submenu (o nome dele vem com a setinha).
+fn submenu(h: &mut Harness<'_, StudioApp>, nome: &str) {
+    h.get_by(|n| n.label().is_some_and(|l| l.starts_with(nome) && l != nome))
+        .hover();
+    h.run_steps(3);
+}
+
+fn perto(a: f64, b: f64, tol: f64) -> bool {
+    (a - b).abs() <= tol
+}
+
+/// Cena 3D: o botão direito no chão cria ali; num objeto, o menu dele
+/// (duplicar, copiar e colar a posição); arrastar com ele só gira a câmera;
+/// F2 renomeia pela Hierarquia.
+#[test]
+fn botao_direito_na_cena_3d() {
+    let dir = temp("menu-3d");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    h.run();
+
+    // No chão: o menu de criar. A esfera nasce em pé onde foi o clique.
+    let alvo = glam::Vec3::new(3.0, 0.0, 2.0);
+    let pa = na_vista3d(&h, alvo);
+    clique_direito(&mut h, pa);
+    h.get_by_label("Criar aqui");
+    h.get_by_label("Chão");
+    tela(&mut h, "menu-3d-chao");
+    h.get_by_label("Esfera").click();
+    h.run();
+    assert!(h.query_by_label("Criar aqui").is_none(), "o menu fecha");
+    let esfera = objeto(&h, "Esfera").clone();
+    assert!(
+        perto(esfera.x, 3.0, 0.15) && perto(esfera.z, 2.0, 0.15) && perto(esfera.y, 0.5, 0.05),
+        "esfera em ({}, {}, {})",
+        esfera.x,
+        esfera.y,
+        esfera.z
+    );
+    assert_eq!(cena(&h).selection, vec![esfera.id]);
+    // O menu do chão (no fim) age no chão, e não na esfera selecionada.
+    let pchao = na_vista3d(&h, glam::Vec3::new(-2.0, 0.0, 3.0));
+    clique_direito(&mut h, pchao);
+    assert_eq!(
+        cena(&h).selection,
+        vec![esfera.id],
+        "o chão não é selecionado"
+    );
+    submenu(&mut h, "Chão");
+    h.get_by_label_contains("Excluir").click();
+    h.run();
+    assert!(cena(&h).data.objects.iter().all(|o| o.name != "Chão"));
+    objeto(&h, "Esfera");
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    objeto(&h, "Chão");
+
+    // No cubo: o menu dele, com o nome em cima.
+    let cubo = objeto(&h, "Cubo").clone();
+    let pc = na_vista3d(
+        &h,
+        glam::Vec3::new(cubo.x as f32, cubo.y as f32, cubo.z as f32),
+    );
+    clique_direito(&mut h, pc);
+    assert_eq!(
+        cena(&h).selection,
+        vec![cubo.id],
+        "o clique seleciona o cubo"
+    );
+    h.get_by_label_contains("Renomear");
+    h.get_by(|n| n.label().is_some_and(|l| l.starts_with("➕ Criar aqui")));
+    tela(&mut h, "menu-3d-objeto");
+    h.get_by_label_contains("Duplicar").click();
+    h.run();
+    let cubos = cena(&h)
+        .data
+        .objects
+        .iter()
+        .filter(|o| o.name.starts_with("Cubo"))
+        .count();
+    assert_eq!(cubos, 2, "duplicou");
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    // Copiar a posição do cubo e colar na esfera.
+    clique_direito(&mut h, pc);
+    h.get_by_label("Copiar posição").click();
+    h.run();
+    let pe = na_vista3d(
+        &h,
+        glam::Vec3::new(esfera.x as f32, esfera.y as f32, esfera.z as f32),
+    );
+    clique_direito(&mut h, pe);
+    h.get_by_label("Colar posição").click();
+    h.run();
+    let colada = objeto(&h, "Esfera").clone();
+    assert!(
+        perto(colada.x, cubo.x, 1e-3)
+            && perto(colada.y, cubo.y, 1e-3)
+            && perto(colada.z, cubo.z, 1e-3),
+        "esfera colada em ({}, {}, {})",
+        colada.x,
+        colada.y,
+        colada.z
+    );
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(objeto(&h, "Esfera").x, esfera.x);
+
+    // ➕ Criar aqui > Luz > Lâmpada, em cima do cubo: no alto.
+    clique_direito(&mut h, pc);
+    submenu(&mut h, "➕ Criar aqui");
+    submenu(&mut h, "Luz");
+    h.get_by_label("Lâmpada").click();
+    h.run();
+    let lampada = objeto(&h, "Lâmpada").clone();
+    assert!(lampada.y > 2.0, "a lâmpada fica no alto: y = {}", lampada.y);
+
+    // Arrastar com o botão direito gira a câmera e não abre o menu.
+    let antes = cena(&h).cam3;
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    arrastar_direito(&mut h, rect.center(), rect.center() + egui::vec2(80.0, 0.0));
+    assert!(h.query_by_label("Criar aqui").is_none());
+    assert!(h.query_by_label_contains("Renomear").is_none());
+    assert_ne!(cena(&h).cam3.yaw, antes.yaw, "a câmera girou");
+
+    // F2 com o mouse na vista: renomeia pela Hierarquia.
+    cena_mut(&mut h).selection = vec![cubo.id];
+    h.hover_at(rect.center());
+    h.run();
+    h.key_press(Key::F2);
+    h.run();
+    assert_eq!(
+        cena(&h).renaming.as_ref().map(|r| r.0),
+        Some(cubo.id),
+        "renomeando o cubo"
+    );
+    // O campo de renomear da Hierarquia está com o foco, pronto para digitar.
+    h.get_by(|n| {
+        n.role() == Role::TextInput && n.value().as_deref() == Some("Cubo") && n.is_focused()
+    });
+}
+
+/// Shift+A na vista 3D: a busca rápida cria onde o mouse está, acha com
+/// erro de digitação e lembra o último usado.
+#[test]
+fn busca_rapida_shift_a_na_cena_3d() {
+    let dir = temp("busca-rapida-3d");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    h.run();
+    let alvo = glam::Vec3::new(-3.0, 0.0, 1.0);
+    let p = na_vista3d(&h, alvo);
+    h.hover_at(p);
+    h.run();
+    atalho(&mut h, Modifiers::SHIFT, Key::A);
+    assert!(cena(&h).quick_add.is_some(), "a busca abriu");
+    tela(&mut h, "busca-rapida");
+    digitar(&mut h, "tocah");
+    h.get_by_label("Luz › Tocha");
+    h.key_press(Key::Enter);
+    h.run_steps(4);
+    assert!(cena(&h).quick_add.is_none(), "Enter cria e fecha");
+    let tocha = objeto(&h, "Tocha").clone();
+    assert!(
+        perto(tocha.x, -3.0, 0.15) && perto(tocha.z, 1.0, 0.15),
+        "tocha em ({}, {})",
+        tocha.x,
+        tocha.z
+    );
+    // De novo, sem digitar: o último usado vem primeiro.
+    h.hover_at(p);
+    h.run_steps(2);
+    h.key_press_modifiers(Modifiers::SHIFT, Key::A);
+    h.run_steps(3);
+    h.key_press(Key::Enter);
+    h.run_steps(4);
+    let tochas = cena(&h)
+        .data
+        .objects
+        .iter()
+        .filter(|o| o.name.starts_with("Tocha"))
+        .count();
+    assert_eq!(tochas, 2);
+    // Esc fecha sem criar.
+    h.hover_at(p);
+    h.run_steps(2);
+    h.key_press_modifiers(Modifiers::SHIFT, Key::A);
+    h.run_steps(3);
+    h.event(egui::Event::Text("cubo".into()));
+    h.run_steps(3);
+    h.key_press(Key::Escape);
+    h.run_steps(3);
+    assert!(cena(&h).quick_add.is_none());
+    let n = cena(&h).data.objects.len();
+    assert_eq!(n, 5, "câmera, chão, cubo e as duas tochas");
+}
+
+/// Cena 2D: o botão direito no vazio cria no ponto; arrastar com ele move a
+/// vista; num objeto, o menu dele. Na Hierarquia: o vazio cria, e o objeto
+/// tem ➕ Criar dentro. No Inspetor: o botão direito no componente restaura.
+#[test]
+fn botao_direito_na_cena_2d_na_hierarquia_e_no_inspetor() {
+    let dir = temp("menu-2d");
+    let proj = plataforma(&dir);
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena(&mut h, &proj);
+    let rect = h.get_by_label("Vista da cena").rect();
+
+    // No vazio: criar ali.
+    let p = rect.center() + egui::vec2(200.0, 120.0);
+    let (wx, wy) = cena(&h).camera.to_world(rect, p);
+    clique_direito(&mut h, p);
+    h.get_by_label("Criar aqui");
+    tela(&mut h, "menu-2d-vazio");
+    h.get_by_label("Círculo").click();
+    h.run();
+    let circulo = objeto(&h, "circulo").clone();
+    assert!(
+        perto(circulo.x, wx, 1.0) && perto(circulo.y, wy, 1.0),
+        "círculo em ({}, {}), clique em ({wx}, {wy})",
+        circulo.x,
+        circulo.y
+    );
+
+    // Arrastar com o direito move a vista, sem menu.
+    let antes = cena(&h).camera.x;
+    arrastar_direito(&mut h, p, p + egui::vec2(-100.0, 0.0));
+    assert!(h.query_by_label("Criar aqui").is_none());
+    assert_ne!(cena(&h).camera.x, antes, "a vista andou");
+
+    // No quadrado: o menu dele. Excluir tira, Ctrl+Z traz de volta.
+    let q = objeto(&h, "quadrado").clone();
+    let pq = cena(&h).camera.to_screen(rect, q.x, q.y);
+    clique_direito(&mut h, pq);
+    h.get_by_label_contains("Excluir").click();
+    h.run();
+    assert!(cena(&h).data.objects.iter().all(|o| o.name != "quadrado"));
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    objeto(&h, "quadrado");
+
+    // Hierarquia: o botão direito no vazio cria (no meio da vista).
+    let painel = nn_studio::tutorial::anchor_rect(&h.ctx, "hierarquia").expect("hierarquia");
+    clique_direito(&mut h, painel.left_bottom() + egui::vec2(40.0, -30.0));
+    h.get_by_label("Texto").click();
+    h.run();
+    objeto(&h, "texto");
+
+    // Hierarquia: ➕ Criar dentro do título.
+    h.get_by_label("titulo").click_secondary();
+    h.run();
+    submenu(&mut h, "➕ Criar dentro");
+    h.get_by_label("Retângulo").click();
+    h.run();
+    let titulo = objeto(&h, "titulo").clone();
+    assert_eq!(titulo.children.len(), 1);
+    assert_eq!(titulo.children[0].name, "retangulo");
+    assert_eq!(cena(&h).selection, vec![titulo.children[0].id]);
+
+    // Inspetor: botão direito no nome do componente > Restaurar o padrão.
+    let id = q.id;
+    {
+        let doc = cena_mut(&mut h);
+        doc.selection = vec![id];
+        let c = &mut doc.data.find_mut(id).unwrap().components[0];
+        c.set("color", nn_studio::scene_data::Prop::Str("#FF0000".into()));
+        c.set("shape", nn_studio::scene_data::Prop::Str("circle".into()));
+    }
+    h.run();
+    h.get_all_by_label("Forma")
+        .next()
+        .unwrap()
+        .click_secondary();
+    h.run();
+    h.get_by_label("↺ Restaurar o padrão").click();
+    h.run();
+    let c = objeto(&h, "quadrado").components[0].clone();
+    let padrao = nn_studio::scene_data::Component::new("shape");
+    assert_eq!(c.str("color"), padrao.str("color"), "a cor voltou");
+    assert_eq!(c.str("shape"), "circle", "a forma continua");
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(objeto(&h, "quadrado").components[0].str("color"), "#FF0000");
 }

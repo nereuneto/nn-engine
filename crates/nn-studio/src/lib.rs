@@ -9,6 +9,7 @@
 pub mod anim_file;
 pub mod app;
 pub mod behaviors;
+pub mod catalog;
 pub mod code;
 pub mod commands;
 pub mod complete;

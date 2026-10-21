@@ -2,6 +2,19 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### Botão direito e criar rápido (Sprint 43)
+
+- **Botão direito na cena** (2D e 3D): clicar e soltar, sem arrastar, abre um menu. No vazio, ele cria o objeto **onde você clicou**, e não mais no meio da vista. Em cima de um objeto, mostra o menu dele: Renomear, Duplicar, ⛶ Focar, **Copiar e Colar posição**, **➕ Criar dentro**, Criar filho vazio, 📦 Criar prefab, Excluir e **➕ Criar aqui**. Num chão (plano, terreno, mapa de tiles), o menu é de criar em cima. Arrastar com o botão direito continua movendo a vista (e, no 3D, voando); pintando tiles, ele continua pegando o tile.
+- **Busca rápida para criar (Shift+A):** com o mouse na cena, abre uma caixinha ali. Digite *luz*, *cubo*, *inimigo*, o nome de um prefab, de um modelo ou de uma imagem e aperte **Enter**: o objeto nasce onde o mouse estava. Acha sem acento, por outras palavras (*bloco* acha o Cubo; *lago*, a Água) e com um erro de digitação (*tocah* acha a Tocha). Os últimos que você usou vêm primeiro.
+- **Hierarquia:** o botão direito no espaço vazio cria um objeto, e o menu de um objeto é o mesmo da cena, com **➕ Criar dentro** (o objeto novo já nasce filho).
+- **Inspetor:** o botão direito no nome de um componente abre o menu dele (o mesmo do ☰), que agora também tem **↺ Restaurar o padrão**: os valores voltam ao começo, sem mudar o arquivo, a forma ou o tipo.
+- **F2 na cena** renomeia o objeto selecionado, na Hierarquia (que rola até ele).
+- **Os atalhos aparecem à direita** nos menus (F2, Ctrl+D, F, Del), e a lista de **Ajuda > Atalhos do teclado** tem os novos.
+- A **Lâmpada** e o **Holofote** do ➕ Objeto nascem no alto (2 m e 4 m acima do chão), e não mais no chão.
+- **Tutorial:** o **Seu primeiro mundo 3D** tem um passo novo, **Criar com o botão direito**.
+
 ## 0.4.0
 
 A versão dos **mundos 3D mais vivos**: **luzes** (tochas que tremulam, lâmpadas e holofotes) e coisas que **brilham** no escuro; **dia e noite**, com o sol e a lua cruzando o céu, estrelas e luzes que acendem sozinhas; **água** com ondas que reflete o céu; **vento** que balança árvores, grama e bandeiras; e o **halo** em volta do que brilha. Tudo no **NN Studio sem código**. O Vale 3D ganhou uma caverna escura, a ilha tem dia e noite, mar com ondas e uma bandeira na arena, e há três tutoriais guiados novos: **Uma caverna iluminada**, **Dia e noite** e **Um lago com vida**. Para começar: [Luzes e brilho](docs/studio.md#luzes-e-brilho), [Ambiente](docs/studio.md#ambiente) e [Água, vento e halo](docs/studio.md#água-vento-e-halo).

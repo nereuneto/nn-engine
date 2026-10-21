@@ -255,6 +255,39 @@ pub struct SceneDoc {
     pub show_grid3: bool,
     /// 3D: a névoa da cena na vista (desligue para ver a cena toda de longe).
     pub show_fog3: bool,
+    /// Enquadrar a seleção no próximo desenho (pedido do menu ⛶ Focar).
+    pub focus_request: bool,
+    /// Rolar a Hierarquia até este objeto no próximo desenho.
+    pub reveal: Option<u32>,
+    /// O menu do botão direito na vista: em cima de quem e onde.
+    view_menu: Option<ViewMenu>,
+    /// A busca rápida para criar (Shift+A), aberta.
+    pub quick_add: Option<crate::catalog::QuickAdd>,
+    /// 3D: a câmera voou (WASD) com o botão direito segurado: soltar o botão
+    /// não abre o menu.
+    fly_moved: bool,
+}
+
+/// Onde o botão direito foi clicado na vista.
+#[derive(Debug, Clone, Copy)]
+struct ViewMenu {
+    /// O objeto embaixo do mouse (`None`: o vazio).
+    target: Option<u32>,
+    /// O ponto no mundo 2D.
+    at2: (f64, f64),
+    /// O ponto no mundo 3D (no objeto, ou no chão).
+    at3: glam::Vec3,
+}
+
+/// A posição copiada no menu do botão direito (para colar em outro objeto).
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct CopiedPosition {
+    three_d: bool,
+    pos: [f64; 3],
+}
+
+fn copied_id() -> egui::Id {
+    egui::Id::new("posicao-copiada")
 }
 
 /// O que a aba pede ao espaço de trabalho.
@@ -268,6 +301,8 @@ pub enum SceneAction {
     Game(&'static str),
     /// Criar um mapa de tiles (abre a janela).
     NewMap,
+    /// Um pedido do menu do objeto (o mesmo da Hierarquia).
+    Object(crate::hierarchy::HierarchyAction),
 }
 
 /// O que a aba precisa do espaço de trabalho.
@@ -511,6 +546,125 @@ impl SceneDoc {
             grid3: 1.0,
             show_grid3: true,
             show_fog3: true,
+            focus_request: false,
+            reveal: None,
+            view_menu: None,
+            quick_add: None,
+            fly_moved: false,
+        }
+    }
+
+    /// Abre os pais do objeto na Hierarquia e rola até ele.
+    pub fn reveal(&mut self, id: u32) {
+        let mut cur = self.data.parent_of(id).flatten();
+        while let Some(p) = cur {
+            self.collapsed.remove(&p);
+            cur = self.data.parent_of(p).flatten();
+        }
+        self.reveal = Some(id);
+    }
+
+    /// Começa a renomear o objeto (na Hierarquia).
+    pub fn start_rename(&mut self, id: u32) {
+        if let Some(o) = self.data.find(id) {
+            self.renaming = Some((id, o.name.clone(), true));
+            self.reveal(id);
+        }
+    }
+
+    /// Onde o objeto está no mundo (no 2D e no HUD, z = 0).
+    fn world_position(&self, id: u32) -> Option<CopiedPosition> {
+        if self.data.three_d && !self.on_screen3(id) {
+            let p = self
+                .data
+                .world_matrix3(id)?
+                .transform_point3(glam::Vec3::ZERO);
+            let r = |v: f32| round2(f64::from(v));
+            return Some(CopiedPosition {
+                three_d: true,
+                pos: [r(p.x), r(p.y), r(p.z)],
+            });
+        }
+        let t = self.data.world_transform(id)?;
+        Some(CopiedPosition {
+            three_d: false,
+            pos: [t.x, t.y, 0.0],
+        })
+    }
+
+    /// Guarda a posição do objeto para colar em outro.
+    pub fn copy_position(&self, ctx: &egui::Context, id: u32) {
+        if let Some(p) = self.world_position(id) {
+            ctx.data_mut(|d| d.insert_temp(copied_id(), p));
+        }
+    }
+
+    /// Dá para colar a posição copiada no objeto? (Do 3D para o 3D, do 2D
+    /// para o 2D.)
+    pub fn can_paste_position(&self, ctx: &egui::Context, id: u32) -> bool {
+        let copied: Option<CopiedPosition> = ctx.data(|d| d.get_temp(copied_id()));
+        match (copied, self.world_position(id)) {
+            (Some(c), Some(p)) => c.three_d == p.three_d,
+            _ => false,
+        }
+    }
+
+    /// Põe a seleção na posição copiada.
+    pub fn paste_position(&mut self, ctx: &egui::Context) {
+        let Some(c) = ctx.data(|d| d.get_temp::<CopiedPosition>(copied_id())) else {
+            return;
+        };
+        let ids: Vec<u32> = self
+            .selection_roots()
+            .into_iter()
+            .filter(|id| {
+                self.world_position(*id)
+                    .is_some_and(|p| p.three_d == c.three_d)
+            })
+            .collect();
+        if ids.is_empty() {
+            return;
+        }
+        self.record(None);
+        for id in ids {
+            if c.three_d {
+                if let Some(m0) = self.data.world_matrix3(id) {
+                    let p0 = m0.transform_point3(glam::Vec3::ZERO);
+                    let to = glam::Vec3::new(c.pos[0] as f32, c.pos[1] as f32, c.pos[2] as f32);
+                    self.data
+                        .set_world_matrix3(id, glam::Mat4::from_translation(to - p0) * m0);
+                }
+            } else {
+                self.set_world_position(id, c.pos[0], c.pos[1]);
+            }
+        }
+    }
+
+    /// Cria um objeto dentro de outro (na posição dele, mais o que o objeto
+    /// já traz) e seleciona.
+    pub fn add_child(&mut self, parent: u32, mut o: Object) -> Option<u32> {
+        self.data.find(parent)?;
+        self.record(None);
+        let id = self.data.next_id();
+        let mut next = id;
+        renumber(&mut o, &mut next);
+        let n = self
+            .data
+            .find(parent)
+            .map(|p| p.children.len())
+            .unwrap_or(0);
+        self.data.insert(Some(parent), n, o);
+        self.collapsed.remove(&parent);
+        self.selection = vec![id];
+        Some(id)
+    }
+
+    /// Duplica a seleção (no 2D um pouco ao lado; no 3D um passo da grade).
+    pub fn duplicate_any(&mut self) {
+        if self.data.three_d {
+            self.duplicate_selection3();
+        } else {
+            self.duplicate_selection();
         }
     }
 
@@ -948,6 +1102,9 @@ impl SceneDoc {
             self.framed = true;
             self.frame_selection(rect, env.root, env.sizes);
         }
+        if std::mem::take(&mut self.focus_request) {
+            self.frame_selection(rect, env.root, env.sizes);
+        }
         let painter = ui.painter_at(rect);
 
         // A cena, pelo renderer da engine.
@@ -997,6 +1154,25 @@ impl SceneDoc {
         } else {
             self.handle_input(ui, &response, rect, env, &mut actions);
             self.draw_overlays(&painter, rect, env);
+            self.view_menu2(&response, rect, env, &mut actions);
+        }
+        if let Some(mut q) = self.quick_add.take() {
+            use crate::catalog::{QuickResult, catalog2, quick_add_ui};
+            match quick_add_ui(ui.ctx(), &mut q, &catalog2()) {
+                QuickResult::Open => self.quick_add = Some(q),
+                QuickResult::Close => {}
+                QuickResult::Pick(p) => {
+                    let snap = |v: f64| {
+                        if self.snap {
+                            (v / self.grid).round() * self.grid
+                        } else {
+                            v
+                        }
+                    };
+                    let at = (snap(q.at[0]), snap(q.at[1]));
+                    self.place_picked(env, p, Some(at), &mut actions);
+                }
+            }
         }
 
         // Arquivo solto em cima da cena: vira objeto.
@@ -1163,19 +1339,14 @@ impl SceneDoc {
                 ui.separator();
             }
             let menu = ui.menu_button("➕ Objeto", |ui| {
-                if let Some(o) = add_object_menu(ui) {
-                    let (x, y) = self.view_center();
-                    self.add_prepared(o, x, y);
-                    ui.close();
-                }
-                let r = ui.button("Mapa de tiles...").on_hover_text("Um mapa para pintar com tiles: chão, paredes, plataformas");
-                crate::tutorial::anchor(ui.ctx(), "cena.objeto:mapa", r.rect);
-                if r.clicked() {
-                    actions.push(SceneAction::NewMap);
-                    ui.close();
+                if let Some(p) = add_object_menu(ui) {
+                    self.place_picked(env, p, None, actions);
                 }
             });
             crate::tutorial::anchor(ui.ctx(), "cena.objeto", menu.response.rect);
+            menu.response.on_hover_text(
+                "Criar um objeto. Com o mouse na cena: o botão direito cria onde você clicar, e Shift+A abre a busca.",
+            );
             // Ver o HUD em telas de outras proporções. (A caixa de escolha
             // não pula sozinha para a linha de baixo: sem espaço, ela ficaria
             // cortada na beirada.)
@@ -1583,6 +1754,150 @@ impl SceneDoc {
         });
     }
 
+    /// Cria o que foi escolhido num menu ou na busca rápida, em `at` (ou
+    /// no meio da vista).
+    fn place_picked(
+        &mut self,
+        env: &mut SceneEnv,
+        picked: crate::catalog::Picked,
+        at: Option<(f64, f64)>,
+        actions: &mut Vec<SceneAction>,
+    ) -> Option<u32> {
+        use crate::catalog::Picked;
+        let (x, y) = at.unwrap_or_else(|| self.view_center());
+        match picked {
+            Picked::Object(o) => Some(self.add_prepared(o, x, y)),
+            Picked::File(rel) => self.drop_file(env, &rel, x, y),
+            Picked::NewMap => {
+                actions.push(SceneAction::NewMap);
+                None
+            }
+        }
+    }
+
+    /// O menu do botão direito na vista 2D: clicar e soltar abre (arrastar
+    /// continua movendo a vista).
+    fn view_menu2(
+        &mut self,
+        response: &egui::Response,
+        rect: Rect,
+        env: &mut SceneEnv,
+        actions: &mut Vec<SceneAction>,
+    ) {
+        let open = if response.secondary_clicked() {
+            let p = response.interact_pointer_pos().unwrap_or(rect.center());
+            Some(ViewMenu {
+                target: self.hit(env, rect, p),
+                at2: self.camera.to_world(rect, p),
+                at3: glam::Vec3::ZERO,
+            })
+        } else {
+            None
+        };
+        self.view_menu(response, open, env, actions);
+    }
+
+    /// Um chão (plano, terreno, mapa de tiles): o botão direito nele é
+    /// para criar em cima.
+    fn is_ground(&self, id: u32) -> bool {
+        self.data.find(id).is_some_and(|o| {
+            o.component("terrain").is_some()
+                || o.component("map").is_some()
+                || o.component("shape3d")
+                    .is_some_and(|c| c.str("shape") == "plane")
+        })
+    }
+
+    /// O menu do botão direito na vista (2D e 3D). `open`: o clique que abre
+    /// (em cima de quem e onde). Em cima de um objeto, o menu dele e Criar
+    /// aqui; no vazio ou num chão, o que dá para criar ali.
+    fn view_menu(
+        &mut self,
+        response: &egui::Response,
+        open: Option<ViewMenu>,
+        env: &mut SceneEnv,
+        actions: &mut Vec<SceneAction>,
+    ) {
+        let command = if let Some(m) = open {
+            if let Some(id) = m.target
+                && !self.is_ground(id)
+                && !self.selection.contains(&id)
+            {
+                self.selection = vec![id];
+            }
+            self.view_menu = Some(m);
+            Some(egui::containers::SetOpenCommand::Bool(true))
+        } else if response.clicked() {
+            Some(egui::containers::SetOpenCommand::Bool(false))
+        } else {
+            None
+        };
+        let three_d = self.data.three_d;
+        let add = |ui: &mut egui::Ui| {
+            if three_d {
+                scene3d::add_menu3(ui)
+            } else {
+                add_object_menu(ui)
+            }
+        };
+        let mut picked = None;
+        let mut out = Vec::new();
+        let shown = egui::Popup::context_menu(response)
+            .open_memory(command)
+            .show(|ui| {
+                let Some(m) = self.view_menu else {
+                    ui.close();
+                    return;
+                };
+                ui.set_min_width(170.0);
+                let target = m.target.and_then(|id| {
+                    let name = self.data.find(id)?.name.clone();
+                    Some((id, name, self.is_ground(id)))
+                });
+                match target {
+                    Some((id, name, false)) => {
+                        ui.label(egui::RichText::new(name).strong());
+                        ui.separator();
+                        crate::hierarchy::object_menu(ui, self, id, &mut out);
+                        ui.separator();
+                        let r = ui.menu_button("➕ Criar aqui", |ui| picked = add(ui));
+                        crate::tutorial::anchor(ui.ctx(), "cena.menu.criar", r.response.rect);
+                    }
+                    Some((id, name, true)) => {
+                        ui.weak("Criar aqui");
+                        picked = add(ui);
+                        ui.separator();
+                        ui.menu_button(name, |ui| {
+                            crate::hierarchy::object_menu(ui, self, id, &mut out);
+                        });
+                    }
+                    None => {
+                        ui.weak("Criar aqui");
+                        picked = add(ui);
+                    }
+                }
+            });
+        if shown.is_none() {
+            self.view_menu = None;
+        }
+        if let (Some(p), Some(m)) = (picked, self.view_menu) {
+            if three_d {
+                self.place_picked3(env, p, Some(m.at3), actions);
+            } else {
+                let snap = |v: f64| {
+                    if self.snap {
+                        (v / self.grid).round() * self.grid
+                    } else {
+                        v
+                    }
+                };
+                let at = (snap(m.at2.0), snap(m.at2.1));
+                self.place_picked(env, p, Some(at), actions);
+            }
+        }
+        actions.extend(out.into_iter().map(SceneAction::Object));
+    }
+
     fn handle_input(
         &mut self,
         ui: &mut egui::Ui,
@@ -1618,7 +1933,19 @@ impl SceneDoc {
                 );
             });
         }
-        if response.hovered() || response.has_focus() {
+        // Shift+A: a busca rápida para criar, onde o mouse está.
+        if response.hovered()
+            && !ui.ctx().text_edit_focused()
+            && let Some(p) = pointer
+            && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::A))
+        {
+            let (x, y) = self.camera.to_world(rect, p);
+            let files = crate::catalog::project_files(env.root, &["prefab", "png", "jpg", "jpeg"]);
+            let mut q = crate::catalog::QuickAdd::new(p, files, "2d");
+            q.at = [x, y, 0.0];
+            self.quick_add = Some(q);
+        }
+        if self.quick_add.is_none() && (response.hovered() || response.has_focus()) {
             self.keyboard(ui, rect, env, actions);
         }
 
@@ -2254,6 +2581,14 @@ impl SceneDoc {
         if pressed(ui, Modifiers::COMMAND, Key::D) {
             self.duplicate_selection();
         }
+        if pressed(ui, Modifiers::NONE, Key::F2)
+            && let Some(&id) = self.selection.last()
+        {
+            self.start_rename(id);
+            actions.push(SceneAction::Object(
+                crate::hierarchy::HierarchyAction::ShowHierarchy,
+            ));
+        }
         if pressed(ui, Modifiers::NONE, Key::Escape) {
             self.selection.clear();
         }
@@ -2282,60 +2617,8 @@ impl SceneDoc {
 
 /// Itens do menu "Adicionar objeto": devolve o objeto pronto (com id 0;
 /// [`SceneDoc::add_prepared`] numera ele e os filhos).
-pub fn add_object_menu(ui: &mut egui::Ui) -> Option<Object> {
-    let items: [(&str, &str, &[&str]); 7] = [
-        ("Vazio", "objeto", &[]),
-        ("Imagem (sprite)", "sprite", &["sprite"]),
-        ("Retângulo", "retangulo", &["shape"]),
-        ("Círculo", "circulo", &["shape"]),
-        ("Texto", "texto", &["text"]),
-        ("Câmera", "camera", &["camera"]),
-        ("Som", "som", &["sound"]),
-    ];
-    let mut out = None;
-    for (label, name, comps) in items {
-        if ui.button(label).clicked() {
-            let mut o = Object::new(0, name);
-            o.components = comps.iter().map(|k| Component::new(k)).collect();
-            if label == "Círculo"
-                && let Some(c) = o.components.first_mut()
-            {
-                c.set("shape", Prop::Str("circle".into()));
-            }
-            out = Some(o);
-        }
-    }
-    let r = ui.menu_button("Partículas", |ui| {
-        let r = ui
-            .button("Vazias")
-            .on_hover_text("Um emissor para ajustar do zero no Inspetor");
-        if r.clicked() {
-            let mut o = Object::new(0, "particulas");
-            o.components.push(Component::new("particles"));
-            out = Some(o);
-            ui.close();
-        }
-        ui.separator();
-        for p in crate::particle_presets::PRESETS {
-            let r = ui.button(p.label).on_hover_text(p.tip);
-            crate::tutorial::anchor(ui.ctx(), &format!("cena.objeto:fx:{}", p.id), r.rect);
-            if r.clicked() {
-                let mut o = Object::new(0, p.id);
-                o.components.push(p.component());
-                out = Some(o);
-                ui.close();
-            }
-        }
-    });
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:particulas", r.response.rect);
-    let r = ui.menu_button("Interface", |ui| {
-        if let Some(o) = interface_menu(ui) {
-            out = Some(o);
-            ui.close();
-        }
-    });
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:interface", r.response.rect);
-    out
+pub fn add_object_menu(ui: &mut egui::Ui) -> Option<crate::catalog::Picked> {
+    crate::catalog::menu(ui, &crate::catalog::catalog2(), "2d")
 }
 
 /// O botão Caminhos (com o jogo aberto): mostra no jogo por onde os
@@ -2353,54 +2636,6 @@ pub(crate) fn paths_button(ui: &mut egui::Ui, env: &SceneEnv, actions: &mut Vec<
             "show_paths"
         }));
     }
-}
-
-/// O submenu Interface: menus e HUD.
-fn interface_menu(ui: &mut egui::Ui) -> Option<Object> {
-    let items: [(&str, &str, &str, &str); 8] = [
-        ("Painel", "painel", "panel", "Fundo de menu ou de HUD"),
-        (
-            "Botão",
-            "botao",
-            "button",
-            "Aperta com mouse, teclado ou controle",
-        ),
-        ("Barra", "barra", "bar", "Vida, energia, tempo"),
-        ("Ícones", "icones", "icons", "Corações, vidas, moedas"),
-        ("Deslizador", "deslizador", "slider", "Volume, dificuldade"),
-        ("Caixa de marcar", "caixa", "checkbox", "Liga e desliga"),
-        (
-            "Campo de texto",
-            "campo",
-            "textfield",
-            "Para digitar um nome",
-        ),
-        (
-            "Grupo (arrumar filhos)",
-            "grupo",
-            "layout",
-            "Põe os filhos em coluna, linha ou grade",
-        ),
-    ];
-    let mut out = None;
-    for (label, name, kind, tip) in items {
-        let r = ui.button(label).on_hover_text(tip);
-        crate::tutorial::anchor(ui.ctx(), &format!("cena.objeto:{kind}"), r.rect);
-        if r.clicked() {
-            let mut o = Object::new(0, name);
-            o.components.push(Component::new(kind));
-            out = Some(o);
-        }
-    }
-    ui.separator();
-    let r = ui
-        .button("Menu com botões")
-        .on_hover_text("Um painel com um grupo de 3 botões: Jogar, Opções e Sair");
-    crate::tutorial::anchor(ui.ctx(), "cena.objeto:menu", r.rect);
-    if r.clicked() {
-        out = Some(menu_with_buttons());
-    }
-    out
 }
 
 /// Um menu pronto: painel que arruma 3 botões em coluna.
@@ -2470,6 +2705,15 @@ fn normalize_deg(a: f64) -> f64 {
         a += 360.0;
     }
     a
+}
+
+/// Dá ids novos ao objeto e aos filhos, a partir de `next`.
+fn renumber(o: &mut Object, next: &mut u32) {
+    o.id = *next;
+    *next += 1;
+    for c in &mut o.children {
+        renumber(c, next);
+    }
 }
 
 fn round2(v: f64) -> f64 {

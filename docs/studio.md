@@ -238,6 +238,19 @@ retângulo "tela do jogo" mostra o que cabe na janela (o tamanho do
   imagem, um retângulo, um círculo, um texto, uma câmera, um som,
   [partículas](#partículas) (vazias ou um efeito pronto) ou um componente de
   [interface](#interface-menus-e-hud) no meio da vista.
+- **Botão direito** (clicar e soltar, sem arrastar): no vazio, o mesmo menu do
+  ➕ Objeto, e o objeto nasce **onde você clicou**. Em cima de um objeto, o
+  menu dele: Renomear, Duplicar, ⛶ Focar, Copiar e Colar posição, ➕ Criar
+  dentro, Criar filho vazio, 📦 Criar prefab, Excluir e ➕ Criar aqui. Num
+  chão (um mapa de tiles, um plano, um terreno) o menu é de criar em cima,
+  com o menu do chão no fim. Arrastar com o botão direito continua movendo a
+  vista.
+- **Shift+A** com o mouse na cena abre a **busca rápida**: digite o que quer
+  (*luz*, *cubo*, *inimigo*, o nome de um prefab ou de uma imagem) e aperte
+  **Enter**; o objeto nasce onde o mouse estava. Acha sem acento e com um
+  erro de digitação (*tocah* acha a Tocha), e os últimos que você usou vêm
+  primeiro. **Esc** fecha.
+- **F2** renomeia o selecionado (na Hierarquia).
 - **Arrastar arquivos** do painel Arquivos para a cena: uma imagem vira um
   sprite, um mapa `.tmj` vira um mapa, um som vira um objeto de som e um
   `.prefab` vira uma instância do prefab.
@@ -249,9 +262,11 @@ A lista dos objetos da cena, na ordem de desenho. Clique para selecionar,
 clique duas vezes (ou **F2**) para renomear. O 👁 esconde e o cadeado trava (um
 objeto travado não é selecionado clicando na cena). **Arraste** um objeto para
 mudar a ordem ou solte em cima de outro para virar filho dele: o filho anda,
-gira e escala junto com o pai. O botão direito tem Duplicar, Criar filho
-vazio, Tirar do pai, **📦 Criar prefab** e Excluir; o campo 🔍 filtra pelo
-nome. Instâncias de prefab aparecem em azul.
+gira e escala junto com o pai. O botão direito num objeto tem o mesmo menu
+da cena (Renomear, Duplicar, ⛶ Focar, Copiar e Colar posição, **➕ Criar
+dentro**, Criar filho vazio, Tirar do pai, **📦 Criar prefab** e Excluir); no
+espaço vazio da lista, ele cria um objeto novo. O campo 🔍 filtra pelo nome.
+Instâncias de prefab aparecem em azul.
 
 ### Inspetor
 
@@ -274,8 +289,9 @@ desenhada por cima) e os **componentes**:
 | Interface | Painel, Botão, Barra, Ícones, Deslizador, Caixa de marcar, Campo de texto e Grupo: menus e HUD ([interface](#interface-menus-e-hud)). |
 | Comportamento | Um comportamento pronto ou um script seu (veja abaixo). |
 
-**➕ Adicionar componente** acrescenta outro; o menu ☰ de cada um sobe, desce
-ou remove. Campos de arquivo aceitam arrastar do painel Arquivos. No modo
+**➕ Adicionar componente** acrescenta outro; o menu ☰ de cada um (ou o botão
+direito no nome dele) sobe, desce, **↺ restaura o padrão** (os valores do
+começo; o arquivo, a forma e o tipo continuam) ou remove. Campos de arquivo aceitam arrastar do painel Arquivos. No modo
 Simples, opções avançadas ficam escondidas.
 
 Imagem, texto e forma têm a opção **HUD**: o objeto fica **fixo na tela**
@@ -605,10 +621,11 @@ uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
    mova o mouse para virar a cabeça; com o botão segurado, **W A S D** andam
    e **Q / E** descem e sobem. A rodinha, enquanto voa, muda a velocidade
    (aparece em "voo 8 m/s"). Perdeu-se? Aperte **F** (⛶ Enquadrar).
-3. **Ponha coisas no mundo:** em **➕ Objeto**, escolha **Esfera**. Ela
-   aparece onde a vista aponta, já selecionada. Ou arraste um modelo `.glb`
-   do painel Arquivos para a vista: ele cai em cima do que estiver embaixo
-   do mouse (o chão, outro objeto).
+3. **Ponha coisas no mundo:** clique com o **botão direito** no chão (sem
+   arrastar) e escolha **Esfera**: ela aparece ali, em pé, já selecionada.
+   Também dá pelo **➕ Objeto** (onde a vista aponta) ou pela busca rápida,
+   **Shift+A**. Ou arraste um modelo `.glb` do painel Arquivos para a vista:
+   ele cai em cima do que estiver embaixo do mouse (o chão, outro objeto).
 4. **Arrume:** com **W** (Mover), arraste a seta vermelha, verde ou azul para
    mover só em X, Y (altura) ou Z, ou o quadradinho do meio para deslizar no
    chão. **E** gira (os anéis) e **R** escala (os cubinhos; o do meio escala
@@ -638,6 +655,8 @@ uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
 | Girar em volta do selecionado | **Alt** + arrastar |
 | Arrastar a vista | Botão do meio |
 | Enquadrar o selecionado (ou tudo) | **F** ou ⛶ Enquadrar |
+| Menu do objeto, ou criar onde clicou | Botão direito (clicar e soltar) |
+| Buscar o que criar, onde o mouse está | **Shift+A** |
 
 ### Objetos 3D
 
@@ -1346,6 +1365,9 @@ mensagem diz onde está o erro.
 | Ctrl+W | Fechar aba |
 | Ctrl+= / Ctrl+- / Ctrl+0 | Aumentar / diminuir / tamanho normal da interface |
 | F2 / Del (no painel) | Renomear / mandar para a lixeira |
+| F2 (na cena) | Renomear o objeto selecionado |
+| Shift+A (na cena) | Busca rápida para criar onde o mouse está |
+| Botão direito (na cena, na Hierarquia, no nome de um componente) | Menu do que está ali |
 | W / E / R (na cena) | Mover / girar / escalar |
 | F / Esc (na cena) | Enquadrar / limpar a seleção |
 | Setas, Shift+setas (na cena) | Mover 1 / 10 unidades |
@@ -1437,7 +1459,17 @@ reflete o céu, vento que balança árvores e grama e o halo em volta do que
 brilha. Antes dela, a v0.3 trouxe o combate (caminhos, espada, tiros, ondas
 e chefes) e a v0.2, o 3D. Está tudo no [CHANGELOG](../CHANGELOG.md).
 
-Ainda não tem, e são ideias para as próximas versões:
+Os próximos passos já escolhidos:
+
+- **v0.5, um NN Studio mais gostoso de usar:** o botão direito e a busca
+  rápida (Shift+A) já entraram; depois vêm menos trabalho repetido (copiar e
+  colar componentes, editar vários objetos de uma vez, favoritos) e um
+  Studio mais amigável (avisos com Desfazer, painéis vazios que ensinam);
+- **v0.6, modelar e animar dentro do NN Studio:** um modelador de peças
+  low-poly coloridas, com espelho, variações e peças que se encaixam, e um
+  animador com esqueletos e animações prontas para ajustar.
+
+Ainda não tem, e são ideias para depois:
 
 - sombras das luzes (hoje, só o sol faz sombra);
 - exportar para a web e para outros sistemas além de Windows e Linux;
