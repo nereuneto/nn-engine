@@ -632,6 +632,9 @@ pub struct Schema {
     pub environment: Vec<(String, Prop)>,
     /// Formas do componente shape3d (`M.SHAPES3D`).
     pub shapes3d: Vec<String>,
+    /// Ambientes prontos (`M.ENVIRONMENT_PRESETS`): id, nome e o ambiente
+    /// inteiro (o padrão com os campos dele por cima).
+    pub environment_presets: Vec<(String, String, Vec<(String, Prop)>)>,
 }
 
 /// Chaves do tema da interface, na ordem do formulário.
@@ -694,6 +697,7 @@ pub fn schema() -> &'static Schema {
             "model",
             "anim3d",
             "shape3d",
+            "light3d",
             "camera3d",
             "body3d",
             "terrain",
@@ -715,7 +719,7 @@ pub fn schema() -> &'static Schema {
             })
             .collect();
         let env_list: Table = module.get("ENVIRONMENT").expect("ENVIRONMENT");
-        let environment = env_list
+        let environment: Vec<(String, Prop)> = env_list
             .sequence_values::<Table>()
             .map(|f| {
                 let f = f.expect("campo do ambiente");
@@ -729,12 +733,37 @@ pub fn schema() -> &'static Schema {
             .sequence_values::<String>()
             .map(|s| s.expect("forma"))
             .collect();
+        let presets: Table = module
+            .get("ENVIRONMENT_PRESETS")
+            .expect("ENVIRONMENT_PRESETS");
+        let environment_presets = presets
+            .sequence_values::<Table>()
+            .map(|p| {
+                let p = p.expect("ambiente pronto");
+                let id: String = p.get(1).expect("id");
+                let name: String = p.get(2).expect("nome");
+                let set: Table = p.get(3).expect("campos");
+                let full = environment
+                    .iter()
+                    .map(|(k, v): &(String, Prop)| {
+                        let v = set
+                            .get::<Value>(k.as_str())
+                            .ok()
+                            .and_then(|x| to_prop(&x))
+                            .unwrap_or_else(|| v.clone());
+                        (k.clone(), v)
+                    })
+                    .collect();
+                (id, name, full)
+            })
+            .collect();
         Schema {
             components,
             order,
             theme,
             environment,
             shapes3d,
+            environment_presets,
         }
     })
 }
@@ -1872,7 +1901,7 @@ mod tests {
     fn esquema_vem_da_engine() {
         let s = schema();
         assert!(s.order.contains(&"sprite".to_string()));
-        assert_eq!(s.order.len(), 24);
+        assert_eq!(s.order.len(), 25);
         assert_eq!(
             s.default_of("text3d", "facing"),
             Some(&Prop::Str("camera".into()))

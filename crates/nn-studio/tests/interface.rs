@@ -4147,3 +4147,90 @@ fn cena_3d_com_hud_por_cima() {
         rect.center()
     );
 }
+
+/// Luzes numa cena 3D: ➕ Objeto > Luz (Tocha e Holofote), o ambiente pronto
+/// Caverna, o Inspetor da Luz (a abertura só no holofote) e, na vista, o chão
+/// aceso em volta da tocha no escuro.
+#[test]
+fn cena_3d_luzes_e_ambiente_caverna() {
+    use nn_studio::scene_data::Prop;
+    let gpu = std::env::var_os("NN_REQUIRE_GPU").is_some();
+    let dir = temp("cena-3d-luzes");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), gpu);
+    com_cena3d(&mut h, &proj);
+    let luz = |h: &mut Harness<'_, StudioApp>, item: &str| {
+        h.get_by_label("➕ Objeto").click();
+        h.run_steps(2);
+        h.get_by(|n| {
+            n.label()
+                .is_some_and(|l| l.starts_with("Luz") && l != "Luz")
+        })
+        .hover();
+        h.run_steps(3);
+        h.get_by(|n| n.role() == Role::Button && n.label().as_deref() == Some(item))
+            .click();
+        h.run_steps(4);
+    };
+    luz(&mut h, "Tocha");
+    let tocha = objeto(&h, "Tocha").clone();
+    // A tocha: o cabo e a chama (a luz tremulando e o fogo), com a brasa
+    // que brilha dentro.
+    let chama = tocha.children.iter().find(|c| c.name == "Chama").unwrap();
+    let l = chama.component("light3d").unwrap();
+    assert!(l.num("flicker") > 0.0);
+    assert!(chama.component("particles").is_some());
+    assert_eq!(
+        chama.children[0].component("shape3d").unwrap().num("glow"),
+        1.0
+    );
+    assert!(tocha.children.iter().any(|c| c.name == "Cabo"));
+    // O Inspetor da chama: uma lâmpada, sem a abertura do holofote.
+    cena_mut(&mut h).selection = vec![chama.id];
+    h.run_steps(3);
+    h.get_by_label("Tremular");
+    h.get_by_label("Alcance");
+    assert!(h.query_by_label("Abertura do cone").is_none());
+    luz(&mut h, "Holofote");
+    let holofote = objeto(&h, "Holofote").clone();
+    assert_eq!(holofote.component("light3d").unwrap().str("kind"), "spot");
+    assert_eq!(cena_mut(&mut h).selection, vec![holofote.id]);
+    h.get_by_label("Abertura do cone");
+    // O ambiente pronto Caverna: sem céu e sem sol, com o fundo escuro.
+    cena_mut(&mut h).selection.clear();
+    h.run_steps(3);
+    h.get_by_label("Caverna").click();
+    h.run_steps(3);
+    {
+        let doc = cena_mut(&mut h);
+        assert_eq!(doc.data.env("sky"), Prop::Bool(false));
+        assert_eq!(doc.data.env("sun_color").str(), "#000000");
+        assert_eq!(doc.data.background, "#0A0A0E");
+        // Só a tocha, no meio da vista.
+        doc.data.objects.retain(|o| o.name != "Holofote");
+        doc.cam3
+            .look_at(glam::Vec3::new(0.0, 6.0, 6.0), glam::Vec3::ZERO);
+        doc.cam3_set = true;
+    }
+    h.run_steps(4);
+    tela(&mut h, "cena-3d-luzes");
+    if !gpu {
+        return;
+    }
+    // Na vista: o chão perto da tocha aceso (laranja); longe, escuro.
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let img = h.render().expect("render");
+    let ppp = img.width() as f32 / 1280.0;
+    let px = |x: f32, y: f32| {
+        let p = img.get_pixel((x * ppp) as u32, (y * ppp) as u32);
+        (p[0] as u32, p[1] as u32, p[2] as u32)
+    };
+    let c = rect.center();
+    let perto = px(c.x + 30.0, c.y + 25.0);
+    let canto = px(rect.left() + 6.0, rect.bottom() - 30.0);
+    assert!(
+        perto.0 > 60 && perto.0 > perto.2 + 20,
+        "perto da tocha: {perto:?}"
+    );
+    assert!(canto.0 + canto.1 + canto.2 < 90, "longe, escuro: {canto:?}");
+}

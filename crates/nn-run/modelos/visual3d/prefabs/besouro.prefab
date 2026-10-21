@@ -7,7 +7,7 @@ return {
     x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
     visible = true, layer = 0,
     components = {
-      { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true },
+      { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
       { type = "behavior", script = "nn:inimigo3d", andar = "parado", anim_andar = "andar", anim_parado = "parado", animar = true, contornar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 20, x = 0, z = 0 },
       { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
       { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/acerto.wav" },

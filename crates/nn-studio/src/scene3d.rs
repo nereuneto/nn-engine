@@ -1475,6 +1475,41 @@ impl SceneDoc {
             }
         }
 
+        // As luzes escolhidas: até onde chegam (três círculos numa lâmpada;
+        // o cone num holofote).
+        for &id in &self.selection {
+            let (Some(o), Some(m)) = (self.data.find(id), self.matrix3(id)) else {
+                continue;
+            };
+            let Some(c) = o.component("light3d") else {
+                continue;
+            };
+            let stroke = Stroke::new(1.5, scene_render::egui_color(c.str("color")));
+            let p = m.transform_point3(Vec3::ZERO);
+            let range = c.num("range") as f32;
+            let line = |pts: Vec<Vec3>| {
+                let pts: Vec<Pos2> = pts
+                    .into_iter()
+                    .filter_map(|w| to_screen(&self.cam3, rect, w))
+                    .collect();
+                painter.add(egui::Shape::line(pts, stroke));
+            };
+            if c.str("kind") == "spot" {
+                let dir = m.transform_vector3(Vec3::NEG_Z).normalize_or(Vec3::NEG_Y);
+                let a = (c.num("angle") as f32).clamp(1.0, 89.0).to_radians();
+                let end = p + dir * range * a.cos();
+                let circle = ring(end, dir, range * a.sin());
+                for k in 0..4 {
+                    line(vec![p, circle[k * 12]]);
+                }
+                line(circle);
+            } else {
+                for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+                    line(ring(p, axis, range));
+                }
+            }
+        }
+
         // O círculo do pincel do terreno.
         if self.terrain_tool.active
             && let Some(hit) = self.terrain_tool.cursor
@@ -1660,6 +1695,13 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
     {
         out = Some(Object::new(0, "Grupo"));
     }
+    let r = ui.menu_button("Luz", |ui| {
+        if let Some(o) = light_menu(ui) {
+            out = Some(o);
+            ui.close();
+        }
+    });
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:luz", r.response.rect);
     ui.separator();
     if ui
         .button("Terreno")
@@ -1833,6 +1875,105 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
         out = Some(o);
     }
     out
+}
+
+/// O submenu ➕ Objeto > Luz: lâmpada, tocha (com a chama) e holofote.
+fn light_menu(ui: &mut egui::Ui) -> Option<Object> {
+    let light = |set: &[(&str, Prop)]| {
+        let mut c = Component::new("light3d");
+        for (k, v) in set {
+            c.set(k, v.clone());
+        }
+        c
+    };
+    let mut out = None;
+    let r = ui
+        .button("Lâmpada")
+        .on_hover_text("Ilumina para todos os lados, até o Alcance.");
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:luz:lampada", r.rect);
+    if r.clicked() {
+        let mut o = Object::new(0, "Lâmpada");
+        o.y = 2.0;
+        o.components.push(light(&[]));
+        out = Some(o);
+    }
+    let r = ui.button("Tocha").on_hover_text(
+        "Um cabo com a chama em cima: a luz tremula como fogo, com partículas de fogo.",
+    );
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:luz:tocha", r.rect);
+    if r.clicked() {
+        out = Some(torch());
+    }
+    let r = ui.button("Holofote").on_hover_text(
+        "Ilumina num cone, para a frente do objeto (a seta azul). Gire para apontar.",
+    );
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:luz:holofote", r.rect);
+    if r.clicked() {
+        let mut o = Object::new(0, "Holofote");
+        o.y = 4.0;
+        o.rx = -70.0;
+        o.components.push(light(&[
+            ("kind", Prop::Str("spot".into())),
+            ("color", Prop::Str("#FFF4D6".into())),
+            ("intensity", Prop::Num(2.5)),
+            ("range", Prop::Num(14.0)),
+            ("angle", Prop::Num(25.0)),
+        ]));
+        out = Some(o);
+    }
+    out
+}
+
+/// Uma tocha: o cabo e, no alto, a chama (a luz tremulando e o fogo em
+/// partículas), com um cone que brilha dentro. O objeto de cima não tem
+/// escala: dá para aumentar ou girar a tocha inteira.
+pub fn torch() -> Object {
+    let mut o = Object::new(0, "Tocha");
+    let mut cabo = Object::new(0, "Cabo");
+    let mut forma = Component::new("shape3d");
+    forma.set("shape", Prop::Str("cylinder".into()));
+    forma.set("color", Prop::Str("#7A4A2A".into()));
+    cabo.components.push(forma);
+    (cabo.scale_x, cabo.scale_y, cabo.scale_z) = (0.12, 1.2, 0.12);
+    cabo.y = 0.6;
+    o.children.push(cabo);
+    let mut chama = Object::new(0, "Chama");
+    chama.y = 1.3;
+    let mut luz = Component::new("light3d");
+    luz.set("color", Prop::Str("#FFA347".into()));
+    luz.set("intensity", Prop::Num(1.6));
+    luz.set("range", Prop::Num(7.0));
+    luz.set("flicker", Prop::Num(0.5));
+    chama.components.push(luz);
+    if let Some(p) = crate::particle_presets::PRESETS_3D
+        .iter()
+        .find(|p| p.id == "fogo")
+    {
+        let mut fogo = p.component();
+        for (k, v) in [
+            ("rate", 30.0),
+            ("area_radius", 0.06),
+            ("size_start", 0.22),
+            ("size_end", 0.04),
+            ("speed_min", 0.3),
+            ("speed_max", 0.8),
+            ("lifetime", 0.5),
+        ] {
+            fogo.set(k, Prop::Num(v));
+        }
+        chama.components.push(fogo);
+    }
+    let mut brasa = Object::new(0, "Brasa");
+    let mut cone = Component::new("shape3d");
+    cone.set("shape", Prop::Str("cone".into()));
+    cone.set("color", Prop::Str("#FFB347".into()));
+    cone.set("shadow", Prop::Bool(false));
+    cone.set("glow", Prop::Num(1.0));
+    brasa.components.push(cone);
+    (brasa.scale_x, brasa.scale_y, brasa.scale_z) = (0.22, 0.3, 0.22);
+    chama.children.push(brasa);
+    o.children.push(chama);
+    o
 }
 
 fn stem_of(path: &str) -> String {

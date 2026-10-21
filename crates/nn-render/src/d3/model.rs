@@ -37,6 +37,9 @@ pub struct ModelPart {
     pub image: Option<usize>,
     /// Os ossos de cada vértice (vazio num modelo sem esqueleto).
     pub skin: Vec<SkinVertex>,
+    /// A cor que a parte emite (brilha mesmo no escuro); preto = nada. Vem
+    /// do `emissiveFactor` do material.
+    pub emissive: Color,
 }
 
 /// Imagem de um modelo, já decodificada (RGBA 8 bits).
@@ -485,18 +488,31 @@ fn add_primitive(
     let image = pbr
         .base_color_texture()
         .and_then(|t| image_of_texture.get(&t.texture().index()).copied());
+    // O brilho (em linear no arquivo), com a força da extensão
+    // KHR_materials_emissive_strength quando houver.
+    let [er, eg, eb] = material.emissive_factor();
+    let strength = material.emissive_strength().unwrap_or(1.0).max(0.0);
+    let emissive = Color::rgb(
+        to_srgb(er * strength),
+        to_srgb(eg * strength),
+        to_srgb(eb * strength),
+    );
 
     let normal_matrix = Mat3::from_mat4(world).inverse().transpose();
     // Espelhado (escala negativa): a ordem dos vértices inverte.
     let flip = world.determinant() < 0.0;
 
-    let part = match parts.iter_mut().find(|p| p.image == image) {
+    let part = match parts
+        .iter_mut()
+        .find(|p| p.image == image && p.emissive == emissive)
+    {
         Some(p) => p,
         None => {
             parts.push(ModelPart {
                 mesh: Mesh::new(),
                 image,
                 skin: Vec::new(),
+                emissive,
             });
             parts.last_mut().expect("parte criada")
         }
@@ -725,7 +741,8 @@ impl ModelData {
 /// Um modelo na GPU: uma malha por imagem usada.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Model {
-    pub(crate) parts: Vec<(MeshId, Option<TextureId>)>,
+    /// Malha, textura e a cor que ela emite.
+    pub(crate) parts: Vec<(MeshId, Option<TextureId>, Color)>,
     /// Caixa que envolve o modelo (mínimo, máximo).
     pub bounds: (Vec3, Vec3),
     pub triangles: usize,

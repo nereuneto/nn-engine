@@ -110,9 +110,17 @@ M.FIELDS = {
   -- 3D: um modelo .glb/.gltf, uma forma pronta e a câmera do jogo.
   model = {
     { "file", "" }, { "color", "#FFFFFF" }, { "flat", false }, { "shadow", true },
+    { "glow", 0 },
   },
   shape3d = {
-    { "shape", "cube" }, { "color", "#7BC86C" }, { "shadow", true },
+    { "shape", "cube" }, { "color", "#7BC86C" }, { "shadow", true }, { "glow", 0 },
+  },
+  -- Luz: uma lâmpada (ilumina em volta, até o alcance) ou um holofote
+  -- (ilumina num cone, para a frente do objeto, -Z). "flicker" faz a luz
+  -- tremular como fogo (0 a 1).
+  light3d = {
+    { "kind", "point" }, { "color", "#FFD9A0" }, { "intensity", 1.5 }, { "range", 8 },
+    { "angle", 30 }, { "soft", 0.3 }, { "flicker", 0 }, { "on", true },
   },
   camera3d = {
     { "fov", 60 },
@@ -165,6 +173,40 @@ M.ENVIRONMENT = {
   { "fog", true }, { "fog_near", 30 }, { "fog_far", 90 },
   { "shadows", true }, { "shadow_distance", 30 },
 }
+
+-- Ambientes prontos (o NN Studio aplica com um clique): o que muda em cada
+-- um. Dia é o padrão.
+M.ENVIRONMENT_PRESETS = {
+  { "dia", "Dia", {} },
+  { "entardecer", "Entardecer", {
+    sky_top = "#3B4F8C", sky_horizon = "#F7A35C", sky_bottom = "#6B5A5A",
+    sun_height = 8, sun_color = "#FFB070", sun_size = 6,
+    ambient_sky = "#8C7FA8", ambient_ground = "#5A4638", fog_near = 25, fog_far = 80,
+  } },
+  { "noite", "Noite", {
+    sky_top = "#0B1026", sky_horizon = "#22305A", sky_bottom = "#0E1220",
+    sun_height = 35, sun_color = "#4F6290", sun_size = 2,
+    ambient_sky = "#1C2744", ambient_ground = "#0E0E14", fog_near = 20, fog_far = 70,
+  } },
+  { "caverna", "Caverna", {
+    sky = false, sun_color = "#000000", sun_size = 0,
+    ambient_sky = "#1C1C26", ambient_ground = "#0C0B0A", fog_near = 8, fog_far = 35,
+    shadows = false,
+  } },
+}
+
+--- O ambiente pronto `nome` (dia, entardecer, noite, caverna) completo:
+--- os campos dele por cima do padrão. nil se não existir.
+function M.environment_preset(name)
+  for _, p in ipairs(M.ENVIRONMENT_PRESETS) do
+    if p[1] == name then
+      local e = {}
+      for _, f in ipairs(M.ENVIRONMENT) do e[f[1]] = f[2] end
+      for k, v in pairs(p[3]) do e[k] = v end
+      return e
+    end
+  end
+end
 
 -- Componentes de interface (desenhados como painéis e ficam no HUD).
 M.UI_KINDS = {
@@ -254,7 +296,7 @@ local function defaults(kind)
   if not list then
     error(("componente desconhecido: \"%s\" (use %s)"):format(
       tostring(kind), "sprite, text, shape, body, map, camera, sound, particles, panel, "
-      .. "button, bar, icons, slider, checkbox, textfield, layout, model, shape3d, camera3d "
+      .. "button, bar, icons, slider, checkbox, textfield, layout, model, shape3d, light3d, camera3d "
       .. "ou behavior"), 0)
   end
   return list
@@ -930,7 +972,7 @@ local function build_object(scene, data, parent, fresh, depth)
     if o[comp.type] == nil and (comp.type == "sprite" or comp.type == "text"
         or comp.type == "shape" or comp.type == "camera" or comp.type == "layout"
         or comp.type == "model" or comp.type == "shape3d" or comp.type == "camera3d"
-        or comp.type == "text3d" or M.UI_KINDS[comp.type]) then
+        or comp.type == "text3d" or comp.type == "light3d" or M.UI_KINDS[comp.type]) then
       o[comp.type] = comp
     end
   end
@@ -1880,7 +1922,11 @@ end
 
 --- Fecha a cena aberta por cima (volta para a de baixo).
 function M.close_over(scene)
-  if scene.overlay then nn.scene.pop() end
+  if scene.overlay then
+    nn.scene.pop()
+  elseif scene._guardada then
+    nn.scene.pop({ fade = 0.5 })
+  end
 end
 
 local function slider_value(c)
@@ -2978,8 +3024,44 @@ end
 local ONLY_3D = {
   model = true, shape3d = true, terrain = true, text3d = true, camera3d = true, body3d = true,
   anim3d = true, behavior = true, sound = true, body = true, camera = true, layout = true,
-  bone = true,
+  bone = true, light3d = true,
 }
+
+-- Tremular (fogo): um número de -1 a 1 que muda sem repetir, diferente para
+-- cada luz.
+local function flicker_noise(t, seed)
+  return 0.5 * math.sin(t * 11.0 + seed) + 0.3 * math.sin(t * 23.7 + seed * 1.7)
+    + 0.2 * math.sin(t * 5.3 + seed * 2.3)
+end
+M.flicker_noise = flicker_noise
+
+--- A luz de um componente light3d na matriz `m` (a do objeto): manda para
+--- o renderer neste quadro.
+function M.draw_light(o, c, m)
+  if not c.on or c.intensity <= 0 or c.range <= 0 then return end
+  local x, y, z = m:position()
+  local k, r = c.intensity, c.range
+  if c.flicker > 0 then
+    local n = flicker_noise(nn.time.elapsed(), (o.id or 0) * 7.13)
+    k = k * (1 + c.flicker * 0.35 * n)
+    r = r * (1 + c.flicker * 0.06 * n)
+  end
+  local d = c._lamp
+  if not d then
+    d = {}
+    c._lamp = d
+  end
+  d.x, d.y, d.z, d.color, d.intensity, d.range = x, y, z, c.color, k, r
+  if c.kind == "spot" then
+    local fx, fy, fz = m:forward()
+    d.direction = d.direction or {}
+    d.direction[1], d.direction[2], d.direction[3] = fx, fy, fz
+    d.angle, d.soft = c.angle, c.soft
+  else
+    d.direction = nil
+  end
+  nn.d3.lamp(d)
+end
 
 local function draw_object(o, alpha)
   -- 3D: modelos e formas, com a posição, a rotação e a escala 3D.
@@ -2997,7 +3079,11 @@ local function draw_object(o, alpha)
         c._draw = d
       end
       d.matrix, d.color, d.shadow, d.animator = m3, o._tint or c.color, c.shadow, c._anim
+      d.glow = c.glow
       nn.d3.draw(c._model or c._mesh, d)
+    elseif c.type == "light3d" and o.scene and o.scene._3d then
+      m3 = m3 or o:matrix3d(alpha)
+      M.draw_light(o, c, m3)
     elseif c.type == "text3d" and o.scene and o.scene._3d then
       m3 = m3 or o:matrix3d(alpha)
       nn.d3.text(c.text, {
@@ -3313,8 +3399,13 @@ function M.new(data, path)
   end
 
   function scene:enter(args)
+    -- A cena que está rodando agora (as ferramentas e os testes olham aqui).
+    M.current = self
     -- "Abrir cena por cima": a de baixo continua aparecendo, parada.
     if type(args) == "table" and args.por_cima then self.overlay = true end
+    -- Aberta guardando a de antes ("Ir para cena" com Guardar esta cena):
+    -- "Fechar esta cena" volta para ela.
+    if type(args) == "table" and args.voltar then self._guardada = true end
     M.setup(self, data, path)
     local cp = M.checkpoints[path]
     if args and args.checkpoint and cp then
@@ -3338,7 +3429,13 @@ function M.new(data, path)
   end
 
   function scene:resume()
+    M.current = self
     if self.background and not self.overlay then nn.window.set_clear_color(self.background) end
+    -- 3D: o céu, o sol e a névoa desta cena de novo (a de cima pode ter
+    -- trocado, como uma caverna escura).
+    if self._3d and self._data and not self.overlay then
+      self._environment = M.apply_environment(self._data.environment)
+    end
     call("resume", self)
   end
 

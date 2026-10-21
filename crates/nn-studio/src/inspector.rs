@@ -933,6 +933,19 @@ const MODEL_FIELDS: &[F] = &[
         "Cada face com um tom só, mesmo que o modelo tenha sombreado suave.",
     ),
     f("shadow", "Projeta sombra", W::Bool),
+    help(
+        f(
+            "glow",
+            "Brilho",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 1.0,
+                suffix: "",
+            },
+        ),
+        "Quanto a própria cor brilha (0 a 1): aparece acesa mesmo no escuro, como um cristal ou uma janela à noite. Não ilumina em volta (para isso, uma Luz).",
+    ),
 ];
 
 const SHAPE3D_FIELDS: &[F] = &[
@@ -950,6 +963,100 @@ const SHAPE3D_FIELDS: &[F] = &[
     ),
     f("color", "Cor", W::Color),
     f("shadow", "Projeta sombra", W::Bool),
+    help(
+        f(
+            "glow",
+            "Brilho",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 1.0,
+                suffix: "",
+            },
+        ),
+        "Quanto a própria cor brilha (0 a 1): aparece acesa mesmo no escuro, como um cristal ou uma janela à noite. Não ilumina em volta (para isso, uma Luz).",
+    ),
+];
+
+const LIGHT3D_FIELDS: &[F] = &[
+    help(
+        f(
+            "kind",
+            "Tipo",
+            W::Choice(&[
+                ("point", "Lâmpada (em volta)"),
+                ("spot", "Holofote (num cone)"),
+            ]),
+        ),
+        "Lâmpada: ilumina para todos os lados, como uma tocha. Holofote: ilumina num cone, para a frente do objeto (a seta azul, -Z); gire o objeto para apontar.",
+    ),
+    f("on", "Acesa", W::Bool),
+    f("color", "Cor", W::Color),
+    help(
+        f(
+            "intensity",
+            "Força",
+            W::Num {
+                speed: 0.05,
+                min: 0.0,
+                max: 20.0,
+                suffix: "",
+            },
+        ),
+        "1 é como o sol bem perto da luz; 2 ou 3 para um holofote forte.",
+    ),
+    help(
+        f(
+            "range",
+            "Alcance",
+            W::Num {
+                speed: 0.1,
+                min: 0.1,
+                max: 200.0,
+                suffix: " m",
+            },
+        ),
+        "Até onde a luz chega (vai sumindo aos poucos até lá).",
+    ),
+    help(
+        f(
+            "angle",
+            "Abertura do cone",
+            W::Num {
+                speed: 0.5,
+                min: 1.0,
+                max: 89.0,
+                suffix: "°",
+            },
+        ),
+        "Holofote: metade da abertura do cone.",
+    ),
+    help(
+        adv(
+            "soft",
+            "Borda suave",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 1.0,
+                suffix: "",
+            },
+        ),
+        "Holofote: quanto da borda do cone vai apagando aos poucos (0 = borda dura).",
+    ),
+    help(
+        f(
+            "flicker",
+            "Tremular",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 1.0,
+                suffix: "",
+            },
+        ),
+        "Faz a luz oscilar como fogo (0 = parada; 0,5 para uma tocha).",
+    ),
 ];
 
 const CAMERA3D_FIELDS: &[F] = &[help(
@@ -1244,6 +1351,26 @@ fn environment_ui(ui: &mut egui::Ui, doc: &mut SceneDoc) {
                     doc.data.set_env(key, Prop::Num(v));
                 }
             };
+            // Os prontos: tudo de uma vez (céu, sol, luz ambiente, névoa).
+            ui.horizontal_wrapped(|ui| {
+                ui.label("Pronto:").on_hover_text(
+                    "Troca o céu, o sol, a luz ambiente e a névoa de uma vez (Ctrl+Z desfaz). Na Noite e na Caverna, as Luzes (➕ Objeto > Luz) aparecem bem.",
+                );
+                for (id, name, values) in &crate::scene_data::schema().environment_presets {
+                    let r = ui.small_button(name.as_str());
+                    crate::tutorial::anchor_in(ui, &format!("inspetor:ambiente:{id}"), r.rect);
+                    if r.clicked() {
+                        doc.record(None);
+                        for (k, v) in values {
+                            doc.data.set_env(k, v.clone());
+                        }
+                        // Sem céu (a caverna), o fundo também fica escuro.
+                        if doc.data.env("sky").num() == 0.0 {
+                            doc.data.background = "#0A0A0E".to_string();
+                        }
+                    }
+                }
+            });
             egui::Grid::new(("grade-ambiente", &doc.rel))
                 .num_columns(2)
                 .spacing([8.0, 6.0])
@@ -1394,7 +1521,15 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
 pub fn is_3d_kind(kind: &str) -> bool {
     matches!(
         kind,
-        "model" | "shape3d" | "camera3d" | "body3d" | "anim3d" | "terrain" | "text3d" | "bone"
+        "model"
+            | "shape3d"
+            | "light3d"
+            | "camera3d"
+            | "body3d"
+            | "anim3d"
+            | "terrain"
+            | "text3d"
+            | "bone"
     )
 }
 
@@ -1408,6 +1543,7 @@ fn fields(kind: &str) -> &'static [F] {
     match kind {
         "model" => MODEL_FIELDS,
         "shape3d" => SHAPE3D_FIELDS,
+        "light3d" => LIGHT3D_FIELDS,
         "camera3d" => CAMERA3D_FIELDS,
         "body3d" => BODY3D_FIELDS,
         "anim3d" => ANIM3D_FIELDS,
@@ -1519,6 +1655,10 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "shape3d" => (
             "Forma 3D",
             "Cubo, esfera, cilindro, cone, cápsula ou plano, de uma cor.",
+        ),
+        "light3d" => (
+            "Luz",
+            "Uma lâmpada, uma tocha ou um holofote: ilumina o que está em volta (as luzes não fazem sombra; só o sol).",
         ),
         "camera3d" => (
             "Câmera 3D",
@@ -2918,6 +3058,13 @@ impl Inspector {
                         }
                     }
                     if comp.kind == "sprite" && spec.key == "frame" && comp.num("frame_w") <= 0.0 {
+                        continue;
+                    }
+                    // A abertura e a borda só valem no holofote.
+                    if comp.kind == "light3d"
+                        && matches!(spec.key, "angle" | "soft")
+                        && comp.str("kind") != "spot"
+                    {
                         continue;
                     }
                     if hidden_ui_field(comp, spec.key) {

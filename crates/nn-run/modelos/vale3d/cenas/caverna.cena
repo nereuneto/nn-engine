@@ -1,0 +1,695 @@
+-- Cena visual do NN Studio. Dá para editar à mão; ao salvar pelo editor,
+-- comentários escritos aqui se perdem.
+return {
+  format = 1,
+  background = "#0A0A0E",
+  gravity = -20,
+  mode = "3d",
+  environment = { sky = false, sky_top = "#3F8FD8", sky_horizon = "#CDEBF5", sky_bottom = "#9AA79A", sun_height = 50, sun_turn = 120, sun_color = "#000000", sun_size = 0, ambient_sky = "#1C1C26", ambient_ground = "#0C0B0A", fog = true, fog_near = 8, fog_far = 35, shadows = false, shadow_distance = 30 },
+  events = {
+    { comment = "A dica some depois de 5 segundos." },
+    { when = {
+        { cond = "depois_de", segundos = 5 },
+      }, actions = {
+        { act = "mostrar", acao = "esconder", alvo = "Dica" },
+      } },
+    { comment = "Derrotou um besouro: ganha 3 moedas." },
+    { when = {
+        { cond = "derrotar", quem = "@jogador", alvo = "Besouro" },
+      }, actions = {
+        { act = "variavel", var = "moedas", op = "somar", valor = 3 },
+      } },
+    { comment = "Voltou para a luz: fecha a caverna e o vale continua de onde parou." },
+    { when = {
+        { cond = "entrar_zona", quem = "Saída", por = "@jogador" },
+      }, actions = {
+        { act = "fechar_cena" },
+      } },
+  },
+  objects = {
+    {
+      id = 1, name = "Chão",
+      x = 0, y = -0.25, rotation = 0, scale_x = 12, scale_y = 0.5,
+      z = -19, rx = 0, ry = 0, rz = 0, scale_z = 46,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#4A4550", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 2, name = "Parede esquerda",
+      x = -6.5, y = 3, rotation = 0, scale_x = 1, scale_y = 7,
+      z = -19, rx = 0, ry = 0, rz = 0, scale_z = 46,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#3E3A44", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 3, name = "Parede direita",
+      x = 6.5, y = 3, rotation = 0, scale_x = 1, scale_y = 7,
+      z = -19, rx = 0, ry = 0, rz = 0, scale_z = 46,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#3E3A44", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 4, name = "Teto",
+      x = 0, y = 6.25, rotation = 0, scale_x = 14, scale_y = 0.5,
+      z = -19, rx = 0, ry = 0, rz = 0, scale_z = 46,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#2E2B33", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 5, name = "Parede do fundo",
+      x = 0, y = 3, rotation = 0, scale_x = 14, scale_y = 7,
+      z = -41.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#3E3A44", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 6, name = "Frente esquerda",
+      x = -4, y = 3, rotation = 0, scale_x = 5, scale_y = 7,
+      z = 3.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#3E3A44", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 7, name = "Frente direita",
+      x = 4, y = 3, rotation = 0, scale_x = 5, scale_y = 7,
+      z = 3.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#3E3A44", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 8, name = "Frente de cima",
+      x = 0, y = 5, rotation = 0, scale_x = 3, scale_y = 3,
+      z = 3.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#3E3A44", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 9, name = "Luz do dia",
+      x = 0, y = 1.75, rotation = 0, scale_x = 3, scale_y = 3.5,
+      z = 4.2, rx = 0, ry = 0, rz = 0, scale_z = 0.2,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#DDEEFF", shadow = false, glow = 1 },
+      },
+    },
+    {
+      id = 10, name = "Claridade da saída",
+      x = 0, y = 3.2, rotation = 0, scale_x = 1, scale_y = 1,
+      z = 3.6, rx = -20, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "light3d", kind = "spot", color = "#CFE4FF", intensity = 1.2, range = 12, angle = 40, soft = 0.6, flicker = 0, on = true },
+      },
+    },
+    {
+      id = 11, name = "pedra",
+      x = -4.47, y = 0.33, rotation = 0, scale_x = 2.18, scale_y = 2.18,
+      z = -3.28, rx = 0, ry = 37, rz = 0, scale_z = 2.18,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 12, name = "pedra",
+      x = 4.4, y = 0.32, rotation = 0, scale_x = 2.1, scale_y = 2.1,
+      z = -5.09, rx = 0, ry = 259, rz = 0, scale_z = 2.1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 13, name = "pedra",
+      x = -4.39, y = 0.28, rotation = 0, scale_x = 1.9, scale_y = 1.9,
+      z = -8.66, rx = 0, ry = 123, rz = 0, scale_z = 1.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 14, name = "pedra",
+      x = 4.77, y = 0.36, rotation = 0, scale_x = 2.39, scale_y = 2.39,
+      z = -11.45, rx = 0, ry = 63, rz = 0, scale_z = 2.39,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 15, name = "pedra",
+      x = -4.99, y = 0.32, rotation = 0, scale_x = 2.1, scale_y = 2.1,
+      z = -12.68, rx = 0, ry = 31, rz = 0, scale_z = 2.1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 16, name = "pedra",
+      x = 4.74, y = 0.39, rotation = 0, scale_x = 2.57, scale_y = 2.57,
+      z = -15.88, rx = 0, ry = 23, rz = 0, scale_z = 2.57,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 17, name = "pedra",
+      x = -4.45, y = 0.28, rotation = 0, scale_x = 1.9, scale_y = 1.9,
+      z = -18.51, rx = 0, ry = 276, rz = 0, scale_z = 1.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 18, name = "pedra",
+      x = 4.64, y = 0.36, rotation = 0, scale_x = 2.38, scale_y = 2.38,
+      z = -21.81, rx = 0, ry = 92, rz = 0, scale_z = 2.38,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 19, name = "pedra",
+      x = -4.93, y = 0.24, rotation = 0, scale_x = 1.63, scale_y = 1.63,
+      z = -24.44, rx = 0, ry = 49, rz = 0, scale_z = 1.63,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 20, name = "pedra",
+      x = 4.37, y = 0.22, rotation = 0, scale_x = 1.47, scale_y = 1.47,
+      z = -26.32, rx = 0, ry = 105, rz = 0, scale_z = 1.47,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 21, name = "pedra",
+      x = -4.88, y = 0.35, rotation = 0, scale_x = 2.33, scale_y = 2.33,
+      z = -29.01, rx = 0, ry = 238, rz = 0, scale_z = 2.33,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 22, name = "pedra",
+      x = 4.8, y = 0.26, rotation = 0, scale_x = 1.76, scale_y = 1.76,
+      z = -31.46, rx = 0, ry = 92, rz = 0, scale_z = 1.76,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 23, name = "pedra",
+      x = -4.57, y = 0.31, rotation = 0, scale_x = 2.09, scale_y = 2.09,
+      z = -33.88, rx = 0, ry = 268, rz = 0, scale_z = 2.09,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 24, name = "pedra",
+      x = 4.68, y = 0.29, rotation = 0, scale_x = 1.94, scale_y = 1.94,
+      z = -36.81, rx = 0, ry = 311, rz = 0, scale_z = 1.94,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/pedra.glb", color = "#8C8496", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 25, name = "Ponta de rocha",
+      x = -2.8, y = 0.8, rotation = 0, scale_x = 0.9, scale_y = 1.6,
+      z = -11, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cone", color = "#5A5462", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 26, name = "Ponta do teto",
+      x = 2.24, y = 5.2, rotation = 0, scale_x = 0.7, scale_y = 1.28,
+      z = -13, rx = 180, ry = 0, rz = 0, scale_z = 0.7,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cone", color = "#4A4552", shadow = true, glow = 0 },
+      },
+    },
+    {
+      id = 27, name = "Ponta de rocha",
+      x = 3.2, y = 1.1, rotation = 0, scale_x = 0.9, scale_y = 2.2,
+      z = -17, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cone", color = "#5A5462", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 28, name = "Ponta do teto",
+      x = -2.56, y = 4.9, rotation = 0, scale_x = 0.7, scale_y = 1.76,
+      z = -19, rx = 180, ry = 0, rz = 0, scale_z = 0.7,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cone", color = "#4A4552", shadow = true, glow = 0 },
+      },
+    },
+    {
+      id = 29, name = "Ponta de rocha",
+      x = -3.4, y = 0.9, rotation = 0, scale_x = 0.9, scale_y = 1.8,
+      z = -27, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cone", color = "#5A5462", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 30, name = "Ponta do teto",
+      x = 2.72, y = 5.1, rotation = 0, scale_x = 0.7, scale_y = 1.44,
+      z = -29, rx = 180, ry = 0, rz = 0, scale_z = 0.7,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cone", color = "#4A4552", shadow = true, glow = 0 },
+      },
+    },
+    {
+      id = 31, name = "Ponta de rocha",
+      x = 2.6, y = 0.65, rotation = 0, scale_x = 0.9, scale_y = 1.3,
+      z = -31, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cone", color = "#5A5462", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 32, name = "Ponta do teto",
+      x = -2.08, y = 5.35, rotation = 0, scale_x = 0.7, scale_y = 1.04,
+      z = -33, rx = 180, ry = 0, rz = 0, scale_z = 0.7,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cone", color = "#4A4552", shadow = true, glow = 0 },
+      },
+    },
+    {
+      id = 34, name = "Tocha",
+      x = -5.75, y = 1.4, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -5, rx = 0, ry = 0, rz = -22, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+      },
+      children = {
+        {
+          id = 33, name = "Chama",
+          x = 0, y = 1.15, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true },
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+          },
+        },
+      },
+    },
+    {
+      id = 36, name = "Tocha",
+      x = 5.75, y = 1.4, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -13, rx = 0, ry = 0, rz = 22, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+      },
+      children = {
+        {
+          id = 35, name = "Chama",
+          x = 0, y = 1.15, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true },
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+          },
+        },
+      },
+    },
+    {
+      id = 38, name = "Tocha",
+      x = -5.75, y = 1.4, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -21, rx = 0, ry = 0, rz = -22, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+      },
+      children = {
+        {
+          id = 37, name = "Chama",
+          x = 0, y = 1.15, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true },
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+          },
+        },
+      },
+    },
+    {
+      id = 40, name = "Tocha",
+      x = 5.75, y = 1.4, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -29, rx = 0, ry = 0, rz = 22, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+      },
+      children = {
+        {
+          id = 39, name = "Chama",
+          x = 0, y = 1.15, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.6, range = 7, angle = 30, soft = 0.3, flicker = 0.5, on = true },
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.06, size_start = 0.22, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+          },
+        },
+      },
+    },
+    {
+      id = 42, name = "Cristal",
+      x = -4.3, y = 0, rotation = 0, scale_x = 1.2, scale_y = 1.2,
+      z = -17.5, rx = 0, ry = 20, rz = 0, scale_z = 1.2,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/cristal.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+      children = {
+        {
+          id = 41, name = "Luz do cristal",
+          x = 0, y = 0.7, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "light3d", kind = "point", color = "#5CE1FF", intensity = 1.1, range = 4.5, angle = 30, soft = 0.3, flicker = 0, on = true },
+          },
+        },
+      },
+    },
+    {
+      id = 44, name = "Cristal",
+      x = 4.4, y = 0, rotation = 0, scale_x = 1.4, scale_y = 1.4,
+      z = -25, rx = 0, ry = 160, rz = 0, scale_z = 1.4,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/cristal.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+      children = {
+        {
+          id = 43, name = "Luz do cristal",
+          x = 0, y = 0.7, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "light3d", kind = "point", color = "#5CE1FF", intensity = 1.1, range = 4.5, angle = 30, soft = 0.3, flicker = 0, on = true },
+          },
+        },
+      },
+    },
+    {
+      id = 46, name = "Cristal",
+      x = -4.2, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -33.5, rx = 0, ry = 80, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/cristal.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+      children = {
+        {
+          id = 45, name = "Luz do cristal",
+          x = 0, y = 0.7, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "light3d", kind = "point", color = "#5CE1FF", intensity = 1.1, range = 4.5, angle = 30, soft = 0.3, flicker = 0, on = true },
+          },
+        },
+      },
+    },
+    {
+      id = 48, name = "Cristal",
+      x = 4.1, y = 0, rotation = 0, scale_x = 0.8, scale_y = 0.8,
+      z = -9, rx = 0, ry = 300, rz = 0, scale_z = 0.8,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/cristal.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+      children = {
+        {
+          id = 47, name = "Luz do cristal",
+          x = 0, y = 0.7, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "light3d", kind = "point", color = "#5CE1FF", intensity = 1.1, range = 4.5, angle = 30, soft = 0.3, flicker = 0, on = true },
+          },
+        },
+      },
+    },
+    {
+      id = 49, name = "Pedestal",
+      x = 0, y = 0.4, rotation = 0, scale_x = 1.4, scale_y = 0.8,
+      z = -37, rx = 0, ry = 0, rz = 0, scale_z = 1.4,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cylinder", color = "#6E6A72", shadow = true, glow = 0 },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 50, name = "estrela",
+      x = 0, y = 1.4, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -37, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      prefab = "prefabs/estrela.prefab",
+    },
+    {
+      id = 51, name = "Fresta",
+      x = 0, y = 6.1, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -37, rx = -90, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "light3d", kind = "spot", color = "#DDEBFF", intensity = 4, range = 9, angle = 16, soft = 0.4, flicker = 0, on = true },
+      },
+    },
+    {
+      id = 53, name = "Feixe",
+      x = 0, y = 3, rotation = 0, scale_x = 2.2, scale_y = 6,
+      z = -37, rx = 0, ry = 0, rz = 0, scale_z = 2.2,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cone", color = "#DDEBFF26", shadow = false, glow = 1 },
+      },
+      children = {
+        {
+          id = 52, name = "Poeira no feixe",
+          x = 0, y = -0.1, rotation = 0, scale_x = 0.455, scale_y = 0.167,
+          z = 0, rx = 0, ry = 0, rz = 0, scale_z = 0.455,
+          visible = true, layer = 0,
+          components = {
+            { type = "particles", mode = "continuo", rate = 10, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 3, lifetime_var = 0.3, speed_min = 0.05, speed_max = 0.15, direction = 90, spread = 180, gravity = -0.03, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.4, size_start = 0.05, size_end = 0.05, size_var = 0, color_start = "#FFFFFF00", color_mid = "#F4F8FFCC", color_end = "#FFFFFF00", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+          },
+        },
+      },
+    },
+    {
+      id = 55, name = "Lampião",
+      x = 2.4, y = 0, rotation = 0, scale_x = 1.6, scale_y = 1.6,
+      z = -35.5, rx = 0, ry = 20, rz = 0, scale_z = 1.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/lampiao.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+      },
+      children = {
+        {
+          id = 54, name = "Luz do lampião",
+          x = 0, y = 0.18, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "light3d", kind = "point", color = "#FFD27A", intensity = 1.3, range = 6, angle = 30, soft = 0.3, flicker = 0.15, on = true },
+          },
+        },
+      },
+    },
+    {
+      id = 56, name = "Besouro",
+      x = -1.5, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -19, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "behavior", script = "nn:inimigo3d", andar = "patrulha", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 4, velocidade = 1.8, virar = true, visao = 6, x = 3, z = 0 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
+        { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/acerto.wav" },
+      },
+    },
+    {
+      id = 57, name = "Besouro",
+      x = 1.5, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      z = -27, rx = 0, ry = 0, rz = 0, scale_z = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/bicho.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "behavior", script = "nn:inimigo3d", andar = "vagar", anim_andar = "andar", anim_parado = "parado", animar = true, correr = 3.2, dano = 1, empurrao = 7, perseguir = true, pisar = true, raio = 3, velocidade = 1.8, virar = true, visao = 6, x = 5, z = 0 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "destruir", barra = true, cena = "", cor_barra = "#FF5A5A", invencivel = 0.3, numeros = true, piscar = false, variavel = "", vidas = 2 },
+        { type = "behavior", script = "nn:golpe", acerto = 0.3, alcance = 1.3, alvo = "", angulo = 100, animacao = "golpe", dano = 1, distancia = 1.1, empurrao = 7, intervalo = 1.2, quando = "perto", som = "", som_acerto = "assets/sons/acerto.wav" },
+      },
+    },
+    {
+      id = 62, name = "Herói",
+      x = 0, y = 0.05, rotation = 0, scale_x = 1.1, scale_y = 1.1,
+      z = -3.5, rx = 0, ry = 180, rz = 0, scale_z = 1.1,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+        { type = "behavior", script = "nn:jogador3d", agua = "voltar", altura = 0, camera = "atras", distancia = 5, inverter_y = false, prender_mouse = true, pulo = 8, pulos_no_ar = 0, queda = -25, raio = 0, sensibilidade = 0.15, velocidade = 6, virar = true },
+        { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, tremer = 6, variavel = "vidas", vidas = 3 },
+        { type = "behavior", script = "nn:golpe", acerto = 0.22, alcance = 1.7, alvo = "", angulo = 120, animacao = "golpe", dano = 1, empurrao = 6, intervalo = 0.45, quando = "tecla", som = "assets/sons/golpe.wav", som_acerto = "assets/sons/acerto.wav", tecla = "clique", todos = true },
+      },
+      events = {
+        { when = {
+            { cond = "mensagem", quem = "@este", msg = "pulou" },
+          }, actions = {
+            { act = "som", som = "assets/sons/pulo.wav", volume = 0.5, onde = "@este", distancia = 30 },
+            { act = "soltar_particulas", alvo = "Poeira", quantidade = 14 },
+          } },
+        { when = {
+            { cond = "mensagem", quem = "@este", msg = "agua" },
+          }, actions = {
+            { act = "som", som = "assets/sons/dano.wav", volume = 1, onde = "@este", distancia = 30 },
+          } },
+      },
+      children = {
+        {
+          id = 58, name = "Espada",
+          x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+          z = 0, rx = 20, ry = 0, rz = 0, scale_z = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "model", file = "modelos/espada.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "bone", bone = "mao_d" },
+          },
+        },
+        {
+          id = 60, name = "Tocha na mão",
+          x = 0, y = -0.32, rotation = 0, scale_x = 0.75, scale_y = 0.75,
+          z = 0, rx = 15, ry = 0, rz = 0, scale_z = 0.75,
+          visible = true, layer = 0,
+          components = {
+            { type = "model", file = "modelos/tocha.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0 },
+            { type = "bone", bone = "mao_e" },
+          },
+          children = {
+            {
+              id = 59, name = "Chama",
+              x = 0, y = 1.15, rotation = 0, scale_x = 1, scale_y = 1,
+              visible = true, layer = 0,
+              components = {
+                { type = "light3d", kind = "point", color = "#FFA347", intensity = 1.5, range = 8, angle = 30, soft = 0.3, flicker = 0.5, on = true },
+                { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.5, lifetime_var = 0.4, speed_min = 0.3, speed_max = 0.8, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.048, size_start = 0.176, size_end = 0.04, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500 },
+              },
+            },
+          },
+        },
+        {
+          id = 61, name = "Poeira",
+          x = 0, y = 0.05, rotation = 0, scale_x = 1, scale_y = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 14, on_start = false, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 0.8, speed_max = 2, direction = 90, spread = 200, gravity = 0.5, drag = 4, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.35, size_end = 0.6, size_var = 0, color_start = "#E8DCC4CC", color_mid = "", color_end = "#C8B89800", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500 },
+          },
+        },
+      },
+    },
+    {
+      id = 63, name = "Saída",
+      x = 0, y = 1.5, rotation = 0, scale_x = 3, scale_y = 3,
+      z = 3, rx = 0, ry = 0, rz = 0, scale_z = 0.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#FFD16640", shadow = false, glow = 0 },
+        { type = "behavior", script = "nn:gatilho", alvo = "", invisivel = true, mensagem = "", mensagem_saida = "", quem = "", som = "", uma_vez = false },
+      },
+    },
+    {
+      id = 64, name = "Placar",
+      x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0, anchor = "top_left",
+      components = {
+        { type = "text", text = "", size = 30, color = "#FFD93D", anchor = "left", font = "", hud = true },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Estrelas {estrelas} / 6     Moedas {moedas}" },
+      },
+    },
+    {
+      id = 65, name = "Dica",
+      x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0, anchor = "top",
+      components = {
+        { type = "text", text = "Uma caverna escura! A estrela está lá no fundo. (Para sair, volte para a luz.)", size = 32, color = "#FFFFFF", anchor = "center", font = "", hud = true },
+      },
+    },
+    {
+      id = 66, name = "Corações",
+      x = 40, y = -90, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0, anchor = "top_left",
+      components = {
+        { type = "icons", image = "assets/imagens/coracao.png", frame = 1, frame_w = 0, frame_h = 0, var = "vidas", count = 3, max = 3, size = 40, spacing = 6, color = "#FFFFFF", empty_color = "#FFFFFF40", align = "left", pixel_art = true, hud = true },
+      },
+    },
+  },
+}

@@ -999,10 +999,33 @@ impl Renderer {
         cast_shadow: bool,
         joints: &[Mat4],
     ) {
+        self.draw_mesh_skinned_glow(
+            mesh,
+            model,
+            color,
+            texture,
+            cast_shadow,
+            joints,
+            crate::d3::Glow::NONE,
+        );
+    }
+
+    /// Como [`Renderer::draw_mesh_skinned`], com brilho próprio.
+    #[allow(clippy::too_many_arguments)]
+    pub fn draw_mesh_skinned_glow(
+        &mut self,
+        mesh: crate::d3::MeshId,
+        model: Mat4,
+        color: Color,
+        texture: Option<TextureId>,
+        cast_shadow: bool,
+        joints: &[Mat4],
+        glow: crate::d3::Glow,
+    ) {
         let srgb = self.format.is_srgb();
         let texture = texture.unwrap_or(self.white);
         self.d3
-            .draw_skinned(mesh, model, color, texture, cast_shadow, srgb, joints);
+            .draw_skinned(mesh, model, color, texture, cast_shadow, srgb, joints, glow);
     }
 
     /// Desenha a malha no mundo 3D com a matriz `model` (posição, rotação e
@@ -1033,9 +1056,37 @@ impl Renderer {
         texture: Option<TextureId>,
         cast_shadow: bool,
     ) {
+        self.draw_mesh_glow(
+            mesh,
+            model,
+            color,
+            texture,
+            cast_shadow,
+            crate::d3::Glow::NONE,
+        );
+    }
+
+    /// Como [`Renderer::draw_mesh_with`], com brilho próprio: a malha
+    /// aparece acesa mesmo no escuro (veja [`Glow`](crate::d3::Glow)).
+    pub fn draw_mesh_glow(
+        &mut self,
+        mesh: crate::d3::MeshId,
+        model: Mat4,
+        color: Color,
+        texture: Option<TextureId>,
+        cast_shadow: bool,
+        glow: crate::d3::Glow,
+    ) {
         let srgb = self.format.is_srgb();
         let texture = texture.unwrap_or(self.white);
-        self.d3.draw(mesh, model, color, texture, cast_shadow, srgb);
+        self.d3
+            .draw(mesh, model, color, texture, cast_shadow, srgb, glow);
+    }
+
+    /// Uma lâmpada ou um holofote no mundo 3D, só para este frame (chame a
+    /// cada frame, como os desenhos). Veja [`Lamp3D`](crate::d3::Lamp3D).
+    pub fn add_lamp3d(&mut self, lamp: crate::d3::Lamp3D) {
+        self.d3.lamp(lamp);
     }
 
     /// Uma partícula 3D: um quadrado de lado `size` (metros) sempre virado
@@ -1181,7 +1232,11 @@ impl Renderer {
                 } else {
                     self.create_mesh(&p.mesh)
                 };
-                (mesh, p.image.and_then(|i| textures.get(i).copied()))
+                (
+                    mesh,
+                    p.image.and_then(|i| textures.get(i).copied()),
+                    p.emissive,
+                )
             })
             .collect();
         let skeleton = data.skeleton.clone().map(std::sync::Arc::new);
@@ -1207,13 +1262,33 @@ impl Renderer {
         color: Color,
         cast_shadow: bool,
     ) {
-        if model.skeleton.is_some() {
-            let joints = model.rest_joints.clone();
-            self.draw_model_posed(model, matrix, color, cast_shadow, &joints);
-            return;
-        }
-        for (mesh, texture) in &model.parts {
-            self.draw_mesh_with(*mesh, matrix, color, *texture, cast_shadow);
+        self.draw_model_glow(model, matrix, color, cast_shadow, 0.0, None);
+    }
+
+    /// Desenha um modelo com brilho próprio (`glow`: quanto da própria cor
+    /// brilha, de 0 a 1; as partes que o arquivo já faz brilhar brilham
+    /// sempre) e, num modelo animado, na pose `joints` (`None`: parado).
+    pub fn draw_model_glow(
+        &mut self,
+        model: &crate::d3::Model,
+        matrix: Mat4,
+        color: Color,
+        cast_shadow: bool,
+        glow: f32,
+        joints: Option<&[Mat4]>,
+    ) {
+        let rest = model.rest_joints.clone();
+        let joints = joints.unwrap_or(&rest);
+        for &(mesh, texture, emissive) in &model.parts {
+            let g = crate::d3::Glow {
+                amount: glow,
+                color: emissive,
+            };
+            if model.skeleton.is_some() {
+                self.draw_mesh_skinned_glow(mesh, matrix, color, texture, cast_shadow, joints, g);
+            } else {
+                self.draw_mesh_glow(mesh, matrix, color, texture, cast_shadow, g);
+            }
         }
     }
 
@@ -1228,15 +1303,7 @@ impl Renderer {
         cast_shadow: bool,
         joints: &[Mat4],
     ) {
-        if model.skeleton.is_none() {
-            for (mesh, texture) in &model.parts {
-                self.draw_mesh_with(*mesh, matrix, color, *texture, cast_shadow);
-            }
-            return;
-        }
-        for (mesh, texture) in &model.parts {
-            self.draw_mesh_skinned(*mesh, matrix, color, *texture, cast_shadow, joints);
-        }
+        self.draw_model_glow(model, matrix, color, cast_shadow, 0.0, Some(joints));
     }
 
     /// A câmera 3D (vale até ser trocada).

@@ -21,7 +21,7 @@ return {
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 30,
       visible = true, layer = 0,
       components = {
-        { type = "shape3d", shape = "plane", color = "#7BC86C", shadow = true },
+        { type = "shape3d", shape = "plane", color = "#7BC86C", shadow = true, glow = 0 },
         { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
       },
     },

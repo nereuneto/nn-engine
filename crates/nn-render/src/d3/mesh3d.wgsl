@@ -1,5 +1,6 @@
 // Malhas 3D: luz do sol (direcional) com sombra, mais luz ambiente do céu e
-// do chão, sombreado por face (as normais vêm da malha) e névoa.
+// do chão, as lâmpadas (e holofotes), o brilho próprio, sombreado por face
+// (as normais vêm da malha) e névoa.
 
 struct View {
     view_proj: mat4x4<f32>,
@@ -22,6 +23,20 @@ struct View {
 };
 
 @group(0) @binding(0) var<uniform> view: View;
+
+struct Lamp {
+    pos_range: vec4<f32>,   // posição, alcance
+    color: vec4<f32>,       // cor × força
+    dir_cos: vec4<f32>,     // holofote: direção, cosseno da borda de fora
+    cone: vec4<f32>,        // x = cosseno de onde começa a apagar, y = 1 num holofote
+};
+
+struct Lamps {
+    count: vec4<u32>,
+    items: array<Lamp, 32>,
+};
+
+@group(0) @binding(1) var<uniform> lamps: Lamps;
 @group(1) @binding(0) var tex: texture_2d<f32>;
 @group(1) @binding(1) var samp: sampler;
 @group(2) @binding(0) var shadow_map: texture_depth_2d;
@@ -41,6 +56,8 @@ struct VertexIn {
     @location(9) n1: vec4<f32>,
     @location(10) n2: vec4<f32>,
     @location(11) tint: vec4<f32>,
+    // Brilho: rgb = cor que brilha por cima, a = quanto da própria cor.
+    @location(14) glow: vec4<f32>,
 };
 
 struct VertexOut {
@@ -49,6 +66,7 @@ struct VertexOut {
     @location(1) color: vec4<f32>,
     @location(2) world: vec3<f32>,
     @location(3) uv: vec2<f32>,
+    @location(4) glow: vec4<f32>,
 };
 
 @vertex
@@ -62,7 +80,35 @@ fn vs_main(v: VertexIn) -> VertexOut {
     out.color = v.color * v.tint;
     out.world = world.xyz;
     out.uv = v.uv;
+    out.glow = v.glow;
     return out;
+}
+
+// A luz das lâmpadas num ponto: some aos poucos até o alcance; o holofote
+// só dentro do cone. Um pouco da luz chega mesmo às faces de lado (a luz
+// rebatida), para o chão em volta de uma tocha não ficar preto.
+fn lamp_light(world: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    var sum = vec3<f32>(0.0);
+    let count = min(lamps.count.x, 32u);
+    for (var i = 0u; i < count; i++) {
+        let lamp = lamps.items[i];
+        let to = lamp.pos_range.xyz - world;
+        let d = length(to);
+        let range = lamp.pos_range.w;
+        if (d >= range) {
+            continue;
+        }
+        let l = to / max(d, 1e-4);
+        let k = 1.0 - (d * d) / (range * range);
+        var a = k * k;
+        if (lamp.cone.y > 0.5) {
+            let c = dot(-l, lamp.dir_cos.xyz);
+            a = a * smoothstep(lamp.dir_cos.w, lamp.cone.x, c);
+        }
+        let diffuse = max(dot(n, l), 0.0) * 0.85 + 0.15;
+        sum = sum + lamp.color.rgb * (diffuse * a);
+    }
+    return sum;
 }
 
 // 1 = no sol, 0 = na sombra (com as bordas suavizadas).
@@ -102,7 +148,9 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     }
     let up = n.y * 0.5 + 0.5;
     let ambient = mix(view.ground.rgb, view.sky.rgb, up);
-    var rgb = albedo.rgb * (ambient + view.sun_color.rgb * sun);
+    var rgb = albedo.rgb * (ambient + view.sun_color.rgb * sun + lamp_light(in.world, n));
+    // O brilho próprio: aparece mesmo no escuro.
+    rgb = rgb + albedo.rgb * in.glow.a + in.glow.rgb;
     if (view.fog_range.y > view.fog_range.x) {
         let d = distance(in.world, view.camera.xyz);
         let f = clamp((d - view.fog_range.x) / (view.fog_range.y - view.fog_range.x), 0.0, 1.0);
@@ -150,6 +198,7 @@ fn vs_skinned(v: VertexIn, s: SkinIn) -> VertexOut {
     out.color = v.color * v.tint;
     out.world = world.xyz;
     out.uv = v.uv;
+    out.glow = v.glow;
     return out;
 }
 

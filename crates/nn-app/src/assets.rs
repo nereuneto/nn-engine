@@ -239,6 +239,27 @@ impl Context {
         }
     }
 
+    /// Como [`Context::draw_model_key`], com brilho próprio (`glow`, de 0 a
+    /// 1) e, num modelo animado, na pose `joints`.
+    pub fn draw_model_key_glow(
+        &mut self,
+        key: &str,
+        matrix: glam::Mat4,
+        color: nn_core::Color,
+        cast_shadow: bool,
+        glow: f32,
+        joints: Option<&[glam::Mat4]>,
+    ) -> bool {
+        match self.assets.models.get(key) {
+            Some((model, _)) => {
+                self.renderer
+                    .draw_model_glow(model, matrix, color, cast_shadow, glow, joints);
+                true
+            }
+            None => false,
+        }
+    }
+
     fn read_model(&mut self, file: &str, flat: bool) -> Result<nn_render::d3::Model, AssetError> {
         let bytes = self.assets.read(file)?;
         let dir = Path::new(file)

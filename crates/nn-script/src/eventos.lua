@@ -951,12 +951,18 @@ E.ACTIONS = {
     id = "ir_para_cena", name = "Ir para cena", category = "Cenas",
     text = "ir para a cena {cena}",
     props = { { "cena", "", type = "scene", label = "Cena" },
+      { "guardar", false, label = "Guardar esta cena",
+        help = "A cena de agora fica guardada como está (os objetos, o herói, o que já foi pego). Na outra, \"Fechar esta cena\" volta para ela: entrar numa caverna ou numa casa e sair." },
       { "escurecer", 0.5, min = 0, label = "Escurecer (s)", advanced = true } },
     lua = "nn.scene.switch(\"{cena}\")",
     run = function(ctx, p)
       if p.cena == "" then return end
       local fade = number(p.escurecer)
-      nn.scene.switch(p.cena, nil, { fade = fade > 0 and fade or nil })
+      if p.guardar then
+        nn.scene.push(p.cena, { voltar = true }, { fade = fade > 0 and fade or nil })
+      else
+        nn.scene.switch(p.cena, nil, { fade = fade > 0 and fade or nil })
+      end
     end,
   },
   {
@@ -981,8 +987,8 @@ E.ACTIONS = {
   },
   {
     id = "fechar_cena", name = "Fechar esta cena", category = "Cenas",
-    text = "fechar esta cena (volta para a de baixo)",
-    help = "Numa cena aberta por cima: fecha e o jogo de baixo continua.",
+    text = "fechar esta cena (volta para a de antes)",
+    help = "Numa cena aberta por cima, ou aberta guardando a de antes: fecha e a de antes continua de onde parou.",
     lua = "nn.scene.pop()",
     run = function(ctx) M.close_over(ctx.scene) end,
   },
@@ -1257,6 +1263,39 @@ E.ACTIONS = {
       for _, o in ipairs(resolve(ctx.scene, p.alvo, b, true)) do
         M.set_emitting(o, p.acao == "ligar")
       end
+    end,
+  },
+  {
+    mode = "3d",
+    id = "luz", name = "Acender ou apagar luz", category = "Aparência",
+    text = "{acao} a luz de {alvo}",
+    help = "O objeto precisa do componente Luz (uma lâmpada, uma tocha, um holofote).",
+    props = { { "acao", "acender", options = { { "acender", "acender" }, { "apagar", "apagar" },
+      { "alternar", "acender ou apagar (o contrário)" } } }, who("alvo") },
+    lua = "{alvo}.light3d.on = ...",
+    run = function(ctx, p, b)
+      each(ctx, p.alvo, b, function(o)
+        local c = o.light3d
+        if not c then return end
+        if p.acao == "alternar" then c.on = not c.on else c.on = p.acao == "acender" end
+      end)
+    end,
+  },
+  {
+    mode = "3d",
+    id = "cor_luz", name = "Mudar a cor da luz", category = "Aparência",
+    text = "mudar a luz de {alvo} para {cor}",
+    help = "O objeto precisa do componente Luz.",
+    props = { who("alvo"), { "cor", "#FF5A3C", type = "color", label = "Cor" },
+      { "forca", 0, min = 0, label = "Força", advanced = true, help = "0 = a mesma de antes." } },
+    lua = "{alvo}.light3d.color = \"{cor}\"",
+    run = function(ctx, p, b)
+      each(ctx, p.alvo, b, function(o)
+        local c = o.light3d
+        if not c then return end
+        c.color = p.cor
+        if number(p.forca) > 0 then c.intensity = number(p.forca) end
+      end)
     end,
   },
   {

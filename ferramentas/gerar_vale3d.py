@@ -123,24 +123,51 @@ heroi_events = [
     '            { act = "som", som = "assets/sons/dano.wav", volume = 1, onde = "@este", distancia = 30 },',
     '          } },',
 ]
-hx, hz = 0.0, 36.0
 ESPADA_RX = 20
-c.obj('Herói', [comp('model', file='modelos/heroi.glb', color='#FFFFFF', flat=False, shadow=True),
-                comp('behavior', script='nn:jogador3d', velocidade=6, pulo=8, pulos_no_ar=0, camera='atras',
-                     distancia=7, prender_mouse=True, sensibilidade=0.15, inverter_y=False, virar=True,
-                     agua='voltar', queda=-25, raio=0, altura=0),
-                vida_heroi(tremer=6),
-                comp('behavior', script='nn:golpe', quando='tecla', tecla='clique', alvo='', dano=1,
-                     alcance=1.7, angulo=120, todos=True, empurrao=6, intervalo=0.45, animacao='golpe',
-                     acerto=0.22, som='assets/sons/golpe.wav', som_acerto='assets/sons/acerto.wav')],
-      events=heroi_events, x=hx, y=round(chao(hx, hz) + 0.05, 2), z=hz, ry=180, scale_x=1.1, scale_y=1.1, scale_z=1.1,
-      children=[c.child('Espada', [comp('model', file='modelos/espada.glb', color='#FFFFFF', flat=False, shadow=True),
-                                   comp('bone', bone='mao_d')], rx=ESPADA_RX),
-                c.child('Poeira', [particulas(
-          mode="explosao", amount=14, on_start=False, lifetime=0.6, lifetime_var=0.4,
-          speed_min=0.8, speed_max=2, spread=200, gravity=0.5, drag=4, area="circulo",
-          area_radius=0.3, size_start=0.35, size_end=0.6, color_start="#E8DCC4CC",
-          color_end="#C8B89800")], y=0.05)])
+
+def chama(c, y, cor='#FFA347', forca=1.6, alcance=7, tremular=0.5, fogo=True, tamanho=1.0):
+    """A chama de uma tocha: a luz tremulando e o fogo em partículas."""
+    comps = [comp('light3d', kind='point', color=cor, intensity=forca, range=alcance, angle=30,
+                  soft=0.3, flicker=tremular, on=True)]
+    if fogo:
+        comps.append(particulas(
+            rate=30, lifetime=0.5, lifetime_var=0.4, speed_min=0.3, speed_max=0.8, spread=25,
+            gravity=1.5, area="circulo", area_radius=0.06 * tamanho, size_start=0.22 * tamanho,
+            size_end=0.04, size_var=0.3, color_start="#FFE066", color_mid="#FF7A1A",
+            color_end="#B0201000", blend="add"))
+    return c.child('Chama', comps, y=y)
+
+def heroi(c, x, y, z, ry=180, tocha=False, distancia=7):
+    """O herói com a espada na mão direita (Golpe com o clique) e, com
+    `tocha`, uma tocha acesa na mão esquerda."""
+    filhos = [c.child('Espada', [comp('model', file='modelos/espada.glb', color='#FFFFFF', flat=False, shadow=True),
+                                 comp('bone', bone='mao_d')], rx=ESPADA_RX)]
+    if tocha:
+        filhos.append(c.child('Tocha na mão', [comp('model', file='modelos/tocha.glb', color='#FFFFFF', flat=False, shadow=True, glow=0),
+                                              comp('bone', bone='mao_e')],
+                              y=-0.32, rx=15, scale_x=0.75, scale_y=0.75, scale_z=0.75,
+                              children=[chama(c, 1.15, forca=1.5, alcance=8, tamanho=0.8)]))
+    filhos.append(c.child('Poeira', [particulas(
+        mode="explosao", amount=14, on_start=False, lifetime=0.6, lifetime_var=0.4,
+        speed_min=0.8, speed_max=2, spread=200, gravity=0.5, drag=4, area="circulo",
+        area_radius=0.3, size_start=0.35, size_end=0.6, color_start="#E8DCC4CC",
+        color_end="#C8B89800")], y=0.05))
+    return c.obj('Herói', [comp('model', file='modelos/heroi.glb', color='#FFFFFF', flat=False, shadow=True),
+                           comp('behavior', script='nn:jogador3d', velocidade=6, pulo=8, pulos_no_ar=0, camera='atras',
+                                distancia=distancia, prender_mouse=True, sensibilidade=0.15, inverter_y=False, virar=True,
+                                agua='voltar', queda=-25, raio=0, altura=0),
+                           vida_heroi(tremer=6),
+                           comp('behavior', script='nn:golpe', quando='tecla', tecla='clique', alvo='', dano=1,
+                                alcance=1.7, angulo=120, todos=True, empurrao=6, intervalo=0.45, animacao='golpe',
+                                acerto=0.22, som='assets/sons/golpe.wav', som_acerto='assets/sons/acerto.wav')],
+                 events=heroi_events, x=x, y=y, z=z, ry=ry, scale_x=1.1, scale_y=1.1, scale_z=1.1,
+                 children=filhos)
+
+hx, hz = 0.0, 36.0
+heroi(c, hx, round(chao(hx, hz) + 0.05, 2), hz)
+
+# A entrada da caverna, no pé do morro do leste.
+EX, EZ = 15.0, -11.0
 
 # Árvores e pedras espalhadas (longe da trilha e do lago).
 rnd = random.Random(21)
@@ -152,6 +179,8 @@ while len(postas) < 46 and tentativas < 4000:
     if dist_trilha(x, z) < 4.5 or math.hypot(x - LAGO[0], z - LAGO[1]) < LAGO[2] * 1.6:
         continue
     if math.hypot(x - hx, z - hz) < 5:
+        continue
+    if math.hypot(x - EX, z - EZ) < 7:
         continue
     if any(math.hypot(x - a, z - b) < 3.2 for a, b, _ in postas):
         continue
@@ -210,10 +239,54 @@ c.obj('Placa', [comp('shape3d', shape='cube', color='#9C6B43', shadow=True), com
                                           facing='placa', outline='#3A2E1FC0', background='', font='')],
                         z=0.6, scale_x=0.385, scale_y=1.333, scale_z=10)])
 
+def tocha_de_pe(c, nome, x, y, z, rx=0, rz=0, ry=0):
+    """Uma tocha (o modelo) com a chama acesa em cima."""
+    return c.obj(nome, [comp('model', file='modelos/tocha.glb', color='#FFFFFF', flat=False, shadow=True, glow=0)],
+                 x=x, y=y, z=z, rx=rx, ry=ry, rz=rz, children=[chama(c, 1.15)])
+
+# A entrada da caverna: um arco de pedra no pé do morro, virado para a
+# trilha, com uma tocha de cada lado. Entrar leva para a cena da caverna
+# (guardando o vale como está).
+tx, tz = 4.0, -6.0
+ery = round(math.degrees(math.atan2(tx - EX, tz - EZ)))
+eh = round(chao(EX, EZ), 2)
+PEDRA = '#6E6A72'
+def bloco(nome, x, y, z, sx, sy, sz, cor=PEDRA):
+    return c.child(nome, [comp('shape3d', shape='cube', color=cor, shadow=True, glow=0),
+                          comp('body3d', body='static')],
+                   x=x, y=y, z=z, scale_x=sx, scale_y=sy, scale_z=sz)
+c.obj('Caverna', [], x=EX, y=eh, z=EZ, ry=ery, children=[
+    bloco('Pilar esquerdo', -1.9, 1.4, 0, 1.3, 4.2, 2.2),
+    bloco('Pilar direito', 1.9, 1.4, 0, 1.3, 4.2, 2.2),
+    bloco('Topo', 0, 3.9, 0, 5.2, 1.2, 2.4),
+    bloco('Fundo', 0, 1.4, -1.2, 2.6, 4.2, 0.4, cor='#050507'),
+    bloco('Encosta', 0, 1.0, -3.4, 7.5, 6.0, 4.0, cor='#5E5A63'),
+    # Pedras em volta, para o arco parecer parte do morro.
+    *[c.child('pedra', [comp('model', file='modelos/pedra.glb', color='#FFFFFF', flat=False, shadow=True, glow=0),
+                        comp('body3d', body='static')],
+              x=px, y=py, z=pz, ry=pr, scale_x=ps, scale_y=ps, scale_z=ps)
+      for (px, py, pz, ps, pr) in [(-3.4, 0.5, -0.6, 2.6, 30), (3.5, 0.4, -0.3, 2.3, 200),
+                                   (-2.2, 4.6, -1.3, 2.4, 80), (2.3, 4.5, -1.5, 2.8, 140),
+                                   (0.2, 5.3, -3.0, 3.4, 260), (-3.8, 2.6, -2.6, 3.0, 10),
+                                   (3.9, 2.4, -2.8, 3.2, 300)]],
+    c.child('Placa da caverna', [comp('text3d', text='Caverna', size=0.55, color='#FFE2B8', facing='placa',
+                                      outline='#2A1E14C0', background='', font='')], y=4.0, z=1.25),
+    c.child('Entrada da caverna', [comp('shape3d', shape='cube', color='#FFD16640', shadow=False, glow=0),
+                                   comp('behavior', script='nn:gatilho', alvo='', invisivel=True, mensagem='',
+                                        mensagem_saida='', quem='', som='', uma_vez=False)],
+            y=1.5, z=0.4, scale_x=2.4, scale_y=3, scale_z=1.2),
+])
+# As tochas dos lados (fora do arco, viradas para a trilha).
+for lado in (-1, 1):
+    a = math.radians(ery)
+    ox, oz = math.cos(a) * 3.3 * lado + math.sin(a) * 1.4, -math.sin(a) * 3.3 * lado + math.cos(a) * 1.4
+    x, z = round(EX + ox, 2), round(EZ + oz, 2)
+    tocha_de_pe(c, 'Tocha da entrada', x, round(chao(x, z), 2), z)
+
 c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
-                 comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 5     Moedas {moedas}')],
+                 comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 6     Moedas {moedas}')],
       x=40, y=-44, anchor='top_left')
-c.obj('Dica', [comp('text', text='Ache as 5 estrelas nos morros! Clique para golpear (Esc solta o mouse)', size=32, color='#FFFFFF', anchor='center', font='', hud=True)],
+c.obj('Dica', [comp('text', text='Ache as 6 estrelas (uma na caverna)! Clique para golpear (Esc solta o mouse)', size=30, color='#FFFFFF', anchor='center', font='', hud=True)],
       y=-120, anchor='top')
 coracoes(c)
 
@@ -240,9 +313,15 @@ eventos = '''  events = {
       }, actions = {
         { act = "variavel", var = "moedas", op = "somar", valor = 3 },
       } },
-    { comment = "Achou as 5 estrelas: vitória!" },
+    { comment = "Entrou na caverna: vai para a cena dela, guardando o vale como está." },
     { when = {
-        { cond = "variavel", var = "estrelas", op = ">=", valor = 5 },
+        { cond = "entrar_zona", quem = "Entrada da caverna", por = "@jogador" },
+      }, actions = {
+        { act = "ir_para_cena", cena = "cenas/caverna.cena", guardar = true, escurecer = 0.6 },
+      } },
+    { comment = "Achou as 6 estrelas (uma na caverna): vitória!" },
+    { when = {
+        { cond = "variavel", var = "estrelas", op = ">=", valor = 6 },
       }, actions = {
         { act = "som", som = "assets/sons/vitoria.wav", volume = 1 },
         { act = "esperar", segundos = 1.2 },
@@ -257,3 +336,135 @@ VALE_ENV = env(sky=True, sky_top="#4A90D9", sky_horizon="#D8EEF5", sky_bottom="#
 text = HEADER + 'return {\n  format = 1,\n  mode = "3d",\n  gravity = -20,\n  ' + VALE_ENV + ',\n' + eventos + '  objects = {\n' + '\n'.join(c.objs) + '\n  },\n}\n'
 write(os.path.join(DEST, 'cenas', 'vale.cena'), text)
 print('vale ok:', len(postas), 'árvores e pedras')
+
+
+# --- A caverna ----------------------------------------------------------------
+# Um túnel escuro (ambiente Caverna: sem céu e sem sol), iluminado por tochas
+# nas paredes, cristais que brilham, um lampião e um feixe de luz que entra
+# por uma fresta no teto, em cima da estrela. O herói entra com uma tocha na
+# mão. A saída volta para o vale (Fechar esta cena).
+c = Cena()
+FUNDO = -40.0
+ROCHA, ROCHA2, TETO = '#4A4550', '#3E3A44', '#2E2B33'
+def parede(nome, x, y, z, sx, sy, sz, cor=ROCHA2):
+    return c.obj(nome, [comp('shape3d', shape='cube', color=cor, shadow=True, glow=0),
+                        comp('body3d', body='static')],
+                 x=x, y=y, z=z, scale_x=sx, scale_y=sy, scale_z=sz)
+meio = (FUNDO + 2) / 2
+parede('Chão', 0, -0.25, meio, 12, 0.5, -FUNDO + 6, cor=ROCHA)
+parede('Parede esquerda', -6.5, 3, meio, 1, 7, -FUNDO + 6)
+parede('Parede direita', 6.5, 3, meio, 1, 7, -FUNDO + 6)
+parede('Teto', 0, 6.25, meio, 14, 0.5, -FUNDO + 6, cor=TETO)
+parede('Parede do fundo', 0, 3, FUNDO - 1.5, 14, 7, 1)
+# Na frente, a saída: uma abertura com a luz do dia lá fora.
+parede('Frente esquerda', -4, 3, 3.5, 5, 7, 1)
+parede('Frente direita', 4, 3, 3.5, 5, 7, 1)
+parede('Frente de cima', 0, 5, 3.5, 3, 3, 1)
+c.obj('Luz do dia', [comp('shape3d', shape='cube', color='#DDEEFF', shadow=False, glow=1)],
+      x=0, y=1.75, z=4.2, scale_x=3, scale_y=3.5, scale_z=0.2)
+c.obj('Claridade da saída', [comp('light3d', kind='spot', color='#CFE4FF', intensity=1.2, range=12, angle=40,
+                                  soft=0.6, flicker=0, on=True)],
+      x=0, y=3.2, z=3.6, rx=-20)
+
+# Pedras e pontas de rocha pelo caminho (perto das paredes).
+rnd = random.Random(7)
+for i in range(14):
+    lado = -1 if i % 2 == 0 else 1
+    z = round(-3 - i * 2.6 + rnd.uniform(-0.8, 0.8), 2)
+    x = round(lado * rnd.uniform(4.3, 5.4), 2)
+    s = round(rnd.uniform(1.4, 2.6), 2)
+    c.obj('pedra', [comp('model', file='modelos/pedra.glb', color='#8C8496', flat=False, shadow=True, glow=0),
+                    comp('body3d', body='static')],
+          x=x, y=round(0.15 * s, 2), z=z, ry=rnd.randrange(0, 360), scale_x=s, scale_y=s, scale_z=s)
+for (x, z, h) in [(-2.8, -11, 1.6), (3.2, -17, 2.2), (-3.4, -27, 1.8), (2.6, -31, 1.3)]:
+    c.obj('Ponta de rocha', [comp('shape3d', shape='cone', color='#5A5462', shadow=True, glow=0),
+                             comp('body3d', body='static')],
+          x=x, y=h / 2, z=z, scale_x=0.9, scale_y=h, scale_z=0.9)
+    c.obj('Ponta do teto', [comp('shape3d', shape='cone', color='#4A4552', shadow=True, glow=0)],
+          x=-x * 0.8, y=round(6 - h / 2, 2), z=z - 2, rx=180, scale_x=0.7, scale_y=h * 0.8, scale_z=0.7)
+
+# Tochas nas paredes, inclinadas para o meio.
+for k, z in enumerate([-5, -13, -21, -29]):
+    for lado in (-1, 1):
+        if (k + (lado > 0)) % 2:
+            continue
+        tocha_de_pe(c, 'Tocha', round(lado * 5.75, 2), 1.4, z, rz=lado * 22)
+
+# Cristais que brilham, cada um com uma luz azul fraca.
+for (x, z, s, ry) in [(-4.3, -17.5, 1.2, 20), (4.4, -25, 1.4, 160), (-4.2, -33.5, 1.0, 80), (4.1, -9, 0.8, 300)]:
+    c.obj('Cristal', [comp('model', file='modelos/cristal.glb', color='#FFFFFF', flat=False, shadow=True, glow=0),
+                      comp('body3d', body='static')],
+          x=x, y=0, z=z, ry=ry, scale_x=s, scale_y=s, scale_z=s,
+          children=[c.child('Luz do cristal', [comp('light3d', kind='point', color='#5CE1FF', intensity=1.1,
+                                                    range=4.5, angle=30, soft=0.3, flicker=0, on=True)], y=0.7)])
+
+# O fundo: a estrela num pedestal, embaixo da fresta, e um lampião ao lado.
+c.obj('Pedestal', [comp('shape3d', shape='cylinder', color='#6E6A72', shadow=True, glow=0),
+                   comp('body3d', body='static')],
+      x=0, y=0.4, z=FUNDO + 3, scale_x=1.4, scale_y=0.8, scale_z=1.4)
+c.obj('estrela', prefab='prefabs/estrela.prefab', x=0, y=1.4, z=FUNDO + 3)
+c.obj('Fresta', [comp('light3d', kind='spot', color='#DDEBFF', intensity=4, range=9, angle=16, soft=0.4,
+                      flicker=0, on=True)],
+      x=0, y=6.1, z=FUNDO + 3, rx=-90)
+# O feixe de luz: um cone claro e transparente, da fresta até o chão, com
+# poeirinha brilhando dentro.
+c.obj('Feixe', [comp('shape3d', shape='cone', color='#DDEBFF26', shadow=False, glow=1)],
+      x=0, y=3.0, z=FUNDO + 3, scale_x=2.2, scale_y=6.0, scale_z=2.2,
+      children=[c.child('Poeira no feixe', [particulas(
+          rate=10, lifetime=3, lifetime_var=0.3, speed_min=0.05, speed_max=0.15, direction=90, spread=180,
+          gravity=-0.03, area="circulo", area_radius=0.4, size_start=0.05, size_end=0.05,
+          color_start="#FFFFFF00", color_mid="#F4F8FFCC", color_end="#FFFFFF00", blend="add")],
+          y=-0.1, scale_x=0.4545, scale_y=0.1667, scale_z=0.4545)])
+c.obj('Lampião', [comp('model', file='modelos/lampiao.glb', color='#FFFFFF', flat=False, shadow=True, glow=0)],
+      x=2.4, y=0, z=FUNDO + 4.5, ry=20, scale_x=1.6, scale_y=1.6, scale_z=1.6,
+      children=[c.child('Luz do lampião', [comp('light3d', kind='point', color='#FFD27A', intensity=1.3,
+                                                range=6, angle=30, soft=0.3, flicker=0.15, on=True)], y=0.18)])
+
+# Dois besouros no caminho.
+besouro(c, -1.5, 0, -19, andar='patrulha', ax=3, combate=True)
+besouro(c, 1.5, 0, -27, andar='vagar', raio=3, combate=True)
+
+heroi(c, 0, 0.05, -3.5, ry=180, tocha=True, distancia=5)
+
+c.obj('Saída', [comp('shape3d', shape='cube', color='#FFD16640', shadow=False, glow=0),
+                comp('behavior', script='nn:gatilho', alvo='', invisivel=True, mensagem='', mensagem_saida='',
+                     quem='', som='', uma_vez=False)],
+      x=0, y=1.5, z=3.0, scale_x=3, scale_y=3, scale_z=0.6)
+
+c.obj('Placar', [comp('text', text='', size=30, color='#FFD93D', anchor='left', font='', hud=True),
+                 comp('behavior', script='nn:mostrar_valor', texto='Estrelas {estrelas} / 6     Moedas {moedas}')],
+      x=40, y=-44, anchor='top_left')
+c.obj('Dica', [comp('text', text='Uma caverna escura! A estrela está lá no fundo. (Para sair, volte para a luz.)',
+                    size=32, color='#FFFFFF', anchor='center', font='', hud=True)],
+      y=-120, anchor='top')
+coracoes(c)
+
+eventos = '''  events = {
+    { comment = "A dica some depois de 5 segundos." },
+    { when = {
+        { cond = "depois_de", segundos = 5 },
+      }, actions = {
+        { act = "mostrar", acao = "esconder", alvo = "Dica" },
+      } },
+    { comment = "Derrotou um besouro: ganha 3 moedas." },
+    { when = {
+        { cond = "derrotar", quem = "@jogador", alvo = "Besouro" },
+      }, actions = {
+        { act = "variavel", var = "moedas", op = "somar", valor = 3 },
+      } },
+    { comment = "Voltou para a luz: fecha a caverna e o vale continua de onde parou." },
+    { when = {
+        { cond = "entrar_zona", quem = "Saída", por = "@jogador" },
+      }, actions = {
+        { act = "fechar_cena" },
+      } },
+  },
+'''
+CAVERNA_ENV = env(sky=False, sky_top="#3F8FD8", sky_horizon="#CDEBF5", sky_bottom="#9AA79A",
+                  sun_height=50, sun_turn=120, sun_color="#000000", sun_size=0,
+                  ambient_sky="#1C1C26", ambient_ground="#0C0B0A",
+                  fog=True, fog_near=8, fog_far=35, shadows=False, shadow_distance=30)
+text = (HEADER + 'return {\n  format = 1,\n  mode = "3d",\n  gravity = -20,\n  background = "#0A0A0E",\n  '
+        + CAVERNA_ENV + ',\n' + eventos + '  objects = {\n' + '\n'.join(c.objs) + '\n  },\n}\n')
+write(os.path.join(DEST, 'cenas', 'caverna.cena'), text)
+print('caverna ok')
