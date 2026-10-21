@@ -602,7 +602,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.sky",
         "(opts)",
-        "Céu em degradê com o sol (opts: top, horizon, bottom, sun_size em graus). true = o céu padrão, false = sem céu.",
+        "Céu em degradê com o sol (opts: top, horizon, bottom, sun_size em graus, stars de 0 a 1: as estrelas). true = o céu padrão, false = sem céu.",
     ),
     d(
         "nn.d3.shadows",

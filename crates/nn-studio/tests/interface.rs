@@ -4377,7 +4377,7 @@ fn cena_3d_dia_e_noite_na_vista() {
     if !gpu {
         return;
     }
-    let mut foto = |h: &mut Harness<'_, StudioApp>, hora: f64| {
+    let foto = |h: &mut Harness<'_, StudioApp>, hora: f64| {
         cena_mut(h).data.set_env("start_hour", Prop::Num(hora));
         h.run_steps(3);
         let rect = h.get_by_label("Vista da cena 3D").rect();

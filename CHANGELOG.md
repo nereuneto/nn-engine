@@ -4,6 +4,18 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Dia e noite (Sprint 40)
+
+- **Dia e noite** (☀ Ambiente): a hora anda no jogo. O sol nasce a leste às 6h, cruza o céu e se põe a oeste às 18h; de noite, a lua dá uma luz azulada fraca, e aparecem estrelas. As cores passam pelo amanhecer, pelo dia (as cores da cena), pelo entardecer e pela noite. **Um dia dura** quantos minutos, e **Começa às**, a hora do começo. No NN Studio, a vista mostra a cena nessa hora.
+- **O relógio:** as variáveis **relogio** ("21:30"), **hora** (o número) e **dia**.
+- **Só à noite**, na Luz, e **Brilha só à noite**, na Forma 3D e no Modelo 3D (o brilho do arquivo também): acendem sozinhos ao anoitecer. Sem o ciclo, "de noite" é um ambiente escuro, como a Noite e a Caverna.
+- **Eventos:** **Amanhecer ou anoitecer** e **Estiver de dia ou de noite** (Quando); **Mudar a hora**, **Parar ou continuar o tempo** e **Mudar o ambiente** (para um pronto, aos poucos), em Então.
+- **Ambiente pronto novo:** **Amanhecer**. A **Noite** ficou um pouco mais escura, para as luzes aparecerem melhor.
+- **A ilha (modelo 3D) tem dia e noite:** um dia de 4 minutos, começando às 9h. Postes com lampião no caminho e na ponte acendem sozinhos de noite, o pescador acende o lampião na mão, a fogueira ilumina em volta e o placar mostra a hora.
+- **Partículas no 3D** (fumaça, poeira) recebem a luz do mundo: de noite, ficam escuras (ou da cor da tocha perto). O fogo, que soma luz, continua aceso.
+- **Tutorial guiado novo: Dia e noite** (10 minutos).
+- **No Lua:** `scene:time_of_day()`, `scene:set_time(h)`, `scene:pause_time(sim)`, `scene:environment(pronto, segundos)` e `scene:is_night()`; o `environment` ganha `cycle`, `day_length` e `start_hour`; `nn.d3.sky` ganha `stars`; e `nn.d3.draw`, `emissive = false`.
+
 ### Luzes (Sprint 39)
 
 - **Luzes no 3D:** a **Luz** (componente novo) é uma **lâmpada** (ilumina em volta, até o **Alcance**) ou um **holofote** (ilumina num cone, para a frente do objeto), com cor e força, e pode **tremular** como fogo. Valem as 32 mais perto da câmera; só o sol faz sombra.

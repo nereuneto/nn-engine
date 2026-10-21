@@ -690,10 +690,21 @@ continua).
 | Névoa | O que está longe some na cor do horizonte, entre as duas distâncias |
 | Sombras | Sombra do sol até esta distância da câmera |
 
-**Pronto:** os botões **Dia**, **Entardecer**, **Noite** e **Caverna** trocam
-o céu, o sol, a luz ambiente e a névoa de uma vez (Ctrl+Z desfaz). Na Noite e
-na Caverna, as [luzes](#luzes-e-brilho) aparecem bem; a Caverna também deixa
-o fundo escuro.
+**Pronto:** os botões **Dia**, **Amanhecer**, **Entardecer**, **Noite** e
+**Caverna** trocam o céu, o sol, a luz ambiente e a névoa de uma vez (Ctrl+Z
+desfaz). Na Noite e na Caverna, as [luzes](#luzes-e-brilho) aparecem bem; a
+Caverna também deixa o fundo escuro.
+
+**Dia e noite:** marcado, a hora anda no jogo. O sol nasce às 6h, cruza o céu
+e se põe às 18h; de noite vêm a lua, com uma luz azulada fraca, e as
+estrelas. As cores passam pelo amanhecer, pelo dia (as cores desta cena),
+pelo entardecer e pela noite. **Um dia dura** quantos minutos do jogo, e
+**Começa às** é a hora do começo: a vista da cena mostra essa hora (arraste
+para 22:00 para ver a cena de noite). No placar, a variável **relogio**
+mostra a hora ("21:30"); **hora** é só o número e **dia** conta os dias. A
+ilha do modelo 3D tem Dia e noite, com postes que acendem sozinhos.
+
+![A ilha às 6h30, 9h, 12h, 17h30, 18h40, 20h e 23h](imagens/ilha-dia-e-noite.png)
 
 ### Física: Corpo 3D
 
@@ -991,15 +1002,23 @@ zero.
 
   Escolhida, a luz mostra na vista até onde chega (três círculos, ou o
   cone). Valem as **32** luzes mais perto da câmera, e só o sol faz sombra.
+  Com **Só à noite**, ela acende sozinha ao anoitecer e apaga ao amanhecer
+  (com [Dia e noite](#ambiente)); sem o ciclo, fica acesa num ambiente
+  escuro, como a Noite e a Caverna.
 - **Brilho** (na Forma 3D e no Modelo 3D): a própria cor aparece acesa mesmo
   no escuro, como um cristal ou uma janela à noite. O brilho não ilumina em
   volta; para isso, ponha uma Luz junto. Os modelos `cristal.glb`,
   `tocha.glb` e `lampiao.glb` (nos modelos de projeto 3D) já trazem as partes
-  que brilham.
+  que brilham. **Brilha só à noite** apaga o brilho de dia (o do arquivo
+  também): janelas e lampiões que acendem quando escurece.
 - **Luz na mão:** uma tocha presa à mão do herói (**Preso a um osso**,
   *mao_e*), com a Luz num filho dela, ilumina por onde ele anda.
-- **Eventos:** **Acender ou apagar luz** (ou o contrário do que está) e
-  **Mudar a cor da luz**, em Aparência.
+- **Eventos:** **Acender ou apagar luz** (ou o contrário do que está),
+  **Mudar a cor da luz** e **Mudar o ambiente** (para um pronto, aos poucos:
+  uma tempestade, uma área escura), em Aparência. Com Dia e noite, também:
+  **Amanhecer ou anoitecer** e **Estiver de dia ou de noite** (Quando, em
+  Cena e tempo) e **Mudar a hora** (dormir numa cama) e **Parar ou continuar
+  o tempo** (Então, em Tempo).
 - **Entrar e sair de uma caverna:** na ação **Ir para cena**, escolha
   **Como: guardando esta (para voltar)**: a de agora fica como está (o
   herói, o que já foi pego) e, na outra, **Fechar esta cena** volta para

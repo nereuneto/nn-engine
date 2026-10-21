@@ -1225,7 +1225,7 @@ fn dia_e_noite() -> Tutorial {
                 done: Some(|ws, _| {
                     doc_of(ws).is_some_and(|d| {
                         let h = d.data.env("start_hour").num();
-                        h >= 19.0 || h < 5.0
+                        !(5.0..19.0).contains(&h)
                     })
                 }),
             },

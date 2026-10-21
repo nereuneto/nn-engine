@@ -2646,7 +2646,8 @@ function M.refresh_environment(scene)
   elseif scene._cycle then
     -- A hora em passos de meio minuto do jogo: o sol anda aos poucos e a
     -- sombra não treme.
-    e = M.environment_at(env, math.floor(scene._hour * 120) / 120)
+    scene._env_q = math.floor(scene._hour * 120)
+    e = M.environment_at(env, scene._env_q / 120)
   else
     e = M.environment_at(env, 12)
   end
@@ -2691,7 +2692,10 @@ local function update_day(scene, dt)
   if not scene._3d then return end
   if scene._env_blend then
     scene._env_blend.t = scene._env_blend.t + dt
-    if scene._env_blend.t >= scene._env_blend.dur then scene._env_blend = nil end
+    if scene._env_blend.t >= scene._env_blend.dur then
+      scene._env_blend = nil
+      scene._env_dirty = true
+    end
   end
   if scene._cycle and not scene._time_paused then
     local len = math.max(0.05, tonumber(scene._data.environment and scene._data.environment.day_length) or 4)
@@ -2711,8 +2715,11 @@ local function update_day(scene, dt)
     end
     clock_vars(scene)
   end
-  if scene._cycle or scene._env_blend or scene._env_dirty then
+  if scene._env_blend or scene._env_dirty then
     scene._env_dirty = nil
+    M.refresh_environment(scene)
+  elseif scene._cycle and not scene._env_now and math.floor(scene._hour * 120) ~= scene._env_q then
+    -- (Só quando a hora passa de um passo para o outro.)
     M.refresh_environment(scene)
   end
 end
