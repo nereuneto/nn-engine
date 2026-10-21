@@ -470,11 +470,11 @@ impl FilePanel {
                     }
                     ui.separator();
                 }
-                if ui.button("✏ Renomear (F2)").clicked() {
+                if crate::hierarchy::menu_item(ui, "✏ Renomear", "F2").clicked() {
                     self.start_rename(&e.rel);
                     ui.close();
                 }
-                if ui.button("🗑 Mandar para a lixeira (Del)").clicked() {
+                if crate::hierarchy::menu_item(ui, "🗑 Mandar para a lixeira", "Del").clicked() {
                     actions.push(Action::AskDelete(e.rel.clone()));
                     ui.close();
                 }

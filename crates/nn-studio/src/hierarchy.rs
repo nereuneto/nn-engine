@@ -4,7 +4,7 @@
 use eframe::egui::{self, Color32, Key, Modifiers, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 
 use crate::scene_data::Object;
-use crate::scene_view::{ObjectDrag, SceneDoc, add_object_menu};
+use crate::scene_view::{ObjectDrag, SceneDoc};
 
 /// Onde um objeto arrastado vai parar em relação à linha de destino.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +37,131 @@ pub enum HierarchyAction {
     OpenFile(String),
     /// Criar um mapa de tiles (abre a janela).
     NewMap,
+    /// Mostrar o painel Hierarquia (para renomear, vindo da vista).
+    ShowHierarchy,
+}
+
+/// Um botão de menu com o atalho à direita.
+pub fn menu_item(ui: &mut egui::Ui, text: &str, shortcut: &str) -> egui::Response {
+    ui.add(egui::Button::new(text).shortcut_text(shortcut))
+}
+
+/// O menu de um objeto (botão direito na Hierarquia ou na vista da cena).
+pub fn object_menu(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, out: &mut Vec<HierarchyAction>) {
+    let Some(o) = doc.data.find(id).cloned() else {
+        ui.close();
+        return;
+    };
+    // As ações valem para a seleção: o objeto do menu entra nela (o chão,
+    // que o botão direito não seleciona, entra quando o menu dele abre).
+    if !doc.selection.contains(&id) {
+        doc.selection = vec![id];
+    }
+    let is_root = doc.prefab_root() == Some(id);
+    if menu_item(ui, "✏ Renomear", "F2").clicked() {
+        doc.start_rename(id);
+        out.push(HierarchyAction::ShowHierarchy);
+        ui.close();
+    }
+    if !is_root && menu_item(ui, "Duplicar", "Ctrl+D").clicked() {
+        doc.duplicate_any();
+        ui.close();
+    }
+    if menu_item(ui, "⛶ Focar", "F")
+        .on_hover_text("A vista da cena chega perto do objeto")
+        .clicked()
+    {
+        doc.focus_request = true;
+        ui.close();
+    }
+    ui.separator();
+    if ui
+        .button("Copiar posição")
+        .on_hover_text("Guarda onde o objeto está, para pôr outro no mesmo lugar")
+        .clicked()
+    {
+        doc.copy_position(ui.ctx(), id);
+        ui.close();
+    }
+    let can_paste = doc.can_paste_position(ui.ctx(), id);
+    if ui
+        .add_enabled(can_paste, egui::Button::new("Colar posição"))
+        .on_hover_text("Leva o objeto (ou a seleção) para a posição copiada")
+        .on_disabled_hover_text("Use Copiar posição em outro objeto antes")
+        .clicked()
+    {
+        doc.paste_position(ui.ctx());
+        ui.close();
+    }
+    ui.separator();
+    let child = ui.menu_button("➕ Criar dentro", |ui| {
+        let entries = if doc.data.three_d {
+            crate::catalog::catalog3()
+        } else {
+            crate::catalog::catalog2_objects()
+        };
+        let kind = if doc.data.three_d { "3d" } else { "2d" };
+        if let Some(crate::catalog::Picked::Object(new)) = crate::catalog::menu(ui, &entries, kind)
+        {
+            doc.add_child(id, new);
+            ui.close();
+        }
+    });
+    child
+        .response
+        .on_hover_text("Cria um objeto como filho deste: ele anda, gira e some junto");
+    if ui.button("Criar filho vazio").clicked() {
+        doc.add_child(id, Object::new(0, "filho"));
+        ui.close();
+    }
+    if doc.data.parent_of(id).flatten().is_some() && ui.button("Tirar do pai").clicked() {
+        doc.record(None);
+        let n = doc.data.objects.len();
+        doc.data.move_object(id, None, n);
+        ui.close();
+    }
+    if let Some(link) = &o.prefab {
+        if ui.button("Abrir prefab").clicked() {
+            out.push(HierarchyAction::OpenFile(link.path.clone()));
+            ui.close();
+        }
+    } else if !is_root
+        && ui
+            .button("📦 Criar prefab")
+            .on_hover_text("Guarda o objeto (com os filhos) em prefabs/, para usar em outras cenas. Também dá para arrastar o objeto para uma pasta do painel Arquivos.")
+            .clicked()
+    {
+        out.push(HierarchyAction::CreatePrefab { id, dir: None });
+        ui.close();
+    }
+    if !is_root {
+        ui.separator();
+        if menu_item(ui, "🗑 Excluir", "Del").clicked() {
+            doc.delete_selection();
+            ui.close();
+        }
+    }
+}
+
+/// O menu de criar (➕ e botão direito no vazio da Hierarquia).
+fn create_menu(ui: &mut egui::Ui, doc: &mut SceneDoc, out: &mut Vec<HierarchyAction>) {
+    use crate::catalog::{Picked, catalog2, catalog3, menu};
+    let (entries, kind) = if doc.data.three_d {
+        (catalog3(), "3d")
+    } else {
+        (catalog2(), "2d")
+    };
+    match menu(ui, &entries, kind) {
+        Some(Picked::Object(o)) if doc.data.three_d => {
+            doc.add_from_menu3(o);
+        }
+        Some(Picked::Object(o)) => {
+            let (x, y) = doc.view_center();
+            doc.add_prepared(o, x, y);
+        }
+        Some(Picked::NewMap) => out.push(HierarchyAction::NewMap),
+        Some(Picked::File(_)) | None => {}
+    }
 }
 
 /// Aplica o soltar: devolve `false` se não deu (ex.: soltar dentro do filho).
@@ -101,27 +226,9 @@ impl HierarchyPanel {
             return out;
         }
         ui.horizontal(|ui| {
-            ui.menu_button("➕", |ui| {
-                if doc.data.three_d {
-                    // Na cena 3D, o mesmo menu do ➕ Objeto da vista.
-                    if let Some(o) = crate::scene_view::scene3d::add_menu3(ui) {
-                        doc.add_from_menu3(o);
-                        ui.close();
-                    }
-                    return;
-                }
-                if let Some(o) = add_object_menu(ui) {
-                    let (x, y) = doc.view_center();
-                    doc.add_prepared(o, x, y);
-                    ui.close();
-                }
-                if ui.button("Mapa de tiles...").clicked() {
-                    out.push(HierarchyAction::NewMap);
-                    ui.close();
-                }
-            })
-            .response
-            .on_hover_text("Adicionar objeto");
+            ui.menu_button("➕", |ui| create_menu(ui, doc, &mut out))
+                .response
+                .on_hover_text("Adicionar objeto");
             ui.add(
                 egui::TextEdit::singleline(&mut self.filter)
                     .hint_text("🔍 Filtrar")
@@ -136,7 +243,7 @@ impl HierarchyPanel {
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 1.0;
                 if doc.data.objects.is_empty() {
-                    ui.weak("A cena está vazia. Use ➕ ou arraste imagens do painel Arquivos para a cena.");
+                    ui.weak("A cena está vazia. Use ➕ ou o botão direito aqui (ou na cena), ou arraste imagens do painel Arquivos para a cena.");
                 }
                 if self.filter.trim().is_empty() {
                     // Só as linhas que aparecem são desenhadas (cenas com
@@ -150,6 +257,15 @@ impl HierarchyPanel {
                     let mut measured = None;
                     for (id, depth) in flat {
                         let top = ui.cursor().top();
+                        // Pedido para mostrar um objeto (renomear pela vista).
+                        if doc.reveal == Some(id) {
+                            doc.reveal = None;
+                            let r = Rect::from_min_size(
+                                Pos2::new(ui.cursor().left(), top),
+                                Vec2::new(ui.available_width(), step),
+                            );
+                            ui.scroll_to_rect(r, Some(egui::Align::Center));
+                        }
                         if top + step < clip.top() || top > clip.bottom() {
                             ui.add_space(step);
                             continue;
@@ -208,6 +324,8 @@ impl HierarchyPanel {
                 if resp.clicked() {
                     doc.selection.clear();
                 }
+                // Botão direito no vazio: criar.
+                resp.context_menu(|ui| create_menu(ui, doc, &mut out));
             });
         if let Some((dragged, target, z)) = drop {
             apply_drop(doc, dragged, target, z);
@@ -369,48 +487,7 @@ fn row(
         if !doc.selection.contains(&id) {
             doc.selection = vec![id];
         }
-        if ui.button("✏ Renomear (F2)").clicked() {
-            doc.renaming = Some((id, o.name.clone(), true));
-            ui.close();
-        }
-        if ui.button("Duplicar (Ctrl+D)").clicked() {
-            doc.duplicate_selection();
-            ui.close();
-        }
-        if let Some(link) = &o.prefab {
-            if ui.button("Abrir prefab").clicked() {
-                out.push(HierarchyAction::OpenFile(link.path.clone()));
-                ui.close();
-            }
-        } else if doc.prefab_root() != Some(id)
-            && ui
-                .button("📦 Criar prefab")
-                .on_hover_text("Guarda o objeto (com os filhos) em prefabs/, para usar em outras cenas. Também dá para arrastar o objeto para uma pasta do painel Arquivos.")
-                .clicked()
-        {
-            out.push(HierarchyAction::CreatePrefab { id, dir: None });
-            ui.close();
-        }
-        if ui.button("Criar filho vazio").clicked() {
-            doc.record(None);
-            let new = doc.data.next_id();
-            let n = doc.data.find(id).map(|o| o.children.len()).unwrap_or(0);
-            doc.data.insert(Some(id), n, Object::new(new, "filho"));
-            doc.collapsed.remove(&id);
-            doc.selection = vec![new];
-            ui.close();
-        }
-        if doc.data.parent_of(id).flatten().is_some() && ui.button("Tirar do pai").clicked() {
-            doc.record(None);
-            let n = doc.data.objects.len();
-            doc.data.move_object(id, None, n);
-            ui.close();
-        }
-        ui.separator();
-        if ui.button("🗑 Excluir (Del)").clicked() {
-            doc.delete_selection();
-            ui.close();
-        }
+        object_menu(ui, doc, id, out);
     });
 
     // Arrastar para reorganizar.

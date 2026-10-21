@@ -2664,6 +2664,7 @@ impl Inspector {
             .collect();
         let mut remove = None;
         let mut swap = None;
+        let mut reset: Option<usize> = None;
         let mut add: Vec<Component> = Vec::new();
         let count = o.components.len();
         for (ci, comp) in o.components.iter().enumerate() {
@@ -2682,33 +2683,49 @@ impl Inspector {
             );
             state
                 .show_header(ui, |ui| {
-                    let r = ui.label(RichText::new(&title).strong());
+                    let mut r = ui.add(
+                        egui::Label::new(RichText::new(&title).strong()).sense(egui::Sense::click()),
+                    );
                     crate::tutorial::anchor_in(
                         ui,
                         &format!("inspetor:componente:{}", comp.kind),
                         r.rect,
                     );
                     if !desc.is_empty() {
-                        r.on_hover_text(&desc);
+                        r = r.on_hover_text(&desc);
                     }
                     if instance.is_some() {
                         return;
                     }
+                    // O mesmo menu no botão direito do nome e no ☰.
+                    let mut menu = |ui: &mut egui::Ui| {
+                        if ci > 0 && ui.button("⏶ Subir").clicked() {
+                            swap = Some((ci, ci - 1));
+                            ui.close();
+                        }
+                        if ci + 1 < count && ui.button("⏷ Descer").clicked() {
+                            swap = Some((ci, ci + 1));
+                            ui.close();
+                        }
+                        if ui
+                            .button("↺ Restaurar o padrão")
+                            .on_hover_text("Volta os valores ao começo (o arquivo, a forma e o tipo continuam)")
+                            .clicked()
+                        {
+                            reset = Some(ci);
+                            ui.close();
+                        }
+                        ui.separator();
+                        if ui.button("🗑 Remover componente").clicked() {
+                            remove = Some(ci);
+                            ui.close();
+                        }
+                    };
+                    r.context_menu(&mut menu);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.menu_button("☰", |ui| {
-                            if ci > 0 && ui.button("Subir").clicked() {
-                                swap = Some((ci, ci - 1));
-                                ui.close();
-                            }
-                            if ci + 1 < count && ui.button("Descer").clicked() {
-                                swap = Some((ci, ci + 1));
-                                ui.close();
-                            }
-                            if ui.button("🗑 Remover componente").clicked() {
-                                remove = Some(ci);
-                                ui.close();
-                            }
-                        });
+                        ui.menu_button("☰", &mut menu)
+                            .response
+                            .on_hover_text("Subir, descer, restaurar ou remover (ou o botão direito no nome)");
                     });
                 })
                 .body(|ui| {
@@ -2735,6 +2752,17 @@ impl Inspector {
             doc.record(None);
             if let Some(obj) = doc.data.find_mut(id) {
                 obj.components.remove(ci);
+            }
+        }
+        if let Some(ci) = reset
+            && let Some(comp) = o.components.get(ci)
+        {
+            let fresh = default_component(comp, doc.data.three_d, infos[ci].as_ref());
+            if &fresh != comp {
+                doc.record(None);
+                if let Some(obj) = doc.data.find_mut(id) {
+                    obj.components[ci] = fresh;
+                }
             }
         }
         if let Some((a, b)) = swap {
@@ -3959,6 +3987,33 @@ fn file_combo(
         changed = true;
     }
     changed.then_some(Prop::Str(v))
+}
+
+/// O componente com os valores do começo, mas sem mudar o que diz o que ele é
+/// (o arquivo, a forma, o tipo de luz, o script...).
+pub fn default_component(
+    comp: &Component,
+    three_d: bool,
+    info: Option<&BehaviorInfo>,
+) -> Component {
+    let mut fresh = if comp.is_behavior() {
+        match info {
+            Some(info) => Component::behavior(comp.str("script"), &info.defaults_for(three_d)),
+            None => return comp.clone(),
+        }
+    } else if comp.kind == "particles" && three_d {
+        crate::particle_presets::component_3d()
+    } else {
+        Component::new(&comp.kind)
+    };
+    for key in [
+        "script", "shape", "file", "image", "sound", "map", "kind", "hud", "bone", "model",
+    ] {
+        if let Some(v) = comp.get(key) {
+            fresh.set(key, v.clone());
+        }
+    }
+    fresh
 }
 
 #[cfg(test)]
