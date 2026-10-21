@@ -44,7 +44,7 @@ c.obj('Herói', [comp('model', file='modelos/heroi.glb', color='#FFFFFF', flat=F
                 vida_heroi(tremer=6),
                 comp('behavior', script='nn:golpe', quando='tecla', tecla='clique', alvo='', dano=1,
                      alcance=1.7, angulo=120, todos=True, empurrao=6, intervalo=0.45, animacao='golpe',
-                     acerto=0.22, som='', som_acerto='assets/sons/dano.wav')],
+                     acerto=0.22, som='assets/sons/golpe.wav', som_acerto='assets/sons/acerto.wav')],
       events=heroi_events, z=9, ry=180, scale_x=1.1, scale_y=1.1, scale_z=1.1,
       children=[c.child('Espada', [comp('model', file='modelos/espada.glb', color='#FFFFFF', flat=False, shadow=True),
                                    comp('bone', bone='mao_d')], rx=20),
@@ -154,7 +154,7 @@ c.obj('Zona da arena', [comp('shape3d', shape='cube', color='#FFD16640', shadow=
       x=AX, y=1.5, z=0, scale_x=12, scale_y=3, scale_z=12)
 pontos = [c.child('Saída', [], x=round(math.cos(a) * 6, 2), z=round(math.sin(a) * 6, 2))
           for a in (math.radians(d) for d in (60, 130, 230, 300))]
-c.obj('Ondas', [comp('behavior', script='nn:ondas', prefab='prefabs/besouro.prefab', prefab_forte='',
+c.obj('Ondas da arena', [comp('behavior', script='nn:ondas', prefab='prefabs/besouro.prefab', prefab_forte='',
                      forte_a_partir=2, ondas=3, primeira=2, a_mais=1, quando='mensagem', distancia=6,
                      pausa=3, intervalo=0.6, raio=7, longe=3, letreiro=True, texto='Onda {onda}',
                      texto_fim='', var_onda='onda', var_restantes='restantes', som='assets/sons/porta.wav',
@@ -168,7 +168,7 @@ c.obj('Besouro-rei', [
          pausa=1.4, aviso=0.8, dano=1, golpe=True, alcance=3, investida=True, velocidade_investida=11,
          tonto=1.8, pulo=True, raio_impacto=4.5, leque=True, tiro='prefabs/magia.prefab', tiros=5,
          abertura=70, ajudantes=True, ajudante='prefabs/besouro.prefab', quantos=2, furia=50, barra=True,
-         cor_barra='#FF5A5A', solta='prefabs/estrela.prefab', som_aviso='', som_impacto='assets/sons/explosao.wav'),
+         cor_barra='#FF5A5A', solta='prefabs/estrela.prefab', som_aviso='assets/sons/rugido.wav', som_impacto='assets/sons/explosao.wav'),
 ], x=AX - 4, z=0, ry=90, scale_x=1.5, scale_y=1.5, scale_z=1.5)
 c.obj('Placar da arena', [comp('text', text='', size=30, color='#FFFFFF', anchor='right', font='', hud=True),
                           comp('behavior', script='nn:mostrar_valor', texto='Onda {onda} / 3     Faltam {restantes}')],
@@ -266,11 +266,11 @@ scene_events = '''  events = {
         { act = "mensagem", msg = "fechar", alvo = "Portão da arena" },
         { act = "mostrar", acao = "mostrar", alvo = "Placar da arena" },
         { act = "esperar", segundos = 1 },
-        { act = "mensagem", msg = "comecar", alvo = "Ondas" },
+        { act = "mensagem", msg = "comecar", alvo = "Ondas da arena" },
       } },
     { comment = "Venceu as ondas: o besouro-rei acorda." },
     { when = {
-        { cond = "ondas_terminaram", quem = "Ondas" },
+        { cond = "ondas_terminaram", quem = "Ondas da arena" },
       }, actions = {
         { act = "mostrar", acao = "esconder", alvo = "Placar da arena" },
         { act = "tremer", forca = 10, tempo = 0.6 },
@@ -323,7 +323,7 @@ prefab(BASE + '/visual3d/prefabs/besouro.prefab', 'besouro', [
          piscar=False, barra=True, cor_barra='#FF5A5A', numeros=True),
     comp('behavior', script='nn:golpe', quando='perto', distancia=1.1, alvo='', dano=1, alcance=1.3,
          angulo=100, empurrao=7, intervalo=1.2, animacao='golpe', acerto=0.3, som='',
-         som_acerto='assets/sons/dano.wav'),
+         som_acerto='assets/sons/acerto.wav'),
 ])
 prefab(BASE + '/visual3d/prefabs/magia.prefab', 'magia', [
     comp('shape3d', shape='sphere', color='#FF7A1A', shadow=False),
@@ -384,7 +384,55 @@ def mar(rate=16000, segundos=6.0):
         out.append(lp2 * 2.2 * onda)
     return out
 
+def golpe(rate=22050, segundos=0.28):
+    """Espada cortando o ar: um chiado que sobe e desce de tom, rápido."""
+    rnd = random.Random(3)
+    n = int(rate * segundos)
+    out, lp, hp = [], 0.0, 0.0
+    for i in range(n):
+        t = i / n
+        # O filtro abre e fecha (o "vuuush"); o volume vem e vai.
+        k = 0.05 + 0.5 * math.sin(math.pi * t) ** 2
+        x = rnd.uniform(-1, 1)
+        lp += (x - lp) * k
+        hp = lp - hp * 0.0
+        env = math.sin(math.pi * min(1.0, t * 1.15)) ** 1.5
+        out.append(hp * env * 0.55)
+    return out
+
+def acerto(rate=22050, segundos=0.22):
+    """Um baque: um tom grave que cai rápido, com um estalo no começo."""
+    rnd = random.Random(4)
+    n = int(rate * segundos)
+    out, fase = [], 0.0
+    for i in range(n):
+        t = i / rate
+        f = 150 * math.exp(-t * 18) + 55
+        fase += 2 * math.pi * f / rate
+        tom = math.sin(fase) * math.exp(-t * 16)
+        estalo = rnd.uniform(-1, 1) * math.exp(-t * 90) * 0.7
+        out.append((tom * 0.9 + estalo) * 0.5)
+    return out
+
+def rugido(rate=22050, segundos=1.0):
+    """O besouro-rei se preparando: um ronco grave, áspero, que cresce."""
+    rnd = random.Random(8)
+    n = int(rate * segundos)
+    out, fase, lp = [], 0.0, 0.0
+    for i in range(n):
+        t = i / n
+        f = 70 + 25 * t + 6 * math.sin(2 * math.pi * 7 * t * segundos)
+        fase += 2 * math.pi * f / rate
+        serra = (fase / (2 * math.pi)) % 1.0 * 2 - 1
+        lp += (serra + rnd.uniform(-0.6, 0.6) - lp) * 0.12
+        env = min(1.0, t * 4) * (1 - max(0.0, t - 0.8) / 0.2)
+        out.append(lp * env * 0.35)
+    return out
+
 comum = os.path.join(BASE, 'comum', 'sons')
 wav(os.path.join(comum, 'fogueira.wav'), 16000, fogueira())
 wav(os.path.join(comum, 'mar.wav'), 16000, mar())
+wav(os.path.join(comum, 'golpe.wav'), 22050, golpe())
+wav(os.path.join(comum, 'acerto.wav'), 22050, acerto())
+wav(os.path.join(comum, 'rugido.wav'), 22050, rugido())
 print('sons ok')

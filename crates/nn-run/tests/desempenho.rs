@@ -21,6 +21,7 @@ struct Tempos {
 struct Medida {
     cena: nn_script::LuaScene,
     t: Tempos,
+    rt: ScriptRuntime,
 }
 
 impl Game for Medida {
@@ -74,6 +75,7 @@ fn abrir_em(
     }
     let project = Project::open(&dir).unwrap();
     let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
     let config = project
         .config
         .clone()
@@ -87,6 +89,7 @@ fn abrir_em(
         Medida {
             cena: s,
             t: Tempos::default(),
+            rt: rt2,
         }
     });
     match h {
@@ -250,6 +253,147 @@ fn tempos_numa_cena_cheia() {
     medir_cheia("1000 árvores sem sombra", 1000, 0, 0, false);
     medir_cheia("500 moedas girando", 0, 500, 0, true);
     medir_cheia("50 bichos animados", 0, 0, 50, true);
+}
+
+/// Uma luta grande na arena da ilha: `n` besouros (com Vida, Golpe e
+/// caminhos) atrás do herói, e o besouro-rei acordado.
+fn medir_luta(n: usize) {
+    // NN_PEQUENO: uma tela pequena, para ver a simulação sem o peso da GPU de software.
+    let (w, hh) = if std::env::var_os("NN_PEQUENO").is_some() {
+        (160, 90)
+    } else {
+        (1280, 720)
+    };
+    let Some((mut h, dir)) = abrir(Template::Visual3D, "cenas/ilha.cena", w, hh) else {
+        return;
+    };
+    h.run_frames(5);
+    let lua = h.game.rt.lua().clone();
+    lua.globals()
+        .set("C", h.game.cena.table().unwrap())
+        .unwrap();
+    lua.load(format!(
+        r#"
+        local h = C.objects["Herói"]
+        h:move_to(-27, 0.1, 6)
+        h:behavior("vida").vidas = 1e9
+        h:behavior("vida").atual = 1e9
+        -- As Ondas da arena criam os besouros (uma onda só, com todos).
+        local w = C.objects["Ondas da arena"]:behavior("ondas")
+        w.primeira, w.ondas, w.intervalo, w.raio, w.longe, w.letreiro, w.som = {n}, 1, 0, 7, 2, false, ""
+        if {n} > 0 then w:comecar() end
+        C.objects["Besouro-rei"]:send("comecar")
+        "#
+    ))
+    .exec()
+    .unwrap();
+    let inicio = std::sync::Arc::new(std::sync::Mutex::new(Instant::now()));
+    {
+        let inicio = inicio.clone();
+        let hk = mlua::HookTriggers::new().every_nth_instruction(100_000);
+        lua.set_global_hook(hk, move |lua, _| {
+            if inicio.lock().unwrap().elapsed().as_secs() > 3 {
+                eprintln!(
+                    "{}",
+                    lua.traceback(Some("preso"), 0).unwrap().to_string_lossy()
+                );
+                std::process::exit(3);
+            }
+            Ok(mlua::VmState::Continue)
+        })
+        .unwrap();
+    }
+    for i in 0..(40 + n as u32) {
+        *inicio.lock().unwrap() = Instant::now();
+        let t = Instant::now();
+        h.run_frames(1);
+        if std::env::var_os("NN_DEPURAR").is_some() {
+            println!("quadro {i}: {:.1} ms", t.elapsed().as_secs_f64() * 1000.0);
+        }
+    }
+    eprintln!("contando");
+    let vivos: usize = lua.load("return #C:find_all('besouro')").eval().unwrap();
+    eprintln!("vivos {vivos}");
+    assert_eq!(vivos, n);
+    lua.remove_global_hook();
+    // NN_PERFIL=1: onde o Lua gasta o tempo (amostras a cada 1000 instruções,
+    // o tempo desde a anterior vai para cada função na pilha).
+    let perfil = std::sync::Arc::new(std::sync::Mutex::new((
+        Instant::now(),
+        std::collections::HashMap::<String, f64>::new(),
+    )));
+    if std::env::var_os("NN_PERFIL").is_some() {
+        let perfil = perfil.clone();
+        let hk = mlua::HookTriggers::new().every_nth_instruction(1000);
+        lua.set_global_hook(hk, move |lua, _| {
+            let mut p = perfil.lock().unwrap();
+            let mut dt = p.0.elapsed().as_secs_f64();
+            if dt > 0.002 {
+                dt = 0.0; // entre um quadro e outro (a GPU)
+            }
+            let mut vistas = std::collections::HashSet::new();
+            for nivel in 0..30 {
+                let Some(nome) = lua.inspect_stack(nivel, |d| {
+                    let s = d.source();
+                    format!(
+                        "{}:{}{}",
+                        s.short_src.as_deref().unwrap_or("?"),
+                        s.line_defined.unwrap_or(0),
+                        if nivel == 0 {
+                            format!(" (linha {})", d.current_line().unwrap_or(0))
+                        } else {
+                            String::new()
+                        }
+                    )
+                }) else {
+                    break;
+                };
+                if vistas.insert(nome.clone()) {
+                    *p.1.entry(nome).or_default() += dt;
+                }
+            }
+            p.0 = Instant::now();
+            Ok(mlua::VmState::Continue)
+        })
+        .unwrap();
+    }
+    h.game.t = Tempos::default();
+    let quadros: u32 = std::env::var("NN_QUADROS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(120);
+    let t = Instant::now();
+    h.run_frames(quadros);
+    let total = t.elapsed();
+    let ms = |d: Duration| d.as_secs_f64() * 1000.0 / quadros as f64;
+    println!(
+        "luta com {n:3} besouros {:7.2} ms/quadro: simular {:6.2}, montar o desenho {:6.2}, GPU e o resto {:6.2}",
+        ms(total),
+        ms(h.game.t.simular),
+        ms(h.game.t.desenhar),
+        ms(total - h.game.t.simular - h.game.t.desenhar),
+    );
+    lua.remove_global_hook();
+    let mut lista: Vec<_> = perfil.lock().unwrap().1.clone().into_iter().collect();
+    lista.sort_by(|a, b| b.1.total_cmp(&a.1));
+    for (nome, t) in lista.iter().take(40) {
+        println!("  {:8.2} ms/quadro  {nome}", t * 1000.0 / quadros as f64);
+    }
+    assert!(h.game.cena.error().is_none(), "{:?}", h.game.cena.error());
+    drop(h);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+#[ignore]
+fn tempos_de_uma_luta() {
+    if let Some(n) = std::env::var("NN_LUTA").ok().and_then(|v| v.parse().ok()) {
+        medir_luta(n);
+        return;
+    }
+    medir_luta(0);
+    medir_luta(10);
+    medir_luta(30);
 }
 
 #[test]

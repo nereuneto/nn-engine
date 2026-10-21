@@ -299,3 +299,146 @@ fn projeto_de_fora_abre_e_grava_no_editor() {
         eprintln!("gravado: {rel}");
     }
 }
+
+/// O jogo começa igual ao editor: em cada cena de cada modelo de projeto,
+/// cada objeto do arquivo (e os filhos dele) fica no jogo onde o NN Studio
+/// mostra. Pega erros como o da 0.2.1, em que as cópias de prefab de uma
+/// cena 3D iam para z = 0 só no jogo.
+#[test]
+fn modelos_o_jogo_comeca_igual_ao_editor() {
+    use nn_app::{AppConfig, Context, Game, Headless, Scene};
+    use nn_studio::scene_data::{Object, SceneData};
+    struct Uma(nn_script::LuaScene);
+    impl Game for Uma {
+        fn update(&mut self, ctx: &mut Context) {
+            let _ = self.0.update(ctx);
+        }
+        fn render(&mut self, ctx: &mut Context) {
+            self.0.render(ctx);
+        }
+    }
+    fn todos(list: &[Object], out: &mut Vec<u32>) {
+        for o in list {
+            out.push(o.id);
+            todos(&o.children, out);
+        }
+    }
+    let mut conferidos = 0;
+    for template in Template::ALL {
+        let dir = temp(&format!("igual-{}", template.name()));
+        create_project(&NewOptions {
+            dir: dir.clone(),
+            title: None,
+            template,
+        })
+        .unwrap();
+        let Ok(list) = std::fs::read_dir(dir.join("cenas")) else {
+            continue;
+        };
+        let mut cenas: Vec<String> = list
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.ends_with(".cena"))
+            .collect();
+        cenas.sort();
+        for nome in cenas {
+            let rel = format!("cenas/{nome}");
+            let data: SceneData = nn_studio::scene_data::read(
+                &std::fs::read_to_string(dir.join(&rel)).unwrap(),
+                &rel,
+            )
+            .unwrap();
+            // Os ossos dos modelos (para quem está preso a um osso).
+            let mut sizes = nn_studio::scene_render::Sizes::default();
+            let mut ids = Vec::new();
+            todos(&data.objects, &mut ids);
+            for &id in &ids {
+                if let Some(m) = data.find(id).and_then(|o| o.component("model")) {
+                    sizes.model_bones(&dir, m.str("file"));
+                }
+            }
+            let rt = nn_script::ScriptRuntime::new(&dir).unwrap();
+            let rt2 = rt.clone();
+            let config = AppConfig::default()
+                .size(320, 180)
+                .assets_dir(&dir)
+                .hot_reload(false);
+            let r2 = rel.clone();
+            let Ok(h) = Headless::new(config, move |ctx| {
+                let mut s = rt.scene(r2);
+                s.enter(ctx);
+                Uma(s)
+            }) else {
+                assert!(std::env::var_os("NN_REQUIRE_GPU").is_none());
+                return;
+            };
+            assert_eq!(h.game.0.error(), None, "{} {rel}", template.name());
+            rt2.lua()
+                .globals()
+                .set("C", h.game.0.table().unwrap())
+                .unwrap();
+            for &id in &ids {
+                let o = data.find(id).unwrap();
+                // O que fica preso à tela (HUD) é desenhado de outro jeito.
+                let mut tela = false;
+                let mut cur = Some(id);
+                while let Some(c) = cur {
+                    let x = data.find(c).unwrap();
+                    tela |= data.is_screen(x);
+                    cur = data.parent_of(c).flatten();
+                }
+                if tela {
+                    continue;
+                }
+                let jogo: Option<Vec<f64>> = rt2
+                    .lua()
+                    .load(format!(
+                        "local o = C._by_id[{id}]
+                         if not o then return nil end
+                         if C._3d then return {{ o:position3d() }} end
+                         local x, y = o:world_transform()
+                         return {{ x, y, 0 }}"
+                    ))
+                    .eval()
+                    .unwrap();
+                let jogo = jogo.unwrap_or_else(|| {
+                    panic!(
+                        "{} {rel}: \"{}\" ({id}) não está no jogo",
+                        template.name(),
+                        o.name
+                    )
+                });
+                let (ex, ey, ez) = if data.three_d {
+                    let p = data
+                        .world_matrix3(id)
+                        .unwrap()
+                        .transform_point3(glam::Vec3::ZERO);
+                    (f64::from(p.x), f64::from(p.y), f64::from(p.z))
+                } else {
+                    let t = data.world_transform(id).unwrap();
+                    (t.x, t.y, 0.0)
+                };
+                // Preso a um osso: o jogo já toca a animação (alguns cm).
+                let tol: f64 = if o.component("bone").is_some() {
+                    0.1
+                } else {
+                    1e-3
+                };
+                let d = ((jogo[0] - ex).powi(2) + (jogo[1] - ey).powi(2) + (jogo[2] - ez).powi(2))
+                    .sqrt();
+                assert!(
+                    d <= tol.max(ex.abs().max(ey.abs()).max(ez.abs()) * 1e-5),
+                    "{} {rel}: \"{}\" ({id}) no editor em ({ex:.3}, {ey:.3}, {ez:.3}), no jogo em ({:.3}, {:.3}, {:.3})",
+                    template.name(),
+                    o.name,
+                    jogo[0],
+                    jogo[1],
+                    jogo[2]
+                );
+                conferidos += 1;
+            }
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+    assert!(conferidos > 200, "{conferidos}");
+}

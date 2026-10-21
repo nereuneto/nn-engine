@@ -822,7 +822,8 @@ o rangido). O **Coletável** solta um brilho 3D ao ser pego.
   persegue (e desiste se ele fugir para longe). Quem encosta perde uma vida e
   é empurrado; **pular em cima** derrota o inimigo (com Vida, tira uma vida
   dele a cada pisão). Num modelo animado, como o `bicho.glb`, ele toca
-  *parado* e *andar* sozinho.
+  *parado* e *andar* sozinho. Vários juntos atrás do herói se espalham em
+  volta dele, sem um empurrar o outro.
 - **Contorna paredes e buracos** (ligado): o Inimigo 3D acha um caminho em
   volta de paredes, árvores e cenário, e não entra em buracos, barrancos nem
   na água de um Terreno. O caminho vem da **grade de caminhos** da cena,
@@ -850,7 +851,9 @@ Derrotar um besouro dá 3 moedas (um evento **Derrotar**).
   animação *golpe* do modelo e, no instante do acerto (**Acerta depois de**),
   quem estiver na frente, dentro do **Alcance** e da **Largura do golpe**,
   perde vida e é empurrado. O primeiro clique, que prende o mouse na janela,
-  não golpeia.
+  não golpeia. Quando acerta, o jogo para uma fração de segundo (**Pausa no
+  acerto**), para o golpe ter peso. Os modelos 3D trazem os sons
+  `golpe.wav` e `acerto.wav`.
 - **Inimigo que ataca:** ponha um **Golpe** num inimigo com **Golpeia:
   sozinho, quando o alvo chega perto**. Ele para, vira para o herói e golpeia
   (o besouro dá uma mordida); dá para fugir do golpe. Com um Golpe, o

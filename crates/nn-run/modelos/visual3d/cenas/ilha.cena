@@ -34,11 +34,11 @@ return {
         { act = "mensagem", msg = "fechar", alvo = "Portão da arena" },
         { act = "mostrar", acao = "mostrar", alvo = "Placar da arena" },
         { act = "esperar", segundos = 1 },
-        { act = "mensagem", msg = "comecar", alvo = "Ondas" },
+        { act = "mensagem", msg = "comecar", alvo = "Ondas da arena" },
       } },
     { comment = "Venceu as ondas: o besouro-rei acorda." },
     { when = {
-        { cond = "ondas_terminaram", quem = "Ondas" },
+        { cond = "ondas_terminaram", quem = "Ondas da arena" },
       }, actions = {
         { act = "mostrar", acao = "esconder", alvo = "Placar da arena" },
         { act = "tremer", forca = 10, tempo = 0.6 },
@@ -98,7 +98,7 @@ return {
         { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true },
         { type = "behavior", script = "nn:jogador3d", altura = 0, camera = "atras", distancia = 7, inverter_y = false, prender_mouse = true, pulo = 8, pulos_no_ar = 0, queda = -3, raio = 0, sensibilidade = 0.15, velocidade = 6, virar = true },
         { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, tremer = 6, variavel = "vidas", vidas = 3 },
-        { type = "behavior", script = "nn:golpe", acerto = 0.22, alcance = 1.7, alvo = "", angulo = 120, animacao = "golpe", dano = 1, empurrao = 6, intervalo = 0.45, quando = "tecla", som = "", som_acerto = "assets/sons/dano.wav", tecla = "clique", todos = true },
+        { type = "behavior", script = "nn:golpe", acerto = 0.22, alcance = 1.7, alvo = "", angulo = 120, animacao = "golpe", dano = 1, empurrao = 6, intervalo = 0.45, quando = "tecla", som = "assets/sons/golpe.wav", som_acerto = "assets/sons/acerto.wav", tecla = "clique", todos = true },
       },
       events = {
         { when = {
@@ -905,7 +905,7 @@ return {
       },
     },
     {
-      id = 94, name = "Ondas",
+      id = 94, name = "Ondas da arena",
       x = -27, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
@@ -946,7 +946,7 @@ return {
       components = {
         { type = "model", file = "modelos/besourao.glb", color = "#FFFFFF", flat = false, shadow = true },
         { type = "behavior", script = "nn:vida", ao_acabar = "nada", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.25, numeros = true, piscar = false, variavel = "", vidas = 14 },
-        { type = "behavior", script = "nn:chefe", abertura = 70, ajudante = "prefabs/besouro.prefab", ajudantes = true, alcance = 3, aviso = 0.8, barra = true, cor_barra = "#FF5A5A", dano = 1, distancia = 10, furia = 50, golpe = true, investida = true, leque = true, nome = "Besouro-rei", pausa = 1.4, pulo = true, quando = "mensagem", quantos = 2, raio_impacto = 4.5, solta = "prefabs/estrela.prefab", som_aviso = "", som_impacto = "assets/sons/explosao.wav", tiro = "prefabs/magia.prefab", tiros = 5, tonto = 1.8, velocidade = 2.4, velocidade_investida = 11 },
+        { type = "behavior", script = "nn:chefe", abertura = 70, ajudante = "prefabs/besouro.prefab", ajudantes = true, alcance = 3, aviso = 0.8, barra = true, cor_barra = "#FF5A5A", dano = 1, distancia = 10, furia = 50, golpe = true, investida = true, leque = true, nome = "Besouro-rei", pausa = 1.4, pulo = true, quando = "mensagem", quantos = 2, raio_impacto = 4.5, solta = "prefabs/estrela.prefab", som_aviso = "assets/sons/rugido.wav", som_impacto = "assets/sons/explosao.wav", tiro = "prefabs/magia.prefab", tiros = 5, tonto = 1.8, velocidade = 2.4, velocidade_investida = 11 },
       },
     },
     {

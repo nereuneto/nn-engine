@@ -32,6 +32,8 @@ local B = {
     { "som", "", type = "sound", label = "Som do golpe" },
     { "som_acerto", "", type = "sound", label = "Som ao acertar", advanced = true },
     { "faiscas", true, label = "Faíscas ao acertar", advanced = true },
+    { "pausa_acerto", 0.06, label = "Pausa no acerto", min = 0, max = 0.3, advanced = true,
+      help = "Segundos em que o jogo para quando o golpe acerta (dá peso ao golpe; só com o jogador). 0 = sem pausa." },
   },
 }
 
@@ -165,7 +167,8 @@ function B:acertar()
   local fx, fz = self:frente()
   local algum = false
   for _, a in ipairs(lista) do
-    local ok = self.scene:hit(a, self.dano, o, { push = self.empurrao, dx = fx, dz = fz, up = 0.45 })
+    local ok = self.scene:hit(a, self.dano, o, { push = self.empurrao, dx = fx, dz = fz, up = 0.45,
+      hitstop = self.pausa_acerto })
     if ok then
       algum = true
       if self.faiscas then

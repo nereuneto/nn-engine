@@ -606,6 +606,7 @@ function Object:destroy()
     M.events.signal(self.scene, { kind = "destruido", obj = self })
   end
   self.alive = false
+  if self.scene then self.scene._targets = nil end
   if self._nav_static and self.scene then self.scene._nav_dirty = true end
   if self.body and self.body.alive then
     if self._s3 and self.scene and self.scene._by_body3 then
@@ -662,8 +663,9 @@ end
 local function icons_count(c)
   local n = c.count
   if c.var ~= "" then n = tonumber(nn.vars and nn.vars[c.var]) or 0 end
-  n = math.max(0, math.floor(n))
-  return n, math.max(n, math.floor(c.max or 0))
+  -- Até 100 ícones: com um número enorme (vidas = 1e9), o desenho não trava.
+  n = math.min(100, math.max(0, math.floor(n)))
+  return n, math.min(100, math.max(n, math.floor(c.max or 0)))
 end
 M.icons_count = icons_count
 
@@ -933,6 +935,7 @@ local function build_object(scene, data, parent, fresh, depth)
     end
   end
   table.insert(scene.object_list, o)
+  scene._targets = nil
   scene._by_id[o.id] = o
   if scene.objects[o.name] == nil then scene.objects[o.name] = o end
   local child_fresh = fresh or data._depth ~= nil
@@ -1077,19 +1080,33 @@ end
 
 --- Quem um comportamento procura: "" é o jogador (objetos com um
 --- comportamento de jogador); senão, os objetos com esse nome.
+--- A lista é guardada até o próximo passo (ou até um objeto surgir ou ser
+--- destruído): muitos comportamentos perguntam a mesma coisa a cada passo.
 function M.targets(scene, who)
-  local out = {}
-  for _, o in ipairs(scene.object_list) do
-    if o.alive then
-      if who == nil or who == "" then
-        for _, b in ipairs(o.behaviors) do
-          if b.player then table.insert(out, o) break end
+  who = who or ""
+  local cache = scene._targets
+  if not cache then
+    cache = {}
+    scene._targets = cache
+  end
+  local found = cache[who]
+  if not found then
+    found = {}
+    for _, o in ipairs(scene.object_list) do
+      if o.alive then
+        if who == "" then
+          for _, b in ipairs(o.behaviors) do
+            if b.player then table.insert(found, o) break end
+          end
+        elseif o.name == who then
+          table.insert(found, o)
         end
-      elseif o.name == who then
-        table.insert(out, o)
       end
     end
+    cache[who] = found
   end
+  local out = {}
+  for i = 1, #found do out[i] = found[i] end
   return out
 end
 
@@ -1213,7 +1230,16 @@ function M.hit(scene, by, target, amount, opts)
     end
   end
   if by and by.alive then by:send("acertou", target, amount) end
+  -- Pausa no acerto, só quando o jogador bate ou apanha.
+  local stop = opts.hitstop or 0
+  if stop > 0 and ((by and by._player) or target._player) then M.hitstop(scene, stop) end
   return true
+end
+
+--- Para o jogo por `seconds` (uma fração de segundo): a "pausa no acerto"
+--- que dá peso aos golpes. O desenho continua (com o tremor da câmera).
+function M.hitstop(scene, seconds)
+  scene._hitstop = math.max(scene._hitstop or 0, math.min(seconds or 0.05, 0.3))
 end
 
 --- 3D: um lugar no chão até `radius` metros de (x, z), onde dá para andar
@@ -2506,6 +2532,7 @@ local function prepare_all(scene, list)
     for _, b in ipairs(o.behaviors) do
       if b.player then o._player = true end
     end
+    scene._targets = nil
     M.events.add_object(scene, o)
   end
 end
@@ -2530,6 +2557,7 @@ function M.setup(scene, data, path)
   M.teardown(scene)
   scene._data, scene._path = data, path
   scene.objects, scene.object_list = {}, {}
+  scene._targets = nil
   scene._by_id, scene._by_body = {}, {}
   scene._camera, scene._first_map, scene._camera3d = nil, nil, nil
   scene._3d = data.mode == "3d"
@@ -2637,6 +2665,12 @@ local function sync_bodies_after(scene)
 end
 
 function M.fixed_update(scene, dt)
+  scene._targets = nil
+  -- Pausa no acerto: tudo para um instante (o golpe ganha peso).
+  if (scene._hitstop or 0) > 0 then
+    scene._hitstop = scene._hitstop - dt
+    return {}
+  end
   each_behavior(scene, "fixed_update", dt)
   -- Objetos sem corpo físico com velocidade (vx, vy) andam sozinhos.
   for _, o in ipairs(scene.object_list) do
@@ -2701,8 +2735,10 @@ local function refresh_list(scene)
 end
 
 function M.update(scene, dt)
+  scene._targets = nil
   if scene._3d then shake3_restore(scene) end
   scene._dt = dt
+  if (scene._hitstop or 0) > 0 then return end
   update_numbers(scene, dt)
   refresh_list(scene)
   if M.ui then M.ui.update(scene, dt) end
@@ -3388,6 +3424,11 @@ function M.new(data, path)
   --- dá para andar e longe `longe` metros dos jogadores (x, y, z).
   function scene:ground_spot(x, y, z, raio, longe)
     return M.ground_spot(self, x, y, z, raio, longe)
+  end
+
+  --- Para o jogo um instante (a pausa no acerto), em segundos.
+  function scene:hitstop(seconds)
+    M.hitstop(self, seconds)
   end
 
   --- Um aviso no console (filtro Avisos), uma vez por texto.
