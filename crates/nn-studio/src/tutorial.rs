@@ -221,6 +221,7 @@ pub fn all() -> &'static [Tutorial] {
             efeitos_3d(),
             terreno(),
             inimigos_3d(),
+            um_chefe(),
             portas_e_chaves(),
             uma_conversa(),
             eventos(),
@@ -897,6 +898,169 @@ fn inimigos_3d() -> Tutorial {
             Step {
                 title: "Pronto: um desafio!",
                 text: "Você usou Vida, Ícones, Inimigo 3D e Perigo. Ideias: um Checkpoint no meio do caminho (Fases > Checkpoint), mais besouros com Vagar, ou Atirar no herói (com um prefab de bola) para derrubar os inimigos de longe.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// O herói (com Jogador 3D) segura algo num osso (um filho com Preso a um osso)?
+fn segura_algo(ws: &ProjectWorkspace) -> bool {
+    objects(ws).iter().any(|o| {
+        has_behavior(o, "nn:jogador3d")
+            && o.children.iter().any(|ch| {
+                ch.component("bone")
+                    .is_some_and(|b| !b.str("bone").is_empty())
+            })
+    })
+}
+
+/// Algum prefab do projeto tem um Inimigo 3D?
+fn prefab_de_inimigo(ws: &ProjectWorkspace) -> bool {
+    ws.files.entries().iter().any(|e| {
+        e.rel.ends_with(".prefab")
+            && std::fs::read_to_string(ws.files.root().join(&e.rel))
+                .is_ok_and(|t| t.contains("nn:inimigo3d"))
+    })
+}
+
+fn um_chefe() -> Tutorial {
+    Tutorial {
+        id: "um-chefe",
+        title: "Um chefe",
+        summary: "Um herói com espada, ondas de besouros com o placar da onda e um chefe, o besouro-rei, com a barra de vida no alto da tela e um evento de vitória.",
+        minutes: 15,
+        template: Template::Vazio3D,
+        project: "Um chefe",
+        steps: vec![
+            Step {
+                title: "A luta final",
+                text: "Neste tutorial você monta uma arena: o herói com uma espada, ondas de besouros e, no fim, um chefe com vários ataques. Tudo sem código.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "O herói",
+                text: "Arraste modelos/heroi.glb para a cena e adicione Jogador > Jogador 3D e Jogador > Vida.",
+                target: Some("arquivo:modelos/heroi.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    objects(ws)
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:jogador3d") && has_behavior(o, "nn:vida"))
+                }),
+            },
+            Step {
+                title: "A espada na mão",
+                text: "Arraste modelos/espada.glb para a cena. Na Hierarquia, arraste a espada para cima do herói (ela vira filha dele) e, no Inspetor da espada, ➕ Adicionar componente > Preso a um osso. Ela vai para a mão direita (mao_d).",
+                target: Some("arquivo:modelos/espada.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| segura_algo(ws)),
+            },
+            Step {
+                title: "Golpear",
+                text: "Selecione o herói e adicione Ações > Golpe. No jogo, o clique (ou J) golpeia: quem está na frente perde vida e é empurrado.",
+                target: Some("inspetor.adicionar"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws)
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:jogador3d") && has_behavior(o, "nn:golpe"))
+                }),
+            },
+            Step {
+                title: "Um besouro",
+                text: "Arraste modelos/bicho.glb para a cena e adicione Inimigos > Inimigo 3D e Jogador > Vida (2 vidas, Quando acabar: some, e marque Mostrar o dano). Para ele morder em vez de só encostar, adicione também Ações > Golpe com Golpeia: sozinho, quando o alvo chega perto.",
+                target: Some("arquivo:modelos/bicho.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    with_model(ws, "bicho.glb")
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:inimigo3d") && has_behavior(o, "nn:vida"))
+                }),
+            },
+            Step {
+                title: "Um prefab de besouro",
+                text: "As ondas criam cópias do besouro. Clique com o botão direito nele na Hierarquia e escolha 📦 Criar prefab. Depois, apague o besouro da cena (Delete): as ondas trazem os outros.",
+                target: Some("hierarquia"),
+                show: Some(Tab::Hierarchy),
+                done: Some(|ws, _| prefab_de_inimigo(ws)),
+            },
+            Step {
+                title: "As ondas",
+                text: "➕ Objeto > Ondas de inimigos. No Inspetor, em Inimigo (prefab), escolha o besouro. Os quatro filhos (Saída) são de onde eles saem: espalhe-os em volta. Começa quando o jogador chega perto.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        behavior_of(o, "nn:ondas").is_some_and(|c| !c.str("prefab").is_empty())
+                    })
+                }),
+            },
+            Step {
+                title: "O placar da onda",
+                text: "➕ Objeto > Na tela (HUD) > Texto, no canto de cima, e adicione Aparência > Mostrar valor com o texto: Onda {onda}   Faltam {restantes}.",
+                target: Some("cena.objeto"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        behavior_of(o, "nn:mostrar_valor")
+                            .is_some_and(|c| c.str("texto").contains("{onda}"))
+                    })
+                }),
+            },
+            Step {
+                title: "O chefe",
+                text: "Arraste modelos/besourao.glb para o meio da arena e aumente a escala para 1,5. Adicione Jogador > Vida (12 vidas, Quando acabar: nada) e Inimigos > Chefe. No Chefe, em A luta começa, escolha com a mensagem \"comecar\". Ele já vem com o golpe, a investida e o pulo.",
+                target: Some("arquivo:modelos/besourao.glb"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    objects(ws)
+                        .iter()
+                        .any(|o| has_behavior(o, "nn:chefe") && has_behavior(o, "nn:vida"))
+                }),
+            },
+            Step {
+                title: "Acorde o chefe",
+                text: "No painel Eventos, uma regra da cena: Quando terminarem as ondas de Ondas (Mensagens > Vencer todas as ondas), Então Mandar mensagem comecar para o besouro (o nome dele na cena).",
+                target: Some("eventos"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    all_rules(ws).iter().any(|r| {
+                        r.when.iter().any(|c| c.id == "ondas_terminaram")
+                            && r.actions
+                                .iter()
+                                .any(|a| a.id == "mensagem" && a.str("msg") == "comecar")
+                    })
+                }),
+            },
+            Step {
+                title: "Vitória",
+                text: "Mais uma regra: Quando a vida do besouro acabar (Mensagens > Vida acabar), Então Tocar som assets/sons/vitoria.wav (ou o que quiser: mostrar um texto, ir para outra cena).",
+                target: Some("eventos"),
+                show: Some(Tab::Events),
+                done: Some(|ws, _| {
+                    all_rules(ws).iter().any(|r| {
+                        r.when
+                            .iter()
+                            .any(|c| c.id == "vida_acabou" || c.id == "derrotar")
+                            && !r.actions.is_empty()
+                    })
+                }),
+            },
+            Step {
+                title: "Lute!",
+                text: "F6. Chegue perto das Saídas: as ondas começam. Depois delas, o chefe acorda. Fique de olho no aviso (ele pisca e se prepara) e desvie; quando ele bater numa parede na investida, fica tonto: é a hora de golpear.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: um chefe!",
+                text: "Você usou Golpe, Preso a um osso, Ondas de inimigos, Chefe e os eventos de onda. Ideias: no Chefe, ligue os tiros em leque (com um prefab de Projétil) ou os ajudantes; ponha uma Zona de gatilho que fecha uma Porta atrás do herói; ou deixe o chefe soltar uma estrela ao ser derrotado.",
                 target: None,
                 show: None,
                 done: None,

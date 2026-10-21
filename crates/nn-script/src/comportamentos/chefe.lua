@@ -104,6 +104,11 @@ function B:comecar()
   self.obj:send("luta_comecou")
 end
 
+-- Levou um golpe dormindo: acorda e luta.
+function B:levou_dano()
+  if self.estado == "dormindo" then self:comecar() end
+end
+
 -- Multiplica as velocidades e divide as pausas na fúria.
 function B:ritmo()
   return self.furioso and 1.4 or 1

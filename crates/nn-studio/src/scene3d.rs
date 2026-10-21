@@ -1795,6 +1795,27 @@ pub fn add_object3_menu(ui: &mut egui::Ui) -> Option<Object> {
             ui.close();
         }
     });
+    let r = ui
+        .button("Ondas de inimigos")
+        .on_hover_text("Cria inimigos (um prefab) em ondas: onda 1, 2, 3... Os quatro filhos são de onde eles saem: arraste-os pela arena.");
+    crate::tutorial::anchor(ui.ctx(), "cena.objeto:ondas", r.rect);
+    if r.clicked() {
+        let mut o = Object::new(0, "Ondas");
+        let defaults = crate::behaviors::builtins()
+            .iter()
+            .find(|b| b.script == "nn:ondas")
+            .map(|info| info.defaults_for(true))
+            .unwrap_or_default();
+        o.components
+            .push(Component::behavior("nn:ondas", &defaults));
+        for (x, z) in [(5.0, 0.0), (-5.0, 0.0), (0.0, 5.0), (0.0, -5.0)] {
+            let mut p = Object::new(0, "Saída");
+            (p.x, p.z) = (x, z);
+            o.children.push(p);
+        }
+        out = Some(o);
+        ui.close();
+    }
     ui.separator();
     if ui
         .button("Jogador 3D")

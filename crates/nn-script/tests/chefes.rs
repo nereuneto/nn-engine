@@ -122,7 +122,7 @@ fn heroi(z: f64, vidas: u32) -> String {
     )
 }
 
-fn arquivos<'a>(cena: &'a str) -> Vec<(&'a str, &'a str)> {
+fn arquivos(cena: &str) -> Vec<(&str, &str)> {
     vec![
         ("cenas/obs.lua", OBSERVA),
         ("cenas/mundo.cena", cena),
@@ -233,7 +233,10 @@ fn ondas_comecam_quando_o_jogador_chega_e_gerador_no_3d() {
     assert_eq!(lua::<f64>(&rt, "nn.vars.onda"), 1.0);
     assert_eq!(lua::<usize>(&rt, "#C:find_all('bicho')"), 3);
     let (x, _, z) = xyz(&rt, "C:find_all('bicho')[3]:position3d()");
-    assert!(((x - 4.0).powi(2) + (z - 14.0).powi(2)).sqrt() < 1.0, "{x} {z}");
+    assert!(
+        ((x - 4.0).powi(2) + (z - 14.0).powi(2)).sqrt() < 1.0,
+        "{x} {z}"
+    );
 }
 
 /// Um chefe (uma cápsula grande) com só os ataques pedidos.
@@ -249,7 +252,10 @@ fn chefe(z: f64, ataques: &str, extra: &str) -> String {
 }
 
 fn estado(rt: &ScriptRuntime) -> String {
-    lua(rt, "C.objects.Chefe and C.objects.Chefe:behavior('chefe').estado or 'sumiu'")
+    lua(
+        rt,
+        "C.objects.Chefe and C.objects.Chefe:behavior('chefe').estado or 'sumiu'",
+    )
 }
 
 fn vida_heroi(rt: &ScriptRuntime) -> f64 {
@@ -257,7 +263,12 @@ fn vida_heroi(rt: &ScriptRuntime) -> f64 {
 }
 
 /// Roda até `f` valer (no máximo `max` quadros); devolve se valeu.
-fn ate(h: &mut Headless<Uma>, rt: &ScriptRuntime, max: u32, f: impl Fn(&ScriptRuntime) -> bool) -> bool {
+fn ate(
+    h: &mut Headless<Uma>,
+    rt: &ScriptRuntime,
+    max: u32,
+    f: impl Fn(&ScriptRuntime) -> bool,
+) -> bool {
     for _ in 0..max {
         h.run_frames(1);
         if f(rt) {
@@ -269,7 +280,11 @@ fn ate(h: &mut Headless<Uma>, rt: &ScriptRuntime, max: u32, f: impl Fn(&ScriptRu
 
 #[test]
 fn chefe_avisa_golpeia_fica_furioso_e_cai_deixando_o_premio() {
-    let objetos = format!("{},\n    {}", heroi(0.0, 9), chefe(4.0, "golpe = true,", ""));
+    let objetos = format!(
+        "{},\n    {}",
+        heroi(0.0, 9),
+        chefe(4.0, "golpe = true,", "")
+    );
     let cena_ = mundo(&objetos, "");
     let dir = projeto("chefe-golpe", &arquivos(&cena_));
     let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
@@ -280,7 +295,10 @@ fn chefe_avisa_golpeia_fica_furioso_e_cai_deixando_o_premio() {
     // Perto: a luta começa; anda até o herói, avisa (piscando) e golpeia.
     assert!(ate(&mut h, &rt, 200, |rt| estado(rt) == "aviso"), "avisou");
     assert!(lua::<bool>(&rt, "C.objects.Chefe._tint ~= nil"));
-    assert!(ate(&mut h, &rt, 120, |rt| vida_heroi(rt) < 9.0), "o golpe acertou");
+    assert!(
+        ate(&mut h, &rt, 120, |rt| vida_heroi(rt) < 9.0),
+        "o golpe acertou"
+    );
     assert_eq!(h.game.0.error(), None);
     // Com metade da vida, fica furioso.
     rt.lua()
@@ -288,7 +306,10 @@ fn chefe_avisa_golpeia_fica_furioso_e_cai_deixando_o_premio() {
         .exec()
         .unwrap();
     h.run_frames(3);
-    assert!(lua::<bool>(&rt, "C.objects.Chefe:behavior('chefe').furioso"));
+    assert!(lua::<bool>(
+        &rt,
+        "C.objects.Chefe:behavior('chefe').furioso"
+    ));
     // É pesado: o golpe não empurra.
     let (_, _, z0) = xyz(&rt, "C.objects.Chefe:position3d()");
     rt.lua()
@@ -325,29 +346,46 @@ fn chefe_investida_contra_a_parede_fica_tonto() {
     let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
         return;
     };
-    assert!(ate(&mut h, &rt, 200, |rt| estado(rt) == "investida"), "investiu");
-    assert!(ate(&mut h, &rt, 200, |rt| estado(rt) == "tonto"), "bateu na parede");
+    assert!(
+        ate(&mut h, &rt, 200, |rt| estado(rt) == "investida"),
+        "investiu"
+    );
+    assert!(
+        ate(&mut h, &rt, 200, |rt| estado(rt) == "tonto"),
+        "bateu na parede"
+    );
     assert!(vida_heroi(&rt) < 9.0, "atropelou o herói no caminho");
     assert_eq!(h.game.0.error(), None);
 }
 
 #[test]
 fn chefe_pula_com_impacto_e_atira_em_leque() {
-    let objetos = format!("{},\n    {}", heroi(0.0, 20), chefe(6.0, "pulo = true,", "raio_impacto = 4,"));
+    let objetos = format!(
+        "{},\n    {}",
+        heroi(0.0, 20),
+        chefe(6.0, "pulo = true,", "raio_impacto = 4,")
+    );
     let cena_ = mundo(&objetos, "");
     let dir = projeto("chefe-pulo", &arquivos(&cena_));
     let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
         return;
     };
     assert!(ate(&mut h, &rt, 300, |rt| estado(rt) == "pulo"), "pulou");
-    assert!(ate(&mut h, &rt, 200, |rt| vida_heroi(rt) < 20.0), "o impacto acertou");
+    assert!(
+        ate(&mut h, &rt, 200, |rt| vida_heroi(rt) < 20.0),
+        "o impacto acertou"
+    );
     assert_eq!(h.game.0.error(), None);
     drop(h);
 
     let objetos = format!(
         "{},\n    {}",
         heroi(0.0, 20),
-        chefe(8.0, "leque = true, tiro = \"prefabs/bola.prefab\", tiros = 5,", "")
+        chefe(
+            8.0,
+            "leque = true, tiro = \"prefabs/bola.prefab\", tiros = 5,",
+            ""
+        )
     );
     let cena_ = mundo(&objetos, "");
     let dir = projeto("chefe-leque", &arquivos(&cena_));
@@ -355,13 +393,25 @@ fn chefe_pula_com_impacto_e_atira_em_leque() {
         return;
     };
     assert!(
-        ate(&mut h, &rt, 300, |rt| lua::<usize>(rt, "#C:find_all('bola')") == 5),
+        ate(&mut h, &rt, 300, |rt| lua::<usize>(
+            rt,
+            "#C:find_all('bola')"
+        ) == 5),
         "5 tiros"
     );
     // Os tiros são do chefe: não acertam ele, acertam o herói.
-    assert!(lua::<bool>(&rt, "C:find_all('bola')[1]._dono == C.objects.Chefe"));
-    assert!(ate(&mut h, &rt, 200, |rt| vida_heroi(rt) < 20.0), "um tiro acertou");
-    assert_eq!(lua::<f64>(&rt, "C.objects.Chefe:behavior('vida').atual"), 6.0);
+    assert!(lua::<bool>(
+        &rt,
+        "C:find_all('bola')[1]._dono == C.objects.Chefe"
+    ));
+    assert!(
+        ate(&mut h, &rt, 200, |rt| vida_heroi(rt) < 20.0),
+        "um tiro acertou"
+    );
+    assert_eq!(
+        lua::<f64>(&rt, "C.objects.Chefe:behavior('vida').atual"),
+        6.0
+    );
     assert_eq!(h.game.0.error(), None);
 }
 

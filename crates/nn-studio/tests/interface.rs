@@ -3570,6 +3570,132 @@ fn tutorial_inimigos_3d_avanca_sozinho_ate_o_fim() {
 }
 
 #[test]
+fn tutorial_um_chefe_avanca_sozinho_ate_o_fim() {
+    use nn_studio::scene_data::{Component, EventItem, Object, Prop, Rule};
+    let dir = temp("tutorial-chefe");
+    let mut h = studio(&dir, None);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("um-chefe");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/um-chefe");
+    for f in [
+        "modelos/besourao.glb",
+        "modelos/espada.glb",
+        "modelos/bicho.glb",
+    ] {
+        assert!(projeto.join(f).is_file(), "o modelo vazio3d traz {f}");
+    }
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    h.run_steps(4);
+    fn doc<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.scenes.get_mut("cenas/mundo.cena").unwrap()
+    }
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    let modelo = |id: u32, name: &str, file: &str| {
+        let mut o = Object::new(id, name);
+        let mut c = Component::new("model");
+        c.set("file", Prop::Str(file.into()));
+        o.components.push(c);
+        o
+    };
+    espera(&mut h, 1);
+    let mut heroi = modelo(10, "heroi", "modelos/heroi.glb");
+    heroi
+        .components
+        .push(Component::behavior("nn:jogador3d", &[]));
+    heroi.components.push(Component::behavior("nn:vida", &[]));
+    doc(&mut h).data.objects.push(heroi);
+    espera(&mut h, 2);
+    // A espada, filha do herói, presa à mão.
+    let mut espada = modelo(11, "espada", "modelos/espada.glb");
+    let mut osso = Component::new("bone");
+    osso.set("bone", Prop::Str("mao_d".into()));
+    espada.components.push(osso);
+    doc(&mut h).data.find_mut(10).unwrap().children.push(espada);
+    espera(&mut h, 3);
+    doc(&mut h)
+        .data
+        .find_mut(10)
+        .unwrap()
+        .components
+        .push(Component::behavior("nn:golpe", &[]));
+    espera(&mut h, 4);
+    let mut bicho = modelo(12, "besouro", "modelos/bicho.glb");
+    bicho
+        .components
+        .push(Component::behavior("nn:inimigo3d", &[]));
+    bicho.components.push(Component::behavior("nn:vida", &[]));
+    doc(&mut h).data.objects.push(bicho);
+    espera(&mut h, 5);
+    // O prefab (como o 📦 Criar prefab faz: um arquivo em prefabs/).
+    std::fs::create_dir_all(projeto.join("prefabs")).unwrap();
+    std::fs::write(
+        projeto.join("prefabs/besouro.prefab"),
+        r#"return { format = 1, object = { id = 1, name = "besouro", components = {
+  { type = "model", file = "modelos/bicho.glb" }, { type = "behavior", script = "nn:inimigo3d" } } } }"#,
+    )
+    .unwrap();
+    h.state_mut().project_mut().unwrap().files.rescan();
+    espera(&mut h, 6);
+    let mut ondas = Object::new(13, "Ondas");
+    ondas.components.push(Component::behavior(
+        "nn:ondas",
+        &[("prefab".into(), Prop::Str("prefabs/besouro.prefab".into()))],
+    ));
+    doc(&mut h).data.objects.push(ondas);
+    espera(&mut h, 7);
+    let mut placar = Object::new(14, "placar");
+    placar.components.push(Component::behavior(
+        "nn:mostrar_valor",
+        &[(
+            "texto".into(),
+            Prop::Str("Onda {onda}   Faltam {restantes}".into()),
+        )],
+    ));
+    doc(&mut h).data.objects.push(placar);
+    espera(&mut h, 8);
+    let mut rei = modelo(15, "rei", "modelos/besourao.glb");
+    rei.components.push(Component::behavior("nn:vida", &[]));
+    rei.components.push(Component::behavior("nn:chefe", &[]));
+    doc(&mut h).data.objects.push(rei);
+    espera(&mut h, 9);
+    let item = |id: &str, props: &[(&str, &str)]| EventItem {
+        id: id.into(),
+        not: false,
+        props: props
+            .iter()
+            .map(|(k, v)| (k.to_string(), Prop::Str(v.to_string())))
+            .collect(),
+    };
+    doc(&mut h).data.events.push(Rule {
+        when: vec![item("ondas_terminaram", &[("quem", "Ondas")])],
+        actions: vec![item("mensagem", &[("msg", "comecar"), ("alvo", "rei")])],
+        ..Default::default()
+    });
+    espera(&mut h, 10);
+    doc(&mut h).data.events.push(Rule {
+        when: vec![item("vida_acabou", &[("quem", "rei")])],
+        actions: vec![item("som", &[("som", "assets/sons/vitoria.wav")])],
+        ..Default::default()
+    });
+    espera(&mut h, 11);
+    h.get_by_label("▶ Testar daqui").click();
+    espera(&mut h, 12);
+    h.get_by_label("Concluir").click();
+    h.run_steps(4);
+    assert!(h.state().tutorial.is_none());
+}
+
+#[test]
 fn tutorial_portas_e_chaves_avanca_sozinho_ate_o_fim() {
     use nn_studio::scene_data::{Component, Prop};
     let dir = temp("tutorial-portas");

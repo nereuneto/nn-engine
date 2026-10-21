@@ -761,7 +761,8 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     assert_eq!(h.game.0.error(), None);
     // A arena: o portão começou aberto (desceu); entrando, ele fecha e as
     // ondas começam.
-    let portao = |rt: &ScriptRuntime| -> f64 { lua(rt, "return cena.objects['Portão da arena'].y") };
+    let portao =
+        |rt: &ScriptRuntime| -> f64 { lua(rt, "return cena.objects['Portão da arena'].y") };
     assert!(portao(&rt) < 0.0, "aberto: {}", portao(&rt));
     rt.lua()
         .load("cena.objects['Herói']:move_to(-22, 0.1, 0)")
@@ -770,7 +771,10 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     h.run_frames(120);
     assert!(portao(&rt) > 1.0, "fechou: {}", portao(&rt));
     assert_eq!(lua::<f64>(&rt, "return nn.vars.onda"), 1.0);
-    assert!(lua::<bool>(&rt, "return cena.objects['Placar da arena'].visible"));
+    assert!(lua::<bool>(
+        &rt,
+        "return cena.objects['Placar da arena'].visible"
+    ));
     // Derrota cada onda (o herói fica longe, sem levar dano).
     let mut ondas = 0;
     for _ in 0..40 {
@@ -783,13 +787,20 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
             .unwrap();
         h.run_frames(30);
         ondas = lua::<i64>(&rt, "return nn.vars.onda");
-        if lua::<String>(&rt, "return cena.objects['Besouro-rei']:behavior('chefe').estado") != "dormindo" {
+        if lua::<String>(
+            &rt,
+            "return cena.objects['Besouro-rei']:behavior('chefe').estado",
+        ) != "dormindo"
+        {
             break;
         }
     }
     assert_eq!(ondas, 3);
     assert_eq!(h.game.0.error(), None);
-    assert!(!lua::<bool>(&rt, "return cena.objects['Placar da arena'].visible"));
+    assert!(!lua::<bool>(
+        &rt,
+        "return cena.objects['Placar da arena'].visible"
+    ));
     // O besouro-rei acordou; derrotado, deixa a sexta estrela e o portão abre.
     rt.lua()
         .load("cena:hit(cena.objects['Besouro-rei'], 99, cena.objects['Herói'])")
@@ -797,14 +808,20 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
         .unwrap();
     h.run_frames(200);
     assert_eq!(h.game.0.error(), None);
-    assert!(lua::<bool>(&rt, "return cena.objects['Besouro-rei'] == nil"));
+    assert!(lua::<bool>(
+        &rt,
+        "return cena.objects['Besouro-rei'] == nil"
+    ));
     assert!(portao(&rt) < 0.0, "abriu de novo: {}", portao(&rt));
     let (x, y, z): (f64, f64, f64) = {
         let v: Vec<f64> = lua(&rt, "return { cena:find_all('estrela')[1]:position3d() }");
         (v[0], v[1], v[2])
     };
     rt.lua()
-        .load(format!("cena.objects['Herói']:move_to({x}, {}, {z})", y - 0.5))
+        .load(format!(
+            "cena.objects['Herói']:move_to({x}, {}, {z})",
+            y - 0.5
+        ))
         .exec()
         .unwrap();
     h.run_frames(5);
@@ -1195,9 +1212,7 @@ fn capturas_da_arena() {
     };
     h.run_frames(30);
     let lua = rt2.lua();
-    lua.globals()
-        .set("C", h.game.0.table().unwrap())
-        .unwrap();
+    lua.globals().set("C", h.game.0.table().unwrap()).unwrap();
     // Entra na arena, olhando para o meio dela.
     lua.load(
         r#"

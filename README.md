@@ -64,7 +64,7 @@ O NN Studio é o jeito mais fácil de fazer um jogo: crie um projeto a partir de
 
 ![Cena visual 2D no NN Studio](docs/imagens/nn-studio-cena.png)
 
-**No 3D:** vista em perspectiva com céu, sol, névoa e sombras, navegação como na Unity e no Godot; modelos `.glb` do Blender ou do Mixamo, animados; **física** (chão, paredes, caixas que caem, plataformas que levam o herói); o **Jogador 3D** em terceira pessoa; **terrenos** pintados com o mouse (morros, lagos, cores, árvores espalhadas); partículas e sons no mundo; inimigos que perseguem (contornando paredes) e atacam; **combate** com espada na mão, tiros que miram pelo meio da tela e números de dano; portas com chave e inventário; e o HUD por cima da vista, do jeito que fica no jogo.
+**No 3D:** vista em perspectiva com céu, sol, névoa e sombras, navegação como na Unity e no Godot; modelos `.glb` do Blender ou do Mixamo, animados; **física** (chão, paredes, caixas que caem, plataformas que levam o herói); o **Jogador 3D** em terceira pessoa; **terrenos** pintados com o mouse (morros, lagos, cores, árvores espalhadas); partículas e sons no mundo; inimigos que perseguem (contornando paredes) e atacam; **combate** com espada na mão, tiros que miram pelo meio da tela e números de dano; ondas de inimigos e **chefes** com vários ataques; portas com chave e inventário; e o HUD por cima da vista, do jeito que fica no jogo.
 
 ![Terreno sendo pintado no NN Studio](docs/imagens/nn-studio-terreno.png)
 

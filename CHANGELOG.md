@@ -25,6 +25,18 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - **Vale 3D:** o herói vem com a espada (clique para golpear); os besouros têm 2 de vida, com barra e números, e mordem; derrotar um dá 3 moedas. Traz também o `magia.prefab` (uma bola com Projétil, para um Atirar).
 - **No Lua:** `scene:hit(alvo, dano, quem, opts)`, `scene:foes(quem)`, `scene:damage_number(obj, n)`, `scene:shake(forca, tempo)`, `anim:bones()`, o componente `bone` e a opção `shoulder` da câmera em terceira pessoa. A Vida recebe `dano(n, quem)` e manda `derrotou` para quem bateu por último.
 
+### Chefes e ondas
+
+- **Ondas de inimigos** (comportamento novo, 3D): cria um prefab de inimigo em ondas (onda 1, 2, 3...), cada uma com mais, com pausa entre elas. Os filhos do objeto são os pontos de onde eles saem (sem filhos, em volta, no chão onde dá para andar e longe do herói). Começa quando o jogador chega perto, com a cena ou por mensagem; mostra um letreiro ("Onda 2") e guarda a onda e quantos faltam em variáveis, para o placar. **➕ Objeto > Ondas de inimigos** já vem com quatro pontos.
+- **Chefe** (comportamento novo, 3D): golpe, investida (fica tonto ao bater numa parede), pulo com impacto, tiros em leque e chamar ajudantes, cada um com um aviso antes. Fica furioso com pouca vida, é pesado, mostra o nome e a vida no alto da tela e pode deixar um prêmio ao cair.
+- **Gerador no 3D:** cria num lugar do chão até **Espalhar até** metros, longe do jogador.
+- **Eventos:** **Começar ou terminar uma onda** e **Vencer todas as ondas**.
+- **Modelo novo:** o **besouro-rei** (`besourao.glb`), com parado, andar, golpe, preparar, pular, tonto e cair, nos modelos de projeto 3D.
+- **A ilha (modelo 3D) ganhou uma arena** depois da ponte: 3 ondas de besouros e o besouro-rei, que guarda a sexta estrela. O herói da ilha também ganhou a espada.
+- **Tutorial guiado novo: Um chefe** (15 minutos).
+- **Vida:** a variável padrão ("vidas") só vale no jogador. Antes, um inimigo com Vida e a variável padrão dividia as vidas com o herói.
+- **No Lua:** `scene:ground_spot(...)`, `scene:in_front(...)`, `scene:front3(obj)` e `scene:warn(texto)`.
+
 ## 0.2.2
 
 Correção da 0.2.1.
