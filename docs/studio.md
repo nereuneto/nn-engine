@@ -138,6 +138,33 @@ original, use **Exibir > Restaurar layout padrão**.
 - **Inspetor** (à direita): as propriedades do objeto selecionado.
 - **Console** (embaixo): mensagens do jogo e do editor.
 
+**Avisos rápidos** aparecem um instante no canto de baixo, à direita:
+"1 objeto apagado", "3 objetos colados", "Salvo: fase.cena", "📦 Prefab
+criado"... Os de apagar, recortar e colar têm **Desfazer**, que volta na hora
+(o botão some se a cena mudou depois; aí use Ctrl+Z). Com o mouse em cima, o
+aviso espera. Ao salvar, a aba mostra um ✔ no lugar do •. A primeira vez que
+o jogo de um projeto roda, e a primeira exportação, ganham uma comemoração
+(com confete). A aba **Início** tem a **💡 dica do dia**, com um atalho ou um
+jeito mais rápido de fazer algo.
+
+### Preferências
+
+**Exibir > Preferências** (ou na paleta, *preferências*), para todos os
+projetos:
+
+- **Tema** (escuro ou claro) e **cor de destaque** (azul, verde, roxo,
+  laranja ou rosa), a cor da seleção e dos links;
+- **Modo** (Simples ou Completo) e **tamanho da interface**;
+- **Animações:** os avisos que aparecem e somem, o brilho em volta dos
+  objetos que acabaram de nascer, o confete. Desligadas, tudo fica parado;
+- **Comemorações** (o primeiro ▶ e a primeira exportação);
+- **Sons da interface** (desligados no começo): um "plim" ao salvar e ao
+  exportar e um toque curto ao criar. São gerados pelo próprio NN Studio;
+- **Limpar o Console ao jogar** e **avisar quando sair uma versão nova**.
+
+**Voltar ao padrão** desfaz o tema, a cor, o modo, o tamanho, as animações,
+as comemorações e os sons.
+
 ### Modo Simples e modo Completo
 
 No alto, à direita. O **Simples** mostra só o essencial; o **Completo** mostra
@@ -1420,11 +1447,12 @@ A lista também está em **Ajuda > Atalhos do teclado**.
 
 ## Onde ficam as preferências
 
-Projetos recentes, tema, modo, tamanho da interface e layouts ficam num
-arquivo `preferencias.json` na pasta de configuração do usuário
-(`%APPDATA%\NN Studio\config` no Windows, `~/.config/nnstudio` no Linux). Os
-projetos não ganham nenhum arquivo do editor: a pasta do jogo continua só com
-o jogo.
+Projetos recentes, tema, cor de destaque, modo, tamanho da interface, sons,
+animações e layouts ficam num arquivo `preferencias.json` na pasta de
+configuração do usuário (`%APPDATA%\NN Studio\config` no Windows,
+`~/.config/nnstudio` no Linux). Os projetos não ganham arquivos do editor (a
+pasta do jogo continua só com o jogo), a não ser os ⭐ favoritos que você
+guardar, na pasta `favoritos/`.
 
 Na mesma pasta fica o **log** do editor, `nn-studio.log` (o da vez anterior
 fica em `nn-studio.log.1`). Se o NN Studio fechar por um erro, na próxima vez
@@ -1496,8 +1524,9 @@ Os próximos passos já escolhidos:
 
 - **v0.5, um NN Studio mais gostoso de usar:** o botão direito, a busca
   rápida (Shift+A), os jeitos de duplicar, copiar e colar, editar vários
-  objetos de uma vez e os favoritos já entraram; falta um Studio mais
-  amigável (avisos com Desfazer, painéis vazios que ensinam);
+  objetos de uma vez, os favoritos, os avisos com Desfazer, os painéis
+  vazios que ensinam e as Preferências já entraram; falta a revisão antes
+  de lançar;
 - **v0.6, modelar e animar dentro do NN Studio:** um modelador de peças
   low-poly coloridas, com espelho, variações e peças que se encaixam, e um
   animador com esqueletos e animações prontas para ajustar.

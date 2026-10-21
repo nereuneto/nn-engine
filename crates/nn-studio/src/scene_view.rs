@@ -272,6 +272,13 @@ pub struct SceneDoc {
     carry: Option<Carry>,
     /// O clique que soltou as cópias do Shift+D: ignora o mouse até soltar.
     swallow_press: bool,
+    /// Avisos para o canto da janela (apagou, colou...), com Desfazer.
+    pub notices: Vec<String>,
+    /// Sons da interface pedidos ("criar"), se ligados nas Preferências.
+    pub sounds: Vec<&'static str>,
+    /// Objetos que acabaram de nascer: o contorno brilha um instante. (Com a
+    /// hora em que começou, depois do primeiro desenho.)
+    flash: Vec<(u32, Option<f64>)>,
 }
 
 /// De quem saíram as últimas cópias (Ctrl+D, Alt+arrastar, Shift+D).
@@ -323,6 +330,9 @@ fn clip_id() -> egui::Id {
     egui::Id::new("objetos-copiados")
 }
 
+/// A cor do brilho dos objetos que acabaram de nascer.
+pub(crate) const FLASH: Color32 = Color32::from_rgb(0xFF, 0xE0, 0x66);
+
 /// O começo do texto de objetos copiados no NN Studio.
 const CLIP_MARK: &str = "-- nn-studio: objetos copiados";
 
@@ -359,6 +369,8 @@ pub struct SceneEnv<'a> {
     pub maps: &'a mut std::collections::HashMap<String, crate::map_doc::MapDoc>,
     pub tilesets: &'a mut std::collections::HashMap<String, crate::tileset::TilesetDoc>,
     pub paint: &'a mut crate::paint::PaintState,
+    /// As animações estão ligadas (Preferências): o brilho dos objetos novos.
+    pub animate: bool,
 }
 
 impl std::fmt::Debug for SceneEnv<'_> {
@@ -590,6 +602,9 @@ impl SceneDoc {
             last_dup: None,
             carry: None,
             swallow_press: false,
+            notices: Vec::new(),
+            sounds: Vec::new(),
+            flash: Vec::new(),
         }
     }
 
@@ -701,6 +716,7 @@ impl SceneDoc {
         self.data.insert(Some(parent), n, o);
         self.collapsed.remove(&parent);
         self.selection = vec![id];
+        self.flash_new(&[id]);
         Some(id)
     }
 
@@ -742,6 +758,7 @@ impl SceneDoc {
             copies.push(n);
         }
         self.selection = copies.clone();
+        self.flash_new(&copies);
         self.last_dup = Some(LastDup {
             sources,
             copies: copies.clone(),
@@ -894,10 +911,13 @@ impl SceneDoc {
             return;
         }
         self.record(None);
+        let n = ids.len();
         for id in ids {
             self.data.remove(id);
         }
         self.selection.clear();
+        self.notices
+            .push(count_text(n, "objeto apagado", "objetos apagados"));
     }
 
     /// Num prefab, o objeto principal.
@@ -979,7 +999,13 @@ impl SceneDoc {
     /// Ctrl+X: copia e apaga.
     pub fn cut_selection(&mut self, ctx: &egui::Context) {
         if self.copy_selection(ctx) {
+            let before = self.notices.len();
             self.delete_selection();
+            if self.notices.len() > before
+                && let Some(last) = self.notices.last_mut()
+            {
+                *last = last.replace("apagado", "recortado");
+            }
         }
     }
 
@@ -1041,7 +1067,37 @@ impl SceneDoc {
             }
         }
         self.selection = ids.clone();
+        self.notices
+            .push(count_text(ids.len(), "objeto colado", "objetos colados"));
+        self.flash_new(&ids);
         ids
+    }
+
+    /// Faz o contorno destes objetos brilhar um instante (acabaram de nascer).
+    pub fn flash_new(&mut self, ids: &[u32]) {
+        if !ids.is_empty() {
+            self.sounds.push("criar");
+        }
+        self.flash.retain(|(id, _)| !ids.contains(id));
+        self.flash.extend(ids.iter().map(|id| (*id, None)));
+    }
+
+    /// Quanto o contorno de cada objeto novo ainda brilha (1 = começo, some
+    /// em 0,7 s). Esquece os que já acabaram.
+    pub(super) fn flash_levels(&mut self, now: f64, animate: bool) -> Vec<(u32, f32)> {
+        if !animate {
+            self.flash.clear();
+            return Vec::new();
+        }
+        const LEN: f64 = 0.7;
+        for f in &mut self.flash {
+            f.1.get_or_insert(now);
+        }
+        self.flash.retain(|(_, t)| t.is_some_and(|t| now - t < LEN));
+        self.flash
+            .iter()
+            .map(|(id, t)| (*id, (1.0 - (now - t.unwrap_or(now)) / LEN) as f32))
+            .collect()
     }
 
     /// Ctrl+C, Ctrl+X e Ctrl+V com o mouse na vista ou na Hierarquia. `at`:
@@ -1194,6 +1250,106 @@ impl SceneDoc {
         true
     }
 
+    /// O brilho em volta dos objetos que acabaram de nascer (2D).
+    fn draw_flash2(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        env: &mut SceneEnv,
+        flashes: &[(u32, f32)],
+    ) {
+        for &(id, level) in flashes {
+            let Some((corners, _, _)) = self.screen_corners(env, rect, id) else {
+                continue;
+            };
+            let c = corners.iter().fold(Vec2::ZERO, |a, p| a + p.to_vec2()) / 4.0;
+            // O contorno cresce e some.
+            let grow = 1.0 + (1.0 - level) * 0.25;
+            let mut pts: Vec<Pos2> = corners
+                .iter()
+                .map(|p| (c + (p.to_vec2() - c) * grow).to_pos2())
+                .collect();
+            pts.push(pts[0]);
+            painter.add(egui::Shape::line(
+                pts,
+                Stroke::new(1.0 + 3.0 * level, FLASH.gamma_multiply(level)),
+            ));
+        }
+        if !flashes.is_empty() {
+            painter.ctx().request_repaint();
+        }
+    }
+
+    /// A cena está vazia? (No 3D, a câmera sozinha não conta.)
+    pub fn is_empty_scene(&self) -> bool {
+        self.data.objects.iter().all(|o| {
+            self.data.three_d && o.component("camera3d").is_some() && o.children.is_empty()
+        })
+    }
+
+    /// Abre a busca rápida (Shift+A) em `pos` na tela, para criar no meio da
+    /// vista (2D) ou onde a câmera olha (3D).
+    pub fn open_quick_add(&mut self, pos: Pos2, root: &Path) {
+        let mut q = if self.data.three_d {
+            crate::catalog::QuickAdd::new(pos, scene3d::scatter_files(root), "3d")
+        } else {
+            let files = crate::catalog::project_files(root, &["prefab", "png", "jpg", "jpeg"]);
+            crate::catalog::QuickAdd::new(pos, files, "2d")
+        };
+        q.at = if self.data.three_d {
+            let p = self.spawn_point3();
+            [f64::from(p.x), f64::from(p.y), f64::from(p.z)]
+        } else {
+            let (x, y) = self.view_center();
+            [x, y, 0.0]
+        };
+        self.quick_add = Some(q);
+    }
+
+    /// O cartão no meio de uma cena vazia: como começar.
+    fn empty_card(&mut self, ui: &mut egui::Ui, rect: Rect, env: &mut SceneEnv) {
+        if !self.is_empty_scene()
+            || self.quick_add.is_some()
+            || self.view_menu.is_some()
+            || self.prefab_root().is_some()
+            || self.painting.is_some()
+        {
+            return;
+        }
+        let card = Rect::from_center_size(rect.center(), Vec2::new(360.0, 170.0)).intersect(rect);
+        if card.width() < 200.0 || card.height() < 120.0 {
+            return;
+        }
+        let three_d = self.data.three_d;
+        let mut search = None;
+        ui.scope_builder(egui::UiBuilder::new().max_rect(card), |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new("Sua cena está vazia")
+                        .size(16.0)
+                        .strong(),
+                );
+                ui.add_space(4.0);
+                ui.label("• Clique com o botão direito aqui: o objeto nasce no ponto do clique.");
+                ui.label("• Shift+A abre a busca: luz, cubo, inimigo...");
+                ui.label(if three_d {
+                    "• Arraste modelos (.glb) e prefabs do painel Arquivos."
+                } else {
+                    "• Arraste imagens, mapas e prefabs do painel Arquivos."
+                });
+                ui.add_space(6.0);
+                let r = ui.button("🔍 Buscar o que criar");
+                crate::tutorial::anchor(ui.ctx(), "cena.vazia", r.rect);
+                if r.clicked() {
+                    search = Some(r.rect.left_bottom());
+                }
+            });
+        });
+        if let Some(p) = search {
+            self.open_quick_add(p, env.root);
+        }
+    }
+
     /// A dica embaixo da vista enquanto as cópias seguem o mouse.
     fn carry_hint(&self, painter: &egui::Painter, rect: Rect) {
         if self.carry.is_none() {
@@ -1266,6 +1422,7 @@ impl SceneDoc {
             None => self.data.objects.push(o),
         }
         self.selection = vec![id];
+        self.flash_new(&[id]);
         id
     }
 
@@ -1531,7 +1688,10 @@ impl SceneDoc {
         } else {
             self.handle_input(ui, &response, rect, env, &mut actions);
             self.draw_overlays(&painter, rect, env);
+            let flashes = self.flash_levels(ui.input(|i| i.time), env.animate);
+            self.draw_flash2(&painter, rect, env, &flashes);
             self.carry_hint(&painter, rect);
+            self.empty_card(ui, rect, env);
             self.view_menu2(&response, rect, env, &mut actions);
         }
         if let Some(mut q) = self.quick_add.take() {
@@ -3154,6 +3314,15 @@ fn renumber(o: &mut Object, next: &mut u32) {
     *next += 1;
     for c in &mut o.children {
         renumber(c, next);
+    }
+}
+
+/// "1 objeto apagado", "3 objetos apagados".
+fn count_text(n: usize, one: &str, many: &str) -> String {
+    if n == 1 {
+        format!("1 {one}")
+    } else {
+        format!("{n} {many}")
     }
 }
 

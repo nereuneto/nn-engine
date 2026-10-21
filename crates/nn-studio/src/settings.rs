@@ -22,6 +22,37 @@ pub enum ThemeChoice {
     Claro,
 }
 
+/// A cor de destaque do NN Studio (seleção, links, abas).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Accent {
+    #[default]
+    Azul,
+    Verde,
+    Roxo,
+    Laranja,
+    Rosa,
+}
+
+impl Accent {
+    pub const ALL: [Accent; 5] = [
+        Accent::Azul,
+        Accent::Verde,
+        Accent::Roxo,
+        Accent::Laranja,
+        Accent::Rosa,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Accent::Azul => "Azul",
+            Accent::Verde => "Verde",
+            Accent::Roxo => "Roxo",
+            Accent::Laranja => "Laranja",
+            Accent::Rosa => "Rosa",
+        }
+    }
+}
+
 /// Modo Simples esconde opções avançadas; o Completo mostra tudo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Mode {
@@ -75,6 +106,17 @@ pub struct Settings {
     pub latest_url: Option<String>,
     /// Versão que a pessoa pediu para não lembrar mais.
     pub skipped_version: Option<String>,
+    /// A cor de destaque.
+    pub accent: Accent,
+    /// Sons da interface (um "plim" ao salvar e exportar, um clique ao criar).
+    pub ui_sounds: bool,
+    /// Pequenas animações (avisos que aparecem e somem, o brilho dos objetos
+    /// novos, o confete). Desligadas, tudo fica parado.
+    pub animations: bool,
+    /// Comemorar os marcos (o primeiro ▶ do projeto, a primeira exportação).
+    pub celebrations: bool,
+    /// Os marcos já comemorados (`jogar:<pasta>`, `exportar:<pasta>`).
+    pub celebrated: std::collections::BTreeSet<String>,
 }
 
 impl Default for Settings {
@@ -92,6 +134,11 @@ impl Default for Settings {
             latest_version: None,
             latest_url: None,
             skipped_version: None,
+            accent: Accent::Azul,
+            ui_sounds: false,
+            animations: true,
+            celebrations: true,
+            celebrated: Default::default(),
         }
     }
 }

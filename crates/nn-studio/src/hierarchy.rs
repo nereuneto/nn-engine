@@ -300,8 +300,12 @@ impl HierarchyPanel {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 1.0;
-                if doc.data.objects.is_empty() {
-                    ui.weak("A cena está vazia. Use ➕ ou o botão direito aqui (ou na cena), ou arraste imagens do painel Arquivos para a cena.");
+                if doc.is_empty_scene() {
+                    ui.weak("A cena está vazia. Use ➕ ou o botão direito aqui (ou na cena), ou arraste arquivos do painel Arquivos para a cena.");
+                    let r = ui.button("🔍 Buscar o que criar (Shift+A)");
+                    if r.clicked() {
+                        doc.open_quick_add(r.rect.left_bottom(), root);
+                    }
                 }
                 if self.filter.trim().is_empty() {
                     // Só as linhas que aparecem são desenhadas (cenas com

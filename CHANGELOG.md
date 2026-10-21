@@ -4,6 +4,26 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Amigável e divertido (Sprint 45)
+
+- **Avisos rápidos** no canto de baixo: "1 objeto apagado", "3 objetos colados", "Salvo: fase.cena", "📦 Prefab criado", "⭐ Guardado nos favoritos" e os erros. Os de apagar, recortar e colar têm **Desfazer**, que só aparece enquanto a cena não mudou depois. Com o mouse em cima, o aviso espera.
+- **Ao salvar**, a aba mostra um ✔ no lugar do • por um instante.
+- **Objetos novos brilham**: o que acabou de nascer (criado, colado, duplicado) ganha um contorno amarelo que some em menos de um segundo, para você ver onde ele caiu.
+- **Painéis vazios que ensinam:**
+  - uma cena vazia mostra como começar, com **🔍 Buscar o que criar**;
+  - o Console vazio explica o que aparece ali e tem **▶ Jogar**;
+  - a Hierarquia de uma cena vazia também tem a busca.
+- **💡 Dica do dia** no Início, com **Próxima dica**.
+- **Comemorações:** a primeira vez que o jogo de um projeto roda, e a primeira exportação, ganham um aviso e um confete curtinho. Uma vez por projeto.
+- **Preferências** (Exibir > Preferências):
+  - tema e **cor de destaque** (azul, verde, roxo, laranja, rosa);
+  - modo e tamanho da interface;
+  - **animações**: desligadas, menus, avisos e brilhos ficam parados;
+  - **comemorações**;
+  - **sons da interface**, desligados no começo e gerados pelo próprio NN Studio;
+  - limpar o Console ao jogar e avisar versões novas.
+- Os rótulos com ✓ (que apareciam como um quadradinho) agora usam ✔.
+
 ### Menos trabalho repetido (Sprint 44)
 
 - **Ctrl+D repete o passo:** duplicou e moveu a cópia? O próximo Ctrl+D põe a nova o mesmo tanto adiante. Uma cerca ou uma fileira sai com Ctrl+D, Ctrl+D, Ctrl+D…

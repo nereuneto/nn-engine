@@ -557,6 +557,7 @@ impl SceneDoc {
             None => self.data.objects.push(o),
         }
         self.selection = vec![id];
+        self.flash_new(&[id]);
         id
     }
 
@@ -707,8 +708,10 @@ impl SceneDoc {
         }
 
         self.input3(ui, &response, rect, env, &mut actions);
-        self.overlays3(&painter, rect, env);
+        let flashes = self.flash_levels(ui.input(|i| i.time), env.animate);
+        self.overlays3(&painter, rect, env, &flashes);
         self.carry_hint(&painter, rect);
+        self.empty_card(ui, rect, env);
         self.view_menu3(&response, rect, env, &mut actions);
         if let Some(mut q) = self.quick_add.take() {
             let entries = catalog::with_favorites(catalog::catalog3(), env.root, true);
@@ -1553,9 +1556,22 @@ impl SceneDoc {
         self.duplicate_selection();
     }
 
-    fn overlays3(&self, painter: &egui::Painter, rect: Rect, env: &mut SceneEnv) {
+    fn overlays3(
+        &self,
+        painter: &egui::Painter,
+        rect: Rect,
+        env: &mut SceneEnv,
+        flashes: &[(u32, f32)],
+    ) {
         // Caixas de seleção e de destaque (e das colisões, se pedido).
         let mut boxes: Vec<(u32, Color32)> = Vec::new();
+        // Os que acabaram de nascer brilham um instante.
+        for &(id, level) in flashes {
+            boxes.push((id, super::FLASH.gamma_multiply(level)));
+        }
+        if !flashes.is_empty() {
+            painter.ctx().request_repaint();
+        }
         if self.show_colliders {
             scene_data::visit(&self.data.objects, &mut |o| {
                 let player = o

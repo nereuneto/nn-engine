@@ -326,6 +326,18 @@ pub struct ProjectWorkspace {
     /// usam. Refeito quando alguma cena muda.
     script_objects: Option<HashMap<String, Vec<String>>>,
     started: std::time::Instant,
+    /// Os avisos rápidos do canto da janela.
+    pub toasts: crate::toast::Toasts,
+    /// Quando cada arquivo foi salvo (a aba mostra um ✓ um instante).
+    saved_at: HashMap<String, f64>,
+    /// Sons da interface para tocar no próximo quadro (se ligados).
+    pending_sounds: Vec<&'static str>,
+    ui_sound_ids: HashMap<&'static str, nn_audio::SoundId>,
+    playing_ui: Vec<nn_audio::Sound>,
+    /// O confete de uma comemoração (há quanto tempo começou, em segundos).
+    confetti: Option<f32>,
+    /// A exportação terminou bem (a comemoração vem no próximo quadro).
+    exported_ok: bool,
     /// Quantas vezes o jogo foi aberto (▶ Jogar ou Testar daqui).
     pub plays: u64,
     /// Imagens criadas com "Nova imagem" (o tutorial confere).
@@ -428,6 +440,13 @@ impl ProjectWorkspace {
             config: ConfigValues::default(),
             script_objects: None,
             started: std::time::Instant::now(),
+            toasts: Default::default(),
+            saved_at: HashMap::new(),
+            pending_sounds: Vec::new(),
+            ui_sound_ids: HashMap::new(),
+            playing_ui: Vec::new(),
+            confetti: None,
+            exported_ok: false,
             plays: 0,
             created_images: Vec::new(),
             map_docs: HashMap::new(),
@@ -627,7 +646,7 @@ impl ProjectWorkspace {
         errors.extend(err);
         saved.sort();
         for rel in saved {
-            self.console.info(format!("Salvo: {rel}"));
+            self.saved(&rel);
         }
         self.files.rescan();
         if errors.is_empty() {
@@ -1019,6 +1038,41 @@ impl ProjectWorkspace {
         self.play_from(ctx, env, None);
     }
 
+    /// Um marco do projeto (`what`: `jogar` ou `exportar`): na primeira vez,
+    /// um aviso de comemoração com confete (se as comemorações estão ligadas).
+    fn celebrate(&mut self, env: &mut Env, what: &str, text: &str) {
+        let key = format!("{what}:{}", self.root.display());
+        if !env.settings.celebrated.insert(key) || !env.settings.celebrations {
+            return;
+        }
+        self.toasts.push(text, crate::toast::Kind::Celebrate);
+        self.confetti = Some(0.0);
+        self.pending_sounds.push("comemorar");
+    }
+
+    /// Toca os sons da interface pedidos (se ligados nas Preferências).
+    fn play_ui_sounds(&mut self, env: &mut Env) {
+        let pending = std::mem::take(&mut self.pending_sounds);
+        if !env.settings.ui_sounds || pending.is_empty() {
+            return;
+        }
+        let audio = env.audio.get_or_insert_with(nn_audio::Audio::new);
+        self.playing_ui.retain(|s| s.is_playing());
+        let mut done: Vec<&str> = Vec::new();
+        for kind in pending {
+            // Um de cada tipo por quadro (colar 10 objetos é um clique só).
+            if done.contains(&kind) {
+                continue;
+            }
+            done.push(kind);
+            let id = *self.ui_sound_ids.entry(kind).or_insert_with(|| {
+                let (rate, samples) = crate::ui_sounds::samples(kind);
+                audio.add_samples(rate, &samples)
+            });
+            self.playing_ui.push(audio.play(id));
+        }
+    }
+
     /// Roda o jogo; com `start`, começando nessa cena em vez da inicial.
     pub fn play_from(&mut self, ctx: &egui::Context, env: &mut Env, start: Option<&str>) {
         self.plays += 1;
@@ -1040,6 +1094,11 @@ impl ProjectWorkspace {
                     None => self.console.info("▶ Jogo iniciado. Salve um arquivo com o jogo aberto e a mudança aparece na hora."),
                 }
                 self.game = Some(g);
+                self.celebrate(
+                    env,
+                    "jogar",
+                    "🎉 Seu jogo rodou pela primeira vez! Agora é só ir melhorando.",
+                );
             }
             Err(e) => self
                 .console
@@ -1484,6 +1543,10 @@ impl ProjectWorkspace {
         self.console.info(format!(
             "Prefab criado: {rel}. Arraste-o do painel Arquivos para pôr cópias nas cenas."
         ));
+        self.toasts.push(
+            format!("📦 Prefab criado: {rel}"),
+            crate::toast::Kind::Success,
+        );
     }
 
     /// Cria `scripts/<nome do objeto>.lua` com o modelo de comportamento e
@@ -1614,6 +1677,17 @@ impl ProjectWorkspace {
         }
     }
 
+    /// Um arquivo foi salvo: o Console, o aviso rápido, o ✓ na aba e o som.
+    fn saved(&mut self, rel: &str) {
+        self.console.info(format!("Salvo: {rel}"));
+        let name = rel.rsplit('/').next().unwrap_or(rel);
+        self.toasts
+            .push(format!("Salvo: {name}"), crate::toast::Kind::Success);
+        self.saved_at
+            .insert(rel.to_string(), self.started.elapsed().as_secs_f64());
+        self.pending_sounds.push("salvar");
+    }
+
     /// Salvou os mapas: o jogo aberto relê, o aviso "salve para o jogo ver" sai.
     fn paint_grew_reset(&mut self) {
         for s in self.scenes.values_mut() {
@@ -1625,7 +1699,7 @@ impl ProjectWorkspace {
         if let Some(d) = self.dialogues.get_mut(rel) {
             match d.save(&self.root) {
                 Ok(()) => {
-                    self.console.info(format!("Salvo: {rel}"));
+                    self.saved(rel);
                     self.files.rescan();
                 }
                 Err(e) => self
@@ -1637,7 +1711,7 @@ impl ProjectWorkspace {
         if let Some(img) = self.pixels.get_mut(rel) {
             match img.save(&self.root) {
                 Ok(()) => {
-                    self.console.info(format!("Salvo: {rel}"));
+                    self.saved(rel);
                     self.files.rescan();
                 }
                 Err(e) => self
@@ -1655,7 +1729,7 @@ impl ProjectWorkspace {
             let maps = scene_maps(&scene.data);
             match scene.save(&self.root) {
                 Ok(()) => {
-                    self.console.info(format!("Salvo: {rel}"));
+                    self.saved(rel);
                     self.files.rescan();
                 }
                 Err(e) => self
@@ -1672,7 +1746,7 @@ impl ProjectWorkspace {
             Ok(()) => {
                 doc.check_now(&self.lua);
                 let issue = doc.issue.clone();
-                self.console.info(format!("Salvo: {rel}"));
+                self.saved(rel);
                 if let Some(i) = issue {
                     self.console
                         .warn(format!("{rel}:{}: {}", i.line, i.message));
@@ -1754,9 +1828,11 @@ impl ProjectWorkspace {
                 Action::Rename { rel, new_name } => self.rename(&rel, &new_name),
                 Action::Notice { text, error } => {
                     if error {
-                        self.console.error(text);
+                        self.console.error(&text);
+                        self.toasts.push(text, crate::toast::Kind::Error);
                     } else {
-                        self.console.info(text);
+                        self.console.info(&text);
+                        self.toasts.push(text, crate::toast::Kind::Success);
                     }
                 }
                 Action::NewMap => {
@@ -2072,6 +2148,9 @@ impl ProjectWorkspace {
                 game_state: self.game_state.as_ref().filter(|g| {
                     self.game.is_some() && self.game_scene.as_deref() == Some(g.scene.as_str())
                 }),
+                saved_at: &self.saved_at,
+                now: self.started.elapsed().as_secs_f64(),
+                animate: env.settings.animations,
             };
             let mut style = egui_dock::Style::from_egui(ui.style().as_ref());
             style.tab_bar.fill_tab_bar = false;
@@ -2090,6 +2169,43 @@ impl ProjectWorkspace {
                 self.active_scene = Some(r);
             }
         }
+        // Avisos das cenas (apagou, colou...), com Desfazer, e os sons.
+        for (rel, doc) in self.scenes.iter_mut() {
+            let version = doc.history.version();
+            for text in doc.notices.drain(..) {
+                self.toasts.push_undo(
+                    text,
+                    crate::toast::Undo {
+                        rel: rel.clone(),
+                        version,
+                    },
+                );
+            }
+            self.pending_sounds.append(&mut doc.sounds);
+        }
+        if std::mem::take(&mut self.exported_ok) {
+            self.celebrate(
+                env,
+                "exportar",
+                "🎉 Seu primeiro jogo exportado! Agora dá para mandar para os amigos.",
+            );
+            self.pending_sounds.push("salvar");
+        }
+        let scenes = &self.scenes;
+        if let Some(u) = self.toasts.ui(
+            &ctx,
+            |rel| scenes.get(rel).map(|s| s.history.version()),
+            env.settings.animations,
+        ) && let Some(doc) = self.scenes.get_mut(&u.rel)
+        {
+            doc.undo();
+        }
+        if env.settings.animations {
+            draw_confetti(&ctx, &mut self.confetti);
+        } else {
+            self.confetti = None;
+        }
+        self.play_ui_sounds(env);
         for doc in self.scenes.values_mut() {
             doc.end_frame();
         }
@@ -2506,11 +2622,14 @@ impl ProjectWorkspace {
                     && let Ok(result) = rx.try_recv()
                 {
                     match &result {
-                        Ok(r) => self.console.info(format!(
-                            "Jogo exportado: {} ({})",
-                            crate::settings::display_path(&r.output),
-                            files::human_size(r.total_bytes)
-                        )),
+                        Ok(r) => {
+                            self.console.info(format!(
+                                "Jogo exportado: {} ({})",
+                                crate::settings::display_path(&r.output),
+                                files::human_size(r.total_bytes)
+                            ));
+                            self.exported_ok = true;
+                        }
                         Err(e) => self.console.error(format!("A exportação falhou: {e}")),
                     }
                     ex.result = Some(result);
@@ -2869,6 +2988,11 @@ struct Viewer<'a> {
     code_env: Option<&'a (String, crate::complete::Env)>,
     /// O que o jogo aberto conta da cena da frente.
     game_state: Option<&'a crate::scene_view::GameState>,
+    /// Quando cada arquivo foi salvo, e a hora agora (a aba mostra um ✓).
+    saved_at: &'a HashMap<String, f64>,
+    now: f64,
+    /// As animações estão ligadas (Preferências).
+    animate: bool,
 }
 
 impl TabViewer for Viewer<'_> {
@@ -2924,6 +3048,13 @@ impl TabViewer for Viewer<'_> {
                     })
                 {
                     format!("{name} •")
+                } else if self
+                    .saved_at
+                    .get(r.as_str())
+                    .is_some_and(|t| self.now - t < 1.2)
+                {
+                    // Acabou de salvar: um ✔ no lugar do •.
+                    format!("{name} ✔")
                 } else {
                     name
                 }
@@ -3036,10 +3167,12 @@ impl TabViewer for Viewer<'_> {
             }
             Tab::Console => {
                 *self.console_drawn = self.frame;
-                if let Some(ConsoleAction::OpenLocation { path, line }) =
-                    self.console.ui(ui, self.mode.is_full(), self.clear_on_play)
-                {
-                    self.actions.push(Action::OpenLocation { path, line });
+                match self.console.ui(ui, self.mode.is_full(), self.clear_on_play) {
+                    Some(ConsoleAction::OpenLocation { path, line }) => {
+                        self.actions.push(Action::OpenLocation { path, line });
+                    }
+                    Some(ConsoleAction::Play) => self.actions.push(Action::Command(Command::Play)),
+                    None => {}
                 }
             }
             Tab::Settings => self.settings(ui),
@@ -3383,6 +3516,7 @@ impl Viewer<'_> {
             maps: self.map_docs,
             tilesets: self.tilesets,
             paint: self.paint,
+            animate: self.animate,
         };
         let was_painting = doc.painting;
         let actions = doc.ui(ui, &mut env);
@@ -3543,13 +3677,13 @@ impl Viewer<'_> {
                 ui.add_space(4.0);
                 let step = |ui: &mut egui::Ui, n: &str, text: &str| {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new(n).strong().color(theme::ACCENT));
+                        ui.label(RichText::new(n).strong().color(ui.visuals().hyperlink_color));
                         ui.label(text);
                     });
                 };
                 step(ui, "1.", "Clique em ▶ Jogar (ou aperte F5): o jogo abre na janela dele.");
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new("2.").strong().color(theme::ACCENT));
+                    ui.label(RichText::new("2.").strong().color(ui.visuals().hyperlink_color));
                     ui.spacing_mut().item_spacing.x = 0.0;
                     ui.label("Abra a cena inicial, ");
                     if ui.link(&start).clicked() {
@@ -3560,6 +3694,8 @@ impl Viewer<'_> {
                 step(ui, "3.", "Arraste imagens e sons do seu computador para esta janela: eles entram no projeto.");
                 step(ui, "4.", "Clique com o botão direito num arquivo para copiar o caminho e usar no código.");
                 step(ui, "5.", "Ctrl+Shift+P abre a paleta com todos os comandos. Ctrl+P acha qualquer arquivo.");
+                ui.add_space(18.0);
+                crate::tips::tip_ui(ui);
                 ui.add_space(18.0);
 
                 let count = |k: FileKind| self.files.files_of(k).count();
@@ -3835,7 +3971,7 @@ fn theme_form(ui: &mut egui::Ui, v: &mut ConfigValues, fonts: &[String], sounds:
         ("disabled", "Botão desligado"),
         ("panel", "Painel"),
         ("border", "Bordas"),
-        ("accent", "Destaque (barras, ✓)"),
+        ("accent", "Destaque (barras, ✔)"),
     ];
     ui.horizontal_top(|ui| {
         egui::Grid::new("grade-tema")
@@ -3967,6 +4103,53 @@ fn scene_maps(data: &crate::scene_data::SceneData) -> Vec<String> {
         }
     });
     out
+}
+
+/// O confete de uma comemoração: papeizinhos que sobem do alto da janela e
+/// caem, por 1,8 s. `start` vira `None` quando acaba.
+fn draw_confetti(ctx: &egui::Context, start: &mut Option<f32>) {
+    const LEN: f32 = 1.8;
+    let Some(t) = *start else {
+        return;
+    };
+    if t > LEN {
+        *start = None;
+        return;
+    }
+    *start = Some(t + ctx.input(|i| i.stable_dt).min(0.1));
+    // Números "aleatórios" fixos para cada papel.
+    let rnd = |i: u32, k: u32| -> f32 {
+        let mut x = i.wrapping_mul(0x9E37_79B9) ^ k.wrapping_mul(0x85EB_CA6B);
+        x ^= x >> 15;
+        x = x.wrapping_mul(0x2C1B_3C6D);
+        x ^= x >> 12;
+        (x % 10_000) as f32 / 10_000.0
+    };
+    let colors = [
+        egui::Color32::from_rgb(0xFF, 0xC8, 0x3D),
+        egui::Color32::from_rgb(0x4C, 0xC9, 0xF0),
+        egui::Color32::from_rgb(0xF2, 0x6D, 0x6D),
+        egui::Color32::from_rgb(0x6F, 0xD6, 0x96),
+        egui::Color32::from_rgb(0xC7, 0x7D, 0xFF),
+    ];
+    let rect = ctx.content_rect();
+    let painter = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::new("confete"),
+    ));
+    let fade = 1.0 - (t / LEN).powi(3);
+    for i in 0..80u32 {
+        let x0 = rect.center().x + (rnd(i, 1) - 0.5) * rect.width() * 0.35;
+        let y0 = rect.top() + rect.height() * 0.2;
+        let vx = (rnd(i, 2) - 0.5) * 520.0;
+        let vy = -220.0 - rnd(i, 3) * 380.0;
+        let p = egui::pos2(x0 + vx * t, y0 + vy * t + 0.5 * 900.0 * t * t);
+        let spin = (t * (4.0 + rnd(i, 4) * 8.0) + rnd(i, 5) * 6.0).sin();
+        let size = egui::vec2(3.0 + 4.0 * spin.abs(), 6.0);
+        let color = colors[(i as usize) % colors.len()].gamma_multiply(fade);
+        painter.rect_filled(egui::Rect::from_center_size(p, size), 1.0, color);
+    }
+    ctx.request_repaint();
 }
 
 #[cfg(test)]

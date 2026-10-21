@@ -160,7 +160,12 @@ pub fn parse_game_line(line: &str) -> (Level, Category, String) {
 /// O que o usuário pediu ao clicar no console.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConsoleAction {
-    OpenLocation { path: String, line: usize },
+    OpenLocation {
+        path: String,
+        line: usize,
+    },
+    /// O ▶ Jogar do Console vazio.
+    Play,
 }
 
 #[derive(Debug)]
@@ -358,12 +363,27 @@ impl Console {
             .filter(|&i| self.visible(&self.entries[i], full_mode))
             .collect();
         if visible.is_empty() {
-            ui.weak(if self.entries.is_empty() {
-                "Nenhuma mensagem. O que o jogo escrever com print() aparece aqui."
-            } else {
-                "Nenhuma mensagem com esses filtros."
+            if !self.entries.is_empty() {
+                ui.weak("Nenhuma mensagem com esses filtros.");
+                return None;
+            }
+            // Vazio: ensina o que aparece aqui.
+            let mut play = false;
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.weak("Aqui aparece o que o jogo escrever com");
+                ui.code("print()");
+                ui.weak(", os avisos e os erros, com o arquivo e a linha (clique para abrir).");
             });
-            return None;
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                play = ui
+                    .add(egui::Button::new("▶ Jogar").fill(crate::theme::PLAY.gamma_multiply(0.55)))
+                    .on_hover_text("F5")
+                    .clicked();
+                ui.weak("e veja o jogo escrever aqui.");
+            });
+            return play.then_some(ConsoleAction::Play);
         }
         // Só as últimas mensagens são desenhadas: o console continua leve
         // mesmo com um jogo que escreve muito.
