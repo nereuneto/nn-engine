@@ -364,3 +364,46 @@ fn chefe_pula_com_impacto_e_atira_em_leque() {
     assert_eq!(lua::<f64>(&rt, "C.objects.Chefe:behavior('vida').atual"), 6.0);
     assert_eq!(h.game.0.error(), None);
 }
+
+/// Ferramenta: imagens do besouro-rei em cada animação, para conferir
+/// (`NN_SAIDA=<pasta> cargo test -p nn-script --test chefes poses -- --ignored`).
+#[test]
+#[ignore]
+fn poses_do_besouro_rei() {
+    let Some(out) = std::env::var_os("NN_SAIDA").map(PathBuf::from) else {
+        return;
+    };
+    let objetos = r#"{ id = 10, name = "Rei", ry = 35,
+      components = { { type = "model", file = "modelos/besourao.glb" },
+        { type = "anim3d", animation = "parado", speed = 0 } } },
+    { id = 11, name = "Herói", x = 2.2, ry = -60,
+      components = { { type = "model", file = "modelos/heroi.glb" } } },
+    { id = 12, name = "Câmera", x = 4.2, y = 1.8, z = 2.6, rx = -10, ry = 62,
+      components = { { type = "camera3d", fov = 55 } } }"#;
+    let cena_ = mundo(objetos, "");
+    let dir = projeto("poses", &arquivos(&cena_));
+    let Some((mut h, rt)) = cena(&dir, "cenas/mundo.cena") else {
+        return;
+    };
+    h.run_frames(3);
+    for (nome, t) in [
+        ("parado", 0.0),
+        ("andar", 0.2),
+        ("golpe", 0.15),
+        ("golpe", 0.3),
+        ("preparar", 0.1),
+        ("pular", 0.25),
+        ("tonto", 0.25),
+        ("cair", 1.1),
+    ] {
+        rt.lua()
+            .load(format!(
+                "local a = C.objects.Rei:animator(); a:play('{nome}', {{ blend = 0, restart = true }}); a.speed = 1; a.time = {t}; a.speed = 0"
+            ))
+            .exec()
+            .unwrap();
+        h.run_frames(2);
+        h.save_png(out.join(format!("rei-{nome}-{t}.png"))).unwrap();
+    }
+    assert_eq!(h.game.0.error(), None);
+}

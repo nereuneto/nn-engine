@@ -198,7 +198,14 @@ function B:atacar(ataque)
   elseif ataque == "pulo" then
     local x, _, z = o:position3d()
     local px, pz = x, z
-    if p then px, _, pz = p:position3d() end
+    if p then
+      -- Cai na frente do jogador (não em cima dele).
+      px, _, pz = p:position3d()
+      local dx, dz = px - x, pz - z
+      local n = math.sqrt(dx * dx + dz * dz)
+      local antes = math.min(n, self.raio + 0.6)
+      if n > 1e-3 then px, pz = px - dx / n * antes, pz - dz / n * antes end
+    end
     local vy = 9
     local tempo = 2 * vy / 20
     self.salto = { (px - x) / tempo, (pz - z) / tempo }

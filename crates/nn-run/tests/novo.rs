@@ -723,8 +723,8 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     }
     assert!(lua::<bool>(&rt, "return cena:dialogue() == nil"));
     assert_eq!(lua::<f64>(&rt, "return nn.vars.dica"), 1.0);
-    // Leva o herói até cada estrela: pega as 5 e o evento de vitória
-    // dispara (o som e a espera vêm antes de ir para o fim).
+    // Leva o herói até cada estrela da ilha: pega as 5 (a sexta é do
+    // besouro-rei).
     let estrelas: Vec<(f64, f64, f64)> = rt
         .lua()
         .load(
@@ -757,7 +757,58 @@ fn modelo_visual3d_ilha_sem_codigo_anda_pega_estrelas_e_termina() {
     assert!(lua::<i64>(&rt, "return #cena:find_all('estrela')") == 0);
     // O placar mostra.
     let placar: String = lua(&rt, "return cena.objects.Placar.text.text");
-    assert!(placar.contains("Estrelas 5 / 5"), "{placar}");
+    assert!(placar.contains("Estrelas 5 / 6"), "{placar}");
+    assert_eq!(h.game.0.error(), None);
+    // A arena: o portão começou aberto (desceu); entrando, ele fecha e as
+    // ondas começam.
+    let portao = |rt: &ScriptRuntime| -> f64 { lua(rt, "return cena.objects['Portão da arena'].y") };
+    assert!(portao(&rt) < 0.0, "aberto: {}", portao(&rt));
+    rt.lua()
+        .load("cena.objects['Herói']:move_to(-22, 0.1, 0)")
+        .exec()
+        .unwrap();
+    h.run_frames(120);
+    assert!(portao(&rt) > 1.0, "fechou: {}", portao(&rt));
+    assert_eq!(lua::<f64>(&rt, "return nn.vars.onda"), 1.0);
+    assert!(lua::<bool>(&rt, "return cena.objects['Placar da arena'].visible"));
+    // Derrota cada onda (o herói fica longe, sem levar dano).
+    let mut ondas = 0;
+    for _ in 0..40 {
+        rt.lua()
+            .load(
+                "cena.objects['Herói']:move_to(-19.5, 0.1, 0)
+                 for _, b in ipairs(cena:find_all('besouro')) do cena:hit(b, 5, cena.objects['Herói']) end",
+            )
+            .exec()
+            .unwrap();
+        h.run_frames(30);
+        ondas = lua::<i64>(&rt, "return nn.vars.onda");
+        if lua::<String>(&rt, "return cena.objects['Besouro-rei']:behavior('chefe').estado") != "dormindo" {
+            break;
+        }
+    }
+    assert_eq!(ondas, 3);
+    assert_eq!(h.game.0.error(), None);
+    assert!(!lua::<bool>(&rt, "return cena.objects['Placar da arena'].visible"));
+    // O besouro-rei acordou; derrotado, deixa a sexta estrela e o portão abre.
+    rt.lua()
+        .load("cena:hit(cena.objects['Besouro-rei'], 99, cena.objects['Herói'])")
+        .exec()
+        .unwrap();
+    h.run_frames(200);
+    assert_eq!(h.game.0.error(), None);
+    assert!(lua::<bool>(&rt, "return cena.objects['Besouro-rei'] == nil"));
+    assert!(portao(&rt) < 0.0, "abriu de novo: {}", portao(&rt));
+    let (x, y, z): (f64, f64, f64) = {
+        let v: Vec<f64> = lua(&rt, "return { cena:find_all('estrela')[1]:position3d() }");
+        (v[0], v[1], v[2])
+    };
+    rt.lua()
+        .load(format!("cena.objects['Herói']:move_to({x}, {}, {z})", y - 0.5))
+        .exec()
+        .unwrap();
+    h.run_frames(5);
+    assert_eq!(lua::<i64>(&rt, "return nn.vars.estrelas"), 6);
     assert_eq!(h.game.0.error(), None);
     drop(h);
     std::fs::remove_dir_all(&dir).unwrap();
@@ -1104,6 +1155,101 @@ fn capturas_do_combate() {
     h.ctx.input.release_mouse(nn_input::MouseButton::Right);
     h.run_frames(14);
     h.save_png(out.join("combate-magia.png")).unwrap();
+    assert_eq!(h.game.0.error(), None);
+    drop(h);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Ferramenta: imagens da arena da ilha (o letreiro da onda, os besouros e
+/// o besouro-rei com a barra no alto): `NN_SAIDA=<pasta> cargo test -p
+/// nn-run --test novo capturas_da_arena -- --ignored`.
+#[test]
+#[ignore]
+fn capturas_da_arena() {
+    let Some(out) = std::env::var_os("NN_SAIDA").map(PathBuf::from) else {
+        return;
+    };
+    let dir = temp("captura-arena");
+    create_project(&NewOptions {
+        dir: dir.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Visual3D,
+    })
+    .unwrap();
+    let project = Project::open(&dir).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let rt2 = rt.clone();
+    let config = project
+        .config
+        .clone()
+        .size(1280, 720)
+        .save_dir(dir.join("dados"))
+        .hot_reload(false);
+    let start = project.start.clone();
+    let Ok(mut h) = Headless::new(config, move |ctx| {
+        let mut s = rt.scene(start);
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(30);
+    let lua = rt2.lua();
+    lua.globals()
+        .set("C", h.game.0.table().unwrap())
+        .unwrap();
+    // Entra na arena, olhando para o meio dela.
+    lua.load(
+        r#"
+        local h = C.objects["Herói"]
+        h:move_to(-22, 0.1, 0)
+        h.ry = -90
+        local cam = C._player_cam.cam
+        cam.yaw = 90
+        cam.pitch = 20
+        cam.distance = 3
+        "#,
+    )
+    .exec()
+    .unwrap();
+    h.run_frames(100);
+    h.save_png(out.join("arena-onda.png")).unwrap();
+    // Pula as ondas: o besouro-rei acorda.
+    for _ in 0..40 {
+        lua.load("C.objects['Herói']:behavior('vida').inv = 1e9; for _, b in ipairs(C:find_all('besouro')) do b:destroy() end")
+            .exec()
+            .unwrap();
+        h.run_frames(30);
+    }
+    lua.load(
+        r#"
+        local h = C.objects["Herói"]
+        h:move_to(-27, 0.1, 3)
+        h.ry = 180
+        local cam = C._player_cam.cam
+        cam.yaw = 20
+        cam.pitch = 22
+        cam.distance = 6
+        "#,
+    )
+    .exec()
+    .unwrap();
+    h.run_frames(30);
+    h.save_png(out.join("arena-rei.png")).unwrap();
+    for i in 0..6 {
+        h.run_frames(25);
+        let info: String = lua
+            .load(
+                "local r = C.objects['Besouro-rei']; local h = C.objects['Herói']; local c = C._player_cam.cam
+                 local rx, ry, rz = r:position3d(); local hx, hy, hz = h:position3d()
+                 return string.format('rei %.1f %.1f %.1f %s | heroi %.1f %.1f %.1f vida %s | cam %.1f %.1f %.1f',
+                   rx, ry, rz, r:behavior('chefe').estado, hx, hy, hz, tostring(h:behavior('vida').atual), c.x, c.y, c.z)",
+            )
+            .eval()
+            .unwrap();
+        eprintln!("{info}");
+        h.save_png(out.join(format!("arena-luta-{i}.png"))).unwrap();
+    }
     assert_eq!(h.game.0.error(), None);
     drop(h);
     std::fs::remove_dir_all(&dir).unwrap();

@@ -562,6 +562,116 @@ def bicho():
     return m
 
 
+def besourao():
+    """O besouro-rei (chefe): um besouro grande, de chifres, virado para +Z,
+    1,9 m de altura até a ponta do chifre, com 6 patas. Animações: parado,
+    andar, golpe (o acerto é perto de 0,3 s), preparar (o aviso antes de
+    atacar), pular, tonto e cair."""
+    m = Modelo()
+    RAIZ, CORPO, CABECA, P1, P2, P3, P4, P5, P6 = range(9)
+    patas = [(0.78, 0.6), (-0.78, 0.6), (0.82, 0.0), (-0.82, 0.0), (0.78, -0.6), (-0.78, -0.6)]
+    m.ossos([("raiz", None, (0, 0, 0)), ("corpo", RAIZ, (0, 0.9, 0)), ("cabeca", CORPO, (0, 1.0, 0.9))]
+            + [("pata%d" % (i + 1), CORPO, (x, 0.85, z)) for i, (x, z) in enumerate(patas)])
+    casco = Parte("#A3242F")
+    casco.osso = CORPO
+    casco.caixa(0, 1.0, -0.12, 1.5, 0.7, 1.8)
+    casco.prisma(8, 0.74, 1.35, 1.65, raio_topo=0.42, centro=(0, -0.12))
+    faixa = Parte("#5C1018")
+    faixa.osso = CORPO
+    faixa.caixa(0, 1.66, -0.12, 0.08, 0.04, 1.2)
+    pintas = Parte("#F4B400")
+    pintas.osso = CORPO
+    for x, z in ((0.38, 0.25), (-0.38, 0.25), (0.42, -0.45), (-0.42, -0.45)):
+        pintas.caixa(x, 1.36, z, 0.22, 0.04, 0.22)
+    escuro = Parte("#2B2D42")
+    escuro.osso = CABECA
+    escuro.caixa(0, 1.0, 1.12, 0.9, 0.56, 0.5)
+    for i, (x, z) in enumerate(patas):
+        escuro.osso = P1 + i
+        escuro.caixa(x + (0.1 if x > 0 else -0.1), 0.42, z, 0.26, 0.86, 0.26)
+    chifres = Parte("#F2E3C6")
+    chifres.osso = CABECA
+    chifres.prisma(6, 0.15, 1.2, 1.95, raio_topo=0.0, centro=(0, 1.22))
+    chifres.prisma(5, 0.09, 1.2, 1.6, raio_topo=0.0, centro=(0.3, 1.18))
+    chifres.prisma(5, 0.09, 1.2, 1.6, raio_topo=0.0, centro=(-0.3, 1.18))
+    chifres.caixa(0.22, 0.74, 1.42, 0.08, 0.14, 0.2)
+    chifres.caixa(-0.22, 0.74, 1.42, 0.08, 0.14, 0.2)
+    olhos = Parte("#FFD93D")
+    olhos.osso = CABECA
+    olhos.caixa(0.27, 1.08, 1.38, 0.15, 0.12, 0.02)
+    olhos.caixa(-0.27, 1.08, 1.38, 0.15, 0.12, 0.02)
+    malha = m.malha("besourao", [casco, faixa, pintas, escuro, chifres, olhos])
+    m.json["nodes"].append({"name": "besourao", "mesh": malha, "skin": 0})
+    m.json["scenes"][0]["nodes"].append(len(m.json["nodes"]) - 1)
+
+    def x(*graus):
+        return [quat("x", g) for g in graus]
+    def z(*graus):
+        return [quat("z", g) for g in graus]
+    def corpo(*pos):
+        return [(0, y, dz) for y, dz in pos]
+    cab = (0, 0.1, 0.9)
+
+    t = [0, 1, 2]
+    m.animacao("parado", t, {
+        (CORPO, "translation"): corpo((0.9, 0), (0.87, 0), (0.9, 0)),
+        (CABECA, "rotation"): [quat("y", g) for g in (-6, 6, -6)],
+    })
+    t = [0, 0.2, 0.4, 0.6, 0.8]
+    um, outro = x(-25, 0, 25, 0, -25), x(25, 0, -25, 0, 25)
+    m.animacao("andar", t, {
+        (CORPO, "translation"): corpo((0.9, 0), (0.94, 0), (0.9, 0), (0.94, 0), (0.9, 0)),
+        (P1, "rotation"): um, (P4, "rotation"): um, (P5, "rotation"): um,
+        (P2, "rotation"): outro, (P3, "rotation"): outro, (P6, "rotation"): outro,
+    })
+    # Golpe: levanta a cabeça e bate os chifres para baixo e para a frente.
+    t = [0, 0.15, 0.3, 0.5, 0.8]
+    m.animacao("golpe", t, {
+        (CORPO, "translation"): corpo((0.9, 0), (0.95, -0.15), (0.82, 0.35), (0.85, 0.2), (0.9, 0)),
+        (CORPO, "rotation"): x(0, -10, 8, 5, 0),
+        (CABECA, "rotation"): x(0, -30, 32, 20, 0),
+        (P1, "rotation"): x(0, -20, 15, 10, 0),
+        (P2, "rotation"): x(0, -20, 15, 10, 0),
+    })
+    # Preparar (o aviso): empina a frente e treme.
+    t = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    m.animacao("preparar", t, {
+        (CORPO, "translation"): corpo(*[(0.98, -0.1)] * 7),
+        (CORPO, "rotation"): [quat_xz(-14, g) for g in (0, 4, -4, 4, -4, 4, 0)],
+        (CABECA, "rotation"): x(-22, -18, -22, -18, -22, -18, -22),
+        (P1, "rotation"): x(-30, -30, -30, -30, -30, -30, -30),
+        (P2, "rotation"): x(-30, -30, -30, -30, -30, -30, -30),
+    })
+    # Pular: agacha, estica e abre as patas no ar.
+    t = [0, 0.12, 0.25, 0.6, 0.9]
+    abre_e, abre_d = z(0, -10, 30, 30, 0), z(0, 10, -30, -30, 0)
+    m.animacao("pular", t, {
+        (CORPO, "translation"): corpo((0.9, 0), (0.68, 0), (0.98, 0), (0.95, 0), (0.9, 0)),
+        (CABECA, "rotation"): x(0, 10, -20, -15, 0),
+        (P1, "rotation"): abre_e, (P3, "rotation"): abre_e, (P5, "rotation"): abre_e,
+        (P2, "rotation"): abre_d, (P4, "rotation"): abre_d, (P6, "rotation"): abre_d,
+    })
+    # Tonto: a cabeça balança e o corpo cambaleia.
+    t = [0, 0.25, 0.5, 0.75, 1]
+    m.animacao("tonto", t, {
+        (CORPO, "translation"): corpo((0.84, 0), (0.82, 0), (0.84, 0), (0.82, 0), (0.84, 0)),
+        (CORPO, "rotation"): z(0, 6, 0, -6, 0),
+        (CABECA, "rotation"): [quat_xz(15, g) for g in (0, 18, 0, -18, 0)],
+    })
+    # Cair: tomba de lado, com as patas encolhidas (toca uma vez).
+    t = [0, 0.3, 0.7, 1.2]
+    encolhe = x(0, 30, 50, 50)
+    m.animacao("cair", t, {
+        (CORPO, "translation"): corpo((0.9, 0), (0.85, 0), (0.6, 0), (0.62, 0)),
+        (CORPO, "rotation"): z(0, 20, 75, 80),
+        (CABECA, "rotation"): x(0, 15, 25, 25),
+        (P1, "rotation"): encolhe, (P2, "rotation"): encolhe, (P3, "rotation"): encolhe,
+        (P4, "rotation"): encolhe, (P5, "rotation"): encolhe, (P6, "rotation"): encolhe,
+    })
+    del cab
+    return m
+
+
 def espada():
     """Espada para segurar: o cabo na origem (onde a mão pega) e a lâmina
     para a frente (+Z), 0,9 m. Presa no osso mao_d do herói, com o braço
@@ -737,7 +847,8 @@ def main():
     for nome, fazer in [("arvore", arvore), ("pedra", pedra), ("heroi", heroi),
                         ("caixote", caixote), ("estrela", estrela), ("moeda", moeda),
                         ("plataforma", plataforma), ("bicho", bicho), ("chave", chave),
-                        ("porta", porta), ("espada", espada), ("cajado", cajado)]:
+                        ("porta", porta), ("espada", espada), ("cajado", cajado),
+                        ("besourao", besourao)]:
         with open(os.path.join(estrelas, nome + ".glb"), "wb") as f:
             f.write(fazer().glb())
     with open(os.path.join(testes, "roda.glb"), "wb") as f:

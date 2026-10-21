@@ -18,9 +18,42 @@ return {
       }, actions = {
         { act = "mostrar", acao = "esconder", alvo = "Dica" },
       } },
-    { comment = "Achou as 5 estrelas: vitória!" },
+    { comment = "A arena: o portão começa aberto." },
     { when = {
-        { cond = "variavel", var = "estrelas", op = ">=", valor = 5 },
+        { cond = "comecou" },
+      }, actions = {
+        { act = "mensagem", msg = "abrir", alvo = "Portão da arena" },
+        { act = "variavel", var = "arena", op = "definir", valor = 0 },
+      } },
+    { comment = "Entrou na arena: o portão fecha e as ondas começam." },
+    { when = {
+        { cond = "entrar_zona", quem = "Zona da arena", por = "@jogador" },
+        { cond = "variavel", var = "arena", op = "==", valor = 0 },
+      }, actions = {
+        { act = "variavel", var = "arena", op = "definir", valor = 1 },
+        { act = "mensagem", msg = "fechar", alvo = "Portão da arena" },
+        { act = "mostrar", acao = "mostrar", alvo = "Placar da arena" },
+        { act = "esperar", segundos = 1 },
+        { act = "mensagem", msg = "comecar", alvo = "Ondas" },
+      } },
+    { comment = "Venceu as ondas: o besouro-rei acorda." },
+    { when = {
+        { cond = "ondas_terminaram", quem = "Ondas" },
+      }, actions = {
+        { act = "mostrar", acao = "esconder", alvo = "Placar da arena" },
+        { act = "tremer", forca = 10, tempo = 0.6 },
+        { act = "mensagem", msg = "comecar", alvo = "Besouro-rei" },
+      } },
+    { comment = "Derrotou o besouro-rei: o portão abre." },
+    { when = {
+        { cond = "vida_acabou", quem = "Besouro-rei" },
+      }, actions = {
+        { act = "esperar", segundos = 1.5 },
+        { act = "mensagem", msg = "abrir", alvo = "Portão da arena" },
+      } },
+    { comment = "Achou as 6 estrelas: vitória!" },
+    { when = {
+        { cond = "variavel", var = "estrelas", op = ">=", valor = 6 },
       }, actions = {
         { act = "som", som = "assets/sons/vitoria.wav", volume = 1 },
         { act = "esperar", segundos = 1.2 },
@@ -57,14 +90,15 @@ return {
       },
     },
     {
-      id = 5, name = "Herói",
+      id = 6, name = "Herói",
       x = 0, y = 0, rotation = 0, scale_x = 1.1, scale_y = 1.1,
       z = 9, rx = 0, ry = 180, rz = 0, scale_z = 1.1,
       visible = true, layer = 0,
       components = {
         { type = "model", file = "modelos/heroi.glb", color = "#FFFFFF", flat = false, shadow = true },
         { type = "behavior", script = "nn:jogador3d", altura = 0, camera = "atras", distancia = 7, inverter_y = false, prender_mouse = true, pulo = 8, pulos_no_ar = 0, queda = -3, raio = 0, sensibilidade = 0.15, velocidade = 6, virar = true },
-        { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, variavel = "vidas", vidas = 3 },
+        { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 1, piscar = true, tremer = 6, variavel = "vidas", vidas = 3 },
+        { type = "behavior", script = "nn:golpe", acerto = 0.22, alcance = 1.7, alvo = "", angulo = 120, animacao = "golpe", dano = 1, empurrao = 6, intervalo = 0.45, quando = "tecla", som = "", som_acerto = "assets/sons/dano.wav", tecla = "clique", todos = true },
       },
       events = {
         { when = {
@@ -81,7 +115,17 @@ return {
       },
       children = {
         {
-          id = 4, name = "Poeira",
+          id = 4, name = "Espada",
+          x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+          z = 0, rx = 20, ry = 0, rz = 0, scale_z = 1,
+          visible = true, layer = 0,
+          components = {
+            { type = "model", file = "modelos/espada.glb", color = "#FFFFFF", flat = false, shadow = true },
+            { type = "bone", bone = "mao_d" },
+          },
+        },
+        {
+          id = 5, name = "Poeira",
           x = 0, y = 0.05, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
@@ -91,7 +135,7 @@ return {
       },
     },
     {
-      id = 8, name = "Fogueira",
+      id = 9, name = "Fogueira",
       x = -4, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.15,
       z = 6.5, rx = 0, ry = 0, rz = 0, scale_z = 0.9,
       visible = true, layer = 0,
@@ -102,7 +146,7 @@ return {
       },
       children = {
         {
-          id = 6, name = "Fogo",
+          id = 7, name = "Fogo",
           x = 0, y = 1, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
@@ -110,7 +154,7 @@ return {
           },
         },
         {
-          id = 7, name = "Fumaça",
+          id = 8, name = "Fumaça",
           x = 0, y = 8, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
@@ -120,7 +164,7 @@ return {
       },
     },
     {
-      id = 9, name = "Ondas",
+      id = 10, name = "Ondas",
       x = 16, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = -6, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -129,7 +173,7 @@ return {
       },
     },
     {
-      id = 10, name = "Ondas",
+      id = 11, name = "Ondas",
       x = -14, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 10, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -138,7 +182,7 @@ return {
       },
     },
     {
-      id = 11, name = "Ondas",
+      id = 12, name = "Ondas",
       x = 6, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 17, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -147,7 +191,7 @@ return {
       },
     },
     {
-      id = 12, name = "Plataforma",
+      id = 13, name = "Plataforma",
       x = -4, y = 1, rotation = 0, scale_x = 3, scale_y = 1,
       z = 2, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -157,7 +201,7 @@ return {
       },
     },
     {
-      id = 13, name = "Plataforma",
+      id = 14, name = "Plataforma",
       x = -8, y = 2, rotation = 0, scale_x = 3, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -167,7 +211,7 @@ return {
       },
     },
     {
-      id = 14, name = "Plataforma",
+      id = 15, name = "Plataforma",
       x = -6, y = 3.2, rotation = 0, scale_x = 3, scale_y = 1,
       z = -7, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -177,7 +221,7 @@ return {
       },
     },
     {
-      id = 15, name = "Plataforma",
+      id = 16, name = "Plataforma",
       x = 10, y = 4.5, rotation = 0, scale_x = 3, scale_y = 1,
       z = -10, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -187,7 +231,7 @@ return {
       },
     },
     {
-      id = 16, name = "Plataforma",
+      id = 17, name = "Plataforma",
       x = 11, y = 5.8, rotation = 0, scale_x = 2.5, scale_y = 1,
       z = -5.5, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
       visible = true, layer = 0,
@@ -197,7 +241,7 @@ return {
       },
     },
     {
-      id = 17, name = "Plataforma",
+      id = 18, name = "Plataforma",
       x = 8, y = 7.2, rotation = 0, scale_x = 2.5, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
       visible = true, layer = 0,
@@ -207,7 +251,7 @@ return {
       },
     },
     {
-      id = 18, name = "Plataforma",
+      id = 19, name = "Plataforma",
       x = 10.5, y = 8.5, rotation = 0, scale_x = 2.5, scale_y = 1,
       z = 1.5, rx = 0, ry = 0, rz = 0, scale_z = 2.5,
       visible = true, layer = 0,
@@ -217,7 +261,7 @@ return {
       },
     },
     {
-      id = 19, name = "Plataforma",
+      id = 20, name = "Plataforma",
       x = 0, y = 8, rotation = 0, scale_x = 4, scale_y = 1,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 4,
       visible = true, layer = 0,
@@ -227,7 +271,7 @@ return {
       },
     },
     {
-      id = 20, name = "Plataforma que anda",
+      id = 21, name = "Plataforma que anda",
       x = 0, y = 3.5, rotation = 0, scale_x = 3, scale_y = 1,
       z = -10, rx = 0, ry = 0, rz = 0, scale_z = 3,
       visible = true, layer = 0,
@@ -238,7 +282,7 @@ return {
       },
     },
     {
-      id = 21, name = "Elevador",
+      id = 22, name = "Elevador",
       x = 3.2, y = 0.3, rotation = 0, scale_x = 2, scale_y = 1,
       z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2,
       visible = true, layer = 0,
@@ -249,7 +293,7 @@ return {
       },
     },
     {
-      id = 22, name = "Árvore",
+      id = 23, name = "Árvore",
       x = -9, y = 0, rotation = 0, scale_x = 1.3, scale_y = 1.3,
       z = -6, rx = 0, ry = 20, rz = 0, scale_z = 1.3,
       visible = true, layer = 0,
@@ -259,7 +303,7 @@ return {
       },
     },
     {
-      id = 23, name = "Árvore",
+      id = 24, name = "Árvore",
       x = -11, y = 0, rotation = 0, scale_x = 1.1, scale_y = 1.1,
       z = 3, rx = 0, ry = 80, rz = 0, scale_z = 1.1,
       visible = true, layer = 0,
@@ -269,7 +313,7 @@ return {
       },
     },
     {
-      id = 24, name = "Árvore",
+      id = 25, name = "Árvore",
       x = -5, y = 0, rotation = 0, scale_x = 1.4, scale_y = 1.4,
       z = 9, rx = 0, ry = 140, rz = 0, scale_z = 1.4,
       visible = true, layer = 0,
@@ -279,7 +323,7 @@ return {
       },
     },
     {
-      id = 25, name = "Árvore",
+      id = 26, name = "Árvore",
       x = 6, y = 0, rotation = 0, scale_x = 1.2, scale_y = 1.2,
       z = -5, rx = 0, ry = 200, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
@@ -289,7 +333,7 @@ return {
       },
     },
     {
-      id = 26, name = "Árvore",
+      id = 27, name = "Árvore",
       x = 9, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 4, rx = 0, ry = 260, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -299,7 +343,7 @@ return {
       },
     },
     {
-      id = 27, name = "Árvore",
+      id = 28, name = "Árvore",
       x = -2, y = 0, rotation = 0, scale_x = 1.5, scale_y = 1.5,
       z = -11, rx = 0, ry = 300, rz = 0, scale_z = 1.5,
       visible = true, layer = 0,
@@ -309,7 +353,7 @@ return {
       },
     },
     {
-      id = 28, name = "Árvore",
+      id = 29, name = "Árvore",
       x = 12, y = 0, rotation = 0, scale_x = 1.3, scale_y = 1.3,
       z = -2, rx = 0, ry = 40, rz = 0, scale_z = 1.3,
       visible = true, layer = 0,
@@ -319,7 +363,7 @@ return {
       },
     },
     {
-      id = 29, name = "Árvore",
+      id = 30, name = "Árvore",
       x = -12, y = 0, rotation = 0, scale_x = 1.2, scale_y = 1.2,
       z = -2, rx = 0, ry = 110, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
@@ -329,7 +373,7 @@ return {
       },
     },
     {
-      id = 30, name = "Pedra",
+      id = 31, name = "Pedra",
       x = -7, y = 0.468, rotation = 0, scale_x = 1.8, scale_y = 1.8,
       z = 6, rx = 0, ry = 30, rz = 0, scale_z = 1.8,
       visible = true, layer = 0,
@@ -339,7 +383,7 @@ return {
       },
     },
     {
-      id = 31, name = "Pedra",
+      id = 32, name = "Pedra",
       x = 3.5, y = 0.39, rotation = 0, scale_x = 1.5, scale_y = 1.5,
       z = 11.5, rx = 0, ry = 90, rz = 0, scale_z = 1.5,
       visible = true, layer = 0,
@@ -349,7 +393,7 @@ return {
       },
     },
     {
-      id = 32, name = "Pedra",
+      id = 33, name = "Pedra",
       x = 11.5, y = 0.572, rotation = 0, scale_x = 2.2, scale_y = 2.2,
       z = 3, rx = 0, ry = 150, rz = 0, scale_z = 2.2,
       visible = true, layer = 0,
@@ -359,7 +403,7 @@ return {
       },
     },
     {
-      id = 33, name = "Pedra",
+      id = 34, name = "Pedra",
       x = -10, y = 0.442, rotation = 0, scale_x = 1.7, scale_y = 1.7,
       z = -9, rx = 0, ry = 220, rz = 0, scale_z = 1.7,
       visible = true, layer = 0,
@@ -369,7 +413,7 @@ return {
       },
     },
     {
-      id = 34, name = "Caixote",
+      id = 35, name = "Caixote",
       x = -2, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -379,7 +423,7 @@ return {
       },
     },
     {
-      id = 35, name = "Caixote",
+      id = 36, name = "Caixote",
       x = -0.8, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5.2, rx = 0, ry = 15, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -389,7 +433,7 @@ return {
       },
     },
     {
-      id = 36, name = "Caixote",
+      id = 37, name = "Caixote",
       x = -1.4, y = 1, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5.1, rx = 0, ry = 40, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -399,139 +443,523 @@ return {
       },
     },
     {
-      id = 37, name = "moeda",
+      id = 38, name = "moeda",
       x = -8.457, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -3.078, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 38, name = "moeda",
+      id = 39, name = "moeda",
       x = -7.092, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -5.541, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 39, name = "moeda",
+      id = 40, name = "moeda",
       x = -5.033, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7.461, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 40, name = "moeda",
+      id = 41, name = "moeda",
       x = -2.481, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -8.651, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 41, name = "moeda",
+      id = 42, name = "moeda",
       x = 0.314, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -8.995, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 42, name = "moeda",
+      id = 43, name = "moeda",
       x = 3.078, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -8.457, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 43, name = "moeda",
+      id = 44, name = "moeda",
       x = 5.541, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7.092, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 44, name = "moeda",
+      id = 45, name = "moeda",
       x = 7.461, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -5.033, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 45, name = "moeda",
+      id = 46, name = "moeda",
       x = -4, y = 1.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 46, name = "moeda",
+      id = 47, name = "moeda",
       x = 11, y = 6.4, rotation = 0, scale_x = 1, scale_y = 1,
       z = -5.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 47, name = "moeda",
+      id = 48, name = "moeda",
       x = 8, y = 7.8, rotation = 0, scale_x = 1, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 48, name = "moeda",
+      id = 49, name = "moeda",
       x = 1.5, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 8.6, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 49, name = "moeda",
+      id = 50, name = "moeda",
       x = 2.8, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 8.3, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 50, name = "moeda",
+      id = 51, name = "moeda",
       x = 4.1, y = 0.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = 8, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/moeda.prefab",
     },
     {
-      id = 51, name = "estrela",
+      id = 52, name = "estrela",
       x = -6, y = 3.6, rotation = 0, scale_x = 1, scale_y = 1,
       z = -7, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 52, name = "estrela",
+      id = 53, name = "estrela",
       x = 10, y = 4.9, rotation = 0, scale_x = 1, scale_y = 1,
       z = -10, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 53, name = "estrela",
+      id = 54, name = "estrela",
       x = 10.5, y = 8.9, rotation = 0, scale_x = 1, scale_y = 1,
       z = 1.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 54, name = "estrela",
+      id = 55, name = "estrela",
       x = 0, y = 8.4, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 55, name = "estrela",
+      id = 56, name = "estrela",
       x = 7.5, y = 0.5, rotation = 0, scale_x = 1, scale_y = 1,
       z = 7.5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
       prefab = "prefabs/estrela.prefab",
     },
     {
-      id = 56, name = "Parede",
+      id = 57, name = "Areia da arena",
+      x = -27, y = -0.55, rotation = 0, scale_x = 19.5, scale_y = 1,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 19.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cylinder", color = "#F2D49B", shadow = false },
+      },
+    },
+    {
+      id = 58, name = "Arena",
+      x = -27, y = -2, rotation = 0, scale_x = 18, scale_y = 4,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 18,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cylinder", color = "#C9B48A", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 59, name = "Ponte",
+      x = -14.6, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.5,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 60, name = "Ponte",
+      x = -15.55, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.5,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 61, name = "Ponte",
+      x = -16.5, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.5,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 62, name = "Ponte",
+      x = -17.45, y = 0, rotation = 0, scale_x = 0.9, scale_y = 0.5,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 2.6,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/plataforma.glb", color = "#C89B6D", flat = false, shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 63, name = "Pilar",
+      x = -19.34, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 3.69, rx = 0, ry = -25.7, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 64, name = "Pilar",
+      x = -20.35, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 5.3, rx = 0, ry = -38.6, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 65, name = "Pilar",
+      x = -21.7, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 6.65, rx = 0, ry = -51.4, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 66, name = "Pilar",
+      x = -23.31, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 7.66, rx = 0, ry = -64.3, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 67, name = "Pilar",
+      x = -25.11, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 8.29, rx = 0, ry = -77.1, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 68, name = "Pilar",
+      x = -27, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 8.5, rx = 0, ry = -90, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 69, name = "Pilar",
+      x = -28.89, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 8.29, rx = 0, ry = -102.9, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 70, name = "Pilar",
+      x = -30.69, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 7.66, rx = 0, ry = -115.7, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 71, name = "Pilar",
+      x = -32.3, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 6.65, rx = 0, ry = -128.6, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 72, name = "Pilar",
+      x = -33.65, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 5.3, rx = 0, ry = -141.4, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 73, name = "Pilar",
+      x = -34.66, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 3.69, rx = 0, ry = -154.3, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 74, name = "Pilar",
+      x = -35.29, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 1.89, rx = 0, ry = -167.1, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 75, name = "Pilar",
+      x = -35.5, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = 0, rx = 0, ry = -180, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 76, name = "Pilar",
+      x = -35.29, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -1.89, rx = 0, ry = -192.9, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 77, name = "Pilar",
+      x = -34.66, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -3.69, rx = 0, ry = -205.7, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 78, name = "Pilar",
+      x = -33.65, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -5.3, rx = 0, ry = -218.6, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 79, name = "Pilar",
+      x = -32.3, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -6.65, rx = 0, ry = -231.4, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 80, name = "Pilar",
+      x = -30.69, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -7.66, rx = 0, ry = -244.3, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 81, name = "Pilar",
+      x = -28.89, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -8.29, rx = 0, ry = -257.1, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 82, name = "Pilar",
+      x = -27, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -8.5, rx = 0, ry = -270, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 83, name = "Pilar",
+      x = -25.11, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -8.29, rx = 0, ry = -282.9, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 84, name = "Pilar",
+      x = -23.31, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -7.66, rx = 0, ry = -295.7, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 85, name = "Pilar",
+      x = -21.7, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -6.65, rx = 0, ry = -308.6, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 86, name = "Pilar",
+      x = -20.35, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -5.3, rx = 0, ry = -321.4, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 87, name = "Pilar",
+      x = -19.34, y = 1.1, rotation = 0, scale_x = 0.7, scale_y = 2.2,
+      z = -3.69, rx = 0, ry = -334.3, rz = 0, scale_z = 0.9,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#8E939C", shadow = true },
+        { type = "body3d", body = "static", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+      },
+    },
+    {
+      id = 88, name = "Portão da arena",
+      x = -18.5, y = 1.2, rotation = 0, scale_x = 0.5, scale_y = 2.4,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 3.4,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#6B4226", shadow = true },
+        { type = "body3d", body = "kinematic", shape = "auto", sensor = false, bounce = 0, friction = 0.5, mass = 0, lock_rotation = false, gravity_scale = 1, tag = "" },
+        { type = "behavior", script = "nn:porta3d", abre = "descendo", abrir_com = "mensagem", angulo = 100, chave = "", distancia = 1.2, fechar_depois = 0, gastar_chave = true, lado = "esquerda", som = "assets/sons/porta.wav", som_trancada = "assets/sons/dano.wav", tempo = 0.8, texto = "abrir", texto_fechar = "fechar", texto_trancada = "Precisa de: {item}" },
+      },
+    },
+    {
+      id = 89, name = "Zona da arena",
+      x = -27, y = 1.5, rotation = 0, scale_x = 12, scale_y = 3,
+      z = 0, rx = 0, ry = 0, rz = 0, scale_z = 12,
+      visible = true, layer = 0,
+      components = {
+        { type = "shape3d", shape = "cube", color = "#FFD16640", shadow = false },
+        { type = "behavior", script = "nn:gatilho", alvo = "", invisivel = true, mensagem = "", mensagem_saida = "", quem = "", som = "", uma_vez = false },
+      },
+    },
+    {
+      id = 94, name = "Ondas",
+      x = -27, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "behavior", script = "nn:ondas", a_mais = 1, cor = "#B36BFF", distancia = 6, forte_a_partir = 2, intervalo = 0.6, letreiro = true, longe = 3, ondas = 3, pausa = 3, prefab = "prefabs/besouro.prefab", prefab_forte = "", primeira = 2, quando = "mensagem", raio = 7, som = "assets/sons/porta.wav", texto = "Onda {onda}", texto_fim = "", var_onda = "onda", var_restantes = "restantes" },
+      },
+      children = {
+        {
+          id = 90, name = "Saída",
+          x = 3, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+          z = 5.2, rx = 0, ry = 0, rz = 0, scale_z = 1,
+          visible = true, layer = 0,
+        },
+        {
+          id = 91, name = "Saída",
+          x = -3.86, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+          z = 4.6, rx = 0, ry = 0, rz = 0, scale_z = 1,
+          visible = true, layer = 0,
+        },
+        {
+          id = 92, name = "Saída",
+          x = -3.86, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+          z = -4.6, rx = 0, ry = 0, rz = 0, scale_z = 1,
+          visible = true, layer = 0,
+        },
+        {
+          id = 93, name = "Saída",
+          x = 3, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+          z = -5.2, rx = 0, ry = 0, rz = 0, scale_z = 1,
+          visible = true, layer = 0,
+        },
+      },
+    },
+    {
+      id = 95, name = "Besouro-rei",
+      x = -31, y = 0, rotation = 0, scale_x = 1.5, scale_y = 1.5,
+      z = 0, rx = 0, ry = 90, rz = 0, scale_z = 1.5,
+      visible = true, layer = 0,
+      components = {
+        { type = "model", file = "modelos/besourao.glb", color = "#FFFFFF", flat = false, shadow = true },
+        { type = "behavior", script = "nn:vida", ao_acabar = "nada", barra = false, cena = "", cor_barra = "#FF5A5A", invencivel = 0.25, numeros = true, piscar = false, variavel = "", vidas = 14 },
+        { type = "behavior", script = "nn:chefe", abertura = 70, ajudante = "prefabs/besouro.prefab", ajudantes = true, alcance = 3, aviso = 0.8, barra = true, cor_barra = "#FF5A5A", dano = 1, distancia = 10, furia = 50, golpe = true, investida = true, leque = true, nome = "Besouro-rei", pausa = 1.4, pulo = true, quando = "mensagem", quantos = 2, raio_impacto = 4.5, solta = "prefabs/estrela.prefab", som_aviso = "", som_impacto = "assets/sons/explosao.wav", tiro = "prefabs/magia.prefab", tiros = 5, tonto = 1.8, velocidade = 2.4, velocidade_investida = 11 },
+      },
+    },
+    {
+      id = 96, name = "Placar da arena",
+      x = -40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = false, layer = 0, anchor = "top_right",
+      components = {
+        { type = "text", text = "", size = 30, color = "#FFFFFF", anchor = "right", font = "", hud = true },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Onda {onda} / 3     Faltam {restantes}" },
+      },
+    },
+    {
+      id = 97, name = "Parede",
       x = 7.5, y = 1.3, rotation = 0, scale_x = 3.4, scale_y = 2.6,
       z = 5.95, rx = 0, ry = 0, rz = 0, scale_z = 0.3,
       visible = true, layer = 0,
@@ -541,7 +969,7 @@ return {
       },
     },
     {
-      id = 57, name = "Parede",
+      id = 98, name = "Parede",
       x = 7.5, y = 1.3, rotation = 0, scale_x = 3.4, scale_y = 2.6,
       z = 9.05, rx = 0, ry = 0, rz = 0, scale_z = 0.3,
       visible = true, layer = 0,
@@ -551,7 +979,7 @@ return {
       },
     },
     {
-      id = 58, name = "Parede",
+      id = 99, name = "Parede",
       x = 9.05, y = 1.3, rotation = 0, scale_x = 0.3, scale_y = 2.6,
       z = 7.5, rx = 0, ry = 0, rz = 0, scale_z = 2.8,
       visible = true, layer = 0,
@@ -561,7 +989,7 @@ return {
       },
     },
     {
-      id = 59, name = "Parede",
+      id = 100, name = "Parede",
       x = 5.95, y = 1.3, rotation = 0, scale_x = 0.3, scale_y = 2.6,
       z = 6.5, rx = 0, ry = 0, rz = 0, scale_z = 0.8,
       visible = true, layer = 0,
@@ -571,7 +999,7 @@ return {
       },
     },
     {
-      id = 60, name = "Parede",
+      id = 101, name = "Parede",
       x = 5.95, y = 1.3, rotation = 0, scale_x = 0.3, scale_y = 2.6,
       z = 8.5, rx = 0, ry = 0, rz = 0, scale_z = 0.8,
       visible = true, layer = 0,
@@ -581,7 +1009,7 @@ return {
       },
     },
     {
-      id = 61, name = "Parede",
+      id = 102, name = "Parede",
       x = 5.95, y = 2.4, rotation = 0, scale_x = 0.3, scale_y = 0.4,
       z = 7.5, rx = 0, ry = 0, rz = 0, scale_z = 1.2,
       visible = true, layer = 0,
@@ -591,7 +1019,7 @@ return {
       },
     },
     {
-      id = 62, name = "Parede",
+      id = 103, name = "Parede",
       x = 7.5, y = 2.72, rotation = 0, scale_x = 3.8, scale_y = 0.25,
       z = 7.5, rx = 0, ry = 0, rz = 0, scale_z = 3.8,
       visible = true, layer = 0,
@@ -601,7 +1029,7 @@ return {
       },
     },
     {
-      id = 63, name = "Porta do cofre",
+      id = 104, name = "Porta do cofre",
       x = 5.95, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 7.5, rx = 0, ry = -90, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -612,7 +1040,7 @@ return {
       },
     },
     {
-      id = 64, name = "Placa do cofre",
+      id = 105, name = "Placa do cofre",
       x = 5.78, y = 2.4, rotation = 0, scale_x = 1, scale_y = 1,
       z = 7.5, rx = 0, ry = -90, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -621,7 +1049,7 @@ return {
       },
     },
     {
-      id = 65, name = "Chave",
+      id = 106, name = "Chave",
       x = -8, y = 2.1, rotation = 0, scale_x = 1.6, scale_y = 1.6,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1.6,
       visible = true, layer = 0,
@@ -632,7 +1060,7 @@ return {
       },
     },
     {
-      id = 67, name = "Pescador",
+      id = 108, name = "Pescador",
       x = 1.8, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 4.8, rx = 0, ry = -23, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -644,7 +1072,7 @@ return {
       },
       children = {
         {
-          id = 66, name = "Nome",
+          id = 107, name = "Nome",
           x = 0, y = 2.15, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
@@ -654,24 +1082,24 @@ return {
       },
     },
     {
-      id = 68, name = "Placar",
+      id = 109, name = "Placar",
       x = 40, y = -44, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
         { type = "text", text = "", size = 30, color = "#FFD93D", anchor = "left", font = "", hud = true },
-        { type = "behavior", script = "nn:mostrar_valor", texto = "Estrelas {estrelas} / 5     Moedas {moedas}" },
+        { type = "behavior", script = "nn:mostrar_valor", texto = "Estrelas {estrelas} / 6     Moedas {moedas}" },
       },
     },
     {
-      id = 69, name = "Dica",
+      id = 110, name = "Dica",
       x = 0, y = -120, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top",
       components = {
-        { type = "text", text = "Ache as 5 estrelas! (Esc solta o mouse)", size = 34, color = "#FFFFFF", anchor = "center", font = "", hud = true },
+        { type = "text", text = "Ache as 6 estrelas! Uma é do besouro-rei, na arena. (Esc solta o mouse)", size = 30, color = "#FFFFFF", anchor = "center", font = "", hud = true },
       },
     },
     {
-      id = 70, name = "Corações",
+      id = 111, name = "Corações",
       x = 40, y = -90, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0, anchor = "top_left",
       components = {
@@ -679,7 +1107,7 @@ return {
       },
     },
     {
-      id = 71, name = "Inventário",
+      id = 112, name = "Inventário",
       x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
@@ -687,7 +1115,7 @@ return {
       },
     },
     {
-      id = 72, name = "Besouro",
+      id = 113, name = "Besouro",
       x = -9, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = 5, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
@@ -698,7 +1126,7 @@ return {
       },
     },
     {
-      id = 73, name = "Besouro",
+      id = 114, name = "Besouro",
       x = 6, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       z = -2, rx = 0, ry = 0, rz = 0, scale_z = 1,
       visible = true, layer = 0,
