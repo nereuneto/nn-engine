@@ -482,6 +482,13 @@ fn mundo_3d() -> Tutorial {
                 }),
             },
             Step {
+                title: "Uma fileira de árvores",
+                text: "Com a árvore selecionada, segure Alt e arraste a seta vermelha (X): sai uma cópia, e a original fica. Agora aperte Ctrl+D duas vezes: cada árvore nova anda o mesmo tanto que a cópia andou. Uma fileira em segundos!\n\nOutro jeito: Shift+D faz uma cópia que segue o mouse até você clicar.",
+                target: Some("cena"),
+                show: None,
+                done: Some(|ws, _| with_model(ws, "arvore.glb").len() >= 4),
+            },
+            Step {
                 title: "Uma caixa que cai",
                 text: "Arraste caixote.glb para a cena e, com a seta verde (Y), suba ele uns 3 metros. Adicione um Corpo 3D e, no Tipo, escolha \"Cai e é empurrado\". Teste com F6: ele cai, e o herói empurra.",
                 target: Some("arquivo:modelos/caixote.glb"),

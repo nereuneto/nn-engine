@@ -251,6 +251,26 @@ retângulo "tela do jogo" mostra o que cabe na janela (o tamanho do
   erro de digitação (*tocah* acha a Tocha), e os últimos que você usou vêm
   primeiro. **Esc** fecha.
 - **F2** renomeia o selecionado (na Hierarquia).
+- **Duplicar sem repetir trabalho:**
+  - **Ctrl+D** duplica um passo ao lado. Se você mover a cópia e apertar
+    Ctrl+D de novo, a próxima anda **o mesmo tanto**: uma cerca, uma fileira
+    de árvores ou uma escada sai com Ctrl+D, Ctrl+D, Ctrl+D…
+  - **Alt + arrastar** um objeto leva uma cópia (o original fica). No 3D,
+    Alt + arrastar continua girando a câmera; a cópia sai arrastando uma
+    **seta do Mover** com Alt.
+  - **Shift+D** faz uma cópia que **segue o mouse** até você clicar (com
+    **Encaixar**, na grade). **Esc** ou o botão direito desistem.
+- **Ctrl+C / Ctrl+X / Ctrl+V** copiam, recortam e colam objetos (com os
+  filhos), também entre cenas e entre dois NN Studio abertos. Com o mouse na
+  cena, o colado vai para onde o mouse está; na Hierarquia, para o mesmo
+  lugar. O botão direito no vazio tem **📋 Colar aqui**.
+- **⭐ Favoritos:** no botão direito de um objeto, **⭐ Guardar nos
+  favoritos** guarda ele (com os filhos) como um molde, em
+  `favoritos/<nome>.favorito`. Os favoritos aparecem no topo do ➕ Objeto, do
+  botão direito e do **Shift+A**. Diferente do [prefab](#prefabs), cada cópia
+  é livre: mudar uma não muda as outras (e mudar o favorito não muda as
+  cópias já feitas). Para tirar um favorito, apague o arquivo no painel
+  Arquivos.
 - **Arrastar arquivos** do painel Arquivos para a cena: uma imagem vira um
   sprite, um mapa `.tmj` vira um mapa, um som vira um objeto de som e um
   `.prefab` vira uma instância do prefab.
@@ -290,8 +310,18 @@ desenhada por cima) e os **componentes**:
 | Comportamento | Um comportamento pronto ou um script seu (veja abaixo). |
 
 **➕ Adicionar componente** acrescenta outro; o menu ☰ de cada um (ou o botão
-direito no nome dele) sobe, desce, **↺ restaura o padrão** (os valores do
-começo; o arquivo, a forma e o tipo continuam) ou remove. Campos de arquivo aceitam arrastar do painel Arquivos. No modo
+direito no nome dele) sobe, desce, **📋 copia o componente**, **📋 cola os
+valores** de um copiado do mesmo tipo, **↺ restaura o padrão** (os valores do
+começo; o arquivo, a forma e o tipo continuam) ou remove. Com um componente
+copiado, **📋 Colar componente** (embaixo do ➕ Adicionar componente) põe uma
+cópia dele no objeto.
+
+**Vários objetos selecionados:** o Inspetor mostra a Transformação e os
+componentes que **todos** têm, com os valores do último selecionado. O que
+você mudar muda em todos (só o campo mexido: mudar o X não iguala o Y). Um
+**≠** laranja ao lado do nome marca os campos em que eles têm valores
+diferentes. Componentes adicionados, colados ou removidos ali também valem
+para todos. Campos de arquivo aceitam arrastar do painel Arquivos. No modo
 Simples, opções avançadas ficam escondidas.
 
 Imagem, texto e forma têm a opção **HUD**: o objeto fica **fixo na tela**
@@ -1366,6 +1396,9 @@ mensagem diz onde está o erro.
 | Ctrl+= / Ctrl+- / Ctrl+0 | Aumentar / diminuir / tamanho normal da interface |
 | F2 / Del (no painel) | Renomear / mandar para a lixeira |
 | F2 (na cena) | Renomear o objeto selecionado |
+| Ctrl+C / Ctrl+X / Ctrl+V (na cena e na Hierarquia) | Copiar / recortar / colar objetos |
+| Shift+D (na cena) | Uma cópia que segue o mouse até o clique |
+| Alt + arrastar (na cena; no 3D, pela seta do Mover) | Levar uma cópia |
 | Shift+A (na cena) | Busca rápida para criar onde o mouse está |
 | Botão direito (na cena, na Hierarquia, no nome de um componente) | Menu do que está ali |
 | W / E / R (na cena) | Mover / girar / escalar |
@@ -1461,10 +1494,10 @@ e chefes) e a v0.2, o 3D. Está tudo no [CHANGELOG](../CHANGELOG.md).
 
 Os próximos passos já escolhidos:
 
-- **v0.5, um NN Studio mais gostoso de usar:** o botão direito e a busca
-  rápida (Shift+A) já entraram; depois vêm menos trabalho repetido (copiar e
-  colar componentes, editar vários objetos de uma vez, favoritos) e um
-  Studio mais amigável (avisos com Desfazer, painéis vazios que ensinam);
+- **v0.5, um NN Studio mais gostoso de usar:** o botão direito, a busca
+  rápida (Shift+A), os jeitos de duplicar, copiar e colar, editar vários
+  objetos de uma vez e os favoritos já entraram; falta um Studio mais
+  amigável (avisos com Desfazer, painéis vazios que ensinam);
 - **v0.6, modelar e animar dentro do NN Studio:** um modelador de peças
   low-poly coloridas, com espelho, variações e peças que se encaixam, e um
   animador com esqueletos e animações prontas para ajustar.

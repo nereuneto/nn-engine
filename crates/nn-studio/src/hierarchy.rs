@@ -39,6 +39,10 @@ pub enum HierarchyAction {
     NewMap,
     /// Mostrar o painel Hierarquia (para renomear, vindo da vista).
     ShowHierarchy,
+    /// Um arquivo foi gravado (um favorito): avisa no Console.
+    Saved(String),
+    /// Algo deu errado: avisa no Console.
+    Error(String),
 }
 
 /// Um botão de menu com o atalho à direita.
@@ -47,7 +51,13 @@ pub fn menu_item(ui: &mut egui::Ui, text: &str, shortcut: &str) -> egui::Respons
 }
 
 /// O menu de um objeto (botão direito na Hierarquia ou na vista da cena).
-pub fn object_menu(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, out: &mut Vec<HierarchyAction>) {
+pub fn object_menu(
+    ui: &mut egui::Ui,
+    doc: &mut SceneDoc,
+    id: u32,
+    root: &std::path::Path,
+    out: &mut Vec<HierarchyAction>,
+) {
     let Some(o) = doc.data.find(id).cloned() else {
         ui.close();
         return;
@@ -63,9 +73,19 @@ pub fn object_menu(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, out: &mut Vec
         out.push(HierarchyAction::ShowHierarchy);
         ui.close();
     }
-    if !is_root && menu_item(ui, "Duplicar", "Ctrl+D").clicked() {
-        doc.duplicate_any();
-        ui.close();
+    if !is_root {
+        if menu_item(ui, "Duplicar", "Ctrl+D").clicked() {
+            doc.duplicate_any();
+            ui.close();
+        }
+        if menu_item(ui, "📋 Copiar", "Ctrl+C").clicked() {
+            doc.copy_selection(ui.ctx());
+            ui.close();
+        }
+        if menu_item(ui, "✂ Recortar", "Ctrl+X").clicked() {
+            doc.cut_selection(ui.ctx());
+            ui.close();
+        }
     }
     if menu_item(ui, "⛶ Focar", "F")
         .on_hover_text("A vista da cena chega perto do objeto")
@@ -95,11 +115,13 @@ pub fn object_menu(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, out: &mut Vec
     }
     ui.separator();
     let child = ui.menu_button("➕ Criar dentro", |ui| {
-        let entries = if doc.data.three_d {
+        let three_d = doc.data.three_d;
+        let entries = if three_d {
             crate::catalog::catalog3()
         } else {
             crate::catalog::catalog2_objects()
         };
+        let entries = crate::catalog::with_favorites(entries, root, three_d);
         let kind = if doc.data.three_d { "3d" } else { "2d" };
         if let Some(crate::catalog::Picked::Object(new)) = crate::catalog::menu(ui, &entries, kind)
         {
@@ -118,6 +140,20 @@ pub fn object_menu(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, out: &mut Vec
         doc.record(None);
         let n = doc.data.objects.len();
         doc.data.move_object(id, None, n);
+        ui.close();
+    }
+    if !is_root
+        && ui
+            .button("⭐ Guardar nos favoritos")
+            .on_hover_text("Guarda o objeto (com os filhos) como um molde: ele aparece no topo do ➕ Objeto e no Shift+A. Diferente do prefab, cada cópia fica livre.")
+            .clicked()
+    {
+        match crate::catalog::save_favorite(root, &o, doc.data.three_d) {
+            Ok(rel) => out.push(HierarchyAction::Saved(rel)),
+            Err(e) => out.push(HierarchyAction::Error(format!(
+                "Não deu para guardar nos favoritos: {e}"
+            ))),
+        }
         ui.close();
     }
     if let Some(link) = &o.prefab {
@@ -144,13 +180,30 @@ pub fn object_menu(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, out: &mut Vec
 }
 
 /// O menu de criar (➕ e botão direito no vazio da Hierarquia).
-fn create_menu(ui: &mut egui::Ui, doc: &mut SceneDoc, out: &mut Vec<HierarchyAction>) {
+fn create_menu(
+    ui: &mut egui::Ui,
+    doc: &mut SceneDoc,
+    root: &std::path::Path,
+    out: &mut Vec<HierarchyAction>,
+) {
+    if let Some(text) = SceneDoc::copied_objects(ui.ctx()) {
+        if menu_item(ui, "📋 Colar", "Ctrl+V")
+            .on_hover_text("Cola os objetos copiados no mesmo lugar de onde vieram")
+            .clicked()
+        {
+            doc.paste_objects(&text, root, None);
+            ui.close();
+            return;
+        }
+        ui.separator();
+    }
     use crate::catalog::{Picked, catalog2, catalog3, menu};
     let (entries, kind) = if doc.data.three_d {
         (catalog3(), "3d")
     } else {
         (catalog2(), "2d")
     };
+    let entries = crate::catalog::with_favorites(entries, root, doc.data.three_d);
     match menu(ui, &entries, kind) {
         Some(Picked::Object(o)) if doc.data.three_d => {
             doc.add_from_menu3(o);
@@ -213,7 +266,12 @@ pub struct HierarchyPanel {
 }
 
 impl HierarchyPanel {
-    pub fn ui(&mut self, ui: &mut egui::Ui, doc: Option<&mut SceneDoc>) -> Vec<HierarchyAction> {
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        doc: Option<&mut SceneDoc>,
+        root: &std::path::Path,
+    ) -> Vec<HierarchyAction> {
         let mut out = Vec::new();
         crate::tutorial::anchor(ui.ctx(), "hierarquia", ui.max_rect());
         let Some(doc) = doc else {
@@ -226,7 +284,7 @@ impl HierarchyPanel {
             return out;
         }
         ui.horizontal(|ui| {
-            ui.menu_button("➕", |ui| create_menu(ui, doc, &mut out))
+            ui.menu_button("➕", |ui| create_menu(ui, doc, root, &mut out))
                 .response
                 .on_hover_text("Adicionar objeto");
             ui.add(
@@ -273,7 +331,7 @@ impl HierarchyPanel {
                         let Some(o) = doc.data.find(id).cloned() else {
                             continue;
                         };
-                        row(ui, doc, &o, depth, &mut drop, &mut out);
+                        row(ui, doc, &o, depth, root, &mut drop, &mut out);
                         measured.get_or_insert(ui.cursor().top() - top);
                     }
                     if let Some(h) = measured
@@ -290,7 +348,7 @@ impl HierarchyPanel {
                         }
                     });
                     for o in found {
-                        row(ui, doc, &o, 0, &mut drop, &mut out);
+                        row(ui, doc, &o, 0, root, &mut drop, &mut out);
                     }
                 }
                 // Espaço livre no fim: soltar aqui leva para a raiz.
@@ -325,7 +383,7 @@ impl HierarchyPanel {
                     doc.selection.clear();
                 }
                 // Botão direito no vazio: criar.
-                resp.context_menu(|ui| create_menu(ui, doc, &mut out));
+                resp.context_menu(|ui| create_menu(ui, doc, root, &mut out));
             });
         if let Some((dragged, target, z)) = drop {
             apply_drop(doc, dragged, target, z);
@@ -345,6 +403,8 @@ impl HierarchyPanel {
             if ui.input_mut(|i| i.consume_key(Modifiers::COMMAND, Key::D)) {
                 doc.duplicate_selection();
             }
+            // Ctrl+C, Ctrl+X e Ctrl+V (colar no mesmo lugar).
+            doc.clipboard_keys(ui, root, None);
         }
         out
     }
@@ -371,6 +431,7 @@ fn row(
     doc: &mut SceneDoc,
     o: &Object,
     depth: usize,
+    root: &std::path::Path,
     drop: &mut Option<(u32, u32, DropZone)>,
     out: &mut Vec<HierarchyAction>,
 ) {
@@ -487,7 +548,7 @@ fn row(
         if !doc.selection.contains(&id) {
             doc.selection = vec![id];
         }
-        object_menu(ui, doc, id, out);
+        object_menu(ui, doc, id, root, out);
     });
 
     // Arrastar para reorganizar.

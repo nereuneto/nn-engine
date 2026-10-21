@@ -930,6 +930,12 @@ impl StudioApp {
                             ("Criar onde o mouse está (na cena)", "Shift+A"),
                             ("Menu do objeto, ou criar ali (na cena)", "Botão direito"),
                             ("Duplicar / apagar objeto (na cena)", "Ctrl+D / Del"),
+                            (
+                                "Copiar / recortar / colar objetos (na cena)",
+                                "Ctrl+C / Ctrl+X / Ctrl+V",
+                            ),
+                            ("Cópia que segue o mouse (na cena)", "Shift+D"),
+                            ("Levar uma cópia (na cena)", "Alt + arrastar"),
                             ("Focar a seleção (na cena)", "F"),
                             ("Voar (na cena 3D)", "Botão direito + WASD, Q/E"),
                             ("Girar em volta (na cena 3D)", "Alt + arrastar"),

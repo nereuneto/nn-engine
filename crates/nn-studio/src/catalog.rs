@@ -555,6 +555,143 @@ fn doors_and_items() -> Vec<Entry> {
     ]
 }
 
+// Favoritos -----------------------------------------------------------------
+
+/// A pasta dos favoritos, no projeto.
+pub const FAVORITES_DIR: &str = "favoritos";
+/// A extensão de um favorito (um pedaço de cena com um objeto).
+pub const FAVORITE_EXT: &str = "favorito";
+const FAVORITE_MARK: &str =
+    "-- Favorito do NN Studio: um molde para criar o objeto de novo (⭐ no ➕ Objeto).";
+
+/// Um objeto guardado nos favoritos do projeto.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Favorite {
+    pub name: String,
+    pub rel: String,
+    pub three_d: bool,
+    pub object: Object,
+}
+
+type FavCache = Option<(
+    std::path::PathBuf,
+    Vec<(String, Option<std::time::SystemTime>)>,
+    Vec<Favorite>,
+)>;
+static FAV_CACHE: std::sync::Mutex<FavCache> = std::sync::Mutex::new(None);
+
+/// Os favoritos do projeto (relidos só quando os arquivos mudam).
+pub fn favorites(root: &std::path::Path) -> Vec<Favorite> {
+    let dir = root.join(FAVORITES_DIR);
+    let mut stamp: Vec<(String, Option<std::time::SystemTime>)> = std::fs::read_dir(&dir)
+        .map(|list| {
+            list.flatten()
+                .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some(FAVORITE_EXT))
+                .map(|e| {
+                    let t = e.metadata().and_then(|m| m.modified()).ok();
+                    (e.file_name().to_string_lossy().to_string(), t)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    stamp.sort();
+    let mut cache = FAV_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((r, st, favs)) = cache.as_ref()
+        && r == root
+        && *st == stamp
+    {
+        return favs.clone();
+    }
+    let mut favs = Vec::new();
+    for (file, _) in &stamp {
+        let rel = format!("{FAVORITES_DIR}/{file}");
+        let Ok(text) = std::fs::read_to_string(root.join(&rel)) else {
+            continue;
+        };
+        let Ok(mut piece) = crate::scene_data::read(&text, &rel) else {
+            continue;
+        };
+        piece.link_prefabs(root);
+        let Some(object) = piece.objects.into_iter().next() else {
+            continue;
+        };
+        let name = std::path::Path::new(file)
+            .file_stem()
+            .map(|s| s.to_string_lossy().replace(['_', '-'], " "))
+            .unwrap_or_default();
+        favs.push(Favorite {
+            name,
+            rel,
+            three_d: piece.three_d,
+            object,
+        });
+    }
+    *cache = Some((root.to_path_buf(), stamp, favs.clone()));
+    favs
+}
+
+/// Guarda o objeto (com os filhos) nos favoritos do projeto, com o nome
+/// dele. Devolve o caminho do arquivo.
+pub fn save_favorite(
+    root: &std::path::Path,
+    obj: &Object,
+    three_d: bool,
+) -> Result<String, String> {
+    let mut o = obj.clone();
+    // Um molde: a posição vem de onde ele for criado.
+    (o.x, o.y, o.z) = (0.0, 0.0, 0.0);
+    let base = {
+        let s = nn_app::slug(&o.name);
+        if s.is_empty() {
+            "favorito".to_string()
+        } else {
+            s
+        }
+    };
+    let dir = root.join(FAVORITES_DIR);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let mut name = base.clone();
+    let mut n = 2;
+    while dir.join(format!("{name}.{FAVORITE_EXT}")).exists() {
+        name = format!("{base}-{n}");
+        n += 1;
+    }
+    let piece = crate::scene_data::SceneData {
+        three_d,
+        objects: vec![o],
+        ..Default::default()
+    };
+    let text = format!("{FAVORITE_MARK}\n{}", crate::scene_data::write(&piece));
+    let rel = format!("{FAVORITES_DIR}/{name}.{FAVORITE_EXT}");
+    std::fs::write(root.join(&rel), text).map_err(|e| e.to_string())?;
+    Ok(rel)
+}
+
+/// O menu com os favoritos do projeto (desta dimensão) no topo.
+pub fn with_favorites(
+    mut entries: Vec<Entry>,
+    root: &std::path::Path,
+    three_d: bool,
+) -> Vec<Entry> {
+    let favs: Vec<Entry> = favorites(root)
+        .into_iter()
+        .filter(|f| f.three_d == three_d)
+        .map(|f| {
+            let object = f.object.clone();
+            let mut it = item(&f.name, move || object.clone())
+                .tip("Um favorito: cria uma cópia livre (mudar uma não muda as outras)")
+                .words("favorito");
+            it.anchor = Some(format!("cena.objeto:favorito:{}", f.name));
+            it.into()
+        })
+        .collect();
+    if !favs.is_empty() {
+        entries.insert(0, sub("⭐ Favoritos", Some("cena.objeto:favoritos"), favs));
+        entries.insert(1, Entry::Sep);
+    }
+    entries
+}
+
 // Menus ---------------------------------------------------------------------
 
 /// Desenha o menu (o ➕ Objeto, ou dentro do menu do botão direito). Fecha o

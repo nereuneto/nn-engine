@@ -1577,7 +1577,13 @@ fn environment_ui(ui: &mut egui::Ui, doc: &mut SceneDoc) {
 }
 
 /// Posição, rotação e escala de um objeto numa cena 3D.
-fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scene_data::Object) {
+fn transform3_ui(
+    ui: &mut egui::Ui,
+    doc: &mut SceneDoc,
+    id: u32,
+    o: &crate::scene_data::Object,
+    differs: [bool; 4],
+) {
     egui::CollapsingHeader::new(RichText::new("Transformação").strong())
         .id_salt(("transformacao3", id))
         .default_open(true)
@@ -1594,8 +1600,9 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
                                tip: &str,
                                v: &mut [f64],
                                speed: f64,
-                               suffix: &str| {
-                        ui.label(label).on_hover_text(tip);
+                               suffix: &str,
+                               differs: bool| {
+                        transform_label(ui, label, tip, differs);
                         ui.horizontal(|ui| {
                             for (k, axis) in ["x ", "y ", "z "].into_iter().enumerate() {
                                 ui.add(
@@ -1616,6 +1623,7 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
                         &mut t[0..3],
                         0.05,
                         "",
+                        differs[0],
                     );
                     row(
                         ui,
@@ -1624,6 +1632,7 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
                         &mut t[3..6],
                         1.0,
                         "°",
+                        differs[1],
                     );
                     row(
                         ui,
@@ -1632,6 +1641,7 @@ fn transform3_ui(ui: &mut egui::Ui, doc: &mut SceneDoc, id: u32, o: &crate::scen
                         &mut t[6..9],
                         0.01,
                         "",
+                        differs[2],
                     );
                     let now = doc.data.find(id).map(|x| {
                         [
@@ -1899,6 +1909,199 @@ pub struct Inspector {
     game: Option<GameState>,
     /// Componente novo: no próximo quadro, rola até o fim para mostrá-lo.
     scroll_to_end: bool,
+    /// Vários objetos selecionados: o que eles têm em comum e o que difere.
+    multi: Option<Multi>,
+}
+
+/// Vários objetos no Inspetor: ele mostra o último selecionado (o "líder"),
+/// só com os componentes que todos têm, e o que muda nele muda em todos.
+#[derive(Debug, Default, Clone)]
+struct Multi {
+    /// Os componentes do líder que todos têm (pelo índice).
+    common: Vec<bool>,
+    /// Campos com valores diferentes entre eles: (componente, chave).
+    differs: std::collections::HashSet<(usize, String)>,
+    /// Posição, rotação, escala e camada diferentes.
+    pos: bool,
+    rot: bool,
+    scale: bool,
+    layer: bool,
+}
+
+/// O que identifica um componente para comparar objetos: o tipo e, num
+/// comportamento, o script.
+fn comp_key(c: &Component) -> (String, String) {
+    let script = if c.is_behavior() {
+        c.str("script").to_string()
+    } else {
+        String::new()
+    };
+    (c.kind.clone(), script)
+}
+
+/// O componente de `o` que corresponde ao componente `ci` de `lead` (o mesmo
+/// tipo, na mesma ordem entre os do mesmo tipo).
+fn matching(o: &Object, lead: &Object, ci: usize) -> Option<usize> {
+    let key = comp_key(lead.components.get(ci)?);
+    let k = lead.components[..ci]
+        .iter()
+        .filter(|c| comp_key(c) == key)
+        .count();
+    o.components
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| comp_key(c) == key)
+        .nth(k)
+        .map(|(i, _)| i)
+}
+
+impl Multi {
+    fn of(lead: &Object, others: &[Object], three_d: bool) -> Self {
+        let mut m = Multi::default();
+        for (ci, c) in lead.components.iter().enumerate() {
+            let matched: Vec<Option<&Component>> = others
+                .iter()
+                .map(|o| matching(o, lead, ci).map(|j| &o.components[j]))
+                .collect();
+            let common = matched.iter().all(Option::is_some);
+            m.common.push(common);
+            if !common {
+                continue;
+            }
+            for other in matched.into_iter().flatten() {
+                let keys = c
+                    .props
+                    .iter()
+                    .map(|(k, _)| k)
+                    .chain(other.props.iter().map(|(k, _)| k));
+                for k in keys {
+                    let same = match (c.get(k), other.get(k)) {
+                        (Some(a), Some(b)) => same_value(a, b),
+                        (None, None) => true,
+                        _ => false,
+                    };
+                    if !same {
+                        m.differs.insert((ci, k.clone()));
+                    }
+                }
+            }
+        }
+        for o in others {
+            if three_d {
+                m.pos |= (o.x, o.y, o.z) != (lead.x, lead.y, lead.z);
+                m.rot |= (o.rx, o.ry, o.rz) != (lead.rx, lead.ry, lead.rz);
+                m.scale |=
+                    (o.scale_x, o.scale_y, o.scale_z) != (lead.scale_x, lead.scale_y, lead.scale_z);
+            } else {
+                m.pos |= (o.x, o.y) != (lead.x, lead.y);
+                m.rot |= o.rotation != lead.rotation;
+                m.scale |= (o.scale_x, o.scale_y) != (lead.scale_x, lead.scale_y);
+            }
+            m.layer |= o.layer != lead.layer;
+        }
+        m
+    }
+
+    fn differs(&self, ci: usize, key: &str) -> bool {
+        self.differs.contains(&(ci, key.to_string()))
+    }
+}
+
+/// Leva para os outros objetos o que mudou no líder (`before` → agora): os
+/// campos da transformação que mudaram, os valores mudados dos componentes
+/// em comum, componentes novos e componentes tirados.
+fn propagate(doc: &mut SceneDoc, before: &Object, others: &[u32]) {
+    let Some(after) = doc.data.find(before.id).cloned() else {
+        return;
+    };
+    if &after == before {
+        return;
+    }
+    for &oid in others {
+        let Some(other) = doc.data.find(oid).cloned() else {
+            continue;
+        };
+        let mut o2 = other.clone();
+        macro_rules! field {
+            ($($f:ident),*) => {
+                $( if before.$f != after.$f { o2.$f = after.$f.clone(); } )*
+            };
+        }
+        field!(
+            x, y, z, rotation, rx, ry, rz, scale_x, scale_y, scale_z, visible, locked, layer
+        );
+        let (nb, na) = (before.components.len(), after.components.len());
+        if na == nb {
+            for ci in 0..na {
+                let (b, a) = (&before.components[ci], &after.components[ci]);
+                if b == a || comp_key(b) != comp_key(a) {
+                    continue;
+                }
+                let Some(j) = matching(&other, before, ci) else {
+                    continue;
+                };
+                let keys: Vec<String> = b
+                    .props
+                    .iter()
+                    .chain(a.props.iter())
+                    .map(|(k, _)| k.clone())
+                    .collect();
+                for k in keys {
+                    if b.get(&k) != a.get(&k) {
+                        match a.get(&k) {
+                            Some(v) => o2.components[j].set(&k, v.clone()),
+                            None => o2.components[j].remove(&k),
+                        }
+                    }
+                }
+            }
+        } else if na > nb {
+            // Componentes novos (vão para o fim).
+            for c in &after.components[nb..] {
+                o2.components.push(c.clone());
+            }
+        } else {
+            // Um componente saiu: o primeiro que não bate mais.
+            let ci = (0..nb)
+                .find(|&i| {
+                    i >= na || comp_key(&before.components[i]) != comp_key(&after.components[i])
+                })
+                .unwrap_or(nb - 1);
+            if let Some(j) = matching(&other, before, ci) {
+                o2.components.remove(j);
+            }
+        }
+        if o2 != other
+            && let Some(slot) = doc.data.find_mut(oid)
+        {
+            *slot = o2;
+        }
+    }
+}
+
+/// O componente copiado (☰ > Copiar componente).
+fn copied_component_id() -> egui::Id {
+    egui::Id::new("componente-copiado")
+}
+
+fn copied_component(ctx: &egui::Context) -> Option<Component> {
+    ctx.data(|d| d.get_temp::<Component>(copied_component_id()))
+}
+
+/// O rótulo de uma linha da Transformação, marcado quando os objetos
+/// selecionados têm valores diferentes.
+fn transform_label(ui: &mut egui::Ui, text: &str, tip: &str, differs: bool) -> egui::Response {
+    if differs {
+        ui.label(RichText::new(format!("{text} ≠")).color(crate::theme::WARNING))
+            .on_hover_text(format!("{tip}\n\nOs objetos têm valores diferentes: o que você mudar aqui fica igual em todos."))
+    } else {
+        let r = ui.label(text);
+        if tip.is_empty() {
+            r
+        } else {
+            r.on_hover_text(tip)
+        }
+    }
 }
 
 /// Cor do que vem do jogo aberto.
@@ -1935,16 +2138,29 @@ fn is_behavior_candidate(rel: &str) -> bool {
 
 /// Rótulo de um campo (em negrito e com ↺ quando a instância mudou o valor
 /// do prefab).
-fn field_row(ui: &mut egui::Ui, spec: &Spec, overridden: bool, reverts: &mut Vec<String>) -> bool {
+fn field_row(
+    ui: &mut egui::Ui,
+    spec: &Spec,
+    overridden: bool,
+    differs: bool,
+    reverts: &mut Vec<String>,
+) -> bool {
     ui.horizontal(|ui| {
-        let text = if overridden {
+        let text = if differs {
+            RichText::new(format!("{} ≠", spec.label)).color(crate::theme::WARNING)
+        } else if overridden {
             RichText::new(&spec.label).strong().color(PREFAB)
         } else {
             RichText::new(&spec.label)
         };
-        let r = ui.label(text);
+        let mut r = ui.label(text);
         if !spec.help.is_empty() {
-            r.on_hover_text(&spec.help);
+            r = r.on_hover_text(&spec.help);
+        }
+        if differs {
+            r.on_hover_text(
+                "Os objetos têm valores diferentes: o que você mudar aqui fica igual em todos.",
+            );
         }
         if overridden
             && ui
@@ -2241,15 +2457,43 @@ impl Inspector {
                     }
                 }
                 n => {
-                    ui.label(format!("{n} objetos selecionados."));
-                    ui.horizontal(|ui| {
-                        if ui.button("Duplicar").clicked() {
-                            doc.duplicate_selection();
+                    let lead = *doc.selection.last().expect("seleção");
+                    let mut others: Vec<u32> = Vec::new();
+                    for id in &doc.selection {
+                        if *id != lead && !others.contains(id) {
+                            others.push(*id);
                         }
-                        if ui.button("🗑 Excluir").clicked() {
-                            doc.delete_selection();
-                        }
+                    }
+                    let Some(before) = doc.data.find(lead).cloned() else {
+                        return;
+                    };
+                    let objs: Vec<Object> = others
+                        .iter()
+                        .filter_map(|id| doc.data.find(*id).cloned())
+                        .collect();
+                    egui::Frame::group(ui.style()).show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(RichText::new(format!("{n} objetos")).strong());
+                            ui.weak(format!("(mostrando {})", before.name));
+                        });
+                        ui.weak("O que você mudar aqui muda em todos. ≠ marca valores diferentes entre eles; só aparecem os componentes que todos têm.");
+                        ui.horizontal(|ui| {
+                            if ui.button("Duplicar").clicked() {
+                                doc.duplicate_selection();
+                            }
+                            if ui.button("🗑 Excluir").clicked() {
+                                doc.delete_selection();
+                            }
+                        });
                     });
+                    if doc.selection.len() < 2 || doc.data.find(lead).is_none() {
+                        return;
+                    }
+                    ui.add_space(4.0);
+                    self.multi = Some(Multi::of(&before, &objs, doc.data.three_d));
+                    self.object_ui(ui, doc, lead, files, sizes, mode);
+                    self.multi = None;
+                    propagate(doc, &before, &others);
                 }
             });
         actions.append(&mut self.actions_out);
@@ -2407,19 +2651,22 @@ impl Inspector {
         crate::events::set_three_d(doc.data.three_d);
         let full = mode.is_full();
         let o = doc.data.find(id).cloned().expect("objeto selecionado");
-        // Nome, visível, travado.
-        ui.horizontal(|ui| {
-            let mut name = o.name.clone();
-            let r = ui.add(
-                egui::TextEdit::singleline(&mut name).desired_width(ui.available_width() - 4.0),
-            );
-            if r.changed() {
-                doc.record(Some(&format!("{id}:name")));
-                if let Some(obj) = doc.data.find_mut(id) {
-                    obj.name = name;
+        let multi = self.multi.clone();
+        // Nome, visível, travado. (Com vários, o nome fica de fora.)
+        if multi.is_none() {
+            ui.horizontal(|ui| {
+                let mut name = o.name.clone();
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut name).desired_width(ui.available_width() - 4.0),
+                );
+                if r.changed() {
+                    doc.record(Some(&format!("{id}:name")));
+                    if let Some(obj) = doc.data.find_mut(id) {
+                        obj.name = name;
+                    }
                 }
-            }
-        });
+            });
+        }
         ui.horizontal(|ui| {
             let mut v = o.visible;
             if ui.checkbox(&mut v, "Visível").changed() {
@@ -2445,8 +2692,11 @@ impl Inspector {
         });
         ui.add_space(4.0);
 
+        let d = multi
+            .as_ref()
+            .map_or([false; 4], |m| [m.pos, m.rot, m.scale, m.layer]);
         if doc.data.three_d {
-            transform3_ui(ui, doc, id, &o);
+            transform3_ui(ui, doc, id, &o, d);
         } else {
             egui::CollapsingHeader::new(RichText::new("Transformação").strong())
             .id_salt(("transformacao", id))
@@ -2457,23 +2707,27 @@ impl Inspector {
                     .spacing([8.0, 4.0])
                     .show(ui, |ui| {
                         let mut t = (o.x, o.y, o.rotation, o.scale_x, o.scale_y, o.layer);
-                        ui.label("Posição");
+                        transform_label(ui, "Posição", "", d[0]);
                         ui.horizontal(|ui| {
                             ui.add(egui::DragValue::new(&mut t.0).speed(1.0).prefix("x "));
                             ui.add(egui::DragValue::new(&mut t.1).speed(1.0).prefix("y "));
                         });
                         ui.end_row();
-                        ui.label("Rotação");
+                        transform_label(ui, "Rotação", "", d[1]);
                         ui.add(egui::DragValue::new(&mut t.2).speed(1.0).suffix("°"));
                         ui.end_row();
-                        ui.label("Escala");
+                        transform_label(ui, "Escala", "", d[2]);
                         ui.horizontal(|ui| {
                             ui.add(egui::DragValue::new(&mut t.3).speed(0.01).prefix("x "));
                             ui.add(egui::DragValue::new(&mut t.4).speed(0.01).prefix("y "));
                         });
                         ui.end_row();
-                        ui.label("Camada")
-                            .on_hover_text("Objetos de camada maior são desenhados por cima.");
+                        transform_label(
+                            ui,
+                            "Camada",
+                            "Objetos de camada maior são desenhados por cima.",
+                            d[3],
+                        );
                         ui.add(egui::DragValue::new(&mut t.5).speed(0.1));
                         ui.end_row();
                         // Na tela (HUD ou cena por cima), os objetos da raiz
@@ -2521,7 +2775,9 @@ impl Inspector {
                             ui.end_row();
                         }
                         // Onde está no jogo aberto, se mudou.
-                        if let Some(g) = self.game.as_ref().and_then(|g| g.objects.get(&id)) {
+                        if multi.is_none()
+                            && let Some(g) = self.game.as_ref().and_then(|g| g.objects.get(&id))
+                        {
                             let l = g.local;
                             let differs = (l.x - o.x).abs() > 0.01
                                 || (l.y - o.y).abs() > 0.01
@@ -2597,7 +2853,7 @@ impl Inspector {
 
         // Instância de prefab: os componentes vêm dele.
         let instance = o.prefab.clone();
-        if let Some(link) = &instance {
+        if let Some(link) = instance.as_ref().filter(|_| multi.is_none()) {
             let mut unlink = false;
             egui::Frame::group(ui.style()).show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
@@ -2665,9 +2921,16 @@ impl Inspector {
         let mut remove = None;
         let mut swap = None;
         let mut reset: Option<usize> = None;
+        let mut paste_values: Option<usize> = None;
         let mut add: Vec<Component> = Vec::new();
         let count = o.components.len();
         for (ci, comp) in o.components.iter().enumerate() {
+            if multi
+                .as_ref()
+                .is_some_and(|m| !m.common.get(ci).copied().unwrap_or(false))
+            {
+                continue;
+            }
             let (mut title, mut desc) = {
                 let (t, d) = component_info(&comp.kind);
                 (t.to_string(), d.to_string())
@@ -2707,6 +2970,28 @@ impl Inspector {
                             swap = Some((ci, ci + 1));
                             ui.close();
                         }
+                        if ui
+                            .button("📋 Copiar componente")
+                            .on_hover_text("Para colar os valores em outro igual, ou como componente novo em outro objeto")
+                            .clicked()
+                        {
+                            ui.ctx().data_mut(|d| {
+                                d.insert_temp(copied_component_id(), comp.clone());
+                            });
+                            ui.close();
+                        }
+                        let can_paste = copied_component(ui.ctx())
+                            .is_some_and(|c| comp_key(&c) == comp_key(comp));
+                        if ui
+                            .add_enabled(can_paste, egui::Button::new("📋 Colar valores"))
+                            .on_hover_text("Põe aqui os valores do componente copiado")
+                            .on_disabled_hover_text("Copie um componente deste mesmo tipo antes")
+                            .clicked()
+                        {
+                            paste_values = Some(ci);
+                            ui.close();
+                        }
+                        ui.separator();
                         if ui
                             .button("↺ Restaurar o padrão")
                             .on_hover_text("Volta os valores ao começo (o arquivo, a forma e o tipo continuam)")
@@ -2754,6 +3039,15 @@ impl Inspector {
                 obj.components.remove(ci);
             }
         }
+        if let Some(ci) = paste_values
+            && let Some(c) = copied_component(ui.ctx())
+            && o.components.get(ci).is_some_and(|x| *x != c)
+        {
+            doc.record(None);
+            if let Some(obj) = doc.data.find_mut(id) {
+                obj.components[ci] = c;
+            }
+        }
         if let Some(ci) = reset
             && let Some(comp) = o.components.get(ci)
         {
@@ -2777,7 +3071,8 @@ impl Inspector {
                 obj.components.extend(add);
             }
         }
-        if let Some(obj) = doc.data.find(id)
+        if multi.is_none()
+            && let Some(obj) = doc.data.find(id)
             && events_summary(ui, &obj.events, true)
         {
             self.actions_out.push(InspectorAction::ShowEvents);
@@ -2945,6 +3240,34 @@ impl Inspector {
             });
         });
         crate::tutorial::anchor_in(ui, "inspetor.adicionar", add_menu.response.rect);
+        // O componente copiado (☰ > Copiar componente) entra como novo.
+        if let Some(c) = copied_component(ui.ctx()) {
+            let (title, _) = component_info(&c.kind);
+            let unique = matches!(
+                c.kind.as_str(),
+                "body" | "camera" | "map" | "layout" | "body3d" | "anim3d" | "terrain" | "bone"
+            );
+            let fits = if doc.data.three_d {
+                !is_2d_only_kind(&c.kind)
+            } else {
+                !is_3d_kind(&c.kind)
+            };
+            let blocked = unique && o.component(&c.kind).is_some();
+            if fits
+                && ui
+                    .add_enabled(
+                        !blocked,
+                        egui::Button::new(format!("📋 Colar componente: {title}")),
+                    )
+                    .on_hover_text(
+                        "Põe aqui uma cópia do componente copiado, com os mesmos valores",
+                    )
+                    .on_disabled_hover_text("Este objeto já tem um deste (só pode um)")
+                    .clicked()
+            {
+                chosen.push(c);
+            }
+        }
         if !chosen.is_empty() {
             doc.record(None);
             if let Some(obj) = doc.data.find_mut(id) {
@@ -3056,7 +3379,8 @@ impl Inspector {
                     }
                     let spec = behavior_spec(info, p);
                     let overridden = o.is_overridden(ci, &p.key);
-                    if field_row(ui, &spec, overridden, &mut reverts) {
+                    let differs = self.multi.as_ref().is_some_and(|m| m.differs(ci, &p.key));
+                    if field_row(ui, &spec, overridden, differs, &mut reverts) {
                         // (a linha mostrou o rótulo)
                     }
                     let current = value(&p.key);
@@ -3268,7 +3592,11 @@ impl Inspector {
                     }
                     let overridden =
                         is_instance && obj.is_some_and(|x| x.is_overridden(ci, &spec.key));
-                    field_row(ui, &spec, overridden, &mut reverts);
+                    let differs = self
+                        .multi
+                        .as_ref()
+                        .is_some_and(|m| m.differs(ci, &spec.key));
+                    field_row(ui, &spec, overridden, differs, &mut reverts);
                     let current = comp.get(&spec.key).cloned().unwrap_or(Prop::Num(0.0));
                     if let Some(new) = field_widget(
                         ui,

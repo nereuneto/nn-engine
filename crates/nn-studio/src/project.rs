@@ -152,6 +152,11 @@ impl NewKind {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     Command(Command),
+    /// Uma linha no Console (informação ou erro).
+    Notice {
+        text: String,
+        error: bool,
+    },
     OpenFile {
         rel: String,
         line: Option<usize>,
@@ -1747,6 +1752,13 @@ impl ProjectWorkspace {
                 }
                 Action::ImportPaths { paths, dest } => self.import_paths(&paths, dest.as_deref()),
                 Action::Rename { rel, new_name } => self.rename(&rel, &new_name),
+                Action::Notice { text, error } => {
+                    if error {
+                        self.console.error(text);
+                    } else {
+                        self.console.info(text);
+                    }
+                }
                 Action::NewMap => {
                     self.dialog = Some(Dialog::NewMap(
                         crate::new_map::NewMapForm::new(&self.files),
@@ -2801,6 +2813,13 @@ fn hierarchy_action(actions: &mut Vec<Action>, a: HierarchyAction) {
         HierarchyAction::ShowHierarchy => {
             actions.push(Action::Command(Command::ShowHierarchy));
         }
+        HierarchyAction::Saved(rel) => actions.push(Action::Notice {
+            text: format!(
+                "⭐ Guardado nos favoritos: {rel}. Ele aparece no topo do ➕ Objeto e no Shift+A."
+            ),
+            error: false,
+        }),
+        HierarchyAction::Error(text) => actions.push(Action::Notice { text, error: true }),
     }
 }
 
@@ -3159,7 +3178,7 @@ impl TabViewer for Viewer<'_> {
                     .active_scene
                     .as_deref()
                     .and_then(|r| self.scenes.get_mut(r));
-                for a in self.hierarchy.ui(ui, doc) {
+                for a in self.hierarchy.ui(ui, doc, self.root) {
                     hierarchy_action(self.actions, a);
                 }
             }
