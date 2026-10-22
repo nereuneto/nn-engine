@@ -40,7 +40,7 @@ pub enum RigKind {
 pub const RIGS: [(RigKind, &str, &str); 3] = [
     (
         RigKind::Humanoid,
-        "🧍 Humanoide",
+        "🚶 Humanoide",
         "Quadril, tronco, cabeça, braços e pernas: heróis, inimigos, gente",
     ),
     (
@@ -50,7 +50,7 @@ pub const RIGS: [(RigKind, &str, &str); 3] = [
     ),
     (
         RigKind::Simple,
-        "🦴 Simples",
+        "📌 Simples",
         "Um osso só: porta, tampa de baú, hélice, bandeira",
     ),
 ];

@@ -15,6 +15,10 @@ use glam::{Mat4, Quat, Vec3};
 
 use crate::model_data::{self, MID, ModelData, Part, SHAPES, face_center, face_normal};
 use crate::repeat::{self, RepeatSpec};
+
+#[path = "model_animator.rs"]
+mod animator;
+pub use animator::RigState;
 use crate::scene_render::{self, SceneRenderer, View3};
 use crate::scene_view::scene3d::{
     BLUE, Cam3, GREEN, ORANGE, RED, arrow, axis_param, dist_to_segment, ray, ray_plane, ring, snap,
@@ -217,7 +221,10 @@ pub struct ModelDoc {
     /// O clique que terminou de puxar ou encolher não escolhe nada.
     swallow: bool,
     rev: u64,
-    built: Option<ModelData>,
+    /// As peças com que as malhas foram montadas.
+    built: Option<Vec<Part>>,
+    /// O esqueleto e o animador.
+    pub rig: RigState,
     stage: crate::scene_data::SceneData,
     pub view_rect: Option<Rect>,
     actions: Vec<ModelAction>,
@@ -286,6 +293,7 @@ impl ModelDoc {
             swallow: false,
             rev: 0,
             built: None,
+            rig: RigState::default(),
             stage: crate::scene_data::SceneData {
                 three_d: true,
                 ..Default::default()
@@ -364,6 +372,16 @@ impl ModelDoc {
     }
 
     fn fix_selection(&mut self) {
+        if self.rig.anim.is_some_and(|i| i >= self.data.anims.len()) {
+            self.rig.anim = (!self.data.anims.is_empty()).then_some(0);
+        }
+        if self.rig.sel_bone.is_some_and(|i| i >= self.data.bones.len()) {
+            self.rig.sel_bone = None;
+        }
+        if self.data.bones.is_empty() {
+            self.rig.animating = false;
+            self.rig.bones_mode = false;
+        }
         let parts = &self.data.parts;
         self.sel_parts.retain(|&i| i < parts.len());
         self.sel_faces
@@ -379,6 +397,7 @@ impl ModelDoc {
     }
 
     pub fn set_mode(&mut self, mode: Select) {
+        self.rig.bones_mode = false;
         if mode == self.mode {
             return;
         }
@@ -1452,10 +1471,16 @@ impl ModelDoc {
 
     fn gizmo_hit(&self, rect: Rect, p: Pos2) -> Option<DragKind> {
         let center = self.selection_center()?;
+        self.gizmo_hit_at(rect, p, center, self.tool)
+    }
+
+    /// Qual alça (da ferramenta `tool`, com o meio em `center`) está embaixo
+    /// do mouse.
+    fn gizmo_hit_at(&self, rect: Rect, p: Pos2, center: Vec3, tool: MTool) -> Option<DragKind> {
         let len = self.gizmo_len(center);
         let c = to_screen(&self.cam, rect, center)?;
         let (o, d) = ray(&self.cam, rect, p);
-        match self.tool {
+        match tool {
             MTool::Paint => None,
             MTool::Move => {
                 for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
@@ -1676,7 +1701,14 @@ impl ModelDoc {
             ui.label("Corrija o arquivo (ele é um texto em Lua) e abra de novo.");
             return Vec::new();
         }
-        self.toolbar(ui, env.library);
+        if self.rig.animating {
+            self.anim_toolbar(ui);
+            egui::Panel::bottom(egui::Id::new(("modelo-tempo", &self.rel)))
+                .resizable(false)
+                .show(ui, |ui| self.timeline(ui));
+        } else {
+            self.toolbar(ui, env.library);
+        }
         egui::Panel::right(egui::Id::new(("modelo-lado", &self.rel)))
             .resizable(true)
             .default_size(190.0)
@@ -1701,12 +1733,31 @@ impl ModelDoc {
                 (Select::Parts, "📦 Peças", "Escolher peças inteiras (3)", "modelo.pecas"),
             ] {
                 let r = ui
-                    .selectable_label(self.mode == mode, label)
+                    .selectable_label(self.mode == mode && !self.rig.bones_mode, label)
                     .on_hover_text(tip);
                 crate::tutorial::anchor(ui.ctx(), key, r.rect);
                 if r.clicked() {
                     self.set_mode(mode);
                 }
+            }
+            if self.has_bones() {
+                let r = ui
+                    .selectable_label(self.rig.bones_mode, "💀 Ossos")
+                    .on_hover_text("Escolher ossos e mover as juntas (4)");
+                crate::tutorial::anchor(ui.ctx(), "modelo.ossos", r.rect);
+                if r.clicked() {
+                    self.rig.bones_mode = true;
+                }
+            }
+            ui.separator();
+            self.skeleton_menu(ui);
+            let r = ui
+                .add_enabled(self.has_bones(), egui::Button::new("🎬 Animar"))
+                .on_hover_text("A linha do tempo e as animações: parado, andar, pular...")
+                .on_disabled_hover_text("Para animar, ponha um esqueleto (💀 Esqueleto)");
+            crate::tutorial::anchor(ui.ctx(), "modelo.animar", r.rect);
+            if r.clicked() {
+                self.set_animating(true);
             }
             ui.separator();
             for (tool, label, tip) in [
@@ -1979,7 +2030,9 @@ impl ModelDoc {
                 self.undo.push(before);
                 self.redo.clear();
             }
+            self.part_bone_ui(ui, i);
         }
+        self.bones_list(ui);
 
         ui.separator();
         ui.strong("Cores");
@@ -2103,8 +2156,9 @@ impl ModelDoc {
         }
         let painter = ui.painter_at(rect);
 
-        if self.built.as_ref() != Some(&self.data) {
-            self.built = Some(self.data.clone());
+        self.tick(ui);
+        if self.built.as_ref() != Some(&self.data.parts) {
+            self.built = Some(self.data.parts.clone());
             self.rev = NEXT_REV.fetch_add(1, Ordering::Relaxed);
         }
         match env.renderer.as_deref_mut() {
@@ -2114,18 +2168,20 @@ impl ModelDoc {
                     (rect.width() * ppp).round().max(1.0) as u32,
                     (rect.height() * ppp).round().max(1.0) as u32,
                 );
-                let shown: Vec<&Part> = self
+                let mats = self.shown_matrices();
+                let shown: Vec<(usize, &Part)> = self
                     .data
                     .parts
                     .iter()
-                    .filter(|p| p.visible && !p.faces.is_empty())
+                    .enumerate()
+                    .filter(|(_, p)| p.visible && !p.faces.is_empty())
                     .collect();
                 let ids = renderer.model_meshes(&self.rel, self.rev, || {
-                    shown.iter().map(|p| p.mesh()).collect()
+                    shown.iter().map(|(_, p)| p.mesh()).collect()
                 });
                 let extra: Vec<_> = ids
                     .into_iter()
-                    .zip(shown.iter().map(|p| p.matrix()))
+                    .zip(shown.iter().map(|(i, _)| mats[*i]))
                     .collect();
                 let view = View3 {
                     camera: {
@@ -2159,7 +2215,11 @@ impl ModelDoc {
         }
 
         self.input(ui, &response, rect);
-        self.overlays(&painter, rect);
+        if self.rig.animating || self.rig.bones_mode {
+            self.rig_overlays(&painter, rect);
+        } else {
+            self.overlays(&painter, rect);
+        }
         self.view_menu(ui, &response, rect, env.library);
         self.hint(&painter, rect);
     }
@@ -2260,6 +2320,11 @@ impl ModelDoc {
                 center: Vec3::ZERO,
                 recorded: false,
             });
+        }
+        // Ossos e Animar: escolher ossos e posar.
+        if self.rig.animating || self.rig.bones_mode {
+            self.rig_input(ui, response, rect, mods, flying);
+            return;
         }
 
         // Pincel: pinta as faces por onde o mouse passa com o botão apertado.
@@ -2435,6 +2500,9 @@ impl ModelDoc {
                     self.set_mode(mode);
                 }
             }
+            if self.has_bones() && pressed(ui, Modifiers::NONE, Key::Num4) {
+                self.rig.bones_mode = true;
+            }
             for (key, tool) in [
                 (Key::W, MTool::Move),
                 (Key::E, MTool::Rotate),
@@ -2494,7 +2562,12 @@ impl ModelDoc {
     ) {
         let popup_id = egui::Popup::default_response_id(response);
         let was_open = egui::Popup::is_id_open(&response.ctx, popup_id);
-        let open = if response.secondary_clicked() && !self.fly_moved && self.repeat.is_none() {
+        let open = if response.secondary_clicked()
+            && !self.fly_moved
+            && self.repeat.is_none()
+            && !self.rig.animating
+            && !self.rig.bones_mode
+        {
             let p = response.interact_pointer_pos().unwrap_or(rect.center());
             // Clicar em algo fora da seleção escolhe ele.
             let (o, d) = ray(&self.cam, rect, p);
@@ -2792,12 +2865,17 @@ impl ModelDoc {
         let Some(center) = self.selection_center() else {
             return;
         };
+        self.draw_gizmo(painter, rect, center, self.tool);
+    }
+
+    /// Desenha as alças da ferramenta `tool` em `center`.
+    fn draw_gizmo(&self, painter: &egui::Painter, rect: Rect, center: Vec3, tool: MTool) {
         let Some(c) = to_screen(&self.cam, rect, center) else {
             return;
         };
         let len = self.gizmo_len(center);
         let axes = [(Vec3::X, RED), (Vec3::Y, GREEN), (Vec3::Z, BLUE)];
-        match self.tool {
+        match tool {
             MTool::Move => {
                 for (axis, color) in axes {
                     if let Some(tip) = to_screen(&self.cam, rect, center + axis * len) {
