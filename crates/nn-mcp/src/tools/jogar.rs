@@ -261,7 +261,7 @@ fn rodar_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
 }
 
 /// Junta o texto e as capturas (as primeiras e a última, até o limite).
-fn with_images(mut text: String, mut captures: Vec<Capture>) -> Output {
+pub(super) fn with_images(mut text: String, mut captures: Vec<Capture>) -> Output {
     if captures.len() > MAX_IMAGES {
         let extra = captures.len() - MAX_IMAGES;
         let last = captures.pop();
@@ -288,11 +288,11 @@ fn with_images(mut text: String, mut captures: Vec<Capture>) -> Output {
     out
 }
 
-fn kind_lines(lines: &[LogLine], kind: LineKind) -> Vec<&LogLine> {
+pub(super) fn kind_lines(lines: &[LogLine], kind: LineKind) -> Vec<&LogLine> {
     lines.iter().filter(|l| l.kind == kind).collect()
 }
 
-fn write_lines(out: &mut String, title: &str, lines: &[&LogLine]) {
+pub(super) fn write_lines(out: &mut String, title: &str, lines: &[&LogLine]) {
     if lines.is_empty() {
         return;
     }
@@ -431,6 +431,25 @@ fn write_state(
     end_scene: &str,
     after: Option<&Value>,
 ) {
+    write_state_since(
+        out,
+        start_scene,
+        before,
+        end_scene,
+        after,
+        "do começo ao fim",
+    );
+}
+
+/// Como [`write_state`], dizendo desde quando (`since`).
+pub(super) fn write_state_since(
+    out: &mut String,
+    start_scene: &str,
+    before: Option<&Value>,
+    end_scene: &str,
+    after: Option<&Value>,
+    since: &str,
+) {
     let Some(after) = after else {
         return;
     };
@@ -477,7 +496,7 @@ fn write_state(
         if sb != sa {
             lines.push(format!("objetos criados pelo jogo: {sb} → {sa}"));
         }
-        out.push_str(&format!("\nO que mudou em {end_scene} do começo ao fim:\n"));
+        out.push_str(&format!("\nO que mudou em {end_scene} {since}:\n"));
         if lines.is_empty() {
             out.push_str("  nada (nenhum objeto se mexeu ou mudou)\n");
         }
@@ -493,7 +512,7 @@ fn write_state(
             out.push_str(&format!("Variáveis que mudaram: {}\n", vars.join(", ")));
         }
     } else {
-        out.push_str(&format!("\nNo fim, em {end_scene}:\n"));
+        out.push_str(&format!("\nOs objetos de {end_scene}:\n"));
         let objs = objects_by_id(after);
         for (_, o) in objs.iter().take(MAX_LINES) {
             let mut fields = Vec::new();
@@ -522,13 +541,18 @@ fn write_state(
             .iter()
             .map(|(k, v)| format!("{k} = {}", show(v)))
             .collect();
-        out.push_str(&format!("Variáveis no fim: {}\n", list.join(", ")));
+        let when = if since == "do começo ao fim" {
+            "no fim"
+        } else {
+            "agora"
+        };
+        out.push_str(&format!("Variáveis {when}: {}\n", list.join(", ")));
     }
 }
 
 /// O estado completo dos objetos pedidos.
-fn write_objects(out: &mut String, after: Option<&Value>, names: &[String]) {
-    out.push_str("\nObjetos pedidos (no fim):\n");
+pub(super) fn write_objects(out: &mut String, after: Option<&Value>, names: &[String]) {
+    out.push_str("\nObjetos pedidos:\n");
     let objs = after.map(objects_by_id).unwrap_or_default();
     for name in names {
         let found: Vec<&&Value> = objs
@@ -782,7 +806,7 @@ mod tests {
         let mut out = String::new();
         write_state(&mut out, "a.cena", Some(&before), "b.cena", Some(&after));
         assert!(
-            out.contains("No fim, em b.cena:\n  heroi (1): x 40.5"),
+            out.contains("Os objetos de b.cena:\n  heroi (1): x 40.5"),
             "{out}"
         );
         let mut out = String::new();

@@ -28,7 +28,7 @@ mod window;
 
 pub use assets::{AssetError, Assets, model_key};
 pub use config::AppConfig;
-pub use context::{Context, Game};
+pub use context::{Context, Game, Screenshot};
 pub use headless::Headless;
 pub use scene::{Fade, Scene, SceneStack, Transition};
 pub use source::{AssetSource, DiskSource, Pack, PackError, list_dir, normalize};

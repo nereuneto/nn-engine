@@ -40,7 +40,24 @@ pub fn mcp_hooks() -> nn_mcp::Hooks {
             .collect(),
         create_project: Some(create),
         agents_md: agents_md(Template::Visual, "Seu jogo"),
+        play: Some(play),
     }
+}
+
+/// Abre o jogo da pasta numa janela com o próprio `nn` (`nn <pasta> --cena`).
+fn play(dir: &Path, scene: Option<&str>, log: &Path) -> std::io::Result<std::process::Child> {
+    let exe = std::env::current_exe()?;
+    let mut cmd = Command::new(exe);
+    cmd.arg(dir);
+    if let Some(scene) = scene {
+        cmd.args(["--cena", scene]);
+    }
+    let log = std::fs::File::create(log)?;
+    cmd.current_dir(dir)
+        .stdin(std::process::Stdio::null())
+        .stdout(log.try_clone()?)
+        .stderr(log)
+        .spawn()
 }
 
 /// Sufixo dos executáveis nesta plataforma (`.exe` no Windows).

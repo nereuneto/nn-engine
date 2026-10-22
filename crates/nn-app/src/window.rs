@@ -119,6 +119,10 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
             .get_default_config(&gpu.adapter, size.width.max(1), size.height.max(1))
             .ok_or(AppError::UnsupportedSurface)?;
         surface_config.format = format;
+        // Para as capturas da tela (o agente de IA vê o jogo aberto).
+        if caps.usages.contains(wgpu::TextureUsages::COPY_SRC) {
+            surface_config.usage |= wgpu::TextureUsages::COPY_SRC;
+        }
         surface_config.present_mode = if self.config.vsync {
             wgpu::PresentMode::AutoVsync
         } else {
@@ -220,6 +224,30 @@ impl State {
                     .texture
                     .create_view(&nn_render::wgpu::TextureViewDescriptor::default());
                 draw(&mut self.ctx, game, &view);
+                if std::mem::take(&mut self.ctx.screenshot_request) {
+                    let shot = if self
+                        .surface_config
+                        .usage
+                        .contains(wgpu::TextureUsages::COPY_SRC)
+                    {
+                        let size = UVec2::new(texture.texture.width(), texture.texture.height());
+                        nn_render::read_texture_rgba(
+                            &self.gpu,
+                            &texture.texture,
+                            size,
+                            self.surface_config.format,
+                        )
+                        .map(|pixels| crate::Screenshot {
+                            width: size.x,
+                            height: size.y,
+                            pixels,
+                        })
+                        .map_err(|e| e.to_string())
+                    } else {
+                        Err("esta placa de vídeo não deixa ler a imagem da janela".into())
+                    };
+                    self.ctx.screenshot = Some(shot);
+                }
                 self.window.pre_present_notify();
                 self.gpu.queue.present(texture);
             }

@@ -4,6 +4,7 @@ use serde_json::{Map, Value, json};
 
 use crate::Server;
 
+mod aovivo;
 mod arquivos;
 mod cenas;
 mod docs;
@@ -26,6 +27,16 @@ impl Output {
     pub fn and_text(mut self, text: impl Into<String>) -> Self {
         self.content
             .push(json!({ "type": "text", "text": text.into() }));
+        self
+    }
+
+    /// Uma imagem que já veio em base64.
+    pub fn and_image_base64(mut self, data: &str, mime: &str) -> Self {
+        self.content.push(json!({
+            "type": "image",
+            "data": data,
+            "mimeType": mime,
+        }));
         self
     }
 
@@ -63,6 +74,7 @@ fn all() -> Vec<&'static Tool> {
     v.extend(cenas::TOOLS);
     v.extend(eventos::TOOLS);
     v.extend(jogar::TOOLS);
+    v.extend(aovivo::TOOLS);
     v.extend(docs::TOOLS);
     v
 }

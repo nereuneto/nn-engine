@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! nn novo <pasta> [opções]       cria um jogo novo a partir de um modelo
-//! nn [pasta]                     roda o jogo da pasta (padrão: pasta atual)
+//! nn [pasta] [--cena arquivo]   roda o jogo da pasta (padrão: pasta atual)
 //! nn exportar <pasta> [opções]   gera um executável único para distribuir
 //! nn testar [pasta] [opções]     roda os testes de jogo (testes/*.lua)
 //! nn mcp [pasta]                 servidor MCP para agentes de IA
@@ -16,7 +16,8 @@ use nn_run::{ExportOptions, NewOptions, Template, create_project, export, human_
 const HELP: &str = "\
 uso:
   nn novo <pasta> [opções]       cria um jogo novo, pronto para rodar
-  nn [pasta]                     roda o jogo em Lua da pasta (padrão: pasta atual)
+  nn [pasta] [--cena <arquivo>]  roda o jogo em Lua da pasta (padrão: pasta atual),
+                                 começando na cena inicial ou na pedida
   nn exportar <pasta> [opções]   gera um executável único com o jogo
   nn testar [pasta] [opções]     roda os testes de jogo (arquivos Lua em testes/),
                                  sem janela; sai com erro se algum falhar
@@ -78,13 +79,33 @@ fn main() -> ExitCode {
         Some("novo") => novo(&args[1..]),
         Some("mcp") => mcp(&args[1..]),
         Some("testar") => testar(&args[1..]),
-        Some(dir) => rodar(dir),
-        None => rodar("."),
+        Some(_) => rodar(&args),
+        None => rodar(&[]),
     }
 }
 
-fn rodar(dir: &str) -> ExitCode {
-    match nn_script::run_project(dir) {
+/// `nn [pasta] [--cena arquivo]`: abre o jogo numa janela.
+fn rodar(args: &[String]) -> ExitCode {
+    let mut dir = ".";
+    let mut scene = None;
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "--cena" => match it.next() {
+                Some(s) => scene = Some(s.as_str()),
+                None => {
+                    eprintln!("erro: --cena precisa de um valor\n\n{HELP}");
+                    return ExitCode::FAILURE;
+                }
+            },
+            other if other.starts_with("--") => {
+                eprintln!("erro: opção desconhecida: {other}\n\n{HELP}");
+                return ExitCode::FAILURE;
+            }
+            other => dir = other,
+        }
+    }
+    match nn_script::run_project_from(dir, scene) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             log::error!("{e}");

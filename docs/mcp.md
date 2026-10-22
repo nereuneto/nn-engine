@@ -1,6 +1,6 @@
 # O servidor MCP: desenvolver com um agente de IA
 
-A ferramenta `nn` tem um **servidor MCP** (Model Context Protocol). Ele liga um agente de IA (Claude Code, Claude Desktop, Cursor ou outro cliente MCP) a um projeto de jogo. O agente conhece o projeto, monta cenas, põe comportamentos e eventos, escreve scripts Lua e confere o que fez, tudo pelas mesmas regras do NN Studio. O que ele grava o editor abre igual, e o contrário também. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela, e roda os **testes de jogo** do projeto.
+A ferramenta `nn` tem um **servidor MCP** (Model Context Protocol). Ele liga um agente de IA (Claude Code, Claude Desktop, Cursor ou outro cliente MCP) a um projeto de jogo. O agente conhece o projeto, monta cenas, põe comportamentos e eventos, escreve scripts Lua e confere o que fez, tudo pelas mesmas regras do NN Studio. O que ele grava o editor abre igual, e o contrário também. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela, roda os **testes de jogo** do projeto e acompanha o **jogo aberto** enquanto você joga, mudando valores na hora.
 
 ```
 nn mcp <pasta-do-jogo>
@@ -91,6 +91,9 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `conferir_lua` | A sintaxe de um trecho de Lua, sem gravar. |
 | `rodar_jogo` | Roda o jogo **sem janela**, com teclas e cliques simulados, e mostra os erros (com arquivo e linha), avisos, prints, as regras que dispararam, as trocas de cena, o que mudou nos objetos e variáveis, e **capturas da tela**. Veja [Rodar e ver](#rodar-e-ver). |
 | `rodar_testes` | Roda os [testes de jogo](lua.md#testes-de-jogo) do projeto (`testes/*.lua`) e mostra quem falhou, a linha, os prints e a tela na hora da falha. |
+| `abrir_jogo` | Abre o jogo **numa janela** no seu computador (você vê e pode jogar junto) e liga nele. Veja [O jogo aberto](#o-jogo-aberto). |
+| `ver_jogo_aberto` | Olha o jogo aberto (por `abrir_jogo`, pelo ▶ Jogar do NN Studio ou por `nn .`) enquanto alguém joga: a cena, os erros, prints e regras desde a última olhada, o que mudou e a tela. |
+| `mexer_no_jogo` | Muda o jogo aberto **na hora, sem gravar**: campos de objetos e comportamentos, variáveis, Lua; pausa, avança quadros e fecha. |
 
 Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
 
@@ -180,6 +183,28 @@ e traz as capturas (a do fim e as pedidas) como imagens. Se um script dá erro, 
 
 Para conferir o que importa de novo depois de cada mudança, o agente escreve **testes de jogo** em `testes/` e roda com `rodar_testes`. Os testes estão no [guia de Lua](lua.md#testes-de-jogo); `nn testar` roda os mesmos testes no terminal.
 
+## O jogo aberto
+
+Com o jogo aberto numa janela, o agente acompanha você jogando. Ele liga no jogo aberto pelo **▶ Jogar** do NN Studio, por `nn .` na pasta ou por ele mesmo, com `abrir_jogo` (que também aceita uma `cena` para começar).
+
+- `ver_jogo_aberto` mostra a cena da frente, o tempo, se está pausado, os erros, avisos e prints e as regras que dispararam **desde a última olhada**, o que mudou nos objetos e nas variáveis desde a última olhada, e a **tela agora** como imagem. Com `objetos` e `olhar`, os objetos por inteiro e expressões Lua.
+- `mexer_no_jogo` muda o jogo **na hora, sem gravar nada**. Serve para experimentar um valor com você antes de mudar o arquivo:
+
+```json
+{
+  "mudar": [{"objeto": "heroi", "componente": "nn:plataforma", "campo": "pulo", "valor": 1000}],
+  "variaveis": {"vidas": 9},
+  "lua": "self.objects.heroi:move_to(400, 0)",
+  "pausar": true,
+  "avancar": 30
+}
+```
+
+  `avancar` anda um número de quadros (60 = 1 s) e deixa o jogo pausado; `"pausar": false` continua, e `"fechar": true` fecha o jogo.
+- O que fica, o agente grava nos arquivos (`mudar_objeto`, `escrever_arquivo`...): o jogo aberto recarrega sozinho, e o NN Studio mostra a mudança.
+
+O jogo aberto atende numa porta do próprio computador (`127.0.0.1`), com uma senha num arquivo que só o seu usuário lê. Um programa de fora do computador não fala com ele. Um jogo exportado não atende ninguém.
+
 ## Segurança
 
 - O servidor recusa caminhos fora da pasta do jogo (`..`, caminhos absolutos, links que saem dela) e não mexe em `.git`, `dist` e `target`.
@@ -188,7 +213,6 @@ Para conferir o que importa de novo depois de cada mudança, o agente escreve **
 
 ## O que vem depois
 
-As próximas partes da v0.7 trazem:
+Depois desta, vem a revisão e o lançamento da v0.7. Depois, na v0.8:
 
-- **Ao vivo:** ligar no jogo aberto e no NN Studio, ler o estado e mudar valores na hora.
 - **Arte, modelagem e animação (v0.8):** pixel art, sons, modelos 3D e animações pelas ferramentas, com prévias em imagem.

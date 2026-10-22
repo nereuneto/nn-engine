@@ -1653,7 +1653,17 @@ local function run_actions(ctx, actions, b, from)
 end
 
 local function mark_fired(scene, ctx, rule)
-  if ctx.key then scene._fired[ctx.key .. ":" .. rule.index] = true end
+  if ctx.key then
+    local key = ctx.key .. ":" .. rule.index
+    scene._fired[key] = true
+    -- O jogo aberto guarda as regras para o agente (servidor MCP) ver.
+    if E.log_fired then
+      local log = scene._fired_log or {}
+      scene._fired_log = log
+      if #log >= 300 then table.remove(log, 1) end
+      table.insert(log, { t = nn.time.elapsed(), k = key })
+    end
+  end
 end
 
 --- Um quadro dos eventos: confere as regras e roda as ações.

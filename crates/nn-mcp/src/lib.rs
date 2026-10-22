@@ -45,14 +45,20 @@ pub struct TemplateInfo {
 /// Cria um projeto: pasta, modelo e título. Devolve os arquivos criados.
 pub type CreateProject = fn(&Path, &str, Option<&str>) -> Result<Vec<String>, String>;
 
+/// Abre o jogo de uma pasta numa janela (começando na cena pedida), com o
+/// log indo para o arquivo dado. Devolve o processo.
+pub type PlayGame = fn(&Path, Option<&str>, &Path) -> std::io::Result<std::process::Child>;
+
 /// O que o servidor recebe de quem o abre (a ferramenta `nn`): os modelos de
-/// projeto e como criar um.
+/// projeto, como criar um e como abrir o jogo.
 #[derive(Debug, Clone, Default)]
 pub struct Hooks {
     pub templates: Vec<TemplateInfo>,
     pub create_project: Option<CreateProject>,
     /// Texto do `AGENTS.md` dos projetos novos (também vira um recurso).
     pub agents_md: String,
+    /// Abre o jogo numa janela (ferramenta `abrir_jogo`).
+    pub play: Option<PlayGame>,
 }
 
 /// O servidor: a pasta do projeto e o que ele lembra entre as chamadas.
@@ -63,6 +69,11 @@ pub struct Server {
     history: History,
     catalog: nn_projeto::behaviors::Catalog,
     client: String,
+    /// O estado do jogo aberto na última olhada (cena e estado), para dizer
+    /// o que mudou.
+    live_last: Option<(String, Value)>,
+    /// O jogo que `abrir_jogo` abriu.
+    game: Option<std::process::Child>,
 }
 
 /// Erro de JSON-RPC: código e mensagem.
@@ -84,6 +95,8 @@ impl Server {
             history: History::default(),
             catalog: Default::default(),
             client: String::new(),
+            live_last: None,
+            game: None,
         }
     }
 

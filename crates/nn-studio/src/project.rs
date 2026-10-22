@@ -324,6 +324,8 @@ pub struct ProjectWorkspace {
     map_editors: HashMap<String, crate::map_editor::MapEditor>,
     pub console: Console,
     pub game: Option<GameProcess>,
+    /// Os testes de jogo rodando (Jogo > Conferir com os testes).
+    tests: Option<std::sync::mpsc::Receiver<TestMsg>>,
     form: SettingsForm,
     lua: mlua::Lua,
     dialog: Option<Dialog>,
@@ -449,6 +451,7 @@ impl ProjectWorkspace {
             map_editors: HashMap::new(),
             console: Console::default(),
             game: None,
+            tests: None,
             form: SettingsForm::default(),
             lua: mlua::Lua::new(),
             dialog: None,
@@ -1217,6 +1220,94 @@ impl ProjectWorkspace {
         }
     }
 
+    /// Roda os testes de jogo (`testes/*.lua`) sem janela, em segundo plano;
+    /// o resultado vai para o Console.
+    pub fn run_tests(&mut self, ctx: &egui::Context) {
+        if self.tests.is_some() {
+            self.console.warn("Os testes já estão rodando.");
+            return;
+        }
+        let _ = self.save_all();
+        let root = self.root.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let wake = ctx.clone();
+        self.console
+            .info("🧪 Rodando os testes do jogo (os arquivos de testes/), sem janela...");
+        self.show_tab(Tab::Console);
+        std::thread::spawn(move || {
+            let send = |m: TestMsg| {
+                let _ = tx.send(m);
+                wake.request_repaint();
+            };
+            let project = match nn_script::Project::open(&root) {
+                Ok(p) => p,
+                Err(e) => {
+                    send(TestMsg::Done(Err(e.to_string())));
+                    return;
+                }
+            };
+            let opts = nn_script::testing::TestOptions::default();
+            let result = nn_script::testing::run_tests(&project, &opts, |r| {
+                send(TestMsg::Result(test_line(r)))
+            });
+            send(TestMsg::Done(result.map(|s| {
+                let mut lines: Vec<(bool, String)> = s
+                    .file_errors
+                    .iter()
+                    .map(|e| (true, format!("✗ {} não carregou:\n{}", e.file, e.message)))
+                    .collect();
+                let total = s.results.len();
+                lines.push((
+                    !s.ok(),
+                    if total == 0 && s.file_errors.is_empty() {
+                        "Este projeto ainda não tem testes. Crie um arquivo .lua em testes/ com \
+                         test(\"nome\", function(t) ... end): veja \"Testes de jogo\" no Guia do Lua (F1)."
+                            .to_string()
+                    } else {
+                        format!(
+                            "🧪 {total} {}: {} {}, {} {}.",
+                            if total == 1 { "teste" } else { "testes" },
+                            s.passed(),
+                            if s.passed() == 1 { "passou" } else { "passaram" },
+                            s.failed(),
+                            if s.failed() == 1 { "falhou" } else { "falharam" },
+                        )
+                    },
+                ));
+                lines
+            })));
+        });
+        self.tests = Some(rx);
+    }
+
+    fn poll_tests(&mut self) {
+        let Some(rx) = &self.tests else {
+            return;
+        };
+        let msgs: Vec<TestMsg> = rx.try_iter().collect();
+        for m in msgs {
+            match m {
+                TestMsg::Result((false, text)) => self.console.info(text),
+                TestMsg::Result((true, text)) => self.console.error(text),
+                TestMsg::Done(Ok(lines)) => {
+                    for (error, text) in lines {
+                        if error {
+                            self.console.error(text);
+                        } else {
+                            self.console.info(text);
+                        }
+                    }
+                    self.tests = None;
+                }
+                TestMsg::Done(Err(e)) => {
+                    self.console
+                        .error(format!("Não foi possível rodar os testes: {e}"));
+                    self.tests = None;
+                }
+            }
+        }
+    }
+
     pub fn stop(&mut self) {
         if let Some(mut g) = self.game.take() {
             g.stop();
@@ -1399,6 +1490,7 @@ impl ProjectWorkspace {
                     .warn("Abra uma cena visual (.cena) para testar o jogo a partir dela."),
             },
             Command::Stop => self.stop(),
+            Command::RunTests => self.run_tests(ctx),
             Command::Undo | Command::Redo => {
                 if let Some(map_rel) = self.focused_map() {
                     self.undo_map(&map_rel, cmd == Command::Undo);
@@ -2207,6 +2299,7 @@ impl ProjectWorkspace {
         let ctx = ui.ctx().clone();
         self.watch_files();
         self.poll_game();
+        self.poll_tests();
         if self.game.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
         } else {
@@ -4586,5 +4679,36 @@ mod tests {
         assert!(tabs.contains(&Tab::Files));
         assert!(tabs.contains(&Tab::Console));
         assert!(tabs.contains(&Tab::Home));
+    }
+}
+
+/// O que a thread dos testes manda: cada teste (falhou?, texto) e o fim.
+#[derive(Debug)]
+enum TestMsg {
+    Result((bool, String)),
+    Done(Result<Vec<(bool, String)>, String>),
+}
+
+/// A linha do Console de um teste: ✓, ou ✗ com o motivo (o arquivo:linha vira
+/// link) e o que o jogo escreveu.
+fn test_line(r: &nn_script::testing::TestResult) -> (bool, String) {
+    let secs = |t: f64| format!("{t:.2} s").replace('.', ",");
+    match &r.failure {
+        None => (
+            false,
+            format!("✓ {} › {} ({})", r.case.file, r.case.name, secs(r.time)),
+        ),
+        Some(f) => {
+            let mut text = format!("✗ {} › {}: {f}", r.case.file, r.case.name);
+            for l in r.report.lines.iter().take(20) {
+                let kind = match l.kind {
+                    nn_script::capture::LineKind::Print => "print",
+                    nn_script::capture::LineKind::Warning => "aviso",
+                    nn_script::capture::LineKind::Error => "erro",
+                };
+                text.push_str(&format!("\n  {kind} em {}: {}", secs(l.time), l.text));
+            }
+            (true, text)
+        }
     }
 }

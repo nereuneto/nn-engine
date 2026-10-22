@@ -124,7 +124,8 @@ pub fn prompt(params: &Value) -> Result<Value, String> {
             "No jogo desta pasta, quero: {}\n\n\
              Comece por ver_projeto e pelas cenas envolvidas (ver_cena). Mude com as ferramentas de cena e eventos, \
              escreva Lua só quando precisar. Confira jogando (rodar_jogo), rode os testes do projeto (rodar_testes) \
-             e acrescente um teste para o que mudou. Termine com conferir_projeto.",
+             e acrescente um teste para o que mudou. Se o jogo estiver aberto numa janela, veja o efeito nele \
+             (ver_jogo_aberto). Termine com conferir_projeto.",
             arg("pedido")
         ),
         other => return Err(format!("prompt desconhecido: {other}")),
@@ -148,6 +149,7 @@ pub fn instructions(server: &Server) -> String {
          - Depois de uma leva de mudanças, conferir_projeto. Errou? desfazer.\n\
          - Veja funcionando: rodar_jogo roda sem janela, com teclas e cliques simulados, e mostra erros, prints, regras que dispararam, o que mudou e capturas da tela.\n\
          - Testes de jogo: arquivos Lua em testes/ com test(\"nome\", function(t) ... end); rodar_testes roda todos. Rode antes e depois de mudar.\n\
+         - Jogo aberto numa janela (abrir_jogo, ou o ▶ Jogar do NN Studio): ver_jogo_aberto mostra o que acontece enquanto a pessoa joga; mexer_no_jogo muda valores na hora (sem gravar), pausa e avança quadros. Bom para ajustar números junto com a pessoa; o que ficar, grave nos arquivos.\n\
          - 2D: pixels, y para cima, (0,0) no meio da tela. 3D: metros, y é a altura.",
     );
     if !server.has_project() {

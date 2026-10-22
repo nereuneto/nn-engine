@@ -54,6 +54,11 @@ pub fn enable() {
     ENABLED.store(true, Ordering::Relaxed);
 }
 
+/// Quantos quadros pedidos com "avançar" ainda não andaram.
+pub fn pending_steps() -> u32 {
+    STEPS.load(Ordering::Relaxed)
+}
+
 /// O editor pausou o jogo?
 pub fn paused() -> bool {
     PAUSED.load(Ordering::Relaxed)

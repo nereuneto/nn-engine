@@ -62,6 +62,19 @@ impl<G: Game> Headless<G> {
     pub fn frame(&mut self, dt: Duration) {
         simulate(&mut self.ctx, &mut self.game, dt);
         draw(&mut self.ctx, &mut self.game, self.target.view());
+        if std::mem::take(&mut self.ctx.screenshot_request) {
+            let size = self.target.size();
+            let shot = self
+                .target
+                .read_rgba(&self.gpu)
+                .map(|pixels| crate::Screenshot {
+                    width: size.x,
+                    height: size.y,
+                    pixels,
+                })
+                .map_err(|e| e.to_string());
+            self.ctx.screenshot = Some(shot);
+        }
         if let Some(fullscreen) = self.ctx.fullscreen_request.take() {
             self.ctx.fullscreen = fullscreen;
         }

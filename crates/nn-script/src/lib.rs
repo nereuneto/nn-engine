@@ -41,6 +41,7 @@ mod nav;
 mod particles;
 mod physics;
 mod physics3d;
+pub mod remote;
 mod save;
 mod terrain3d;
 pub mod testing;
@@ -286,6 +287,8 @@ struct Inner {
     front: RefCell<(String, Option<Table>)>,
     /// Erros das cenas desde a última [`ScriptRuntime::take_errors`].
     errors: RefCell<Vec<SceneError>>,
+    /// O módulo do jogo sem janela e do jogo aberto (`testes.lua`).
+    driver: RefCell<Option<Table>>,
 }
 
 /// Um erro de script que parou uma cena.
@@ -378,6 +381,7 @@ impl ScriptRuntime {
                 watch: RefCell::new(Watch::default()),
                 front: RefCell::new((String::new(), None)),
                 errors: RefCell::new(Vec::new()),
+                driver: RefCell::new(None),
             }),
         };
         // Registra o estado atual dos arquivos, para só recarregar o que mudar depois.
@@ -410,6 +414,16 @@ impl ScriptRuntime {
     /// Os erros que pararam cenas desde a última chamada.
     pub fn take_errors(&self) -> Vec<SceneError> {
         std::mem::take(&mut *self.inner.errors.borrow_mut())
+    }
+
+    /// O módulo `testes.lua` (instalado na primeira vez).
+    pub(crate) fn driver(&self) -> mlua::Result<Table> {
+        if let Some(d) = self.inner.driver.borrow().clone() {
+            return Ok(d);
+        }
+        let d = game_run::install_driver(self)?;
+        *self.inner.driver.borrow_mut() = Some(d.clone());
+        Ok(d)
     }
 
     fn set_front(&self, path: &str, instance: Option<Table>) {
@@ -706,12 +720,14 @@ impl LuaScene {
         let msg = format_error(e);
         log::error!(target: SCENE_ERROR_TARGET, "erro em {}:\n{msg}", self.path);
         let mut errors = self.runtime.inner.errors.borrow_mut();
-        if errors.len() < MAX_ERRORS {
-            errors.push(SceneError {
-                scene: self.path.clone(),
-                message: msg.clone(),
-            });
+        // Os mais novos (o jogo aberto pode ficar horas sem ninguém olhar).
+        if errors.len() >= MAX_ERRORS {
+            errors.remove(0);
         }
+        errors.push(SceneError {
+            scene: self.path.clone(),
+            message: msg.clone(),
+        });
         drop(errors);
         self.error = Some(msg);
     }
@@ -927,6 +943,15 @@ impl Scene for LuaScene {
 
     fn update(&mut self, ctx: &mut Context) -> Transition {
         self.reload_if_changed(ctx);
+        if remote::serving() {
+            remote::serve(
+                &self.runtime,
+                &self.path,
+                self.instance.clone(),
+                self.error.as_deref(),
+                ctx,
+            );
+        }
         if live::enabled() {
             self.live_tick(ctx);
         }
@@ -1165,9 +1190,30 @@ impl Project {
     }
 }
 
-/// Abre a janela e roda o projeto Lua da pasta `dir`.
+/// Abre a janela e roda o projeto Lua da pasta `dir`. O jogo atende o
+/// servidor MCP pela porta local ([`remote`]).
 pub fn run_project(dir: impl AsRef<Path>) -> Result<(), Box<dyn std::error::Error>> {
-    run(Project::open(dir.as_ref())?)
+    run_project_from(dir, None)
+}
+
+/// Como [`run_project`], começando na cena `start` (ou na inicial).
+pub fn run_project_from(
+    dir: impl AsRef<Path>,
+    start: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let dir = dir.as_ref();
+    let mut project = Project::open(dir)?;
+    if let Some(start) = start {
+        project.start = start.to_string();
+    }
+    let _remote = match remote::listen(dir) {
+        Ok(l) => Some(l),
+        Err(e) => {
+            log::warn!("o jogo não vai atender o servidor MCP: {e}");
+            None
+        }
+    };
+    run(project)
 }
 
 /// Abre a janela e roda um projeto já aberto (de pasta ou pacote).

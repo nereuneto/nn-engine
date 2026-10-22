@@ -53,7 +53,7 @@ fn open_log(dir: &Path) -> Option<std::fs::File> {
 /// Liga o log (terminal e arquivo na pasta `dir`) e o aviso de travamento.
 pub fn init(dir: Option<&Path>) {
     let file = dir.and_then(open_log).map(Mutex::new);
-    let _ = env_logger::Builder::from_env(
+    let logger = env_logger::Builder::from_env(
         env_logger::Env::default().default_filter_or("warn,nn_studio=info"),
     )
     .format(|buf, record| {
@@ -67,7 +67,11 @@ pub fn init(dir: Option<&Path>) {
         )
     })
     .target(env_logger::Target::Pipe(Box::new(Tee { file })))
-    .try_init();
+    .build();
+    // A captura repassa ao log do editor e guarda os prints dos testes de
+    // jogo (Jogo > Conferir com os testes).
+    let level = logger.filter();
+    let _ = nn_script::capture::install(Some(Box::new(logger)), level);
     log::info!(
         "NN Studio {} ({} {})",
         env!("CARGO_PKG_VERSION"),

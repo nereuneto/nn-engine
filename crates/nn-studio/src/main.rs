@@ -69,25 +69,24 @@ fn main() -> ExitCode {
 /// A entrada padrão traz os ajustes ao vivo do editor.
 fn play(dir: &str, scene: Option<&str>) -> ExitCode {
     let filter = "warn,nn_app=info,nn_script=info,nn_render=info,nn_audio=info,nn_physics=info,nn_tilemap=info";
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter))
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "{}",
-                format_record(record.level(), record.target(), &record.args().to_string())
-            )
-        })
-        .target(env_logger::Target::Stdout)
-        .init();
+    let logger =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(filter))
+            .format(|buf, record| {
+                writeln!(
+                    buf,
+                    "{}",
+                    format_record(record.level(), record.target(), &record.args().to_string())
+                )
+            })
+            .target(env_logger::Target::Stdout)
+            .build();
+    // A captura repassa tudo ao logger do editor e guarda o que o agente de
+    // IA (servidor MCP) pergunta ao jogo aberto.
+    let level = logger.filter();
+    let _ = nn_script::capture::install(Some(Box::new(logger)), level);
     nn_script::live::listen_stdin();
-    let result = nn_script::Project::open(dir)
-        .map_err(Into::into)
-        .and_then(|mut project| {
-            if let Some(scene) = scene {
-                project.start = scene.to_string();
-            }
-            nn_script::run(project)
-        });
+    // run_project_from também atende o servidor MCP pela porta local.
+    let result = nn_script::run_project_from(dir, scene);
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

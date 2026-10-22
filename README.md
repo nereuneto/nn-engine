@@ -94,7 +94,7 @@ cargo nn mcp ../meu-jogo    # servidor MCP para o Claude Code, Claude Desktop, C
 claude mcp add nn -- nn mcp .   # no Claude Code, de dentro da pasta do jogo
 ```
 
-O **servidor MCP** da engine liga um agente de IA ao projeto. O agente vê o projeto, monta cenas com componentes, comportamentos prontos e eventos, escreve scripts Lua e confere o que fez. Cada campo é conferido antes de gravar, com erros em português que dizem o que vale. As cenas que ele grava são as mesmas que o NN Studio grava, ele não sai da pasta do jogo e tudo pode ser desfeito. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela. Como ligar e as ferramentas: [docs/mcp.md](docs/mcp.md).
+O **servidor MCP** da engine liga um agente de IA ao projeto. O agente vê o projeto, monta cenas com componentes, comportamentos prontos e eventos, escreve scripts Lua e confere o que fez. Cada campo é conferido antes de gravar, com erros em português que dizem o que vale. As cenas que ele grava são as mesmas que o NN Studio grava, ele não sai da pasta do jogo e tudo pode ser desfeito. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela. Com o jogo aberto numa janela (pelo NN Studio ou por `nn .`), ele acompanha você jogando e muda valores na hora, sem gravar, para acertar o pulo ou a velocidade junto com você. Como ligar e as ferramentas: [docs/mcp.md](docs/mcp.md).
 
 ### Testes de jogo
 
@@ -102,7 +102,7 @@ O **servidor MCP** da engine liga um agente de IA ao projeto. O agente vê o pro
 cargo nn testar ../meu-jogo   # roda os testes de jogo (testes/*.lua), sem janela
 ```
 
-Um **teste de jogo** é um arquivo Lua em `testes/` que joga o jogo sozinho e confere o resultado: segura a seta, aperta espaço, confere que o herói pulou e que a moeda somou. `nn testar` mostra o que falhou e a linha, e sai com erro (bom para um CI). Os modelos já vêm com testes. Como escrever: [docs/lua.md](docs/lua.md#testes-de-jogo).
+Um **teste de jogo** é um arquivo Lua em `testes/` que joga o jogo sozinho e confere o resultado: segura a seta, aperta espaço, confere que o herói pulou e que a moeda somou. `nn testar` mostra o que falhou e a linha, e sai com erro (bom para um CI); no NN Studio, **Jogo > Conferir com os testes** (Ctrl+F5). Os modelos já vêm com testes. Como escrever: [docs/lua.md](docs/lua.md#testes-de-jogo).
 
 ### Jogos de demonstração em Lua
 

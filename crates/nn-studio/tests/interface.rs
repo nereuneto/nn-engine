@@ -6817,3 +6817,66 @@ fn modelo_quebrado_mostra_o_erro_e_nao_grava_por_cima() {
         assert_eq!(d.data.parts.len(), 1);
     }
 }
+
+#[test]
+fn rodar_os_testes_mostra_no_console_e_leva_a_linha() {
+    let dir = temp("testes");
+    let proj = dir.join("jogo");
+    nn_run::create_project(&nn_run::NewOptions {
+        dir: proj.clone(),
+        title: None,
+        template: nn_run::Template::Visual,
+    })
+    .unwrap();
+    std::fs::write(
+        proj.join("testes/quebra.lua"),
+        "test(\"cai no abismo\", function(t)\n  t:open(\"cenas/fase.cena\")\n  t:check(false, \"caiu\")\nend)\n",
+    )
+    .unwrap();
+    // (O título tem um herói animado: a tela redesenha sempre.)
+    let options = StudioOptions {
+        settings_path: Some(dir.join("preferencias.json")),
+        open: Some(proj),
+        exe: Some(fake_game(&dir)),
+        check_updates: false,
+    };
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_eframe(move |cc| StudioApp::new(&cc.egui_ctx, options));
+    h.run_steps(4);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::F5);
+    h.run_steps(2);
+    assert!(console_text(&h).contains("🧪 Rodando os testes do jogo"));
+    let started = std::time::Instant::now();
+    let text = loop {
+        h.run_steps(2);
+        let text = console_text(&h);
+        if text.contains("🧪 5 testes") || text.contains("Não foi possível rodar os testes") {
+            break text;
+        }
+        assert!(started.elapsed().as_secs() < 300, "{text}");
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    };
+    if text.contains("Não foi possível rodar os testes") {
+        assert!(
+            !std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1"),
+            "{text}"
+        );
+        return;
+    }
+    assert!(
+        text.contains("✓ testes/jogo.lua › o herói anda e pula"),
+        "{text}"
+    );
+    assert!(
+        text.contains("✗ testes/quebra.lua › cai no abismo: testes/quebra.lua:3: caiu"),
+        "{text}"
+    );
+    assert!(
+        text.contains("🧪 5 testes: 4 passaram, 1 falhou."),
+        "{text}"
+    );
+    h.get_by_label("testes/quebra.lua:3").click();
+    h.run_steps(4);
+    assert!(tabs(&h).contains(&Tab::Code("testes/quebra.lua".into())));
+}
