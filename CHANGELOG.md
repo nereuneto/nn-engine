@@ -2,7 +2,29 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
-## Não lançado
+## 0.6.0
+
+A versão do **modelar e animar no NN Studio**. O **modelador** monta modelos 3D low-poly de peças coloridas. Ele tem formas prontas, puxar e encolher faces, pintar com a paleta e o **espelho X**. O **Repetir em linha e em círculo** (também na cena), as **peças que se encaixam**, os **kits** e uma **biblioteca** de modelos prontos acabam com o trabalho repetido. O **animador** põe um **esqueleto pronto** (humanoide, quadrúpede ou simples), que liga as peças sozinho. Depois, é posar quadro a quadro numa **linha do tempo** ou usar as **animações prontas** (parado, andar, correr, pular...), que o Jogador 3D toca sozinho. Ao salvar, sai o `.glb` que as cenas e o jogo usam: a engine não mudou. Três tutoriais novos: **Modele uma casinha**, **Uma cerca e uma fogueira** e **Anime seu personagem**. Para começar: [Modelador](docs/studio.md#modelador), [Modelar sem repetir](docs/studio.md#modelar-sem-repetir) e [Esqueleto e animações](docs/studio.md#esqueleto-e-animações).
+
+### Para quem vem da 0.5
+
+- **Os projetos da 0.5 abrem e rodam.** Conferido com os dez modelos de projeto da 0.5, também depois de abrir e gravar cada cena no NN Studio da 0.6. A 0.5 também roda as cenas gravadas pela 0.6.
+- **A engine, a API Lua, os comportamentos prontos e as crates do Rust não mudaram**: só o NN Studio.
+- **As preferências da 0.5 abrem na 0.6** como estão.
+- **Arquivos novos, só se você usar:**
+  - os modelos do modelador são `.modelo` (texto, como as cenas), com o `.glb` do mesmo nome ao lado;
+  - a biblioteca pessoal de peças fica na pasta `biblioteca`, ao lado das preferências.
+- **O que muda sem você mexer:**
+  - um `.glb` trocado por fora (exportado do Blender, por exemplo) agora atualiza as cenas abertas na hora;
+  - o botão direito de um objeto da cena ganhou o **🔁 Repetir…**.
+
+### Revisão (Sprint 50)
+
+- **O Inspetor mostra o modelo aberto:** com a aba de um `.modelo` na frente, ele mostra as peças, os triângulos, o tamanho, os ossos e as animações, em vez da última cena.
+- **Pontos em modelos grandes:** num modelo com 180 peças e 3.360 triângulos, escolher pontos passou de quase 3 s para uns 30 ms por quadro. O NN Studio agora sabe o que aparece por um mapa de profundidade da vista, refeito só quando o modelo ou a câmera mudam.
+- **A barra do modelador não passa mais do lado da aba** com o esqueleto ligado (a grade ia para fora, e o painel da direita cobria o Inspetor).
+- **Um `.modelo` com erro** mostra o motivo, não é gravado por cima e abre sozinho quando é corrigido fora.
+- **Documentação:** o modelador entrou no README, e o "O que vem depois" foi atualizado.
 
 ### O modelador (Sprint 47)
 

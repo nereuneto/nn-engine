@@ -6783,3 +6783,37 @@ fn tutorial_anime_seu_personagem() {
     espera(&mut h, 11);
     tela(&mut h, "tutorial-animar-cena");
 }
+
+#[test]
+fn modelo_quebrado_mostra_o_erro_e_nao_grava_por_cima() {
+    let dir = temp("modelo-quebrado");
+    let proj = plataforma(&dir);
+    std::fs::create_dir_all(proj.join("assets/modelos")).unwrap();
+    let ruim = "return { parts = { { name = \"Cubo\", verts = { { 0, 0 } ";
+    std::fs::write(proj.join("assets/modelos/ruim.modelo"), ruim).unwrap();
+    let mut h = studio(&dir, Some(proj.clone()));
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.files.rescan();
+        ws.open_file("assets/modelos/ruim.modelo", None);
+    }
+    h.run();
+    h.get_by_label_contains("Não foi possível abrir o modelo");
+    // Salvar não estraga o arquivo (o texto fica para corrigir).
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let depois = std::fs::read_to_string(proj.join("assets/modelos/ruim.modelo")).unwrap();
+    assert_eq!(depois, ruim);
+    // Corrigido por fora, ele abre sozinho.
+    std::fs::write(
+        proj.join("assets/modelos/ruim.modelo"),
+        nn_studio::model_data::ModelData::new_default().to_lua(),
+    )
+    .unwrap();
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let d = ws.models.values_mut().next().unwrap();
+        d.disk_changed(&proj);
+        assert!(d.error.is_none());
+        assert_eq!(d.data.parts.len(), 1);
+    }
+}

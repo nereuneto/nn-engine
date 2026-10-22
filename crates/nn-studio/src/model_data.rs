@@ -1488,6 +1488,35 @@ mod tests {
     }
 
     #[test]
+    fn modelo_da_s47_sem_esqueleto_abre() {
+        // Como a 0.6 em desenvolvimento gravava antes do esqueleto.
+        let text = r##"return {
+  format = 1,
+  palette = { "#FFFFFF", "#FF8C42", },
+  parts = {
+    { name = "Cubo", pos = { 0, 0, 0 }, rot = { 0, 0, 0 }, scale = { 1, 1, 1 },
+      mirror = true,
+      verts = {
+        { 0, 0, -0.5 }, { 0.5, 0, -0.5 }, { 0.5, 0, 0.5 }, { 0, 0, 0.5 },
+      },
+      faces = {
+        { 1, 2, 3, 4, color = "#FF8C42" },
+      },
+    },
+  },
+}
+"##;
+        let m = ModelData::from_lua(text, "velho.modelo").unwrap();
+        assert_eq!(m.parts.len(), 1);
+        assert!(m.parts[0].mirror && m.parts[0].bone.is_empty());
+        assert!(m.bones.is_empty() && m.anims.is_empty());
+        assert_eq!(
+            m.to_lua(),
+            ModelData::from_lua(&m.to_lua(), "x").unwrap().to_lua()
+        );
+    }
+
+    #[test]
     fn arquivo_modelo_ida_e_volta() {
         let mut m = ModelData::new_default();
         m.parts.push(Part::cylinder("Tronco", "#9C6B43"));

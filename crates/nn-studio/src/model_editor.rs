@@ -229,6 +229,8 @@ pub struct ModelDoc {
     pub view_rect: Option<Rect>,
     actions: Vec<ModelAction>,
     repeat: Option<PartRepeat>,
+    /// O mapa de profundidade da vista (para saber o que aparece).
+    depth: std::cell::RefCell<Option<DepthGrid>>,
 }
 
 impl std::fmt::Debug for ModelDoc {
@@ -301,6 +303,7 @@ impl ModelDoc {
             view_rect: None,
             actions: Vec::new(),
             repeat: None,
+            depth: std::cell::RefCell::new(None),
         }
     }
 
@@ -554,16 +557,27 @@ impl ModelDoc {
     }
 
     /// O ponto do mundo está à mostra (nenhuma face na frente)?
-    fn sees(&self, w: Vec3) -> bool {
-        let v = w - self.cam.pos;
-        let dist = v.length();
-        if dist < 1e-4 {
-            return true;
+    ///
+    /// Usa um mapa de profundidade da vista (de 3 em 3 pixels), refeito só
+    /// quando o modelo ou a câmera mudam: perguntar ponto por ponto com um
+    /// raio pesava demais em modelos grandes.
+    fn sees(&self, rect: Rect, w: Vec3) -> bool {
+        let mut cache = self.depth.borrow_mut();
+        let key = DepthKey {
+            rev: self.rev,
+            cam: [
+                self.cam.pos.x,
+                self.cam.pos.y,
+                self.cam.pos.z,
+                self.cam.yaw,
+                self.cam.pitch,
+            ],
+            rect,
+        };
+        if cache.as_ref().is_none_or(|g| g.key != key) {
+            *cache = Some(DepthGrid::build(self, key));
         }
-        match self.pick_face(self.cam.pos, v / dist) {
-            Some(h) => h.t >= dist - 0.002 - dist * 0.002,
-            None => true,
-        }
+        cache.as_ref().is_none_or(|g| g.sees(&self.cam, w))
     }
 
     /// Os pontos das peças à mostra, onde aparecem na tela: (peça, ponto,
@@ -595,7 +609,7 @@ impl ModelDoc {
         let mut best: Option<(f32, usize, u32)> = None;
         for (pi, k, _, s, w) in self.screen_points(rect) {
             let d = (s - p).length();
-            if d < POINT_PICK && best.is_none_or(|b| d < b.0) && self.sees(w) {
+            if d < POINT_PICK && best.is_none_or(|b| d < b.0) && self.sees(rect, w) {
                 best = Some((d, pi, k));
             }
         }
@@ -639,7 +653,8 @@ impl ModelDoc {
         match self.mode {
             Select::Points => {
                 for (pi, k, _, s, w) in self.screen_points(rect) {
-                    if area.contains(s) && self.sees(w) && !self.sel_verts.contains(&(pi, k)) {
+                    if area.contains(s) && self.sees(rect, w) && !self.sel_verts.contains(&(pi, k))
+                    {
                         self.sel_verts.push((pi, k));
                     }
                 }
@@ -657,7 +672,11 @@ impl ModelDoc {
                         let front = n.dot(c - self.cam.pos) < 0.0;
                         let inside =
                             to_screen(&self.cam, rect, c).is_some_and(|s| area.contains(s));
-                        if front && inside && self.sees(c) && !self.sel_faces.contains(&(pi, fi)) {
+                        if front
+                            && inside
+                            && self.sees(rect, c)
+                            && !self.sel_faces.contains(&(pi, fi))
+                        {
                             self.sel_faces.push((pi, fi));
                         }
                     }
@@ -1834,6 +1853,11 @@ impl ModelDoc {
             ui.checkbox(&mut self.snap, "Encaixar").on_hover_text(
                 "Encaixa na grade ao mover e puxar, de 15 em 15 graus ao girar. Segurar Ctrl troca.",
             );
+            // (A grade não quebra de linha sozinha: sem espaço, vai para a
+            // próxima.)
+            if ui.available_size_before_wrap().x < 70.0 {
+                ui.end_row();
+            }
             egui::ComboBox::from_id_salt(("modelo-grade", &self.rel))
                 .width(56.0)
                 .selected_text(crate::scene_data::format_num(f64::from(self.grid)))
@@ -2819,7 +2843,7 @@ impl ModelDoc {
         // Os pontos.
         if self.mode == Select::Points {
             for (pi, k, mirrored, s, w) in self.screen_points(rect) {
-                if !rect.contains(s) || !self.sees(w) {
+                if !rect.contains(s) || !self.sees(rect, w) {
                     continue;
                 }
                 let selected = self.sel_verts.contains(&(pi, k));
@@ -2946,6 +2970,106 @@ impl ModelDoc {
         let bg = Rect::from_center_size(pos, galley.size() + egui::vec2(18.0, 10.0));
         painter.rect_filled(bg, 6.0, Color32::from_black_alpha(170));
         painter.galley(bg.min + egui::vec2(9.0, 5.0), galley, Color32::WHITE);
+    }
+}
+
+/// De quando é um mapa de profundidade: o modelo, a câmera e a vista.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct DepthKey {
+    rev: u64,
+    cam: [f32; 5],
+    rect: Rect,
+}
+
+/// A profundidade do que está mais perto da câmera em cada pedacinho da
+/// vista (1/distância; 0 = nada).
+#[derive(Debug, Clone)]
+struct DepthGrid {
+    key: DepthKey,
+    w: usize,
+    h: usize,
+    inv: Vec<f32>,
+}
+
+/// Lado de cada pedacinho do mapa, em pixels.
+const DEPTH_CELL: f32 = 3.0;
+
+impl DepthGrid {
+    fn project(cam: &Cam3, rect: Rect, w: Vec3) -> Option<(f32, f32, f32)> {
+        let z = (w - cam.pos).dot(cam.forward());
+        if z < 0.02 {
+            return None;
+        }
+        let s = to_screen(cam, rect, w)?;
+        Some((
+            (s.x - rect.min.x) / DEPTH_CELL,
+            (s.y - rect.min.y) / DEPTH_CELL,
+            1.0 / z,
+        ))
+    }
+
+    fn build(doc: &ModelDoc, key: DepthKey) -> Self {
+        let rect = key.rect;
+        let w = (rect.width() / DEPTH_CELL).ceil().max(1.0) as usize;
+        let h = (rect.height() / DEPTH_CELL).ceil().max(1.0) as usize;
+        let mut inv = vec![0.0f32; w * h];
+        for p in doc.data.parts.iter().filter(|p| p.visible) {
+            let m = p.matrix();
+            for (pts, ..) in p.all_faces() {
+                let s: Option<Vec<(f32, f32, f32)>> = pts
+                    .iter()
+                    .map(|q| Self::project(&doc.cam, rect, m.transform_point3(*q)))
+                    .collect();
+                let Some(s) = s else {
+                    continue;
+                };
+                for k in 1..s.len().saturating_sub(1) {
+                    let (a, b, c) = (s[0], s[k], s[k + 1]);
+                    let area = (b.0 - a.0) * (c.1 - a.1) - (c.0 - a.0) * (b.1 - a.1);
+                    if area.abs() < 1e-6 {
+                        continue;
+                    }
+                    let x0 = a.0.min(b.0).min(c.0).floor().max(0.0) as usize;
+                    let x1 = (a.0.max(b.0).max(c.0).ceil() as usize).min(w - 1);
+                    let y0 = a.1.min(b.1).min(c.1).floor().max(0.0) as usize;
+                    let y1 = (a.1.max(b.1).max(c.1).ceil() as usize).min(h - 1);
+                    if x0 > x1 || y0 > y1 {
+                        continue;
+                    }
+                    for gy in y0..=y1 {
+                        for gx in x0..=x1 {
+                            let (px, py) = (gx as f32 + 0.5, gy as f32 + 0.5);
+                            let w0 = ((b.0 - px) * (c.1 - py) - (c.0 - px) * (b.1 - py)) / area;
+                            let w1 = ((c.0 - px) * (a.1 - py) - (a.0 - px) * (c.1 - py)) / area;
+                            let w2 = 1.0 - w0 - w1;
+                            if w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4 {
+                                continue;
+                            }
+                            let z = w0 * a.2 + w1 * b.2 + w2 * c.2;
+                            let cell = &mut inv[gy * w + gx];
+                            if z > *cell {
+                                *cell = z;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Self { key, w, h, inv }
+    }
+
+    /// O ponto está à mostra (nada bem na frente dele)?
+    fn sees(&self, cam: &Cam3, w: Vec3) -> bool {
+        let Some((x, y, z)) = Self::project(cam, self.key.rect, w) else {
+            return false;
+        };
+        let (gx, gy) = (x.floor(), y.floor());
+        if gx < 0.0 || gy < 0.0 || gx as usize >= self.w || gy as usize >= self.h {
+            return true;
+        }
+        let near = self.inv[gy as usize * self.w + gx as usize];
+        // Um pouco de folga: o ponto fica na quina das faces dele.
+        near <= 0.0 || z >= near * 0.97
     }
 }
 

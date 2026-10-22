@@ -26,24 +26,24 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.5.0"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.89"
 repository = "https://github.com/nereuneto/nn-engine"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-nn-core = { path = "crates/nn-core", version = "0.5.0" }
-nn-input = { path = "crates/nn-input", version = "0.5.0" }
-nn-render = { path = "crates/nn-render", version = "0.5.0" }
-nn-app = { path = "crates/nn-app", version = "0.5.0" }
-nn-audio = { path = "crates/nn-audio", version = "0.5.0" }
-nn-script = { path = "crates/nn-script", version = "0.5.0" }
-nn-physics = { path = "crates/nn-physics", version = "0.5.0" }
-nn-physics3d = { path = "crates/nn-physics3d", version = "0.5.0" }
-nn-nav = { path = "crates/nn-nav", version = "0.5.0" }
-nn-tilemap = { path = "crates/nn-tilemap", version = "0.5.0" }
-nn-run = { path = "crates/nn-run", version = "0.5.0" }
+nn-core = { path = "crates/nn-core", version = "0.6.0" }
+nn-input = { path = "crates/nn-input", version = "0.6.0" }
+nn-render = { path = "crates/nn-render", version = "0.6.0" }
+nn-app = { path = "crates/nn-app", version = "0.6.0" }
+nn-audio = { path = "crates/nn-audio", version = "0.6.0" }
+nn-script = { path = "crates/nn-script", version = "0.6.0" }
+nn-physics = { path = "crates/nn-physics", version = "0.6.0" }
+nn-physics3d = { path = "crates/nn-physics3d", version = "0.6.0" }
+nn-nav = { path = "crates/nn-nav", version = "0.6.0" }
+nn-tilemap = { path = "crates/nn-tilemap", version = "0.6.0" }
+nn-run = { path = "crates/nn-run", version = "0.6.0" }
 
 wgpu = "30"
 winit = "0.30"

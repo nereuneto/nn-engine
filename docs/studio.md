@@ -1732,23 +1732,21 @@ quase não usa o processador.
 
 ## O que vem depois
 
-A **v0.5** deixa o NN Studio mais gostoso de usar: o botão direito em todo
-lugar, a busca rápida (Shift+A), jeitos de duplicar sem repetir trabalho,
-copiar e colar objetos e componentes, editar vários objetos de uma vez, os
-favoritos, os avisos com Desfazer, painéis que ensinam e as Preferências.
-Antes dela, a v0.4 deixou os mundos 3D mais vivos (luzes, dia e noite, água
-e vento), a v0.3 trouxe o combate e a v0.2, o 3D. Está tudo no
-[CHANGELOG](../CHANGELOG.md).
+A **v0.6** trouxe o modelar e animar dentro do NN Studio: o modelador de
+peças low-poly, o Repetir em linha e em círculo, os kits, a biblioteca de
+modelos prontos, os esqueletos prontos e o animador com a linha do tempo e
+as animações prontas. Antes dela, a v0.5 deixou o NN Studio mais gostoso de
+usar, a v0.4 deixou os mundos 3D mais vivos, a v0.3 trouxe o combate e a
+v0.2, o 3D. Está tudo no [CHANGELOG](../CHANGELOG.md).
 
-O próximo passo já escolhido é a **v0.6, modelar e animar dentro do NN
-Studio**: um modelador de peças low-poly coloridas (formas prontas, puxar
-faces, pintar, espelho), com variações e peças que se encaixam, e um animador
-com esqueletos prontos e animações para ajustar (parado, andar, correr,
-pular, atacar).
+A próxima etapa ainda vai ser escolhida.
 
 Ainda não tem, e são ideias para depois:
 
 - sombras das luzes (hoje, só o sol faz sombra);
+- no animador: copiar animações de um modelo para outro, e pontos que
+  entortam suave nas juntas (pesos), além das peças que seguem um osso;
+- texturas pintadas nas faces do modelador;
 - exportar para a web e para outros sistemas além de Windows e Linux;
 - assinatura digital do instalador do Windows.
 
