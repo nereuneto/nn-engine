@@ -227,6 +227,7 @@ pub fn all() -> &'static [Tutorial] {
             um_lago(),
             portas_e_chaves(),
             uma_conversa(),
+            casinha(),
             eventos(),
             desenhe(),
             tiles(),
@@ -1694,6 +1695,144 @@ fn uma_conversa() -> Tutorial {
             Step {
                 title: "Pronto: alguém para conversar!",
                 text: "Você usou o editor de conversa, personagens, escolhas, o comportamento Diálogo e o evento Escolher numa conversa. Ideias: uma escolha que só aparece com um item (Mais > Só aparece com o item), um retrato para o personagem, ou a conversa começando sozinha quando a cena começa.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// Os modelos abertos no modelador.
+fn models(ws: &ProjectWorkspace) -> Vec<&crate::model_editor::ModelDoc> {
+    let mut v: Vec<_> = ws.models.values().collect();
+    v.sort_by(|a, b| a.rel.cmp(&b.rel));
+    v
+}
+
+/// As peças de todos os modelos abertos.
+fn model_parts(ws: &ProjectWorkspace) -> Vec<&crate::model_data::Part> {
+    models(ws).into_iter().flat_map(|m| &m.data.parts).collect()
+}
+
+/// O telhado do tutorial da casinha: uma pirâmide.
+fn roof(ws: &ProjectWorkspace) -> Option<&crate::model_data::Part> {
+    model_parts(ws)
+        .into_iter()
+        .find(|p| p.name.starts_with("Pirâmide"))
+}
+
+fn casinha() -> Tutorial {
+    Tutorial {
+        id: "modele-uma-casinha",
+        title: "Modele uma casinha",
+        summary: "Monte um modelo 3D no modelador do NN Studio: uma casinha com porta e telhado, pintada com a paleta, e ponha ela na cena.",
+        minutes: 10,
+        template: Template::Vazio3D,
+        project: "Uma casinha",
+        steps: vec![
+            Step {
+                title: "O modelador",
+                text: "No modelador você monta modelos 3D low-poly (cada face de uma cor) para as suas cenas: casas, árvores, móveis, personagens. Um modelo é feito de peças, e cada peça de pontos e faces.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Um modelo novo",
+                text: "No painel Arquivos: ➕ Novo > 🎲 Modelo 3D. Chame de casinha e clique em Criar. Ele abre no modelador com um cubo: as paredes da casa.",
+                target: Some("arquivos.novo"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| !models(ws).is_empty()),
+            },
+            Step {
+                title: "A porta",
+                text: "Com ◼ Faces escolhido (tecla 2), clique na parede da frente. Aperte I (Encolher), aproxime o mouse do meio da parede e clique: nasce uma face menor dentro dela, a porta.",
+                target: Some("modelo"),
+                show: None,
+                done: Some(|ws, _| model_parts(ws).iter().any(|p| p.faces.len() >= 10)),
+            },
+            Step {
+                title: "Pinte a porta",
+                text: "Com a porta ainda escolhida, clique numa cor marrom em Cores, à direita: a face escolhida fica dessa cor.",
+                target: Some("modelo.cores"),
+                show: None,
+                done: Some(|ws, _| {
+                    model_parts(ws).iter().any(|p| {
+                        p.faces.len() >= 10 && p.faces.iter().any(|f| f.color != "#FF8C42")
+                    })
+                }),
+            },
+            Step {
+                title: "Afunde a porta",
+                text: "Aperte P (Puxar) e mexa o mouse para dentro da casa; clique para terminar. Puxar tira um bloco das faces escolhidas, para fora ou para dentro.",
+                target: Some("modelo"),
+                show: None,
+                done: Some(|ws, _| model_parts(ws).iter().any(|p| p.faces.len() >= 14)),
+            },
+            Step {
+                title: "O telhado",
+                text: "Uma peça nova: ➕ Peça > 🏠 Pirâmide (ou o botão direito na vista, ou Shift+A). Ela aparece na lista de Peças, à direita.",
+                target: Some("modelo.peca"),
+                show: None,
+                done: Some(|ws, _| roof(ws).is_some()),
+            },
+            Step {
+                title: "Em cima da casa",
+                text: "Com a pirâmide escolhida, arraste a seta verde para cima até ela ficar em cima das paredes. As alças são as mesmas da cena: E gira e R escala (o quadrado do meio escala tudo).",
+                target: Some("modelo"),
+                show: None,
+                done: Some(|ws, _| roof(ws).is_some_and(|p| p.pos.y >= 0.75)),
+            },
+            Step {
+                title: "Telhado vermelho",
+                text: "Com o telhado escolhido (📦 Peças, tecla 3), clique no vermelho em Cores: a peça inteira fica vermelha. Com 🎨 Pintar (B), você pinta face por face.",
+                target: Some("modelo.cores"),
+                show: None,
+                done: Some(|ws, _| {
+                    roof(ws).is_some_and(|p| p.faces.iter().all(|f| f.color == "#E84A4A"))
+                }),
+            },
+            Step {
+                title: "Salve",
+                text: "Ctrl+S. Junto com o casinha.modelo, o NN Studio grava o casinha.glb: é ele que vai para as cenas e para o jogo (e abre no Blender também).",
+                target: Some("modelo"),
+                show: None,
+                done: Some(|ws, _| {
+                    let m = models(ws);
+                    !m.is_empty()
+                        && m.iter().all(|m| {
+                            !m.is_dirty()
+                                && ws.root.join(crate::model_data::glb_path(&m.rel)).is_file()
+                        })
+                        && roof(ws).is_some()
+                }),
+            },
+            Step {
+                title: "Na cena",
+                text: "Abra cenas/mundo.cena e arraste o casinha.modelo do painel Arquivos para a cena: a casinha aparece onde você soltar.",
+                target: Some("arquivo:cenas/mundo.cena"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        o.component("model").is_some_and(|c| {
+                            let file = c.str("file");
+                            file.ends_with(".glb")
+                                && ws.root.join(file.replace(".glb", ".modelo")).is_file()
+                        })
+                    })
+                }),
+            },
+            Step {
+                title: "Mude e veja",
+                text: "Volte para a aba casinha.modelo, pinte uma parede de outra cor e salve: a casinha muda na cena também.",
+                target: Some("modelo.cores"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Pronto: uma casinha sua!",
+                text: "Você usou faces, Encolher, Puxar, peças, as alças e a paleta. Ideias: janelas (Encolher e Puxar de novo), uma chaminé (Ctrl+D duplica uma peça), ou um personagem com o ↔ Espelho X, que modela uma metade e copia a outra.",
                 target: None,
                 show: None,
                 done: None,

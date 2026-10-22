@@ -1057,6 +1057,9 @@ impl StudioApp {
                             ("Voar (na cena 3D)", "Botão direito + WASD, Q/E"),
                             ("Girar em volta (na cena 3D)", "Alt + arrastar"),
                             ("Arrastar a vista (na cena 3D)", "Botão do meio"),
+                            ("Pontos / faces / peças (no modelador)", "1 / 2 / 3"),
+                            ("Puxar / encolher / juntar (no modelador)", "P / I / M"),
+                            ("Pintar faces (no modelador)", "B"),
                         ] {
                             ui.label(what);
                             ui.monospace(keys);

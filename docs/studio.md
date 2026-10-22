@@ -106,6 +106,9 @@ projeto continua aberto.
   conversa com falas, escolhas e um personagem novo no editor de conversa,
   um personagem que fala na cena e um evento para a escolha do jogador
   ([editor de conversa](#editor-de-conversa)).
+- **Modele uma casinha** (uns 10 minutos), a partir do modelo Vazio 3D:
+  paredes, uma porta afundada e um telhado vermelho no
+  [modelador](#modelador), e a casinha na cena.
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -1182,6 +1185,74 @@ encontra os objetos em `self.objects`, com `obj.body` (o corpo 3D),
 `obj:position3d()` e `self:world3()` (o mundo da física). Veja o
 [guia do Lua](lua.md#cenas-3d).
 
+## Modelador
+
+Arquivos **`.modelo`** abrem no **modelador**, que monta modelos 3D low-poly
+(cada face de uma cor) para as cenas: casas, árvores, móveis, personagens.
+Crie um em **Arquivos > ➕ Novo > 🎲 Modelo 3D**. Ele nasce em
+`assets/modelos`, com um cubo para começar.
+
+![O modelador com uma casinha: paredes, porta e telhado](imagens/nn-studio-modelador.png)
+
+**O `.modelo` e o `.glb`.** O `.modelo` é o arquivo que você edita (um texto
+em Lua, como as cenas). Ao salvar, o NN Studio grava junto o **`.glb`** com o
+mesmo nome: é ele que vai para as cenas e para o jogo, e abre no Blender
+também. No `.glb`, cada peça vira uma parte e cada cor, um material.
+
+**Peças.** Um modelo é feito de peças (as paredes, o telhado, a cabeça...),
+cada uma com pontos e faces. A lista à direita mostra todas: o 👁 esconde uma
+peça só no modelador, e o duplo clique (ou **F2**) renomeia. Para pôr uma
+peça nova, use **➕ Peça**, o botão direito na vista ou **Shift+A**, e
+escolha uma forma pronta: cubo, cilindro, cone, pirâmide, esfera, plano ou rampa.
+
+**Navegar.** A vista anda como a da [cena 3D](#navegar-na-vista-3d): botão
+direito + WASD voa, Alt + arrastar gira em volta do que está escolhido, a
+rodinha aproxima, o botão do meio arrasta e **F** enquadra.
+
+**Escolher.** Escolha o que o clique pega:
+
+- **• Pontos (1)**;
+- **◼ Faces (2)**;
+- **📦 Peças (3)**.
+
+**Shift** junta ou tira, e arrastar no vazio faz uma **caixa de seleção**
+(ela só pega o que aparece). **Ctrl+A** escolhe tudo, e **Esc** limpa.
+
+**Mover, girar e escalar.** As alças são as da cena: **W** move pelas setas
+(ou pelo quadrado do meio, de frente para a câmera), **E** gira pelos
+círculos e **R** escala pelas pontas (ou por tudo, no quadrado do meio).
+Arrastar o que está escolhido também move. Com **Encaixar**, tudo anda na
+grade, e os giros vão de 15 em 15 graus; segurar **Ctrl** troca.
+
+**Ferramentas** (na barra, no botão direito ou pelo teclado):
+
+| Ferramenta | O que faz |
+|---|---|
+| **⬆ Puxar (P)** | Tira um bloco das faces escolhidas, para fora ou para dentro (o mouse manda, o clique termina, o Esc desfaz) |
+| **▣ Encolher (I)** | Faz uma face menor dentro de cada face escolhida: aproxime o mouse do meio e clique |
+| **🔗 Juntar (M)** | Junta os pontos escolhidos num só |
+| **🗑 Apagar (Del)** | Apaga os pontos, as faces ou as peças escolhidas |
+| **Duplicar (Ctrl+D)** | Uma cópia da peça, ao lado |
+| **↔ Espelho X** | Modela uma metade: a outra aparece copiada |
+
+Com o **↔ Espelho X**, só a metade da direita é de verdade, e os pontos do
+meio ficam no meio. É o jeito mais rápido de fazer personagens e carros.
+Desligar transforma a cópia em pontos e faces de verdade.
+
+**Cores.** Clicar numa cor da paleta pinta o que está escolhido: as faces,
+ou a peça inteira. Com **🎨 Pintar (B)**, cada clique (ou arrasto) pinta a
+face embaixo do mouse, e com **Shift**, a peça toda. O quadrado embaixo da
+paleta escolhe uma cor nova, e o **➕** guarda ela na paleta do modelo.
+
+**Na cena.** Arraste o `.modelo` (ou o `.glb`) do painel Arquivos para uma
+cena 3D: o objeto nasce onde você soltar, com o componente Modelo 3D. Mudou
+o modelo? Salve, e as cenas abertas mostram o novo na hora.
+
+**Ctrl+S** salva, **Ctrl+Z / Ctrl+Y** desfazem e refazem, e a barra mostra
+quantos triângulos o modelo tem (até uns 2.000 por modelo é tranquilo).
+
+O tutorial **Modele uma casinha** passa por tudo isso em 10 minutos.
+
 ## Editor de conversa
 
 Arquivos **`.dialogo`** abrem no **editor de conversa**. Crie um em
@@ -1452,6 +1523,9 @@ mensagem diz onde está o erro.
 | B E G U I T (pintando um mapa) | Pincel, borracha, balde, retângulo, conta-gotas, terreno |
 | R / X / Shift+X (pintando um mapa) | Girar / espelhar / espelhar na vertical o pincel |
 | Ctrl + arrastar / botão direito (pintando) | Copiar um pedaço / pegar o tile |
+| 1 / 2 / 3 (no modelador) | Escolher pontos / faces / peças |
+| P / I / M (no modelador) | Puxar / encolher / juntar pontos |
+| B (no modelador) | Pintar faces |
 | F1 | Guia do Lua |
 
 A lista também está em **Ajuda > Atalhos do teclado**.

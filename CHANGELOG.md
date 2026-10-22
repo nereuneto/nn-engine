@@ -2,6 +2,27 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### O modelador (Sprint 47)
+
+- **Modelos 3D feitos no NN Studio:** **Arquivos > ➕ Novo > 🎲 Modelo 3D** cria um `.modelo` e abre a aba do **modelador**, com um cubo para começar. O modelo é feito de **peças** (paredes, telhado, cabeça...), cada uma com pontos e faces coloridas, no estilo low-poly.
+- **Ao salvar, o `.glb` sai junto**, com o mesmo nome: é ele que vai para as cenas e para o jogo, e abre no Blender. Cada peça vira uma parte do arquivo, e cada cor, um material. A engine não mudou.
+- **A vista anda como a da cena 3D:** botão direito + WASD voa, Alt + arrastar gira em volta, a rodinha aproxima e **F** enquadra.
+- **Escolher** pontos (**1**), faces (**2**) ou peças inteiras (**3**): clique, **Shift** junta, e arrastar no vazio faz uma **caixa de seleção**. As alças são as da cena: **W** move, **E** gira e **R** escala. Arrastar o que está escolhido também move, de frente para a câmera.
+- **Ferramentas:**
+  - **⬆ Puxar (P):** tira um bloco das faces escolhidas, para fora ou para dentro. O mouse manda, o clique termina e o **Esc** desfaz.
+  - **▣ Encolher (I):** faz uma face menor dentro de cada face (portas, janelas).
+  - **🔗 Juntar (M):** junta os pontos escolhidos num só.
+  - **🗑 Apagar (Del)**, **Duplicar peça (Ctrl+D)** e **Escolher tudo (Ctrl+A)**.
+- **Formas prontas** para começar uma peça: cubo, cilindro, cone, pirâmide, esfera, plano e rampa, no **➕ Peça**, no botão direito da vista ou no **Shift+A**.
+- **Cores:** clicar numa cor da paleta pinta o que está escolhido (faces ou a peça toda). Com **🎨 Pintar (B)**, cada clique pinta uma face, e com **Shift**, a peça inteira. Dá para guardar cores novas na paleta do modelo.
+- **↔ Espelho X:** modela só uma metade, e a outra aparece copiada. Os pontos do meio ficam no meio. Desligar transforma a cópia em pontos e faces de verdade.
+- **Peças:** a lista à direita mostra, esconde e renomeia as peças (duplo clique ou F2).
+- **Na cena:** arrastar o `.modelo` do painel Arquivos para uma cena 3D cria o objeto com o `.glb`. Salvar o modelo de novo atualiza as cenas abertas. Trocar um `.glb` por fora (exportado do Blender, por exemplo) também atualiza agora.
+- **Ctrl+Z / Ctrl+Y** desfazem e refazem no modelador, e a contagem de triângulos aparece na barra.
+- **Tutorial novo:** **Modele uma casinha**, com paredes, uma porta afundada, um telhado vermelho e a casinha na cena.
+
 ## 0.5.0
 
 A versão do **NN Studio mais gostoso de usar**. O **botão direito** funciona em todo lugar e cria onde você clicou. A **busca rápida (Shift+A)** acha o que criar pelo nome, até com erro de digitação. Duplicar ficou sem trabalho repetido (**Ctrl+D que repete o passo**, **Alt+arrastar**, **Shift+D**), e dá para **copiar e colar** objetos e componentes. O Inspetor edita **vários objetos de uma vez**, os **⭐ favoritos** guardam o que você monta toda hora, os **avisos rápidos com Desfazer** deixam errar sem medo, os painéis vazios ensinam e as **Preferências** trazem a cor de destaque, as animações e os sons. A engine não mudou: os jogos rodam igual. Para começar: [A aba da cena](docs/studio.md#a-aba-da-cena), [Inspetor](docs/studio.md#inspetor) e [Preferências](docs/studio.md#preferências).

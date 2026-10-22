@@ -5656,3 +5656,431 @@ fn preferencias_cor_animacoes_e_sons() {
     let gravado = std::fs::read_to_string(dir.join("preferencias.json")).unwrap();
     assert!(gravado.contains("\"accent\""), "{gravado}");
 }
+
+// Modelador (S47) -------------------------------------------------------------
+
+fn modelo<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::model_editor::ModelDoc {
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .models
+        .values_mut()
+        .next()
+        .expect("um modelo aberto")
+}
+
+/// Onde um ponto do modelo aparece na vista do modelador.
+fn na_vista_modelo(h: &mut Harness<'_, StudioApp>, p: glam::Vec3) -> egui::Pos2 {
+    let rect = h.get_by_label("Vista do modelo").rect();
+    let s = modelo(h)
+        .cam
+        .camera()
+        .screen_point(p, glam::Vec2::new(rect.width(), rect.height()))
+        .expect("na frente da câmera");
+    rect.min + egui::vec2(s.x, s.y)
+}
+
+fn novo_modelo(h: &mut Harness<'_, StudioApp>) {
+    h.get_by_label("➕ Novo").click();
+    h.run_steps(2);
+    h.get_by_label("🎲 Modelo 3D").click();
+    h.run_steps(2);
+    h.key_press(Key::Enter);
+    h.run_steps(4);
+}
+
+#[test]
+fn modelador_puxa_pinta_salva_e_vai_para_a_cena() {
+    use nn_studio::model_editor::Select;
+    let dir = temp("modelador");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    novo_modelo(&mut h);
+    assert!(proj.join("assets/modelos/modelo.modelo").is_file());
+    assert!(
+        proj.join("assets/modelos/modelo.glb").is_file(),
+        "o .glb nasce junto"
+    );
+    assert!(tabs(&h).contains(&Tab::Model("assets/modelos/modelo.modelo".into())));
+    h.get_by_label("Vista do modelo");
+    assert_eq!(modelo(&mut h).mode, Select::Faces);
+
+    // Clicar na face de cima do cubo escolhe ela.
+    let topo = na_vista_modelo(&mut h, glam::Vec3::new(0.0, 1.0, 0.0));
+    clicar(&mut h, topo);
+    let (peca, face) = *modelo(&mut h).sel_faces.first().expect("face escolhida");
+    {
+        let d = modelo(&mut h);
+        let n = nn_studio::model_data::face_normal(
+            &d.data.parts[peca].verts,
+            &d.data.parts[peca].faces[face].v,
+        );
+        assert!(n.y > 0.9, "a de cima");
+    }
+    tela(&mut h, "modelador-face");
+
+    // P puxa: o mouse sobe e o clique termina. Vira um bloco mais alto.
+    h.hover_at(topo);
+    h.run();
+    atalho(&mut h, Modifiers::NONE, Key::P);
+    for i in 1..=5 {
+        h.hover_at(topo - egui::vec2(0.0, 12.0 * i as f32));
+        h.run();
+    }
+    tela(&mut h, "modelador-puxando");
+    clicar(&mut h, topo - egui::vec2(0.0, 60.0));
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts[0].faces.len(), 10, "o bloco ganhou 4 paredes");
+        let (_, hi) = d.data.bounds().unwrap();
+        assert!(hi.y > 1.2, "mais alto: {hi}");
+    }
+
+    // Uma cor da paleta pinta a face escolhida.
+    h.get_by_label("#3FA7D6").click();
+    h.run();
+    assert_eq!(modelo(&mut h).data.parts[0].faces[face].color, "#3FA7D6");
+
+    // Desfazer volta a cor, refazer põe de volta.
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_ne!(modelo(&mut h).data.parts[0].faces[face].color, "#3FA7D6");
+    atalho(&mut h, Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
+    assert_eq!(modelo(&mut h).data.parts[0].faces[face].color, "#3FA7D6");
+
+    // Botão direito no vazio: ➕ Peça aqui > Cone.
+    let rect = h.get_by_label("Vista do modelo").rect();
+    clique_direito(&mut h, rect.left_top() + egui::vec2(60.0, 60.0));
+    submenu(&mut h, "➕ Peça aqui");
+    h.get_by_label("🔺 Cone").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 2);
+        assert_eq!(d.data.parts[1].name, "Cone");
+        assert_eq!(d.mode, Select::Parts);
+        assert_eq!(d.sel_parts, vec![1]);
+    }
+    h.get_by_label("Cone");
+    tela(&mut h, "modelador-cone");
+
+    // Ctrl+S grava o .modelo e o .glb, que a engine abre com as cores.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    assert!(!modelo(&mut h).is_dirty());
+    let texto = std::fs::read_to_string(proj.join("assets/modelos/modelo.modelo")).unwrap();
+    assert!(texto.contains("\"Cone\""), "{texto}");
+    let glb = std::fs::read(proj.join("assets/modelos/modelo.glb")).unwrap();
+    let lido = nn_render::d3::ModelData::from_gltf(&glb, &mut |_| None).unwrap();
+    assert_eq!(lido.triangle_count(), modelo(&mut h).data.triangle_count());
+
+    // Soltar o .modelo numa cena 3D cria o objeto com o .glb.
+    com_cena3d(&mut h, &proj);
+    let id = {
+        let ws = h.state_mut().project_mut().unwrap();
+        let root = ws.root.clone();
+        let mut sizes = nn_studio::scene_render::Sizes::default();
+        let doc = ws.scenes.get_mut("cenas/teste.cena").unwrap();
+        let mut maps = std::collections::HashMap::new();
+        let mut tilesets = std::collections::HashMap::new();
+        let mut paint = nn_studio::paint::PaintState::default();
+        let mut env = nn_studio::scene_view::SceneEnv {
+            root: &root,
+            sizes: &mut sizes,
+            renderer: None,
+            design: (640.0, 360.0),
+            clear_color: "#000000",
+            connected: false,
+            time: 0.0,
+            game: None,
+            maps: &mut maps,
+            tilesets: &mut tilesets,
+            paint: &mut paint,
+            animate: false,
+        };
+        doc.drop_file3(&mut env, "assets/modelos/modelo.modelo", glam::Vec3::ZERO)
+            .expect("criou o objeto")
+    };
+    h.run();
+    let o = cena(&h).data.find(id).unwrap();
+    assert_eq!(o.name, "modelo");
+    assert_eq!(
+        o.component("model").unwrap().str("file"),
+        "assets/modelos/modelo.glb"
+    );
+}
+
+#[test]
+fn modelador_pontos_espelho_caixa_e_alcas() {
+    use nn_studio::model_editor::Select;
+    let dir = temp("modelador-pontos");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    novo_modelo(&mut h);
+
+    // Espelho X: só a metade da direita fica de verdade.
+    h.get_by_label("↔ Espelho X").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert!(d.data.parts[0].mirror);
+        assert!(d.data.parts[0].verts.iter().all(|v| v.x >= 0.0));
+    }
+
+    let vista = h.get_by_label("Vista do modelo").rect();
+    h.hover_at(vista.center() + egui::vec2(0.0, 150.0));
+    h.run();
+    // 1: pontos. A caixa de seleção pega os quatro de cima (os da metade e os
+    // do meio).
+    atalho(&mut h, Modifiers::NONE, Key::Num1);
+    assert_eq!(modelo(&mut h).mode, Select::Points);
+    let a = na_vista_modelo(&mut h, glam::Vec3::new(-0.7, 1.15, -0.7));
+    let b = na_vista_modelo(&mut h, glam::Vec3::new(0.7, 0.85, 0.7));
+    let caixa = egui::Rect::from_two_pos(a, b);
+    let (de, ate) = (
+        caixa.left_top() - egui::vec2(20.0, 20.0),
+        caixa.right_bottom() + egui::vec2(20.0, 8.0),
+    );
+    arrastar(&mut h, de, ate);
+    let escolhidos = modelo(&mut h).sel_verts.clone();
+    {
+        let d = modelo(&mut h);
+        assert!(!escolhidos.is_empty());
+        for &(p, k) in &escolhidos {
+            assert!(d.data.parts[p].verts[k as usize].y > 0.99, "só os de cima");
+        }
+    }
+    tela(&mut h, "modelador-pontos");
+
+    // A seta verde (Y) sobe os pontos; os do meio continuam no meio.
+    let c = modelo(&mut h).selection_center().unwrap();
+    let base = na_vista_modelo(&mut h, c);
+    let len = (c - modelo(&mut h).cam.pos).length() * 0.16;
+    let ponta = na_vista_modelo(&mut h, c + glam::Vec3::Y * len * 0.8);
+    arrastar(&mut h, ponta, ponta - egui::vec2(0.0, 40.0));
+    {
+        let d = modelo(&mut h);
+        let p = &d.data.parts[0];
+        let altos: Vec<_> = escolhidos
+            .iter()
+            .map(|&(_, k)| p.verts[k as usize])
+            .collect();
+        assert!(altos.iter().all(|v| v.y > 1.1), "subiram: {altos:?}");
+        assert!(altos.iter().any(|v| v.x == 0.0), "os do meio ficam no meio");
+        let _ = base;
+    }
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(
+        modelo(&mut h).data.parts[0]
+            .verts
+            .iter()
+            .all(|v| v.y <= 1.0 + 1e-4)
+    );
+
+    // M junta os pontos escolhidos: o cubo vira um telhado.
+    h.hover_at(vista.center() + egui::vec2(0.0, 150.0));
+    h.run();
+    atalho(&mut h, Modifiers::NONE, Key::M);
+    {
+        let d = modelo(&mut h);
+        assert!(
+            d.data.parts[0].verts.len() < 8,
+            "{} pontos, escolhidos {:?}, modo {:?}",
+            d.data.parts[0].verts.len(),
+            d.sel_verts,
+            d.mode
+        );
+    }
+
+    // 3: peças. Ctrl+D duplica ao lado; Delete apaga a cópia.
+    h.hover_at(vista.center() + egui::vec2(0.0, 150.0));
+    h.run();
+    atalho(&mut h, Modifiers::NONE, Key::Num3);
+    modelo(&mut h).sel_parts = vec![0];
+    atalho(&mut h, Modifiers::COMMAND, Key::D);
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 2);
+        assert_eq!(d.data.parts[1].name, "Cubo 2");
+        assert!(d.data.parts[1].pos.x > 0.5);
+        assert_eq!(d.sel_parts, vec![1]);
+    }
+    tela(&mut h, "modelador-pecas");
+    atalho(&mut h, Modifiers::NONE, Key::Delete);
+    assert_eq!(modelo(&mut h).data.parts.len(), 1);
+
+    // Desligar o espelho transforma a metade copiada em faces de verdade.
+    modelo(&mut h).sel_parts = vec![0];
+    h.get_by_label("↔ Espelho X").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert!(!d.data.parts[0].mirror);
+        assert!(d.data.parts[0].verts.iter().any(|v| v.x < 0.0));
+    }
+}
+
+fn clicar_passos(h: &mut Harness<'_, StudioApp>, p: egui::Pos2) {
+    h.hover_at(p);
+    h.run_steps(1);
+    h.drag_at(p);
+    h.run_steps(1);
+    h.drop_at(p);
+    h.run_steps(2);
+}
+
+fn arrastar_passos(h: &mut Harness<'_, StudioApp>, from: egui::Pos2, to: egui::Pos2) {
+    h.hover_at(from);
+    h.run_steps(1);
+    h.drag_at(from);
+    h.run_steps(1);
+    for i in 1..=6 {
+        h.hover_at(from + (to - from) * (i as f32 / 6.0));
+        h.run_steps(1);
+    }
+    h.drop_at(to);
+    h.run_steps(2);
+}
+
+#[test]
+fn tutorial_modele_uma_casinha() {
+    use nn_studio::model_editor::Select;
+    let dir = temp("tutorial-casinha");
+    let mut h = studio_with(&dir, None, fake_game(&dir), true);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("modele-uma-casinha");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/uma-casinha");
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    espera(&mut h, 1);
+    // ➕ Novo > Modelo 3D, com o nome casinha.
+    h.get_by_label("➕ Novo").click();
+    h.run_steps(2);
+    h.get_by_label("🎲 Modelo 3D").click();
+    h.run_steps(2);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.run_steps(2);
+    h.event(egui::Event::Text("casinha".into()));
+    h.run_steps(2);
+    h.key_press(Key::Enter);
+    espera(&mut h, 2);
+    assert!(projeto.join("assets/modelos/casinha.modelo").is_file());
+    assert!(nn_studio::tutorial::anchor_rect(&h.ctx, "modelo").is_some());
+
+    // A parede da frente (+Z): clicar, I, mouse para o meio, clicar.
+    let frente = na_vista_modelo(&mut h, glam::Vec3::new(0.0, 0.5, 0.5));
+    clicar_passos(&mut h, frente);
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.mode, Select::Faces);
+        let (p, f) = d.sel_faces[0];
+        let n =
+            nn_studio::model_data::face_normal(&d.data.parts[p].verts, &d.data.parts[p].faces[f].v);
+        assert!(n.z > 0.9, "a parede da frente: {n}");
+    }
+    let canto = na_vista_modelo(&mut h, glam::Vec3::new(0.45, 0.95, 0.5));
+    h.hover_at(canto);
+    h.run_steps(1);
+    atalho_passos(&mut h, Modifiers::NONE, Key::I);
+    for i in 1..=4 {
+        h.hover_at(canto + (frente - canto) * (i as f32 * 0.15));
+        h.run_steps(1);
+    }
+    clicar_passos(&mut h, canto + (frente - canto) * 0.6);
+    espera(&mut h, 3);
+
+    // A porta marrom.
+    h.get_by_label("#6B4423").click();
+    espera(&mut h, 4);
+
+    // P para dentro da casa.
+    let porta = na_vista_modelo(&mut h, glam::Vec3::new(0.0, 0.5, 0.5));
+    h.hover_at(porta);
+    h.run_steps(1);
+    atalho_passos(&mut h, Modifiers::NONE, Key::P);
+    for i in 1..=4 {
+        h.hover_at(porta - egui::vec2(0.0, -6.0 * i as f32));
+        h.run_steps(1);
+    }
+    clicar_passos(&mut h, porta + egui::vec2(0.0, 24.0));
+    espera(&mut h, 5);
+    {
+        let d = modelo(&mut h);
+        let (lo, _) = d.data.bounds().unwrap();
+        assert!(lo.z >= -0.5 - 1e-4, "afundou para dentro, não para trás");
+    }
+    tela(&mut h, "tutorial-casinha-porta");
+
+    // ➕ Peça > Pirâmide.
+    h.get_by_label("➕ Peça").click();
+    h.run_steps(3);
+    h.get_by_label("🏠 Pirâmide").click();
+    espera(&mut h, 6);
+
+    // A seta verde leva o telhado para cima.
+    let c = modelo(&mut h).selection_center().unwrap();
+    let len = (c - modelo(&mut h).cam.pos).length() * 0.16;
+    let ponta = na_vista_modelo(&mut h, c + glam::Vec3::Y * len * 0.8);
+    let alvo = na_vista_modelo(&mut h, c + glam::Vec3::Y * (len * 0.8 + 1.0));
+    arrastar_passos(&mut h, ponta, alvo);
+    espera(&mut h, 7);
+
+    // Vermelho na peça inteira.
+    h.get_by_label("#E84A4A").click();
+    espera(&mut h, 8);
+    tela(&mut h, "tutorial-casinha-telhado");
+
+    // Salvar.
+    let meio = na_vista_modelo(&mut h, glam::Vec3::ZERO);
+    h.hover_at(meio);
+    atalho_passos(&mut h, Modifiers::COMMAND, Key::S);
+    espera(&mut h, 9);
+    assert!(projeto.join("assets/modelos/casinha.glb").is_file());
+
+    // Na cena: soltar o .modelo.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.open_file("cenas/mundo.cena", None);
+    }
+    h.run_steps(3);
+    let id = {
+        let ws = h.state_mut().project_mut().unwrap();
+        let root = ws.root.clone();
+        let mut sizes = nn_studio::scene_render::Sizes::default();
+        let mut maps = std::collections::HashMap::new();
+        let mut tilesets = std::collections::HashMap::new();
+        let mut paint = nn_studio::paint::PaintState::default();
+        let mut env = nn_studio::scene_view::SceneEnv {
+            root: &root,
+            sizes: &mut sizes,
+            renderer: None,
+            design: (640.0, 360.0),
+            clear_color: "#000000",
+            connected: false,
+            time: 0.0,
+            game: None,
+            maps: &mut maps,
+            tilesets: &mut tilesets,
+            paint: &mut paint,
+            animate: false,
+        };
+        let doc = ws.scenes.get_mut("cenas/mundo.cena").unwrap();
+        doc.drop_file3(
+            &mut env,
+            "assets/modelos/casinha.modelo",
+            glam::Vec3::new(3.0, 0.0, 0.0),
+        )
+    };
+    assert!(id.is_some());
+    espera(&mut h, 10);
+    tela(&mut h, "tutorial-casinha-cena");
+    h.get_by_label("Próximo").click();
+    espera(&mut h, 11);
+}

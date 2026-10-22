@@ -130,6 +130,12 @@ impl FilePanel {
                     actions.push(Action::NewItem { kind: NewKind::Image, parent: image_dir(tree, &dir) });
                     ui.close();
                 }
+                let r = ui.button("🎲 Modelo 3D").on_hover_text("Um objeto, personagem ou cenário 3D montado no modelador, com peças e cores. Ao salvar, o .glb sai junto para usar nas cenas");
+                crate::tutorial::anchor_in(ui, "arquivos:novo-modelo", r.rect);
+                if r.clicked() {
+                    actions.push(Action::NewItem { kind: NewKind::Model, parent: model_dir(&dir) });
+                    ui.close();
+                }
                 let r = ui.button("💬 Diálogo (conversa)").on_hover_text("Uma conversa com falas e escolhas, montada no editor de conversa. Na cena, use o comportamento Diálogo");
                 crate::tutorial::anchor_in(ui, "arquivos:novo-dialogo", r.rect);
                 if r.clicked() {
@@ -507,6 +513,13 @@ impl FilePanel {
             });
             ui.close();
         }
+        if ui.button("🎲 Novo modelo 3D aqui").clicked() {
+            actions.push(Action::NewItem {
+                kind: NewKind::Model,
+                parent: dir.to_string(),
+            });
+            ui.close();
+        }
         if ui.button("💬 Novo diálogo aqui").clicked() {
             actions.push(Action::NewItem {
                 kind: NewKind::Dialogue,
@@ -577,6 +590,16 @@ pub fn image_dir(tree: &FileTree, chosen: &str) -> String {
         .find(|d| tree.get(d).is_some_and(|e| e.is_dir))
         .map(|d| d.to_string())
         .unwrap_or_default()
+}
+
+/// Pasta sugerida para modelos 3D novos: `assets/modelos` (ou uma pasta
+/// dentro dela).
+fn model_dir(chosen: &str) -> String {
+    if chosen == "assets/modelos" || chosen.starts_with("assets/modelos/") {
+        chosen.to_string()
+    } else {
+        "assets/modelos".into()
+    }
 }
 
 /// Pasta sugerida para diálogos novos: `dialogos` (ou uma pasta dentro
@@ -669,6 +692,7 @@ pub fn paint_icon(painter: &egui::Painter, rect: egui::Rect, kind: FileKind, ope
         FileKind::Image => (rgb(0xD8, 0x7A, 0x4A), "picture"),
         FileKind::Font => (rgb(0x8A, 0x93, 0x9E), "letter"),
         FileKind::Model => (rgb(0x2F, 0xA8, 0xA0), "box"),
+        FileKind::ModelSource => (rgb(0x2F, 0x86, 0xC8), "box"),
         FileKind::Dialogue => (rgb(0xE0, 0x9F, 0x3E), "bubble"),
         _ => (rgb(0x6E, 0x76, 0x80), "none"),
     };

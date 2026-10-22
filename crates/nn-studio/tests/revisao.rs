@@ -696,3 +696,118 @@ fn capturas_da_v05_para_a_documentacao() {
     passos(&mut h);
     tela(&mut h, "nn-studio-preferencias");
 }
+
+/// A imagem do modelador na documentação: uma casinha com porta, janela,
+/// telhado de duas águas e chaminé, com a porta escolhida.
+#[test]
+#[ignore]
+fn captura_do_modelador_para_a_documentacao() {
+    use glam::Vec3;
+    use nn_studio::model_data::{Face, ModelData, Part, face_normal};
+    let dir = temp("captura-modelador");
+    let proj = dir.join("jogo");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Vazio3D,
+    })
+    .unwrap();
+    // A casa: paredes, porta (encolher + puxar para dentro) e janela.
+    let mut paredes = Part::cube("Paredes", "#F2C9A0");
+    paredes.scale = Vec3::new(2.0, 1.4, 1.6);
+    let face = |p: &Part, n: Vec3| {
+        p.faces
+            .iter()
+            .position(|f| face_normal(&p.verts, &f.v).dot(n) > 0.9)
+            .unwrap()
+    };
+    let frente = face(&paredes, Vec3::Z);
+    paredes.inset(&[frente], 0.35);
+    // A porta embaixo: o pedaço de dentro desce até o chão.
+    let porta: Vec<u32> = paredes.faces[frente].v.clone();
+    for &k in &porta {
+        let v = &mut paredes.verts[k as usize];
+        if v.y < 0.5 {
+            v.y = 0.0;
+        } else {
+            v.y = 0.62;
+        }
+        v.x *= 0.6;
+    }
+    let (moved, _) = paredes.extrude(&[frente]);
+    for k in moved {
+        paredes.verts[k as usize].z -= 0.08;
+    }
+    paredes.faces[frente].color = "#6B4423".into();
+    let lado = face(&paredes, Vec3::X);
+    paredes.inset(&[lado], 0.3);
+    let (moved, _) = paredes.extrude(&[lado]);
+    for k in moved {
+        paredes.verts[k as usize].x -= 0.05;
+    }
+    paredes.faces[lado].color = "#3FA7D6".into();
+    // O telhado de duas águas.
+    let telhado = Part {
+        name: "Telhado".into(),
+        verts: vec![
+            Vec3::new(-1.15, 0.0, -0.95),
+            Vec3::new(1.15, 0.0, -0.95),
+            Vec3::new(1.15, 0.0, 0.95),
+            Vec3::new(-1.15, 0.0, 0.95),
+            Vec3::new(-1.15, 0.8, 0.0),
+            Vec3::new(1.15, 0.8, 0.0),
+        ],
+        faces: vec![
+            Face {
+                v: vec![0, 1, 2, 3],
+                color: "#9C6B43".into(),
+            },
+            Face {
+                v: vec![3, 2, 5, 4],
+                color: "#E84A4A".into(),
+            },
+            Face {
+                v: vec![1, 0, 4, 5],
+                color: "#E84A4A".into(),
+            },
+            Face {
+                v: vec![2, 1, 5],
+                color: "#F2C9A0".into(),
+            },
+            Face {
+                v: vec![0, 3, 4],
+                color: "#F2C9A0".into(),
+            },
+        ],
+        pos: Vec3::new(0.0, 1.4, 0.0),
+        ..Part::cube("Telhado", "#E84A4A")
+    };
+    let mut chamine = Part::cube("Chaminé", "#B8B8B8");
+    chamine.scale = Vec3::new(0.3, 0.7, 0.3);
+    chamine.pos = Vec3::new(0.55, 1.6, -0.35);
+    let modelo = ModelData {
+        parts: vec![paredes, telhado, chamine],
+        ..ModelData::new_default()
+    };
+    let pasta = proj.join("assets/modelos");
+    std::fs::create_dir_all(&pasta).unwrap();
+    std::fs::write(pasta.join("casinha.modelo"), modelo.to_lua()).unwrap();
+    std::fs::write(pasta.join("casinha.glb"), modelo.to_glb()).unwrap();
+
+    let mut h = studio(&dir, Some(proj.clone()), egui::vec2(1280.0, 800.0));
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("assets/modelos/casinha.modelo", None);
+    passos(&mut h);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let d = ws.models.values_mut().next().unwrap();
+        d.sel_faces = vec![(0, frente)];
+        d.cam
+            .look_at(Vec3::new(2.3, 1.9, 3.1), Vec3::new(0.0, 0.95, 0.0));
+    }
+    passos(&mut h);
+    passos(&mut h);
+    tela(&mut h, "nn-studio-modelador");
+}

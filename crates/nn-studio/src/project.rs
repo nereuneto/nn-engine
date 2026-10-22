@@ -47,6 +47,8 @@ pub enum Tab {
     Tiles,
     /// Diálogo (`.dialogo`) no editor de conversa.
     Dialogue(String),
+    /// Modelo 3D (`.modelo`) no modelador.
+    Model(String),
 }
 
 impl Tab {
@@ -63,6 +65,7 @@ impl Tab {
             FileKind::Anim => Tab::Code(rel.into()),
             FileKind::Sound => Tab::Sound(rel.into()),
             FileKind::Dialogue => Tab::Dialogue(rel.into()),
+            FileKind::ModelSource => Tab::Model(rel.into()),
             // (O 3D no editor vem depois: por enquanto abre no programa padrão.)
             FileKind::Folder | FileKind::Font | FileKind::Model | FileKind::Other => return None,
         })
@@ -75,7 +78,8 @@ impl Tab {
             | Tab::Sound(r)
             | Tab::Map(r)
             | Tab::Scene(r)
-            | Tab::Dialogue(r) => Some(r),
+            | Tab::Dialogue(r)
+            | Tab::Model(r) => Some(r),
             _ => None,
         }
     }
@@ -87,7 +91,8 @@ impl Tab {
             | Tab::Sound(r)
             | Tab::Map(r)
             | Tab::Scene(r)
-            | Tab::Dialogue(r) => *r = new,
+            | Tab::Dialogue(r)
+            | Tab::Model(r) => *r = new,
             _ => {}
         }
     }
@@ -123,6 +128,8 @@ pub enum NewKind {
     Image,
     /// Conversa para o editor de diálogos.
     Dialogue,
+    /// Modelo 3D para o modelador.
+    Model,
 }
 
 impl NewKind {
@@ -134,6 +141,7 @@ impl NewKind {
             NewKind::Folder => "Nova pasta",
             NewKind::Image => "Nova imagem (pixel art)",
             NewKind::Dialogue => "Novo diálogo (conversa)",
+            NewKind::Model => "Novo modelo 3D",
         }
     }
 
@@ -144,6 +152,7 @@ impl NewKind {
             NewKind::Folder => "nova_pasta",
             NewKind::Image => "desenho",
             NewKind::Dialogue => "conversa",
+            NewKind::Model => "modelo",
         }
     }
 }
@@ -293,6 +302,8 @@ pub struct ProjectWorkspace {
     pub pixels: HashMap<String, PixelDoc>,
     /// Diálogos abertos no editor de conversa.
     pub dialogues: HashMap<String, crate::dialogue::DialogueDoc>,
+    /// Modelos 3D abertos no modelador.
+    pub models: HashMap<String, crate::model_editor::ModelDoc>,
     /// Paleta do projeto (`paleta.hex`), lida na primeira vez.
     palette: Option<Vec<crate::pixel_ops::Color>>,
     sounds: HashMap<String, SoundView>,
@@ -417,6 +428,7 @@ impl ProjectWorkspace {
             docs: HashMap::new(),
             pixels: HashMap::new(),
             dialogues: HashMap::new(),
+            models: HashMap::new(),
             palette: None,
             sounds: HashMap::new(),
             maps: HashMap::new(),
@@ -512,6 +524,12 @@ impl ProjectWorkspace {
                     .map(|s| s.rel.clone()),
             )
             .chain(
+                self.models
+                    .values()
+                    .filter(|s| s.is_dirty())
+                    .map(|s| s.rel.clone()),
+            )
+            .chain(
                 self.tilesets
                     .values()
                     .filter(|s| s.is_dirty())
@@ -531,6 +549,10 @@ impl ProjectWorkspace {
                 .dialogues
                 .get(rel)
                 .is_some_and(crate::dialogue::DialogueDoc::is_dirty)
+            || self
+                .models
+                .get(rel)
+                .is_some_and(crate::model_editor::ModelDoc::is_dirty)
             || self
                 .map_docs
                 .get(rel)
@@ -600,6 +622,7 @@ impl ProjectWorkspace {
         self.scenes.clear();
         self.pixels.clear();
         self.dialogues.clear();
+        self.models.clear();
         self.map_docs.clear();
         self.tilesets.clear();
     }
@@ -642,6 +665,19 @@ impl ProjectWorkspace {
                 Ok(()) => saved.push(d.rel.clone()),
                 Err(e) => errors.push(format!("{}: {e}", d.rel)),
             }
+        }
+        let mut models = Vec::new();
+        for d in self.models.values_mut().filter(|s| s.is_dirty()) {
+            match d.save(&self.root) {
+                Ok(()) => {
+                    saved.push(d.rel.clone());
+                    models.push(d.rel.clone());
+                }
+                Err(e) => errors.push(format!("{}: {e}", d.rel)),
+            }
+        }
+        for rel in models {
+            self.model_exported(&rel);
         }
         let (ok, err) = self.save_maps(None);
         saved.extend(ok);
@@ -801,6 +837,12 @@ impl ProjectWorkspace {
             }
             Tab::Dialogue(r) => {
                 self.dialogues.remove(r);
+            }
+            Tab::Model(r) => {
+                self.models.remove(r);
+                if let Some(sr) = &mut self.scene_renderer {
+                    sr.forget(r);
+                }
             }
             Tab::Sound(r) => {
                 if let Some(mut s) = self.sounds.remove(r) {
@@ -1007,6 +1049,23 @@ impl ProjectWorkspace {
             .find(|p| self.root.join(p).is_file())
     }
 
+    /// Modelo com o foco (recebe Desfazer e Salvar).
+    fn focused_model(&mut self) -> Option<String> {
+        match self.dock.find_active_focused() {
+            Some((_, Tab::Model(r))) => Some(r.clone()),
+            _ => None,
+        }
+    }
+
+    /// O `.glb` de um modelo foi gravado: as cenas abertas leem de novo.
+    fn model_exported(&mut self, rel: &str) {
+        let glb = crate::model_data::glb_path(rel);
+        self.sizes.invalidate(&glb);
+        if let Some(sr) = &mut self.scene_renderer {
+            sr.invalidate(&self.root, &glb);
+        }
+    }
+
     /// Diálogo com o foco (recebe Desfazer e Salvar).
     fn focused_dialogue(&mut self) -> Option<String> {
         match self.dock.find_active_focused() {
@@ -1186,6 +1245,9 @@ impl ProjectWorkspace {
             if let Some(v) = self.dialogues.get_mut(rel) {
                 v.disk_changed(&root);
             }
+            if let Some(v) = self.models.get_mut(rel) {
+                v.disk_changed(&root);
+            }
             // O .anim mudou fora: a imagem dele relê (se não houver nada a perder).
             if FileKind::of(Path::new(rel)) == FileKind::Anim {
                 self.sizes.anims.forget(rel);
@@ -1228,6 +1290,13 @@ impl ProjectWorkspace {
                     if other != rel && (doc.data.uses_prefab(rel) || doc.saved_uses_prefab(rel)) {
                         doc.relink_prefabs(&root);
                     }
+                }
+            }
+            if FileKind::of(Path::new(rel)) == FileKind::Model {
+                // Um .glb mudou (exportado de fora, ou pelo modelador).
+                self.sizes.invalidate(rel);
+                if let Some(sr) = &mut self.scene_renderer {
+                    sr.invalidate(&root, rel);
                 }
             }
             if matches!(
@@ -1291,6 +1360,14 @@ impl ProjectWorkspace {
                     } else {
                         doc.redo();
                     }
+                } else if let Some(rel) = self.focused_model()
+                    && let Some(doc) = self.models.get_mut(&rel)
+                {
+                    if cmd == Command::Undo {
+                        doc.undo();
+                    } else {
+                        doc.redo();
+                    }
                 } else if let Some(rel) = self.focused_image()
                     && let Some(doc) = self.pixels.get_mut(&rel)
                 {
@@ -1319,6 +1396,8 @@ impl ProjectWorkspace {
                 } else if let Some(rel) = self.focused_image() {
                     self.save_doc(&rel);
                 } else if let Some(rel) = self.focused_dialogue() {
+                    self.save_doc(&rel);
+                } else if let Some(rel) = self.focused_model() {
                     self.save_doc(&rel);
                 } else if let Some(rel) = self.focused_scene() {
                     self.save_doc(&rel);
@@ -1395,7 +1474,11 @@ impl ProjectWorkspace {
                 let tab = self.dock.find_active_focused().map(|(_, t)| t.clone());
                 if let Some(tab) = tab {
                     match &tab {
-                        Tab::Code(r) | Tab::Scene(r) | Tab::Image(r) | Tab::Dialogue(r)
+                        Tab::Code(r)
+                        | Tab::Scene(r)
+                        | Tab::Image(r)
+                        | Tab::Dialogue(r)
+                        | Tab::Model(r)
                             if self.is_dirty(r) =>
                         {
                             self.dialog = Some(Dialog::CloseTab(r.clone()));
@@ -1698,6 +1781,19 @@ impl ProjectWorkspace {
     }
 
     fn save_doc(&mut self, rel: &str) {
+        if let Some(d) = self.models.get_mut(rel) {
+            match d.save(&self.root) {
+                Ok(()) => {
+                    self.saved(rel);
+                    self.model_exported(rel);
+                    self.files.rescan();
+                }
+                Err(e) => self
+                    .console
+                    .error(format!("Não foi possível salvar {rel}: {e}")),
+            }
+            return;
+        }
         if let Some(d) = self.dialogues.get_mut(rel) {
             match d.save(&self.root) {
                 Ok(()) => {
@@ -1978,6 +2074,15 @@ impl ProjectWorkspace {
                         *slot = Some(n);
                     }
                 }
+                let models: Vec<String> = self.models.keys().cloned().collect();
+                for k in models {
+                    if let Some(n) = fix(&k)
+                        && let Some(mut d) = self.models.remove(&k)
+                    {
+                        d.rel = n.clone();
+                        self.models.insert(n, d);
+                    }
+                }
                 let dialogues: Vec<String> = self.dialogues.keys().cloned().collect();
                 for k in dialogues {
                     if let Some(n) = fix(&k)
@@ -2107,6 +2212,7 @@ impl ProjectWorkspace {
                 docs: &mut self.docs,
                 pixels: &mut self.pixels,
                 dialogues: &mut self.dialogues,
+                models: &mut self.models,
                 map_docs: &mut self.map_docs,
                 tilesets: &mut self.tilesets,
                 paint: &mut self.paint,
@@ -2328,6 +2434,7 @@ impl ProjectWorkspace {
                             NewKind::VisualScene => ".cena",
                             NewKind::Image => ".png",
                             NewKind::Dialogue => ".dialogo",
+                            NewKind::Model => ".modelo",
                             _ => ".lua",
                         });
                     }
@@ -2382,6 +2489,9 @@ impl ProjectWorkspace {
                     if kind == NewKind::Image {
                         ui.weak("Abre no editor de pixel art. 16 × 16 é um bom tamanho para personagens e itens.");
                     }
+                    if kind == NewKind::Model {
+                        ui.weak("Abre no modelador, com um cubo para começar. Ao salvar, o .glb com o mesmo nome sai junto: é ele que vai para as cenas.");
+                    }
                     if kind == NewKind::Dialogue {
                         ui.weak("Abre no editor de conversa, já com um exemplo: falas, escolhas e um personagem. Na cena, use o comportamento Diálogo.");
                     }
@@ -2408,6 +2518,7 @@ impl ProjectWorkspace {
                                 }
                                 NewKind::Module => files::create_file(&self.root, parent, name, &files::module_template(&rel)),
                                 NewKind::Dialogue => files::create_file(&self.root, parent, &file_name, &crate::dialogue::template()),
+                                NewKind::Model => create_model(&self.root, parent, &file_name),
                                 NewKind::Image => {
                                     let [w, h, n] = *size;
                                     create_image(&self.root, &rel, w, h, n)
@@ -2903,6 +3014,18 @@ fn frame_hint(
 
 /// Cria um PNG transparente (e o `.anim` com o tamanho do quadro, se tiver
 /// mais de um quadro).
+/// Um modelo novo (um cubo), já com o `.glb` dele.
+fn create_model(root: &Path, parent: &str, name: &str) -> Result<String, String> {
+    let model = crate::model_data::ModelData::new_default();
+    let glb = crate::model_data::glb_path(&files::join_rel(parent, name.trim()));
+    if root.join(&glb).exists() {
+        return Err(format!("Já existe {glb}."));
+    }
+    let rel = files::create_file(root, parent, name, &model.to_lua())?;
+    std::fs::write(root.join(&glb), model.to_glb()).map_err(|e| e.to_string())?;
+    Ok(rel)
+}
+
 fn create_image(root: &Path, rel: &str, w: u32, h: u32, frames: u32) -> Result<String, String> {
     let path = root.join(rel);
     if path.exists() {
@@ -2965,6 +3088,7 @@ struct Viewer<'a> {
     docs: &'a mut HashMap<String, CodeDoc>,
     pixels: &'a mut HashMap<String, PixelDoc>,
     dialogues: &'a mut HashMap<String, crate::dialogue::DialogueDoc>,
+    models: &'a mut HashMap<String, crate::model_editor::ModelDoc>,
     palette: &'a mut Vec<crate::pixel_ops::Color>,
     map_docs: &'a mut HashMap<String, crate::map_doc::MapDoc>,
     tilesets: &'a mut HashMap<String, crate::tileset::TilesetDoc>,
@@ -3038,7 +3162,8 @@ impl TabViewer for Viewer<'_> {
             | Tab::Sound(r)
             | Tab::Map(r)
             | Tab::Scene(r)
-            | Tab::Dialogue(r) => {
+            | Tab::Dialogue(r)
+            | Tab::Model(r) => {
                 let name = r.rsplit('/').next().unwrap_or(r).to_string();
                 if self.docs.get(r.as_str()).is_some_and(CodeDoc::is_dirty)
                     || self.scenes.get(r.as_str()).is_some_and(SceneDoc::is_dirty)
@@ -3047,6 +3172,10 @@ impl TabViewer for Viewer<'_> {
                         .dialogues
                         .get(r.as_str())
                         .is_some_and(crate::dialogue::DialogueDoc::is_dirty)
+                    || self
+                        .models
+                        .get(r.as_str())
+                        .is_some_and(crate::model_editor::ModelDoc::is_dirty)
                     || self
                         .map_docs
                         .get(r.as_str())
@@ -3123,6 +3252,22 @@ impl TabViewer for Viewer<'_> {
             }
             Tab::Dialogue(r) => {
                 self.dialogues.remove(r.as_str());
+                OnCloseResponse::Close
+            }
+            Tab::Model(r)
+                if self
+                    .models
+                    .get(r.as_str())
+                    .is_some_and(crate::model_editor::ModelDoc::is_dirty) =>
+            {
+                self.actions.push(Action::AskCloseTab(r.clone()));
+                OnCloseResponse::Ignore
+            }
+            Tab::Model(r) => {
+                self.models.remove(r.as_str());
+                if let Some(sr) = self.scene_renderer.as_mut() {
+                    sr.forget(r);
+                }
                 OnCloseResponse::Close
             }
             Tab::Image(r) if self.pixels.get(r.as_str()).is_some_and(PixelDoc::is_dirty) => {
@@ -3274,6 +3419,35 @@ impl TabViewer for Viewer<'_> {
                     match a {
                         crate::dialogue::DialogueAction::Save => {
                             self.actions.push(Action::SaveDoc(rel.clone()))
+                        }
+                    }
+                }
+            }
+            Tab::Model(rel) => {
+                if !self.models.contains_key(rel.as_str()) {
+                    let doc = crate::model_editor::ModelDoc::open(self.root, rel);
+                    self.models.insert(rel.clone(), doc);
+                }
+                if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(ui.max_rect())
+                {
+                    self.actions.push(Action::FocusTab(Tab::Model(rel.clone())));
+                }
+                let mut env = crate::model_editor::ModelEnv {
+                    renderer: self.scene_renderer.as_mut(),
+                    root: self.root,
+                };
+                let doc = self.models.get_mut(rel.as_str()).expect("modelo aberto");
+                for a in doc.ui(ui, &mut env) {
+                    match a {
+                        crate::model_editor::ModelAction::Save => {
+                            self.actions.push(Action::SaveDoc(rel.clone()))
+                        }
+                        crate::model_editor::ModelAction::Notice(text) => {
+                            self.actions.push(Action::Notice {
+                                text,
+                                toast: None,
+                                error: false,
+                            })
                         }
                     }
                 }
