@@ -2,6 +2,29 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### O servidor MCP (Sprint 51)
+
+- **`nn mcp <pasta>`: um agente de IA desenvolve o jogo.** O servidor MCP liga o Claude Code, o Claude Desktop, o Cursor ou outro cliente MCP ao projeto. O agente vê o projeto, monta cenas, põe comportamentos e eventos, escreve scripts Lua e confere o que fez. Como ligar e o que cada ferramenta faz: [O servidor MCP](docs/mcp.md).
+- **24 ferramentas em português:**
+  - **o projeto:** `ver_projeto`, `criar_projeto` (pelos modelos), `mudar_config` (sem perder os comentários do `config.lua`) e `conferir_projeto`;
+  - **arquivos:** `listar_arquivos`, `ler_arquivo` (uma imagem volta como imagem), `escrever_arquivo`, `apagar_arquivo` e `desfazer`;
+  - **cenas e prefabs:** `ver_cena`, `criar_cena`, `mudar_cena`, `criar_objeto`, `mudar_objeto`, `copiar_objeto`, `apagar_objeto` e `criar_prefab`;
+  - **o que existe:** `listar_componentes`, `listar_comportamentos` e `listar_eventos`, com campos, padrões, opções e ajuda;
+  - **eventos sem código:** `por_regra` e `tirar_regra`;
+  - **código:** `buscar_documentacao` (a API `nn.*` e os guias) e `conferir_lua`.
+- **Tudo é conferido antes de gravar.** Um campo com nome ou tipo errado, uma cor fora do formato ou uma opção que não existe voltam como erro, com a lista do que vale (e os nomes parecidos). Um Lua com erro de sintaxe não é gravado: volta a linha e o erro em português. Um arquivo citado que não existe vira aviso.
+- **O mesmo formato do NN Studio.** As cenas e prefabs que o agente grava são idênticas às que o editor grava, e o agente vê os objetos no formato do arquivo `.cena`. Um comportamento que precisa de corpo físico já ganha um, como no editor.
+- **Seguro:**
+  - o servidor não sai da pasta do jogo (nem por `..`, caminho absoluto ou link) e não mexe em `.git`, `dist` e `target`;
+  - cada arquivo é gravado de uma vez, então o jogo aberto e o editor nunca veem um arquivo pela metade;
+  - `desfazer` volta as mudanças do agente e não passa por cima do que você mudou depois no editor.
+- **A documentação vai junto:** os guias de Lua, de 3D, do NN Studio e do MCP são recursos do servidor, e há dois prompts prontos: `criar_jogo` e `melhorar_jogo`.
+- **Todo projeto novo vem com um `AGENTS.md`,** que explica a um agente como o projeto se organiza e como ligar o servidor.
+- **No AppImage:** `NN-Studio-<versão>-x86_64.AppImage nn mcp <pasta>` roda o `nn` que vem dentro dele.
+- **Para quem usa as crates:** as cenas, prefabs, eventos, comportamentos e o `config.lua` saíram do NN Studio para a crate nova **`nn-projeto`**, usada pelo editor e pelo servidor. A crate **`nn-mcp`** tem o servidor.
+
 ## 0.6.0
 
 A versão do **modelar e animar no NN Studio**. O **modelador** monta modelos 3D low-poly de peças coloridas. Ele tem formas prontas, puxar e encolher faces, pintar com a paleta e o **espelho X**. O **Repetir em linha e em círculo** (também na cena), as **peças que se encaixam**, os **kits** e uma **biblioteca** de modelos prontos acabam com o trabalho repetido. O **animador** põe um **esqueleto pronto** (humanoide, quadrúpede ou simples), que liga as peças sozinho. Depois, é posar quadro a quadro numa **linha do tempo** ou usar as **animações prontas** (parado, andar, correr, pular...), que o Jogador 3D toca sozinho. Ao salvar, sai o `.glb` que as cenas e o jogo usam: a engine não mudou. Três tutoriais novos: **Modele uma casinha**, **Uma cerca e uma fogueira** e **Anime seu personagem**. Para começar: [Modelador](docs/studio.md#modelador), [Modelar sem repetir](docs/studio.md#modelar-sem-repetir) e [Esqueleto e animações](docs/studio.md#esqueleto-e-animações).

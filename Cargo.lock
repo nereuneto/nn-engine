@@ -2837,6 +2837,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nn-mcp"
+version = "0.6.0"
+dependencies = [
+ "log",
+ "mlua",
+ "nn-projeto",
+ "nn-script",
+ "serde_json",
+]
+
+[[package]]
 name = "nn-nav"
 version = "0.6.0"
 dependencies = [
@@ -2858,6 +2869,17 @@ dependencies = [
  "glam 0.34.1",
  "nn-nav",
  "rapier3d",
+]
+
+[[package]]
+name = "nn-projeto"
+version = "0.6.0"
+dependencies = [
+ "glam 0.34.1",
+ "log",
+ "mlua",
+ "nn-script",
+ "serde_json",
 ]
 
 [[package]]
@@ -2886,6 +2908,8 @@ dependencies = [
  "mlua",
  "nn-app",
  "nn-input",
+ "nn-mcp",
+ "nn-projeto",
  "nn-script",
  "serde_json",
 ]
@@ -2927,6 +2951,7 @@ dependencies = [
  "nn-app",
  "nn-audio",
  "nn-core",
+ "nn-projeto",
  "nn-render",
  "nn-run",
  "nn-script",

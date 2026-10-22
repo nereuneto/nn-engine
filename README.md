@@ -87,6 +87,15 @@ cargo nn ../meu-jogo        # joga
 
 O modelo traz menu, partida, pausa, tela de fim e recorde salvo, já organizado do jeito recomendado (cenas, ações de controle, menus). `--titulo "Meu Jogo"` escolhe o título; `--modelo visual`, `--modelo aventura` e `--modelo nave` criam jogos montados como cenas visuais, sem nenhuma linha de código; `--modelo 3d` cria um jogo de plataforma 3D em terceira pessoa em código, e `--modelo visual3d` o mesmo jogo montado no NN Studio, sem código; `--modelo vale3d` cria um vale pintado num terreno; `--modelo vazio` cria uma cena vazia com imagens e sons; e `--modelo minimo` cria só uma cena. Detalhes em [docs/lua.md](docs/lua.md#começando).
 
+### Desenvolver com um agente de IA
+
+```sh
+cargo nn mcp ../meu-jogo    # servidor MCP para o Claude Code, Claude Desktop, Cursor...
+claude mcp add nn -- nn mcp .   # no Claude Code, de dentro da pasta do jogo
+```
+
+O **servidor MCP** da engine liga um agente de IA ao projeto. O agente vê o projeto, monta cenas com componentes, comportamentos prontos e eventos, escreve scripts Lua e confere o que fez. Cada campo é conferido antes de gravar, com erros em português que dizem o que vale. As cenas que ele grava são as mesmas que o NN Studio grava, ele não sai da pasta do jogo e tudo pode ser desfeito. Como ligar e as ferramentas: [docs/mcp.md](docs/mcp.md).
+
 ### Jogos de demonstração em Lua
 
 ```sh

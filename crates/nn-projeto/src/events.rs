@@ -4,7 +4,7 @@
 
 use std::sync::OnceLock;
 
-use mlua::{Lua, Table, Value};
+use mlua::{Table, Value};
 
 use crate::behaviors::{PropSpec, PropType, read_props};
 use crate::scene_data::{EventItem, Prop, Rule, format_num};
@@ -228,7 +228,7 @@ fn read_list(t: &Table) -> Vec<EventDef> {
 pub fn catalog() -> &'static Catalog {
     static CATALOG: OnceLock<Catalog> = OnceLock::new();
     CATALOG.get_or_init(|| {
-        let lua = Lua::new();
+        let lua = crate::quiet_lua();
         let module: Table = lua
             .load(nn_script::SCENE_RUNTIME)
             .eval()

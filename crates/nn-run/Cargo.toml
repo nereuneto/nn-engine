@@ -25,10 +25,12 @@ path = "src/jogo.rs"
 [dependencies]
 nn-app.workspace = true
 nn-script.workspace = true
+nn-mcp.workspace = true
 env_logger.workspace = true
 log.workspace = true
 
 [dev-dependencies]
+nn-projeto.workspace = true
 glam.workspace = true
 mlua.workspace = true
 nn-input.workspace = true

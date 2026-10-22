@@ -307,7 +307,7 @@ fn describe_with(describe: &mlua::Function, src: &str, script: &str) -> Behavior
 }
 
 fn describer() -> (Lua, mlua::Function) {
-    let lua = Lua::new();
+    let lua = crate::quiet_lua();
     let module: Table = lua
         .load(nn_script::SCENE_RUNTIME)
         .eval()

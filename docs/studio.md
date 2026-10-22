@@ -1739,7 +1739,10 @@ as animações prontas. Antes dela, a v0.5 deixou o NN Studio mais gostoso de
 usar, a v0.4 deixou os mundos 3D mais vivos, a v0.3 trouxe o combate e a
 v0.2, o 3D. Está tudo no [CHANGELOG](../CHANGELOG.md).
 
-A próxima etapa ainda vai ser escolhida.
+A próxima etapa, a **v0.7**, é o **desenvolvimento guiado por IA**: o
+[servidor MCP](mcp.md) (`nn mcp`) liga um agente de IA ao projeto para ele
+montar cenas, eventos e scripts, rodar o jogo e ver o resultado. Depois, a
+**v0.8** leva a arte, a modelagem e a animação para o agente também.
 
 Ainda não tem, e são ideias para depois:
 
