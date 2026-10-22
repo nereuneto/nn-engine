@@ -97,11 +97,16 @@ pub fn export(opts: &ExportOptions) -> Result<ExportReport, String> {
         })
         .filter(|s| !s.is_empty());
     let mut files = Vec::new();
+    let tests = format!("{}/", nn_script::testing::TEST_DIR);
     for (rel, full) in list_dir(project_dir) {
         if skip
             .as_ref()
             .is_some_and(|s| rel == *s || rel.starts_with(&format!("{s}/")))
         {
+            continue;
+        }
+        // Os testes de jogo não vão para quem joga.
+        if rel.starts_with(&tests) {
             continue;
         }
         let data = std::fs::read(&full).map_err(|e| format!("{}: {e}", full.display()))?;
@@ -243,6 +248,7 @@ mod tests {
         write(&proj, "main.lua", "return {}");
         write(&proj, "lib/a.lua", "return 1");
         write(&proj, ".git/config", "ignorado");
+        write(&proj, "testes/jogo.lua", "test(\"x\", function(t) end)");
         let runtime = dir.join("nn-jogo.exe");
         std::fs::write(&runtime, b"RUNTIME").unwrap();
         // Saída dentro do projeto: não pode entrar no pacote.

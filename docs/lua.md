@@ -35,6 +35,8 @@ meu-jogo/
 │   └── pausa.lua
 ├── lib/
 │   └── util.lua        módulos: local util = require("lib.util")
+├── testes/
+│   └── jogo.lua        testes de jogo (nn testar), fora do jogo exportado
 └── assets/
     ├── imagens/        heroi.png e, ao lado, heroi.anim (as animações dela)
     └── sons/
@@ -99,6 +101,8 @@ Opções:
 | `--runtime <arquivo>` | Executável `nn-jogo` a usar. Para gerar o jogo de Windows estando no Linux (ou o contrário), baixe o `nn-jogo` do outro sistema nas *releases* do repositório e passe aqui. |
 
 Se o jogo exportado não abrir (por exemplo, por falta de suporte de vídeo), ele deixa um arquivo `<nome>-erro.txt` ao lado do executável explicando o motivo.
+
+A pasta `testes/` (os [testes de jogo](#testes-de-jogo)) não vai para o executável.
 
 ## Cenas
 
@@ -652,6 +656,94 @@ Ações (`act`):
 | `console` | `texto` |
 
 O catálogo completo (com as frases que o NN Studio mostra e o Lua equivalente de cada item) está em `crates/nn-script/src/eventos.lua`.
+
+## Testes de jogo
+
+Um teste de jogo joga o jogo sozinho, sem janela, e confere se o que importa funciona: o herói anda, a moeda soma, a porta só abre com a chave. Depois de mudar o jogo, rode os testes de novo para ver se nada quebrou. Eles ficam em arquivos `.lua` na pasta `testes/` do projeto:
+
+```lua
+-- testes/fase.lua
+test("o herói anda e pula", function(t)
+  t:open("cenas/fase.cena")
+  local heroi = t:find("heroi")
+  t:wait(0.5)                      -- cai até o chão
+  local x0, y0 = heroi.x, heroi.y
+  t:hold("right", 0.5)             -- segura a seta por meio segundo
+  t:check(heroi.x > x0 + 50, "o herói devia andar para a direita")
+  t:press("space")
+  t:wait(0.2)
+  t:check(heroi.y > y0 + 30, "o herói devia pular")
+end)
+
+test("com todas as moedas, a saída leva ao fim", function(t)
+  t:open("cenas/fase.cena")
+  local heroi = t:find("heroi")
+  for _, moeda in ipairs(t:find_all("moeda")) do
+    heroi:move_to(moeda.x, moeda.y)  -- leva o herói até cada moeda
+    t:wait(0.2)
+  end
+  t:check_eq(nn.vars.moedas, 4)
+  local saida = t:find("saida")
+  heroi:move_to(saida.x, saida.y)
+  t:wait_until(function() return t:scene_path() == "cenas/fim.cena" end, 3)
+end)
+```
+
+Para rodar, de dentro da pasta do jogo:
+
+```
+nn testar
+```
+
+```
+  ✓ testes/fase.lua › o herói anda e pula (1,25 s)
+  ✗ testes/fase.lua › com todas as moedas, a saída leva ao fim (falhou em 1,07 s)
+      testes/fase.lua:21: esperava 4, veio 3
+
+2 testes: 1 passou, 1 falhou (2,30 s)
+```
+
+Um teste que falha diz a linha e o motivo; se o jogo deu erro, o teste mostra o erro do jogo. `nn testar` sai com erro quando algum teste falha, então dá para usar num CI. Opções: `--filtro <texto>` (só os testes com o texto no nome), `--capturas <pasta>` (grava a tela de quem falhou e as capturas de `t:screenshot`) e `--tamanho 640x360` (a tela do jogo sem janela; menor roda mais rápido num computador sem placa de vídeo). Pelo [servidor MCP](mcp.md), um agente de IA roda os mesmos testes com `rodar_testes`. Os modelos `visual`, `aventura`, `nave`, `visual3d` e `padrao` já vêm com `testes/jogo.lua`.
+
+**Como os testes rodam.** Cada teste roda num jogo novo, que começa na cena inicial do `config.lua` já rodando (as regras "Quando começar" e o `enter` já rodaram). O jogo anda a 60 quadros por segundo de jogo, o mais rápido que der, sem som, com o `math.random` sempre na mesma sequência (o teste dá o mesmo resultado toda vez) e com o `nn.save` só na memória: os testes não mexem nos recordes de quem joga. O código do teste é Lua do próprio jogo: as funções `nn.*`, `nn.vars` e os objetos funcionam como num script, então dá para preparar a situação (`heroi:move_to(...)`, `nn.vars.vidas = 1`) antes de conferir. Um laço sem fim no jogo vira erro depois de 5 segundos, em vez de travar.
+
+O `t` de cada teste:
+
+| No teste | O que faz |
+|---|---|
+| `t:wait(s)` | Roda o jogo por `s` segundos. |
+| `t:frames(n)` | Roda `n` quadros (60 por segundo). |
+| `t:press(tecla)` | Aperta e solta a tecla (apertada por um quadro). Os nomes são os do [nn.input](#nninput). |
+| `t:hold(tecla, s)` | Segura a tecla por `s` segundos, com o jogo rodando. |
+| `t:down(tecla)`, `t:up(tecla)` | Aperta / solta (para segurar uma tecla enquanto aperta outra). |
+| `t:click(x, y, botão)` | Clica num ponto da tela (pixels, y para baixo, como `nn.input.mouse()`). |
+| `t:click(objeto)`, `t:click("nome")` | Clica no objeto (um botão do menu, um objeto do mundo). |
+| `t:mouse(x, y)` | Põe o mouse no ponto, sem clicar. |
+| `t:type(texto)` | Escreve um texto (num campo de texto). |
+| `t:open(cena, args)` | Troca para a cena (como `nn.scene.switch`) e espera ela rodar o primeiro quadro. |
+| `t:scene()` | O `self` da cena da frente (e o caminho, como segundo valor). Numa cena em código, os campos dela (`t:scene().pontos`). |
+| `t:scene_path()` | O arquivo da cena da frente. |
+| `t:find(nome)` | O objeto da cena da frente. Se não houver, o teste falha dizendo os nomes que existem. |
+| `t:find_all(nome)` | Todos os objetos com o nome (também os criados pelo jogo). |
+| `t:check(condição, msg)` | Se a condição for falsa, o teste falha com a mensagem e a linha. |
+| `t:check_eq(veio, esperado, msg)` | Confere que são iguais: "esperava 4, veio 3". |
+| `t:check_near(veio, esperado, margem, msg)` | Confere que dois números estão perto (margem padrão 1). |
+| `t:wait_until(função, s, msg)` | Roda o jogo até `função()` dar verdadeiro. Se passar de `s` segundos (padrão 5), o teste falha. |
+| `t:screenshot(nome)` | Guarda uma captura da tela. |
+| `t:time()` | Segundos de jogo desde o começo. |
+| `t:quit()` | O jogo fechou (`nn.quit`)? |
+
+Um teste por coisa que importa, com um nome que diga o que confere, deixa claro o que quebrou. Num jogo 3D, as posições são em metros (`heroi:move_to(x, y, z)`); numa cena em código, `t:scene()` dá os campos do `self`:
+
+```lua
+test("pegar a moeda vale um ponto", function(t)
+  t:open("cenas/jogo.lua")
+  local cena = t:scene()
+  cena.x, cena.y = cena.moeda.x, cena.moeda.y
+  t:wait(0.1)
+  t:check_eq(cena.pontos, 1)
+end)
+```
 
 ## Referência da API
 

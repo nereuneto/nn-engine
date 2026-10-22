@@ -4,6 +4,7 @@
 //! nn novo <pasta> [opções]       cria um jogo novo a partir de um modelo
 //! nn [pasta]                     roda o jogo da pasta (padrão: pasta atual)
 //! nn exportar <pasta> [opções]   gera um executável único para distribuir
+//! nn testar [pasta] [opções]     roda os testes de jogo (testes/*.lua)
 //! nn mcp [pasta]                 servidor MCP para agentes de IA
 //! ```
 
@@ -17,6 +18,8 @@ uso:
   nn novo <pasta> [opções]       cria um jogo novo, pronto para rodar
   nn [pasta]                     roda o jogo em Lua da pasta (padrão: pasta atual)
   nn exportar <pasta> [opções]   gera um executável único com o jogo
+  nn testar [pasta] [opções]     roda os testes de jogo (arquivos Lua em testes/),
+                                 sem janela; sai com erro se algum falhar
   nn mcp [pasta]                 servidor MCP: liga um agente de IA (Claude Code,
                                  Claude Desktop, Cursor...) ao jogo da pasta
   nn --versao                    mostra a versão
@@ -35,17 +38,31 @@ opções de exportar:
   --saida <pasta>      onde criar o executável (padrão: dist)
   --nome <nome>        nome do executável (padrão: nome da pasta do projeto)
   --runtime <arquivo>  nn-jogo a usar; para exportar para outro sistema,
-                       passe o nn-jogo daquele sistema (ex.: nn-jogo.exe)";
+                       passe o nn-jogo daquele sistema (ex.: nn-jogo.exe)
+
+opções de testar:
+  --filtro <texto>     só os testes cujo nome (ou arquivo) tem o texto
+  --capturas <pasta>   grava a tela de quem falhar e as capturas dos testes
+  --tamanho <LxA>      tamanho da tela do jogo sem janela (ex.: 640x360; menor
+                       roda mais rápido sem placa de vídeo)";
 
 fn main() -> ExitCode {
     // O servidor MCP usa a saída padrão para o protocolo: o log vai para a
     // saída de erros (o padrão do env_logger) e só os avisos.
-    let level = if std::env::args().nth(1).as_deref() == Some("mcp") {
-        "warn"
-    } else {
-        "info"
+    // O servidor MCP e os testes só mostram os avisos. Os do driver de vídeo
+    // (o jogo sem janela tenta vários) não interessam a quem faz o jogo.
+    let level = match std::env::args().nth(1).as_deref() {
+        Some("mcp" | "testar") => "warn,wgpu_hal=off",
+        _ => "info",
     };
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(level)).init();
+    // A captura do log (prints e erros do jogo sem janela: `nn testar` e o
+    // servidor MCP) repassa tudo para o env_logger.
+    let logger =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(level)).build();
+    let filter = logger.filter();
+    if let Err(e) = nn_script::capture::install(Some(Box::new(logger)), filter) {
+        eprintln!("log: {e}");
+    }
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     match args.first().map(String::as_str) {
@@ -60,6 +77,7 @@ fn main() -> ExitCode {
         Some("exportar") => exportar(&args[1..]),
         Some("novo") => novo(&args[1..]),
         Some("mcp") => mcp(&args[1..]),
+        Some("testar") => testar(&args[1..]),
         Some(dir) => rodar(dir),
         None => rodar("."),
     }
@@ -216,5 +234,176 @@ fn mcp(args: &[String]) -> ExitCode {
             eprintln!("erro: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Segundos com vírgula ("1,25 s").
+fn segundos(t: f64) -> String {
+    format!("{t:.2} s").replace('.', ",")
+}
+
+/// Um nome que dá para usar como nome de arquivo.
+fn file_name(s: &str) -> String {
+    let out: String = s
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    out.trim_matches('_').chars().take(60).collect()
+}
+
+/// `nn testar [pasta] [--filtro texto] [--capturas pasta]`.
+fn testar(args: &[String]) -> ExitCode {
+    let mut dir = None;
+    let mut opts = nn_script::testing::TestOptions {
+        capture_failures: false,
+        ..Default::default()
+    };
+    let mut captures: Option<PathBuf> = None;
+    let mut it = args.iter();
+    while let Some(arg) = it.next() {
+        let mut value = |flag: &str| {
+            it.next()
+                .cloned()
+                .ok_or_else(|| format!("{flag} precisa de um valor"))
+        };
+        let result = match arg.as_str() {
+            "--filtro" => value("--filtro").map(|v| opts.filter = Some(v)),
+            "--capturas" => value("--capturas").map(|v| captures = Some(v.into())),
+            "--tamanho" => value("--tamanho").and_then(|v| {
+                let size = v
+                    .split_once(['x', 'X'])
+                    .and_then(|(w, h)| Some((w.trim().parse().ok()?, h.trim().parse().ok()?)))
+                    .filter(|(w, h): &(u32, u32)| *w > 0 && *h > 0)
+                    .ok_or_else(|| {
+                        format!("--tamanho é largura x altura, como 640x360 (veio {v})")
+                    })?;
+                opts.run.size = Some(size);
+                Ok(())
+            }),
+            other if other.starts_with("--") => Err(format!("opção desconhecida: {other}")),
+            other => {
+                dir = Some(PathBuf::from(other));
+                Ok(())
+            }
+        };
+        if let Err(e) = result {
+            eprintln!("erro: {e}\n\n{HELP}");
+            return ExitCode::FAILURE;
+        }
+    }
+    let dir = dir.unwrap_or_else(|| PathBuf::from("."));
+    opts.capture_failures = captures.is_some();
+    let project = match nn_script::Project::open(&dir) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("erro: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Some(c) = &captures
+        && let Err(e) = std::fs::create_dir_all(c)
+    {
+        eprintln!("erro: {}: {e}", c.display());
+        return ExitCode::FAILURE;
+    }
+    let mut saved = 0;
+    let mut save = |name: &str, png: &[u8]| {
+        if let Some(c) = &captures {
+            saved += 1;
+            let path = c.join(format!("{saved:02}-{}.png", file_name(name)));
+            if let Err(e) = std::fs::write(&path, png) {
+                eprintln!("erro: {}: {e}", path.display());
+            }
+        }
+    };
+    let result = nn_script::testing::run_tests(&project, &opts, |r| {
+        match &r.failure {
+            None => println!(
+                "  ✓ {} › {} ({})",
+                r.case.file,
+                r.case.name,
+                segundos(r.time)
+            ),
+            Some(f) => {
+                println!(
+                    "  ✗ {} › {} (falhou em {})",
+                    r.case.file,
+                    r.case.name,
+                    segundos(r.time)
+                );
+                for line in f.lines() {
+                    println!("      {line}");
+                }
+                for l in &r.report.lines {
+                    let kind = match l.kind {
+                        nn_script::capture::LineKind::Print => "print",
+                        nn_script::capture::LineKind::Warning => "aviso",
+                        nn_script::capture::LineKind::Error => "erro",
+                    };
+                    println!("      {kind} em {}: {}", segundos(l.time), l.text);
+                }
+                if let Some(c) = &r.last_frame {
+                    save(&format!("{}-falhou", r.case.name), &c.png);
+                }
+            }
+        }
+        for c in &r.report.captures {
+            save(&format!("{}-{}", r.case.name, c.label), &c.png);
+        }
+    });
+    let summary = match result {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("erro: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    for e in &summary.file_errors {
+        println!("  ✗ {} não carregou:", e.file);
+        for line in e.message.lines() {
+            println!("      {line}");
+        }
+    }
+    if summary.results.is_empty() && summary.file_errors.is_empty() {
+        println!(
+            "nenhum teste em {}/testes (escreva um arquivo .lua com test(\"nome\", function(t) ... end))",
+            dir.display()
+        );
+        return ExitCode::SUCCESS;
+    }
+    let total = summary.results.len();
+    println!(
+        "\n{} {}: {} {}, {} {} ({})",
+        total,
+        if total == 1 { "teste" } else { "testes" },
+        summary.passed(),
+        if summary.passed() == 1 {
+            "passou"
+        } else {
+            "passaram"
+        },
+        summary.failed(),
+        if summary.failed() == 1 {
+            "falhou"
+        } else {
+            "falharam"
+        },
+        segundos(summary.wall.as_secs_f64())
+    );
+    if let Some(c) = &captures
+        && saved > 0
+    {
+        println!("capturas em {}", c.display());
+    }
+    if summary.ok() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }

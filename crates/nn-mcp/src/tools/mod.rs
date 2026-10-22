@@ -8,6 +8,7 @@ mod arquivos;
 mod cenas;
 mod docs;
 mod eventos;
+mod jogar;
 mod projeto;
 mod valores;
 
@@ -61,6 +62,7 @@ fn all() -> Vec<&'static Tool> {
     v.extend(arquivos::TOOLS);
     v.extend(cenas::TOOLS);
     v.extend(eventos::TOOLS);
+    v.extend(jogar::TOOLS);
     v.extend(docs::TOOLS);
     v
 }

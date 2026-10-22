@@ -17,3 +17,7 @@ Mova a nave com as setas ou WASD e atire com espaço. Cada asteroide destruído 
 Abra o prefab do asteroide e veja os eventos dele no painel **Eventos**. **Ver como código** mostra as mesmas regras em Lua.
 
 Sem o editor, com o `nn` instalado, de dentro desta pasta: `nn .`
+
+## Testes
+
+`testes/jogo.lua` joga o jogo sozinho, sem janela, e confere se o principal funciona (andar e atirar, os pontos, o fim da partida). Com o `nn` instalado, de dentro desta pasta: `nn testar`. Mudou o jogo? Rode de novo para ver se nada quebrou, e escreva testes seus no mesmo jeito (veja "Testes de jogo" na documentação da engine).

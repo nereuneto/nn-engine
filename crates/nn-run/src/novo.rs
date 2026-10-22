@@ -81,6 +81,11 @@ impl Template {
         }
     }
 
+    /// O modelo vem com testes de jogo (`testes/`)?
+    pub fn has_tests(self) -> bool {
+        self.files().iter().any(|(p, _)| p.starts_with("testes/"))
+    }
+
     /// O jogo é montado em cenas visuais (`.cena`), e não em código?
     pub fn is_visual(self) -> bool {
         !matches!(self, Template::Padrao | Template::Minimo | Template::TresD)
@@ -134,6 +139,7 @@ impl Template {
         match self {
             Template::Padrao => modelo!("padrao":
                 "config.lua",
+                "testes/jogo.lua",
                 "LEIAME.md",
                 "lib/jogo.lua",
                 "cenas/titulo.lua",
@@ -150,6 +156,7 @@ impl Template {
             Template::Minimo => modelo!("minimo": "config.lua", "main.lua"),
             Template::Visual => modelo!("visual":
                 "config.lua",
+                "testes/jogo.lua",
                 "LEIAME.md",
                 "cenas/titulo.cena",
                 "cenas/fase.cena",
@@ -170,6 +177,7 @@ impl Template {
             ),
             Template::Aventura => modelo!("aventura":
                 "config.lua",
+                "testes/jogo.lua",
                 "LEIAME.md",
                 "cenas/titulo.cena",
                 "cenas/mapa.cena",
@@ -192,6 +200,7 @@ impl Template {
             ),
             Template::Nave => modelo!("nave":
                 "config.lua",
+                "testes/jogo.lua",
                 "LEIAME.md",
                 "cenas/titulo.cena",
                 "cenas/jogo.cena",
@@ -233,6 +242,7 @@ impl Template {
             ),
             Template::Visual3D => modelo!("visual3d":
                 "config.lua",
+                "testes/jogo.lua",
                 ="assets/imagens/coracao.png" "comum/imagens/coracao.png",
                 ="assets/imagens/chave.png" "comum/imagens/chave.png",
                 "LEIAME.md",
@@ -465,6 +475,11 @@ pub fn agents_md(template: Template, title: &str) -> String {
          `draw`, e o jogo usa a API `nn.*`. Dá para misturar com cenas visuais (`.cena`), \
          montadas no NN Studio."
     };
+    let tests = if template.has_tests() {
+        "Este projeto já vem com `testes/jogo.lua`, com os testes do principal do jogo. "
+    } else {
+        "O exemplo é de uma fase de plataforma: troque a cena e os nomes pelos do seu jogo. "
+    };
     format!(
         "# {title}: guia para agentes de IA\n\
          \n\
@@ -500,15 +515,35 @@ pub fn agents_md(template: Template, title: &str) -> String {
          Ferramentas principais: `ver_projeto` (comece por ela), `ver_cena`, `criar_objeto`, \
          `mudar_objeto`, `listar_componentes`, `listar_comportamentos`, `listar_eventos`, \
          `por_regra`, `buscar_documentacao`, `escrever_arquivo` (confere o Lua antes de gravar), \
-         `conferir_projeto` e `desfazer`.\n\
+         `conferir_projeto`, `rodar_jogo` (joga sem janela e mostra erros, prints, o que mudou \
+         e a tela), `rodar_testes` e `desfazer`.\n\
+         \n\
+         ## Testes de jogo\n\
+         \n\
+         Os arquivos em `testes/` jogam o jogo sem janela e conferem o resultado:\n\
+         \n\
+         ```lua\n\
+         test(\"o herói anda\", function(t)\n\
+           \x20 t:open(\"cenas/fase.cena\")\n\
+           \x20 local heroi = t:find(\"heroi\")\n\
+           \x20 local x0 = heroi.x\n\
+           \x20 t:hold(\"right\", 0.5)\n\
+           \x20 t:check(heroi.x > x0, \"o herói devia andar\")\n\
+         end)\n\
+         ```\n\
+         \n\
+         {tests}Rode com `rodar_testes` (servidor MCP) ou `nn testar` nesta pasta. Tudo o que o `t` \
+         faz: `buscar_documentacao \"testes de jogo\"`.\n\
          \n\
          ## Jeito de trabalhar\n\
          \n\
-         1. Antes de mudar, veja o projeto e a cena (`ver_projeto`, `ver_cena`).\n\
+         1. Antes de mudar, veja o projeto e a cena (`ver_projeto`, `ver_cena`) e rode os testes.\n\
          2. Prefira comportamentos prontos e eventos a código novo.\n\
          3. Antes de escrever Lua, busque a API (`buscar_documentacao`).\n\
-         4. Depois de uma leva de mudanças, rode `conferir_projeto` e conserte o que aparecer.\n\
-         5. Para jogar: `nn .` nesta pasta (ou abra no NN Studio e aperte F5).\n\
+         4. Depois de uma leva de mudanças, rode `conferir_projeto` e veja funcionando com \
+         `rodar_jogo`; conserte o que aparecer.\n\
+         5. Para o que mudou, escreva um teste em `testes/` e rode todos de novo.\n\
+         6. Para jogar com janela: `nn .` nesta pasta (ou abra no NN Studio e aperte F5).\n\
          \n\
          Coordenadas: no 2D, pixels, y para cima e (0, 0) no meio da tela; no 3D, metros e y é \
          a altura.\n"

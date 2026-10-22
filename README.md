@@ -94,7 +94,15 @@ cargo nn mcp ../meu-jogo    # servidor MCP para o Claude Code, Claude Desktop, C
 claude mcp add nn -- nn mcp .   # no Claude Code, de dentro da pasta do jogo
 ```
 
-O **servidor MCP** da engine liga um agente de IA ao projeto. O agente vê o projeto, monta cenas com componentes, comportamentos prontos e eventos, escreve scripts Lua e confere o que fez. Cada campo é conferido antes de gravar, com erros em português que dizem o que vale. As cenas que ele grava são as mesmas que o NN Studio grava, ele não sai da pasta do jogo e tudo pode ser desfeito. Como ligar e as ferramentas: [docs/mcp.md](docs/mcp.md).
+O **servidor MCP** da engine liga um agente de IA ao projeto. O agente vê o projeto, monta cenas com componentes, comportamentos prontos e eventos, escreve scripts Lua e confere o que fez. Cada campo é conferido antes de gravar, com erros em português que dizem o que vale. As cenas que ele grava são as mesmas que o NN Studio grava, ele não sai da pasta do jogo e tudo pode ser desfeito. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela. Como ligar e as ferramentas: [docs/mcp.md](docs/mcp.md).
+
+### Testes de jogo
+
+```sh
+cargo nn testar ../meu-jogo   # roda os testes de jogo (testes/*.lua), sem janela
+```
+
+Um **teste de jogo** é um arquivo Lua em `testes/` que joga o jogo sozinho e confere o resultado: segura a seta, aperta espaço, confere que o herói pulou e que a moeda somou. `nn testar` mostra o que falhou e a linha, e sai com erro (bom para um CI). Os modelos já vêm com testes. Como escrever: [docs/lua.md](docs/lua.md#testes-de-jogo).
 
 ### Jogos de demonstração em Lua
 
@@ -201,8 +209,10 @@ O projeto é um workspace Cargo dividido em crates com responsabilidades separad
 | `nn-physics3d` | Física 3D sobre o [rapier](https://rapier.rs): corpos que caem e empilham, personagem que anda e pula, sensores, raios |
 | `nn-nav` | Caminhos: grade de lugares por onde dá para andar e A*, para os inimigos contornarem paredes, buracos e água (2D e 3D) |
 | `nn-tilemap` | Tilemaps com camadas, tilesets e objetos; importação do editor Tiled (JSON) |
-| `nn-script` | Scripting em Lua: API `nn.*` (com a documentação de cada função em `api_docs`), cenas em Lua e cenas visuais (`.cena`), comportamentos prontos, eventos "Quando... Então...", prefabs, variáveis do jogo, recarga ao salvar, canal ao vivo com o editor, tela de erro |
-| `nn-run` | Ferramenta `nn` (cria, roda e exporta projetos Lua, com os modelos de `nn novo`) e `nn-jogo`, o executável dos jogos exportados |
+| `nn-script` | Scripting em Lua: API `nn.*` (com a documentação de cada função em `api_docs`), cenas em Lua e cenas visuais (`.cena`), comportamentos prontos, eventos "Quando... Então...", prefabs, variáveis do jogo, recarga ao salvar, canal ao vivo com o editor, tela de erro, o jogo sem janela com teclas simuladas (`game_run`) e os testes de jogo (`testing`) |
+| `nn-projeto` | Os arquivos de um projeto (cenas, prefabs, eventos, comportamentos, `config.lua`): ler, conferir e gravar, igual para o NN Studio e o servidor MCP |
+| `nn-mcp` | O servidor MCP (`nn mcp`): as ferramentas para agentes de IA |
+| `nn-run` | Ferramenta `nn` (cria, roda, testa e exporta projetos Lua, com os modelos de `nn novo`) e `nn-jogo`, o executável dos jogos exportados |
 | `nn-engine` (raiz) | Fachada que reexporta tudo, com `prelude` |
 
 ### Loop principal
@@ -438,5 +448,7 @@ Sem dispositivo de som, a engine segue em modo mudo em vez de falhar. Para prot�
 ```sh
 cargo test --workspace
 ```
+
+Para os testes de jogo de um projeto Lua (a pasta `testes/` dele), veja [Testes de jogo](#testes-de-jogo).
 
 Os testes de renderização desenham em uma textura fora da tela e conferem os pixels. Para gerar imagens de referência e conferir a olho: `cargo test -p nn-render --test captura -- --ignored` (salva em `capturas/`). Sem GPU disponível eles são pulados; com `NN_REQUIRE_GPU=1` passam a ser obrigatórios. No CI do Linux usamos o driver Vulkan por software (lavapipe), então esses testes rodam em todo PR.

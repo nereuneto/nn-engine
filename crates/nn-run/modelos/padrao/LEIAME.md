@@ -43,3 +43,7 @@ Gera um único executável em `dist/` com o jogo inteiro dentro, pronto para man
 ## Referência
 
 A API completa (`nn.draw`, `nn.input`, `nn.ui`, `nn.save`, física, tilemaps, partículas...) está em [docs/lua.md](https://github.com/nereuneto/nn-engine/blob/main/docs/lua.md).
+
+## Testes
+
+`testes/jogo.lua` joga o jogo sozinho, sem janela, e confere se o principal funciona (o título, andar, pegar a moeda, o fim do tempo). Com o `nn` instalado, de dentro desta pasta: `nn testar`. Mudou o jogo? Rode de novo para ver se nada quebrou, e escreva testes seus no mesmo jeito (veja "Testes de jogo" na documentação da engine).

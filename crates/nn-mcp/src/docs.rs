@@ -116,13 +116,15 @@ pub fn prompt(params: &Value) -> Result<Value, String> {
              2. Leia o AGENTS.md e veja as cenas que vieram (ver_cena).\n\
              3. Planeje em poucos passos e me mostre o plano.\n\
              4. Monte: prefira comportamentos prontos (listar_comportamentos) e eventos (listar_eventos); escreva Lua só para o que eles não fazem (buscar_documentacao antes).\n\
-             5. Termine com conferir_projeto e conserte o que aparecer.",
+             5. Jogue o que fez com rodar_jogo (ações de teclado e mouse, capturas da tela) e conserte o que não funcionar.\n\
+             6. Escreva testes de jogo em testes/ para o principal (rodar_testes) e termine com conferir_projeto.",
             arg("ideia")
         ),
         "melhorar_jogo" => format!(
             "No jogo desta pasta, quero: {}\n\n\
              Comece por ver_projeto e pelas cenas envolvidas (ver_cena). Mude com as ferramentas de cena e eventos, \
-             escreva Lua só quando precisar, e termine com conferir_projeto.",
+             escreva Lua só quando precisar. Confira jogando (rodar_jogo), rode os testes do projeto (rodar_testes) \
+             e acrescente um teste para o que mudou. Termine com conferir_projeto.",
             arg("pedido")
         ),
         other => return Err(format!("prompt desconhecido: {other}")),
@@ -144,6 +146,8 @@ pub fn instructions(server: &Server) -> String {
          - Comportamento sem código: comportamentos prontos (listar_comportamentos) e eventos \"Quando... Então...\" (listar_eventos, por_regra).\n\
          - Código: buscar_documentacao antes; escrever_arquivo confere a sintaxe antes de gravar.\n\
          - Depois de uma leva de mudanças, conferir_projeto. Errou? desfazer.\n\
+         - Veja funcionando: rodar_jogo roda sem janela, com teclas e cliques simulados, e mostra erros, prints, regras que dispararam, o que mudou e capturas da tela.\n\
+         - Testes de jogo: arquivos Lua em testes/ com test(\"nome\", function(t) ... end); rodar_testes roda todos. Rode antes e depois de mudar.\n\
          - 2D: pixels, y para cima, (0,0) no meio da tela. 3D: metros, y é a altura.",
     );
     if !server.has_project() {

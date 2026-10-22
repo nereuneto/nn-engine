@@ -30,9 +30,11 @@ mod anim3d;
 mod api;
 pub mod api_docs;
 mod camera3d;
+pub mod capture;
 mod convert;
 mod d3;
 mod errors;
+pub mod game_run;
 mod input;
 pub mod live;
 mod nav;
@@ -41,6 +43,7 @@ mod physics;
 mod physics3d;
 mod save;
 mod terrain3d;
+pub mod testing;
 mod tilemap;
 mod types;
 mod ui;
@@ -279,7 +282,27 @@ struct Inner {
     builtin_modules: HashSet<String>,
     generation: Cell<u64>,
     watch: RefCell<Watch>,
+    /// A cena da frente (a última que começou ou voltou) e o `self` dela.
+    front: RefCell<(String, Option<Table>)>,
+    /// Erros das cenas desde a última [`ScriptRuntime::take_errors`].
+    errors: RefCell<Vec<SceneError>>,
 }
+
+/// Um erro de script que parou uma cena.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SceneError {
+    /// O arquivo da cena.
+    pub scene: String,
+    /// A mensagem, já traduzida, com o arquivo e a linha.
+    pub message: String,
+}
+
+/// Alvo do log dos erros que param uma cena (o [`game_run`] os pega direto
+/// do [`ScriptRuntime`], sem passar pelo log).
+pub const SCENE_ERROR_TARGET: &str = "nn_script::erro";
+
+/// Quantos erros [`ScriptRuntime::take_errors`] guarda, no máximo.
+const MAX_ERRORS: usize = 100;
 
 #[derive(Default)]
 struct Watch {
@@ -353,6 +376,8 @@ impl ScriptRuntime {
                 builtin_modules,
                 generation: Cell::new(0),
                 watch: RefCell::new(Watch::default()),
+                front: RefCell::new((String::new(), None)),
+                errors: RefCell::new(Vec::new()),
             }),
         };
         // Registra o estado atual dos arquivos, para só recarregar o que mudar depois.
@@ -374,6 +399,21 @@ impl ScriptRuntime {
     /// Cria uma cena a partir de um arquivo, relativo à pasta dos scripts.
     pub fn scene(&self, path: impl Into<String>) -> LuaScene {
         LuaScene::new(self.clone(), path, None)
+    }
+
+    /// A cena da frente: o arquivo e o `self` dela (`None` se ela não
+    /// carregou). Vazio antes da primeira cena começar.
+    pub fn front(&self) -> (String, Option<Table>) {
+        self.inner.front.borrow().clone()
+    }
+
+    /// Os erros que pararam cenas desde a última chamada.
+    pub fn take_errors(&self) -> Vec<SceneError> {
+        std::mem::take(&mut *self.inner.errors.borrow_mut())
+    }
+
+    fn set_front(&self, path: &str, instance: Option<Table>) {
+        *self.inner.front.borrow_mut() = (path.to_string(), instance);
     }
 
     /// Verifica a sintaxe de todos os `.lua`, sem executar nada.
@@ -664,7 +704,15 @@ impl LuaScene {
 
     fn set_error(&mut self, e: &mlua::Error) {
         let msg = format_error(e);
-        log::error!("erro em {}:\n{msg}", self.path);
+        log::error!(target: SCENE_ERROR_TARGET, "erro em {}:\n{msg}", self.path);
+        let mut errors = self.runtime.inner.errors.borrow_mut();
+        if errors.len() < MAX_ERRORS {
+            errors.push(SceneError {
+                scene: self.path.clone(),
+                message: msg.clone(),
+            });
+        }
+        drop(errors);
         self.error = Some(msg);
     }
 
@@ -705,6 +753,7 @@ impl LuaScene {
         } else {
             self.entered = true;
             live::announce(&self.path);
+            self.runtime.set_front(&self.path, self.instance.clone());
             let args: Value = match &self.args {
                 Some(key) => lua.registry_value(key).unwrap_or(Value::Nil),
                 None => Value::Nil,
@@ -849,6 +898,8 @@ impl LuaScene {
 
 impl Scene for LuaScene {
     fn enter(&mut self, ctx: &mut Context) {
+        // Com erro ao carregar, a cena da frente fica sem `self`.
+        self.runtime.set_front(&self.path, None);
         self.load(ctx);
     }
 
@@ -858,6 +909,7 @@ impl Scene for LuaScene {
 
     fn resume(&mut self, ctx: &mut Context) {
         live::announce(&self.path);
+        self.runtime.set_front(&self.path, self.instance.clone());
         self.call(ctx, "resume", ());
     }
 
