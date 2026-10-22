@@ -6084,3 +6084,118 @@ fn tutorial_modele_uma_casinha() {
     h.get_by_label("Próximo").click();
     espera(&mut h, 11);
 }
+
+// Modelar sem repetir (S48) ---------------------------------------------------
+
+#[test]
+fn modelador_repetir_em_linha_e_em_circulo() {
+    use nn_studio::model_editor::Select;
+    let dir = temp("modelador-repetir");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    novo_modelo(&mut h);
+    {
+        let d = modelo(&mut h);
+        d.set_mode(Select::Parts);
+        d.sel_parts = vec![0];
+    }
+    h.run();
+    h.get_by_label("🔁 Repetir").click();
+    h.run();
+    // A prévia: 3 cópias em linha, a 1,25 m (o cubo tem 1 m, mais a grade).
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 4);
+        assert_eq!(d.data.parts[3].name, "Cubo 4");
+        assert!((d.data.parts[3].pos.x - 3.75).abs() < 1e-4, "{}", d.data.parts[3].pos);
+    }
+    tela(&mut h, "modelador-repetir-linha");
+    // Em círculo, 5 cópias: 6 cubos na mesma distância do meio.
+    h.get_by_label("🔄 Em círculo").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 4);
+    }
+    // Esc cancela: volta a ter só o cubo.
+    h.key_press(Key::Escape);
+    h.run();
+    assert_eq!(modelo(&mut h).data.parts.len(), 1);
+    // De novo, em círculo, e Aplicar: um passo de desfazer.
+    h.get_by_label("🔁 Repetir").click();
+    h.run();
+    h.get_by_label("🔄 Em círculo").click();
+    h.run();
+    tela(&mut h, "modelador-repetir-circulo");
+    h.get_by_label("✔ Aplicar").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 4);
+        let c = d.data.parts[0].pos;
+        let raio = |p: glam::Vec3| ((p.x - (c.x - 1.5)).powi(2) + (p.z - c.z).powi(2)).sqrt();
+        for p in &d.data.parts {
+            assert!((raio(p.pos) - 1.5).abs() < 0.05, "no círculo: {}", p.pos);
+        }
+        assert_eq!(d.sel_parts.len(), 4);
+    }
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(modelo(&mut h).data.parts.len(), 1);
+}
+
+#[test]
+fn cena_3d_repetir_pelo_menu_do_objeto() {
+    let dir = temp("cena-3d-repetir");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena3d(&mut h, &proj);
+    let cubo = objeto(&h, "Cubo").clone();
+    let antes = cena(&h).data.objects.len();
+    let p = na_vista3d(
+        &h,
+        glam::Vec3::new(cubo.x as f32, cubo.y as f32, cubo.z as f32),
+    );
+    clique_direito(&mut h, p);
+    h.get_by_label("🔁 Repetir…").click();
+    h.run();
+    assert_eq!(cena(&h).data.objects.len(), antes + 3, "a prévia");
+    h.get_by_label("🔄 Em círculo").click();
+    h.run();
+    tela(&mut h, "cena-3d-repetir");
+    h.get_by_label("✔ Aplicar").click();
+    h.run_steps(4);
+    assert_eq!(cena(&h).data.objects.len(), antes + 3);
+    assert_eq!(cena(&h).selection.len(), 4);
+    // Desfazer tira as três de uma vez.
+    atalho_passos(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(cena(&h).data.objects.len(), antes);
+}
+
+#[test]
+fn cena_2d_repetir_em_linha() {
+    let dir = temp("cena-2d-repetir");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    let id = cena(&h).data.objects[0].id;
+    let antes = cena(&h).data.objects.len();
+    let x0 = cena(&h).data.world_transform(id).unwrap().x;
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.values_mut().next().unwrap();
+        doc.selection = vec![id];
+        assert!(doc.start_repeat());
+    }
+    h.run();
+    h.get_by_label("✔ Aplicar").click();
+    h.run_steps(4);
+    let d = cena(&h);
+    assert_eq!(d.data.objects.len(), antes + 3);
+    let xs: Vec<f64> = d
+        .selection
+        .iter()
+        .map(|i| d.data.world_transform(*i).unwrap().x)
+        .collect();
+    assert_eq!(xs[0], x0);
+    assert!(xs[3] > xs[2] && xs[2] > xs[1] && xs[1] > xs[0], "{xs:?}");
+}

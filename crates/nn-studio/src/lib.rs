@@ -37,6 +37,7 @@ pub mod particle_presets;
 pub mod pixel_editor;
 pub mod pixel_ops;
 pub mod project;
+pub mod repeat;
 pub mod scene_data;
 pub mod scene_render;
 pub mod scene_view;

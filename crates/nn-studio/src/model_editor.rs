@@ -14,6 +14,7 @@ use eframe::egui::{self, Color32, Key, Modifiers, Pos2, Rect, Sense, Stroke};
 use glam::{Mat4, Quat, Vec3};
 
 use crate::model_data::{self, MID, ModelData, Part, SHAPES, face_center, face_normal};
+use crate::repeat::{self, RepeatSpec};
 use crate::scene_render::{self, SceneRenderer, View3};
 use crate::scene_view::scene3d::{
     BLUE, Cam3, GREEN, ORANGE, RED, arrow, axis_param, dist_to_segment, ray, ray_plane, ring, snap,
@@ -120,6 +121,16 @@ enum Modal {
     },
 }
 
+/// Repetindo peças (a janelinha Repetir aberta): como estava antes, quais
+/// peças, como e de onde.
+#[derive(Debug, Clone)]
+struct PartRepeat {
+    before: ModelData,
+    parts: Vec<usize>,
+    spec: RepeatSpec,
+    origin: Vec3,
+}
+
 /// Uma face acertada pelo raio.
 #[derive(Debug, Clone, Copy)]
 struct FaceHit {
@@ -175,6 +186,7 @@ pub struct ModelDoc {
     stage: crate::scene_data::SceneData,
     pub view_rect: Option<Rect>,
     actions: Vec<ModelAction>,
+    repeat: Option<PartRepeat>,
 }
 
 impl std::fmt::Debug for ModelDoc {
@@ -244,6 +256,7 @@ impl ModelDoc {
             },
             view_rect: None,
             actions: Vec::new(),
+            repeat: None,
         }
     }
 
@@ -298,6 +311,7 @@ impl ModelDoc {
 
     pub fn undo(&mut self) {
         self.cancel_modal();
+        self.finish_repeat(false);
         if let Some(d) = self.undo.pop() {
             self.redo.push(std::mem::replace(&mut self.data, d));
             self.fix_selection();
@@ -306,6 +320,7 @@ impl ModelDoc {
 
     pub fn redo(&mut self) {
         self.cancel_modal();
+        self.finish_repeat(false);
         if let Some(d) = self.redo.pop() {
             self.undo.push(std::mem::replace(&mut self.data, d));
             self.fix_selection();
@@ -825,6 +840,133 @@ impl ModelDoc {
         self.fix_selection();
     }
 
+    /// Abre o Repetir com as peças escolhidas (em linha, ao lado delas).
+    pub fn start_repeat(&mut self) -> bool {
+        let parts = self.touched_parts();
+        if parts.is_empty() {
+            return false;
+        }
+        self.cancel_modal();
+        self.finish_repeat(false);
+        let (lo, hi) = parts
+            .iter()
+            .filter_map(|&i| self.part_bounds(i))
+            .fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(a, b), (c, d)| {
+                (a.min(c), b.max(d))
+            });
+        let size = (hi - lo).max(Vec3::splat(0.1));
+        let step = self.grid.max(0.05);
+        let mut spec = RepeatSpec::line(3, snap(size.x + step, step).max(step));
+        spec.radius = snap(size.x.max(size.z) * 1.5, step).max(0.5);
+        self.set_mode(Select::Parts);
+        self.sel_parts = parts.clone();
+        self.repeat = Some(PartRepeat {
+            before: self.data.clone(),
+            parts,
+            spec,
+            origin: (lo + hi) / 2.0,
+        });
+        self.apply_repeat();
+        true
+    }
+
+    /// Refaz as cópias da prévia do Repetir.
+    fn apply_repeat(&mut self) {
+        let Some(r) = self.repeat.clone() else {
+            return;
+        };
+        let mut data = r.before.clone();
+        let mut sel = r.parts.clone();
+        for i in 1..=r.spec.count {
+            let t = r.spec.transform(i, r.origin);
+            for &pi in &r.parts {
+                let Some(base) = r.before.parts.get(pi) else {
+                    continue;
+                };
+                let mut p = base.clone();
+                let (_, q, pos) = (t * base.matrix()).to_scale_rotation_translation();
+                p.pos = round3(pos);
+                p.rot = model_data::euler_degrees(q);
+                p.name = unique_name(&data, &base.name);
+                data.parts.push(p);
+                sel.push(data.parts.len() - 1);
+            }
+        }
+        self.data = data;
+        self.sel_parts = sel;
+    }
+
+    /// Fecha o Repetir: fica com as cópias (`apply`) ou volta como estava.
+    pub fn finish_repeat(&mut self, apply: bool) {
+        if let Some(r) = self.repeat.take() {
+            if apply {
+                self.record_before(r.before);
+            } else {
+                self.data = r.before;
+                self.sel_parts = r.parts;
+                self.fix_selection();
+            }
+        }
+    }
+
+    /// A janelinha do Repetir.
+    fn repeat_window(&mut self, ui: &egui::Ui) {
+        let Some(view) = self.view_rect else {
+            return;
+        };
+        let Some(r) = &mut self.repeat else {
+            return;
+        };
+        let mut changed = false;
+        let mut done = None;
+        let n = r.parts.len();
+        let shown = egui::Window::new("🔁 Repetir")
+            .id(egui::Id::new(("modelo-repetir", &self.rel)))
+            .collapsible(false)
+            .resizable(false)
+            .default_pos(view.left_top() + egui::vec2(12.0, 12.0))
+            .show(ui.ctx(), |ui| {
+                ui.weak(if n == 1 {
+                    "1 peça escolhida".to_string()
+                } else {
+                    format!("{n} peças escolhidas")
+                });
+                changed = repeat::spec_ui(ui, &mut r.spec, true, "m");
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let ok = ui.add(
+                        egui::Button::new("✔ Aplicar")
+                            .fill(crate::theme::ACCENT.gamma_multiply(0.7)),
+                    );
+                    crate::tutorial::anchor(ui.ctx(), "repetir.aplicar", ok.rect);
+                    if ok.on_hover_text("Enter").clicked() {
+                        done = Some(true);
+                    }
+                    if ui.button("Cancelar").on_hover_text("Esc").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+        if let Some(w) = shown {
+            crate::tutorial::anchor(ui.ctx(), "repetir", w.response.rect);
+        }
+        if done.is_none() && !ui.ctx().text_edit_focused() {
+            ui.input_mut(|i| {
+                if i.consume_key(Modifiers::NONE, Key::Enter) {
+                    done = Some(true);
+                } else if i.consume_key(Modifiers::NONE, Key::Escape) {
+                    done = Some(false);
+                }
+            });
+        }
+        if changed {
+            self.apply_repeat();
+        }
+        if let Some(apply) = done {
+            self.finish_repeat(apply);
+        }
+    }
+
     /// Começa a puxar as faces escolhidas.
     pub fn start_extrude(&mut self, mouse: Pos2) -> bool {
         if self.mode != Select::Faces || self.sel_faces.is_empty() {
@@ -1271,6 +1413,7 @@ impl ModelDoc {
                     .show(ui, |ui| self.side_panel(ui));
             });
         self.view(ui, env);
+        self.repeat_window(ui);
         std::mem::take(&mut self.actions)
     }
 
@@ -1386,6 +1529,17 @@ impl ModelDoc {
             r.response.on_hover_text(
                 "Uma forma nova (cubo, cilindro...). Com o mouse na vista: botão direito ou Shift+A.",
             );
+            let r = ui
+                .add_enabled(
+                    !self.touched_parts().is_empty() && self.repeat.is_none(),
+                    egui::Button::new("🔁 Repetir"),
+                )
+                .on_hover_text("Cópias das peças escolhidas em linha (cerca, escada) ou em círculo (raios de roda, pétalas)")
+                .on_disabled_hover_text("Escolha uma ou mais peças para repetir");
+            crate::tutorial::anchor(ui.ctx(), "modelo.repetir", r.rect);
+            if r.clicked() {
+                self.start_repeat();
+            }
             if ui.button("⛶ Enquadrar").on_hover_text("F").clicked() {
                 self.frame();
             }
@@ -1756,7 +1910,9 @@ impl ModelDoc {
 
         // Pincel: pinta as faces por onde o mouse passa com o botão apertado.
         let painting = self.tool == MTool::Paint;
-        if painting {
+        // Com o Repetir aberto, a vista só anda (a prévia não muda por baixo).
+        let locked = self.repeat.is_some();
+        if painting && !locked {
             let down = ui.input(|i| i.pointer.primary_down());
             if down && !mods.alt && (response.is_pointer_button_down_on() || self.stroke) {
                 if let Some(p) = ui.input(|i| i.pointer.latest_pos())
@@ -1787,6 +1943,7 @@ impl ModelDoc {
         }
 
         if !painting
+            && (!locked || mods.alt)
             && response.drag_started_by(egui::PointerButton::Primary)
             && let Some(p) = ui
                 .input(|i| i.pointer.press_origin())
@@ -1864,6 +2021,7 @@ impl ModelDoc {
 
         if response.clicked()
             && !painting
+            && !locked
             && !mods.alt
             && let Some(p) = response.interact_pointer_pos()
         {
@@ -1888,14 +2046,21 @@ impl ModelDoc {
         if response.hovered()
             && !secondary
             && !busy
+            && !locked
             && let Some(p) = response.hover_pos()
             && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::A))
         {
             self.add_menu = Some((p, self.point_under(rect, p)));
         }
 
-        if !busy && (response.hovered() || response.has_focus() || response.dragged()) {
+        if !busy && !locked && (response.hovered() || response.has_focus() || response.dragged()) {
             self.keyboard(ui, rect, flying);
+        } else if locked
+            && response.hovered()
+            && !flying
+            && ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F))
+        {
+            self.frame();
         }
     }
 
@@ -1969,7 +2134,7 @@ impl ModelDoc {
     fn view_menu(&mut self, ui: &mut egui::Ui, response: &egui::Response, rect: Rect) {
         let popup_id = egui::Popup::default_response_id(response);
         let was_open = egui::Popup::is_id_open(&response.ctx, popup_id);
-        let open = if response.secondary_clicked() && !self.fly_moved {
+        let open = if response.secondary_clicked() && !self.fly_moved && self.repeat.is_none() {
             let p = response.interact_pointer_pos().unwrap_or(rect.center());
             // Clicar em algo fora da seleção escolhe ele.
             let (o, d) = ray(&self.cam, rect, p);
@@ -2055,6 +2220,9 @@ impl ModelDoc {
                             if crate::hierarchy::menu_item(ui, "✏ Renomear", "F2").clicked() {
                                 op = Some(Key::F2);
                             }
+                            if ui.button("🔁 Repetir…").clicked() {
+                                op = Some(Key::Num0);
+                            }
                             if ui.button("🎨 Pintar com a cor escolhida").clicked() {
                                 op = Some(Key::B);
                             }
@@ -2135,6 +2303,9 @@ impl ModelDoc {
                 }
             }
             Some(Key::X) => self.toggle_mirror(),
+            Some(Key::Num0) => {
+                self.start_repeat();
+            }
             Some(Key::Delete) => self.delete_selection(),
             Some(Key::F) => self.frame(),
             _ => {}

@@ -10,6 +10,8 @@ use crate::scene_data::{self, Component, History, Object, Prop, SceneData, Trans
 
 #[path = "scene3d.rs"]
 pub mod scene3d;
+#[path = "scene_repeat.rs"]
+mod scene_repeat;
 use crate::scene_render::{self, LocalRect, SceneRenderer, Sizes, local_bounds};
 
 /// Arquivo do painel Arquivos sendo arrastado.
@@ -281,6 +283,8 @@ pub struct SceneDoc {
     /// Objetos que acabaram de nascer: o contorno brilha um instante. (Com a
     /// hora em que começou, depois do primeiro desenho.)
     flash: Vec<(u32, Option<f64>)>,
+    /// O 🔁 Repetir aberto.
+    repeat: Option<scene_repeat::SceneRepeat>,
 }
 
 /// De quem saíram as últimas cópias (Ctrl+D, Alt+arrastar, Shift+D).
@@ -610,6 +614,7 @@ impl SceneDoc {
             notices: Vec::new(),
             sounds: Vec::new(),
             flash: Vec::new(),
+            repeat: None,
         }
     }
 
@@ -862,12 +867,14 @@ impl SceneDoc {
     }
 
     pub fn undo(&mut self) -> bool {
+        self.finish_repeat(false);
         let ok = self.history.undo(&mut self.data);
         self.selection.retain(|id| self.data.find(*id).is_some());
         ok
     }
 
     pub fn redo(&mut self) -> bool {
+        self.finish_repeat(false);
         let ok = self.history.redo(&mut self.data);
         self.selection.retain(|id| self.data.find(*id).is_some());
         ok
@@ -1625,6 +1632,7 @@ impl SceneDoc {
         }
         if self.data.three_d {
             actions.extend(self.ui_3d(ui, env));
+            self.repeat_window(ui, env);
             return actions;
         }
         self.toolbar(ui, env, &mut actions);
@@ -1736,6 +1744,7 @@ impl SceneDoc {
             let (wx, wy) = self.camera.to_world(rect, p);
             self.drop_file(env, &payload.0, wx, wy);
         }
+        self.repeat_window(ui, env);
         actions
     }
 
