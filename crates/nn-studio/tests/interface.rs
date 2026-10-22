@@ -6199,3 +6199,122 @@ fn cena_2d_repetir_em_linha() {
     assert_eq!(xs[0], x0);
     assert!(xs[3] > xs[2] && xs[2] > xs[1] && xs[1] > xs[0], "{xs:?}");
 }
+
+#[test]
+fn modelador_encaixe_kits_biblioteca_e_variacao() {
+    use nn_studio::model_editor::Select;
+    let dir = temp("modelador-kits");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    novo_modelo(&mut h);
+    // Um cubo mais largo, para o telhado encaixar.
+    modelo(&mut h).data.parts[0].scale = glam::Vec3::new(2.0, 1.0, 1.6);
+    h.run();
+
+    // Botão direito na face de cima > ➕ Peça aqui > Casa > Telhado: nasce em
+    // cima, do tamanho da face.
+    let topo = na_vista_modelo(&mut h, glam::Vec3::new(0.0, 1.0, 0.0));
+    clique_direito(&mut h, topo);
+    submenu(&mut h, "➕ Peça aqui");
+    submenu(&mut h, "🏡 Casa");
+    h.get_by_label("Telhado").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 2);
+        let t = &d.data.parts[1];
+        assert_eq!(t.name, "Telhado");
+        assert!((t.pos - glam::Vec3::new(0.0, 1.0, 0.0)).length() < 1e-3, "{}", t.pos);
+        assert!((t.scale.x - 2.0).abs() < 1e-3 && (t.scale.z - 1.6).abs() < 1e-3, "{}", t.scale);
+        assert!(t.rot.length() < 1e-3, "{}", t.rot);
+    }
+    tela(&mut h, "modelador-telhado-encaixado");
+
+    // Numa parede do lado (+X): a peça nasce de lado, virada para fora.
+    let lado = na_vista_modelo(&mut h, glam::Vec3::new(1.0, 0.5, 0.0));
+    clique_direito(&mut h, lado);
+    submenu(&mut h, "➕ Peça aqui");
+    h.get_by_label("◎ Cilindro").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        let c = d.data.parts.last().unwrap();
+        assert!((c.pos - glam::Vec3::new(1.0, 0.5, 0.0)).length() < 1e-3, "{}", c.pos);
+        let up = c.rotation() * glam::Vec3::Y;
+        assert!(up.x > 0.99, "virado para +X: {up}");
+    }
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+
+    // Trocar cor: o laranja do cubo vira azul no modelo todo.
+    let laranja = h.get_all_by_label("#FF8C42").next().unwrap().rect().center();
+    clique_direito(&mut h, laranja);
+    submenu(&mut h, "🎨 Trocar por…");
+    h.get_by_label("trocar por #3FA7D6").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert!(d.data.parts[0].faces.iter().all(|f| f.color == "#3FA7D6"));
+    }
+
+    // Guardar o telhado na biblioteca e pôr de novo pelo menu.
+    {
+        let d = modelo(&mut h);
+        d.set_mode(Select::Parts);
+        d.sel_parts = vec![1];
+    }
+    h.run();
+    h.get_by_label("📚 Biblioteca").click();
+    h.run();
+    h.get_by_label("⭐ Guardar a peça na biblioteca…").click();
+    h.run_steps(3);
+    h.key_press(Key::Enter);
+    h.run_steps(3);
+    let guardado = dir.join("biblioteca/Telhado.modelo");
+    assert!(guardado.is_file(), "guardado ao lado das preferências");
+    h.get_by_label("➕ Peça").click();
+    h.run();
+    submenu(&mut h, "📚 Biblioteca");
+    h.get_by_label("⭐ Telhado").click();
+    h.run();
+    assert_eq!(modelo(&mut h).data.parts.len(), 3);
+    assert_eq!(modelo(&mut h).data.parts[2].name, "Telhado 2");
+
+    // Um modelo pronto da biblioteca, como peças.
+    h.get_by_label("➕ Peça").click();
+    h.run();
+    submenu(&mut h, "📚 Biblioteca");
+    h.get_by_label("Árvore").click();
+    h.run();
+    assert_eq!(modelo(&mut h).data.parts.len(), 5);
+
+    // 🔀 Criar variação: grava "modelo 2" com o .glb e abre.
+    h.get_by_label("📚 Biblioteca").click();
+    h.run();
+    h.get_by_label("🔀 Criar variação").click();
+    h.run_steps(4);
+    assert!(proj.join("assets/modelos/modelo 2.modelo").is_file());
+    assert!(proj.join("assets/modelos/modelo 2.glb").is_file());
+    assert!(tabs(&h).contains(&Tab::Model("assets/modelos/modelo 2.modelo".into())));
+}
+
+#[test]
+fn novo_modelo_a_partir_de_um_pronto() {
+    let dir = temp("modelo-pronto");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    h.get_by_label("➕ Novo").click();
+    h.run();
+    h.get_by_label("🎲 Modelo 3D").click();
+    h.run();
+    h.get_by(|n| n.value().is_some_and(|v| v == "Um cubo") || n.label().is_some_and(|l| l == "Um cubo"))
+        .click();
+    h.run();
+    h.get_by_label("Cerca").click();
+    h.run();
+    h.get_by_label("Criar").click();
+    h.run();
+    let texto = std::fs::read_to_string(proj.join("assets/modelos/cerca.modelo")).unwrap();
+    let m = nn_studio::model_data::ModelData::from_lua(&texto, "cerca.modelo").unwrap();
+    assert_eq!(m.parts.len(), 5, "três estacas e duas ripas");
+    assert!(proj.join("assets/modelos/cerca.glb").is_file());
+}

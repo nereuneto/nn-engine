@@ -70,7 +70,7 @@ pub fn face_center(verts: &[Vec3], face: &[u32]) -> Vec3 {
 }
 
 impl Part {
-    fn new(name: &str) -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
             name: name.into(),
             verts: Vec::new(),
@@ -98,7 +98,7 @@ impl Part {
         Mat4::from_scale_rotation_translation(self.scale, self.rotation(), self.pos)
     }
 
-    fn face(&mut self, v: &[u32], color: &str) {
+    pub fn face(&mut self, v: &[u32], color: &str) {
         self.faces.push(Face {
             v: v.to_vec(),
             color: color.into(),
@@ -165,7 +165,7 @@ impl Part {
     }
 
     /// Cilindro com `n` lados (ou cone, com `top` = 0).
-    fn ring_solid(name: &str, color: &str, n: u32, top: f32) -> Self {
+    pub fn ring_solid(name: &str, color: &str, n: u32, top: f32) -> Self {
         let mut p = Self::new(name);
         let n = n.max(3);
         for i in 0..n {
@@ -220,8 +220,13 @@ impl Part {
 
     /// Esfera low-poly: 8 fatias e 5 anéis.
     pub fn sphere(name: &str, color: &str) -> Self {
+        Self::sphere_n(name, color, 8, 5)
+    }
+
+    /// Esfera com `seg` fatias e `rings` anéis (1 m, em pé no chão).
+    pub fn sphere_n(name: &str, color: &str, seg: u32, rings: u32) -> Self {
         let mut p = Self::new(name);
-        let (seg, rings) = (8u32, 5u32);
+        let (seg, rings) = (seg.max(3), rings.max(3));
         p.verts.push(Vec3::new(0.0, 0.0, 0.0));
         for r in 1..rings {
             let t = std::f32::consts::PI * r as f32 / rings as f32;
@@ -249,6 +254,42 @@ impl Part {
             p.face(&[at(rings - 1, s), at(rings - 1, s + 1), top], color);
         }
         p
+    }
+
+    /// Os pontos passam pela matriz (a forma muda; a posição, a rotação e a
+    /// escala da peça, não).
+    pub fn baked(mut self, m: Mat4) -> Self {
+        for v in &mut self.verts {
+            *v = m.transform_point3(*v);
+        }
+        // Uma matriz que espelha vira as faces do avesso: desvira.
+        if m.determinant() < 0.0 {
+            for f in &mut self.faces {
+                f.v.reverse();
+            }
+        }
+        self
+    }
+
+    /// Junta os pontos e as faces de outra peça (no mesmo espaço) nesta.
+    pub fn merge(&mut self, other: &Part) {
+        let base = self.verts.len() as u32;
+        self.verts.extend_from_slice(&other.verts);
+        for f in &other.faces {
+            self.faces.push(Face {
+                v: f.v.iter().map(|k| k + base).collect(),
+                color: f.color.clone(),
+            });
+        }
+    }
+
+    /// A face mais virada para `dir` (ex.: a de cima, com `Vec3::Y`).
+    pub fn face_towards(&self, dir: Vec3) -> Option<usize> {
+        (0..self.faces.len()).max_by(|&a, &b| {
+            let na = face_normal(&self.verts, &self.faces[a].v).dot(dir);
+            let nb = face_normal(&self.verts, &self.faces[b].v).dot(dir);
+            na.total_cmp(&nb)
+        })
     }
 
     /// As faces com os pontos já espelhados (as de verdade e, com espelho, as

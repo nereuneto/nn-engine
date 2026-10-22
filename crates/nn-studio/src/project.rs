@@ -223,6 +223,11 @@ pub enum Action {
     FocusTab(Tab),
     /// Criar um mapa de tiles novo na cena ativa.
     NewMap,
+    /// Gravar uma variação do modelo `rel` (uma cópia) e abrir.
+    ModelVariation {
+        rel: String,
+        data: crate::model_data::ModelData,
+    },
     /// Criar uma imagem nova para o componente `ci` do objeto `id`.
     NewImageFor {
         scene: String,
@@ -248,6 +253,9 @@ enum Dialog {
         overlay: bool,
         /// Cena visual 3D.
         three_d: bool,
+        /// Modelo 3D: de onde começa ("" = um cubo, "pronto:<i>" ou o
+        /// caminho de um da biblioteca pessoal).
+        model_from: String,
     },
     ConfirmDelete(String),
     CloseTab(String),
@@ -304,6 +312,8 @@ pub struct ProjectWorkspace {
     pub dialogues: HashMap<String, crate::dialogue::DialogueDoc>,
     /// Modelos 3D abertos no modelador.
     pub models: HashMap<String, crate::model_editor::ModelDoc>,
+    /// A biblioteca pessoal do modelador (ao lado das preferências).
+    pub library_dir: Option<PathBuf>,
     /// Paleta do projeto (`paleta.hex`), lida na primeira vez.
     palette: Option<Vec<crate::pixel_ops::Color>>,
     sounds: HashMap<String, SoundView>,
@@ -429,6 +439,7 @@ impl ProjectWorkspace {
             pixels: HashMap::new(),
             dialogues: HashMap::new(),
             models: HashMap::new(),
+            library_dir: None,
             palette: None,
             sounds: HashMap::new(),
             maps: HashMap::new(),
@@ -1054,6 +1065,42 @@ impl ProjectWorkspace {
         match self.dock.find_active_focused() {
             Some((_, Tab::Model(r))) => Some(r.clone()),
             _ => None,
+        }
+    }
+
+    /// Grava uma cópia do modelo (`casinha 2.modelo`, com o `.glb`) e abre.
+    fn model_variation(&mut self, rel: &str, data: &crate::model_data::ModelData) {
+        let base = rel.strip_suffix(".modelo").unwrap_or(rel);
+        // "casinha 2" vira "casinha 3", e não "casinha 2 2".
+        let base = base
+            .rsplit_once(' ')
+            .filter(|(_, n)| n.parse::<u32>().is_ok())
+            .map_or(base, |(b, _)| b);
+        let new = (2..)
+            .map(|n| format!("{base} {n}.modelo"))
+            .find(|r| {
+                !self.root.join(r).exists()
+                    && !self.root.join(crate::model_data::glb_path(r)).exists()
+            })
+            .expect("nome livre");
+        let result = std::fs::write(self.root.join(&new), data.to_lua()).and_then(|()| {
+            std::fs::write(
+                self.root.join(crate::model_data::glb_path(&new)),
+                data.to_glb(),
+            )
+        });
+        match result {
+            Ok(()) => {
+                self.files.rescan();
+                let name = new.rsplit('/').next().unwrap_or(&new).to_string();
+                self.console.info(format!("Variação criada: {new}"));
+                self.toasts
+                    .push(format!("🔀 {name} criado"), crate::toast::Kind::Success);
+                self.open_file(&new, None);
+            }
+            Err(e) => self
+                .console
+                .error(format!("Não foi possível criar a variação: {e}")),
         }
     }
 
@@ -1894,6 +1941,7 @@ impl ProjectWorkspace {
                         assign: None,
                         overlay: false,
                         three_d: false,
+                        model_from: String::new(),
                     });
                 }
                 Action::NewImageFor {
@@ -1912,6 +1960,7 @@ impl ProjectWorkspace {
                         assign: Some((scene, id, ci)),
                         overlay: false,
                         three_d: false,
+                        model_from: String::new(),
                     });
                 }
                 Action::Import { dest } => {
@@ -1940,6 +1989,7 @@ impl ProjectWorkspace {
                         self.active_scene.clone(),
                     ));
                 }
+                Action::ModelVariation { rel, data } => self.model_variation(&rel, &data),
                 Action::AskDelete(rel) => self.dialog = Some(Dialog::ConfirmDelete(rel)),
                 Action::AskCloseTab(rel) => self.dialog = Some(Dialog::CloseTab(rel)),
                 Action::Reveal(rel) => {
@@ -2213,6 +2263,7 @@ impl ProjectWorkspace {
                 pixels: &mut self.pixels,
                 dialogues: &mut self.dialogues,
                 models: &mut self.models,
+                library: self.library_dir.as_deref(),
                 map_docs: &mut self.map_docs,
                 tilesets: &mut self.tilesets,
                 paint: &mut self.paint,
@@ -2395,8 +2446,14 @@ impl ProjectWorkspace {
                 assign,
                 overlay,
                 three_d,
+                model_from,
             } => {
                 let kind = *kind;
+                let library = self
+                    .library_dir
+                    .as_deref()
+                    .map(crate::model_kits::user_models)
+                    .unwrap_or_default();
                 let dirs: Vec<String> = std::iter::once(String::new())
                     .chain(
                         self.files
@@ -2490,7 +2547,43 @@ impl ProjectWorkspace {
                         ui.weak("Abre no editor de pixel art. 16 × 16 é um bom tamanho para personagens e itens.");
                     }
                     if kind == NewKind::Model {
-                        ui.weak("Abre no modelador, com um cubo para começar. Ao salvar, o .glb com o mesmo nome sai junto: é ele que vai para as cenas.");
+                        let label = |from: &str| -> String {
+                            if let Some(i) = from.strip_prefix("pronto:").and_then(|i| i.parse::<usize>().ok()) {
+                                crate::model_kits::READY.get(i).map_or("?", |r| r.name).to_string()
+                            } else if from.is_empty() {
+                                "Um cubo".to_string()
+                            } else {
+                                format!("⭐ {}", Path::new(from).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default())
+                            }
+                        };
+                        ui.horizontal(|ui| {
+                            ui.label("Começar com:");
+                            let before = model_from.clone();
+                            let r = egui::ComboBox::from_id_salt("novo-modelo-de")
+                                .selected_text(label(model_from))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(model_from, String::new(), "Um cubo");
+                                    ui.separator();
+                                    for (i, r) in crate::model_kits::READY.iter().enumerate() {
+                                        ui.selectable_value(model_from, format!("pronto:{i}"), r.name);
+                                    }
+                                    if !library.is_empty() {
+                                        ui.separator();
+                                    }
+                                    for (n, p) in &library {
+                                        ui.selectable_value(model_from, p.to_string_lossy().into_owned(), format!("⭐ {n}"));
+                                    }
+                                });
+                            crate::tutorial::anchor_in(ui, "novo:modelo-de", r.response.rect);
+                            // O nome acompanha o modelo escolhido (se ainda não foi mudado).
+                            if *model_from != before {
+                                let was = if before.is_empty() { "modelo".to_string() } else { files::safe_name(&label(&before).replace("⭐ ", "")) };
+                                if name.trim() == was || name.trim() == "modelo" {
+                                    *name = if model_from.is_empty() { "modelo".into() } else { files::safe_name(&label(model_from).replace("⭐ ", "")) };
+                                }
+                            }
+                        });
+                        ui.weak("Abre no modelador. Ao salvar, o .glb com o mesmo nome sai junto: é ele que vai para as cenas.");
                     }
                     if kind == NewKind::Dialogue {
                         ui.weak("Abre no editor de conversa, já com um exemplo: falas, escolhas e um personagem. Na cena, use o comportamento Diálogo.");
@@ -2518,7 +2611,16 @@ impl ProjectWorkspace {
                                 }
                                 NewKind::Module => files::create_file(&self.root, parent, name, &files::module_template(&rel)),
                                 NewKind::Dialogue => files::create_file(&self.root, parent, &file_name, &crate::dialogue::template()),
-                                NewKind::Model => create_model(&self.root, parent, &file_name),
+                                NewKind::Model => {
+                                    let model = if let Some(i) = model_from.strip_prefix("pronto:").and_then(|i| i.parse::<usize>().ok()) {
+                                        crate::model_kits::READY.get(i).map(|r| (r.make)())
+                                    } else if model_from.is_empty() {
+                                        None
+                                    } else {
+                                        crate::model_kits::read_user(Path::new(model_from.as_str())).ok()
+                                    };
+                                    create_model(&self.root, parent, &file_name, model.unwrap_or_else(crate::model_data::ModelData::new_default))
+                                }
                                 NewKind::Image => {
                                     let [w, h, n] = *size;
                                     create_image(&self.root, &rel, w, h, n)
@@ -3015,8 +3117,12 @@ fn frame_hint(
 /// Cria um PNG transparente (e o `.anim` com o tamanho do quadro, se tiver
 /// mais de um quadro).
 /// Um modelo novo (um cubo), já com o `.glb` dele.
-fn create_model(root: &Path, parent: &str, name: &str) -> Result<String, String> {
-    let model = crate::model_data::ModelData::new_default();
+fn create_model(
+    root: &Path,
+    parent: &str,
+    name: &str,
+    model: crate::model_data::ModelData,
+) -> Result<String, String> {
     let glb = crate::model_data::glb_path(&files::join_rel(parent, name.trim()));
     if root.join(&glb).exists() {
         return Err(format!("Já existe {glb}."));
@@ -3089,6 +3195,7 @@ struct Viewer<'a> {
     pixels: &'a mut HashMap<String, PixelDoc>,
     dialogues: &'a mut HashMap<String, crate::dialogue::DialogueDoc>,
     models: &'a mut HashMap<String, crate::model_editor::ModelDoc>,
+    library: Option<&'a Path>,
     palette: &'a mut Vec<crate::pixel_ops::Color>,
     map_docs: &'a mut HashMap<String, crate::map_doc::MapDoc>,
     tilesets: &'a mut HashMap<String, crate::tileset::TilesetDoc>,
@@ -3435,6 +3542,7 @@ impl TabViewer for Viewer<'_> {
                 let mut env = crate::model_editor::ModelEnv {
                     renderer: self.scene_renderer.as_mut(),
                     root: self.root,
+                    library: self.library,
                 };
                 let doc = self.models.get_mut(rel.as_str()).expect("modelo aberto");
                 for a in doc.ui(ui, &mut env) {
@@ -3447,6 +3555,12 @@ impl TabViewer for Viewer<'_> {
                                 text,
                                 toast: None,
                                 error: false,
+                            })
+                        }
+                        crate::model_editor::ModelAction::Variation(data) => {
+                            self.actions.push(Action::ModelVariation {
+                                rel: rel.clone(),
+                                data,
                             })
                         }
                     }
