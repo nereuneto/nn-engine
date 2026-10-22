@@ -2560,6 +2560,7 @@ impl ProjectWorkspace {
                             ui.label("Começar com:");
                             let before = model_from.clone();
                             let r = egui::ComboBox::from_id_salt("novo-modelo-de")
+                                .height(420.0)
                                 .selected_text(label(model_from))
                                 .show_ui(ui, |ui| {
                                     ui.selectable_value(model_from, String::new(), "Um cubo");

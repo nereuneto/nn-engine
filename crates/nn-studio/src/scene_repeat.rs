@@ -86,21 +86,22 @@ impl SceneDoc {
                 origin3 += m.transform_point3(Vec3::ZERO);
             }
             origin3 /= sources.len().max(1) as f32;
-            let size = if lo.x <= hi.x {
-                hi - lo
-            } else {
-                Vec3::ONE
-            };
+            let size = if lo.x <= hi.x { hi - lo } else { Vec3::ONE };
             let step = (self.grid3 as f32).max(0.25);
-            let spacing = ((size.x + step) / step).round() * step;
-            spec = RepeatSpec::line(3, spacing.max(step));
+            // Uma encostada na outra (a cerca continua, a parede fecha); o
+            // campo Distância afasta.
+            let spacing = (size.x * 100.0).round() / 100.0;
+            spec = RepeatSpec::line(3, spacing.max(0.1));
             spec.radius = ((size.x.max(size.z) * 2.0 / step).round() * step).max(1.0);
         } else {
             let mut w = 0.0f64;
             for &id in &sources {
                 if let Some(o) = self.data.find(id) {
                     let (lr, _) = scene_render::local_bounds(o, env.root, env.sizes, 32.0);
-                    let s = self.data.world_transform(id).map_or(1.0, |t| t.scale_x.abs());
+                    let s = self
+                        .data
+                        .world_transform(id)
+                        .map_or(1.0, |t| t.scale_x.abs());
                     w = w.max((lr.max.0 - lr.min.0) * s);
                 }
                 if let Some(t) = self.data.world_transform(id) {
@@ -111,7 +112,7 @@ impl SceneDoc {
             let n = sources.len().max(1) as f64;
             origin2 = (origin2.0 / n, origin2.1 / n);
             let g = self.grid.max(1.0);
-            let spacing = (((w.max(g)) + g) / g).round() * g;
+            let spacing = w.max(g).round();
             spec = RepeatSpec::line(3, spacing as f32);
             spec.radius = (spacing * 2.0) as f32;
         }
@@ -134,11 +135,16 @@ impl SceneDoc {
         };
         self.data = before;
         let mut copies = Vec::new();
+        // Cada cópia sai da anterior: os nomes seguem (cerca 2, cerca 3...) e
+        // ficam em ordem na Hierarquia.
+        let mut last: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
         for i in 1..=r.spec.count {
             for &id in &r.sources {
-                let Some(n) = self.data.duplicate(id) else {
+                let from = last.get(&id).copied().unwrap_or(id);
+                let Some(n) = self.data.duplicate(from) else {
                     continue;
                 };
+                last.insert(id, n);
                 if r.three_d {
                     if let Some(m0) = self.data.world_matrix3(id) {
                         let t: Mat4 = r.spec.transform(i, r.origin3);
@@ -156,7 +162,12 @@ impl SceneDoc {
                 copies.push(n);
             }
         }
-        self.selection = r.sources.iter().copied().chain(copies.iter().copied()).collect();
+        self.selection = r
+            .sources
+            .iter()
+            .copied()
+            .chain(copies.iter().copied())
+            .collect();
         if let Some(rr) = &mut self.repeat {
             rr.copies = copies;
         }
@@ -221,7 +232,13 @@ impl SceneDoc {
                 } else {
                     format!("{n} objetos escolhidos")
                 });
-                changed = repeat::spec_ui(ui, &mut r.spec, three_d, if three_d { "m" } else { "px" });
+                changed = repeat::spec_ui(
+                    ui,
+                    &mut r.spec,
+                    three_d,
+                    if three_d { "m" } else { "px" },
+                    false,
+                );
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     let ok = ui.add(

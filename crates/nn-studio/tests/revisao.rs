@@ -811,3 +811,57 @@ fn captura_do_modelador_para_a_documentacao() {
     passos(&mut h);
     tela(&mut h, "nn-studio-modelador");
 }
+
+/// A imagem dos kits e da biblioteca: a casinha, árvores, a cerca e a
+/// fogueira com pedras, com o telhado escolhido.
+#[test]
+#[ignore]
+fn captura_dos_kits_para_a_documentacao() {
+    use glam::Vec3;
+    use nn_studio::model_data::ModelData;
+    use nn_studio::model_kits::READY;
+    let dir = temp("captura-kits");
+    let proj = dir.join("jogo");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Vazio3D,
+    })
+    .unwrap();
+    let pronto = |nome: &str| (READY.iter().find(|r| r.name == nome).unwrap().make)();
+    let mut modelo = pronto("Casinha");
+    let mut junta = |m: ModelData, at: Vec3| {
+        for mut p in m.parts {
+            p.pos += at;
+            modelo.parts.push(p);
+        }
+    };
+    junta(pronto("Árvore"), Vec3::new(2.6, 0.0, -0.6));
+    junta(pronto("Pinheiro"), Vec3::new(-2.5, 0.0, -0.8));
+    for i in 0..3 {
+        junta(pronto("Cerca"), Vec3::new(-2.2 + 2.2 * i as f32, 0.0, 2.6));
+    }
+    junta(pronto("Lampião"), Vec3::new(-1.5, 0.0, 1.5));
+    let pasta = proj.join("assets/modelos");
+    std::fs::create_dir_all(&pasta).unwrap();
+    std::fs::write(pasta.join("vila.modelo"), modelo.to_lua()).unwrap();
+    std::fs::write(pasta.join("vila.glb"), modelo.to_glb()).unwrap();
+
+    let mut h = studio(&dir, Some(proj.clone()), egui::vec2(1280.0, 800.0));
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("assets/modelos/vila.modelo", None);
+    passos(&mut h);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let d = ws.models.values_mut().next().unwrap();
+        d.set_mode(nn_studio::model_editor::Select::Parts);
+        d.sel_parts = vec![1];
+        d.cam
+            .look_at(Vec3::new(3.3, 3.0, 5.6), Vec3::new(0.0, 0.9, 0.6));
+    }
+    passos(&mut h);
+    passos(&mut h);
+    tela(&mut h, "nn-studio-modelador-kits");
+}

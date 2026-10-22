@@ -109,6 +109,10 @@ projeto continua aberto.
 - **Modele uma casinha** (uns 10 minutos), a partir do modelo Vazio 3D:
   paredes, uma porta afundada e um telhado vermelho no
   [modelador](#modelador), e a casinha na cena.
+- **Uma cerca e uma fogueira** (uns 8 minutos), a partir do modelo Vazio
+  3D: uma fogueira da biblioteca, uma pedra do kit Natureza repetida em
+  círculo e uma cerca repetida em linha na cena
+  ([modelar sem repetir](#modelar-sem-repetir)).
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -299,6 +303,12 @@ retângulo "tela do jogo" mostra o que cabe na janela (o tamanho do
     **seta do Mover** com Alt.
   - **Shift+D** faz uma cópia que **segue o mouse** até você clicar (com
     **Encaixar**, na grade). **Esc** ou o botão direito desistem.
+  - **🔁 Repetir…**, no botão direito de um objeto, faz várias cópias de uma
+    vez. **Em linha** escolhe quantas, a distância (começa com uma encostada
+    na outra) e a direção; **em círculo**, o raio, o eixo, quanto da volta e
+    se cada cópia gira junto. A prévia aparece enquanto você mexe;
+    **Aplicar** (Enter) fica com as cópias, num passo só de desfazer, e
+    **Cancelar** (Esc) volta como estava.
 - **Ctrl+C / Ctrl+X / Ctrl+V** copiam, recortam e colam objetos (com os
   filhos), também entre cenas e entre dois NN Studio abertos. Com o mouse na
   cena, o colado vai para onde o mouse está; na Hierarquia, para o mesmo
@@ -1252,6 +1262,61 @@ o modelo? Salve, e as cenas abertas mostram o novo na hora.
 quantos triângulos o modelo tem (até uns 2.000 por modelo é tranquilo).
 
 O tutorial **Modele uma casinha** passa por tudo isso em 10 minutos.
+
+### Modelar sem repetir
+
+![Uma vila montada com a biblioteca: casinha, árvores, cerca e lampião, com o telhado escolhido](imagens/nn-studio-modelador-kits.png)
+
+**🔁 Repetir.** Escolha uma ou mais peças e clique em **🔁 Repetir** (ou no
+botão direito > 🔁 Repetir…). A janelinha mostra a prévia enquanto você mexe:
+
+- **Em linha:** quantas cópias, a distância (começa com uma encostada na
+  outra) e a direção: estacas de cerca, degraus, colunas.
+- **Em círculo:** o raio, o eixo (Y deita no chão; X e Z ficam em pé, como
+  os raios de uma roda), quanto da volta e se cada cópia **gira junto**.
+  **Em volta do meio do modelo** usa o 0 do modelo como meio: pedras em
+  volta de uma fogueira, cadeiras em volta da mesa.
+
+**Aplicar** (Enter) fica com as cópias, e **Cancelar** (Esc) volta como
+estava. Enquanto a janelinha está aberta, a vista só anda (**F** enquadra
+tudo).
+
+**Peças que se encaixam.** Uma peça posta com o botão direito (ou com o
+**Shift+A**) **em cima de uma face** nasce no meio dela, virada para fora: um
+cilindro na lateral vira uma roda, e um telhado vai para cima da parede. No
+vazio, ela vai para o chão. Os **kits** do **➕ Peça** têm peças prontas:
+
+| Kit | Peças |
+|---|---|
+| 🏡 Casa | Parede, parede com porta, parede com janela, telhado (fica do tamanho da face), chaminé, porta |
+| 🌳 Natureza | Tronco, copa, copa de pinheiro, pedra, arbusto |
+| 👤 Personagem | Personagem inteiro, cabeça, corpo, braço, perna |
+| 🚗 Veículo | Carrinho inteiro, carroceria, roda |
+
+Os braços e as pernas do personagem giram no ombro e no quadril: estão
+prontos para o animador.
+
+**📚 Biblioteca.** Modelos prontos para começar ou para pôr no seu modelo:
+árvore, pinheiro, pedra, cerca, casinha, baú, lampião, fogueira, personagem
+e carrinho.
+
+- No **➕ Novo > 🎲 Modelo 3D**, o **Começar com** cria o modelo novo a partir
+  de um deles.
+- No **➕ Peça > 📚 Biblioteca**, ele entra no modelo aberto, como peças.
+- **📚 Biblioteca > ⭐ Guardar na biblioteca** guarda as peças escolhidas
+  (ou o modelo todo) com um nome. Elas aparecem em **Minhas peças** e no
+  Começar com, em **todos os projetos**: ficam numa pasta `biblioteca`,
+  ao lado das [preferências](#onde-ficam-as-preferências).
+
+**Variações e cores.**
+
+- **📚 Biblioteca > 🔀 Criar variação** grava uma cópia do modelo
+  (`casinha 2.modelo`, com o `.glb`) e abre numa aba nova: a casinha azul, a
+  árvore de outono, o inimigo mais forte.
+- O botão direito numa cor da paleta tem **🎨 Trocar por…**, que troca essa
+  cor no modelo todo, e **Escolher as faces desta cor**.
+
+O tutorial **Uma cerca e uma fogueira** usa tudo isso em 8 minutos.
 
 ## Editor de conversa
 

@@ -783,7 +783,10 @@ impl ModelDoc {
         let p = self.data.parts.get(part)?;
         let f = p.faces.get(face)?;
         let m = p.matrix();
-        let w: Vec<Vec3> = f.v.iter().map(|&k| m.transform_point3(p.verts[k as usize])).collect();
+        let w: Vec<Vec3> =
+            f.v.iter()
+                .map(|&k| m.transform_point3(p.verts[k as usize]))
+                .collect();
         let idx: Vec<u32> = (0..w.len() as u32).collect();
         let c = face_center(&w, &idx);
         let n = face_normal(&w, &idx);
@@ -1052,15 +1055,14 @@ impl ModelDoc {
         }
         self.cancel_modal();
         self.finish_repeat(false);
-        let (lo, hi) = parts
-            .iter()
-            .filter_map(|&i| self.part_bounds(i))
-            .fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(a, b), (c, d)| {
-                (a.min(c), b.max(d))
-            });
+        let (lo, hi) = parts.iter().filter_map(|&i| self.part_bounds(i)).fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(a, b), (c, d)| (a.min(c), b.max(d)),
+        );
         let size = (hi - lo).max(Vec3::splat(0.1));
         let step = self.grid.max(0.05);
-        let mut spec = RepeatSpec::line(3, snap(size.x + step, step).max(step));
+        // Uma encostada na outra; o campo Distância afasta.
+        let mut spec = RepeatSpec::line(3, ((size.x * 100.0).round() / 100.0).max(0.05));
         spec.radius = snap(size.x.max(size.z) * 1.5, step).max(0.5);
         self.set_mode(Select::Parts);
         self.sel_parts = parts.clone();
@@ -1100,6 +1102,14 @@ impl ModelDoc {
         self.sel_parts = sel;
     }
 
+    /// Muda quantas cópias o Repetir aberto faz (como no campo Cópias).
+    pub fn set_repeat_count(&mut self, n: u32) {
+        if let Some(r) = &mut self.repeat {
+            r.spec.count = n.clamp(1, 200);
+            self.apply_repeat();
+        }
+    }
+
     /// Fecha o Repetir: fica com as cópias (`apply`) ou volta como estava.
     pub fn finish_repeat(&mut self, apply: bool) {
         if let Some(r) = self.repeat.take() {
@@ -1135,7 +1145,7 @@ impl ModelDoc {
                 } else {
                     format!("{n} peças escolhidas")
                 });
-                changed = repeat::spec_ui(ui, &mut r.spec, true, "m");
+                changed = repeat::spec_ui(ui, &mut r.spec, true, "m", true);
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     let ok = ui.add(
@@ -1177,28 +1187,29 @@ impl ModelDoc {
             return;
         };
         let mut done = None;
-        let r = egui::Modal::new(egui::Id::new(("modelo-guardar", &self.rel))).show(ui.ctx(), |ui| {
-            ui.set_width(320.0);
-            ui.heading("⭐ Guardar na biblioteca");
-            ui.label("Nome:");
-            let r = ui.add(egui::TextEdit::singleline(name).desired_width(f32::INFINITY));
-            if !r.has_focus() && !r.lost_focus() {
-                r.request_focus();
-            }
-            ui.weak("Fica em ➕ Peça > 📚 Biblioteca, em todos os modelos e projetos.");
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                let ok = ui.add(
-                    egui::Button::new("Guardar").fill(crate::theme::ACCENT.gamma_multiply(0.7)),
-                );
-                if ok.clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
-                    done = Some(true);
+        let r =
+            egui::Modal::new(egui::Id::new(("modelo-guardar", &self.rel))).show(ui.ctx(), |ui| {
+                ui.set_width(320.0);
+                ui.heading("⭐ Guardar na biblioteca");
+                ui.label("Nome:");
+                let r = ui.add(egui::TextEdit::singleline(name).desired_width(f32::INFINITY));
+                if !r.has_focus() && !r.lost_focus() {
+                    r.request_focus();
                 }
-                if ui.button("Cancelar").clicked() {
-                    done = Some(false);
-                }
+                ui.weak("Fica em ➕ Peça > 📚 Biblioteca, em todos os modelos e projetos.");
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    let ok = ui.add(
+                        egui::Button::new("Guardar").fill(crate::theme::ACCENT.gamma_multiply(0.7)),
+                    );
+                    if ok.clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
+                        done = Some(true);
+                    }
+                    if ui.button("Cancelar").clicked() {
+                        done = Some(false);
+                    }
+                });
             });
-        });
         if r.should_close() && done.is_none() {
             done = Some(false);
         }
@@ -2881,7 +2892,11 @@ fn add_menu_ui(ui: &mut egui::Ui, library: Option<&Path>) -> Option<AddPick> {
                 }
             }
         });
-        crate::tutorial::anchor(ui.ctx(), &format!("modelo.kit:{}", kit.name), r.response.rect);
+        crate::tutorial::anchor(
+            ui.ctx(),
+            &format!("modelo.kit:{}", kit.name),
+            r.response.rect,
+        );
     }
     ui.separator();
     let r = ui.menu_button("📚 Biblioteca", |ui| {

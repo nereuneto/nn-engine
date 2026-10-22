@@ -29,6 +29,9 @@ pub struct RepeatSpec {
     pub arc: f32,
     /// Em círculo: cada cópia gira junto (virada para fora, como o original).
     pub turn: bool,
+    /// Em círculo: o meio é o 0 do modelo (no eixo), e não ao lado do
+    /// original. Pedras em volta de uma fogueira que está no meio.
+    pub around_zero: bool,
 }
 
 impl RepeatSpec {
@@ -43,6 +46,7 @@ impl RepeatSpec {
             radius: spacing.max(0.1) * 2.0,
             arc: 360.0,
             turn: true,
+            around_zero: false,
         }
     }
 
@@ -57,6 +61,7 @@ impl RepeatSpec {
             radius,
             arc: 360.0,
             turn: true,
+            around_zero: false,
         }
     }
 
@@ -75,6 +80,10 @@ impl RepeatSpec {
 
     /// O meio do círculo, com o original (ou o meio do grupo) em `origin`.
     pub fn center(&self, origin: Vec3) -> Vec3 {
+        if self.around_zero {
+            let a = self.axis_vec();
+            return a * origin.dot(a);
+        }
         origin + self.inward() * self.radius
     }
 
@@ -132,7 +141,14 @@ impl RepeatSpec {
 
 /// A janelinha das opções. `three_d` mostra o eixo Z; `unit` é "m" ou "px".
 /// Devolve se algo mudou.
-pub fn spec_ui(ui: &mut egui::Ui, spec: &mut RepeatSpec, three_d: bool, unit: &str) -> bool {
+/// Com `zero`, o círculo pode ser em volta do 0 (do modelo).
+pub fn spec_ui(
+    ui: &mut egui::Ui,
+    spec: &mut RepeatSpec,
+    three_d: bool,
+    unit: &str,
+    zero: bool,
+) -> bool {
     let before = *spec;
     let step = if unit == "px" { 1.0 } else { 0.05 };
     ui.horizontal(|ui| {
@@ -186,8 +202,17 @@ pub fn spec_ui(ui: &mut egui::Ui, spec: &mut RepeatSpec, three_d: bool, unit: &s
                     ui.end_row();
                 }
                 RepeatKind::Circle => {
+                    if zero {
+                        ui.label("Meio");
+                        let r = ui
+                            .checkbox(&mut spec.around_zero, "Em volta do meio do modelo")
+                            .on_hover_text("O círculo em volta do 0 do modelo (onde está a fogueira, a mesa...). Desligado, o meio fica ao lado, à distância do raio.");
+                        crate::tutorial::anchor(ui.ctx(), "repetir.meio", r.rect);
+                        ui.end_row();
+                    }
                     ui.label("Raio");
-                    ui.add(
+                    ui.add_enabled(
+                        !(zero && spec.around_zero),
                         egui::DragValue::new(&mut spec.radius)
                             .speed(step)
                             .range(0.0..=100_000.0)
@@ -255,8 +280,22 @@ mod tests {
         }
         assert!((s.angle(1) - 60.0).abs() < 1e-4);
         // Um arco de 90 graus com 3 cópias: 30, 60, 90.
-        let a = RepeatSpec { arc: 90.0, ..RepeatSpec::circle(3, 1.0, 1) };
+        let a = RepeatSpec {
+            arc: 90.0,
+            ..RepeatSpec::circle(3, 1.0, 1)
+        };
         assert!((a.angle(3) - 90.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn circulo_em_volta_do_zero() {
+        let s = RepeatSpec {
+            around_zero: true,
+            ..RepeatSpec::circle(3, 9.0, 1)
+        };
+        let o = Vec3::new(1.5, 0.2, 0.0);
+        let p = s.transform(2, o).transform_point3(o);
+        assert!((p - Vec3::new(-1.5, 0.2, 0.0)).length() < 1e-4, "{p}");
     }
 
     #[test]
@@ -277,7 +316,10 @@ mod tests {
         // Meio em (-100, 0): a cópia 2 (180°) vai para (-200, 0).
         assert!((x + 200.0).abs() < 1e-3 && y.abs() < 1e-3, "{x} {y}");
         assert!((turn - 180.0).abs() < 1e-3);
-        let l = RepeatSpec { axis: 1, ..RepeatSpec::line(2, 32.0) };
+        let l = RepeatSpec {
+            axis: 1,
+            ..RepeatSpec::line(2, 32.0)
+        };
         let ((x, y), turn) = l.transform2(2, (0.0, 0.0), (5.0, 5.0));
         assert_eq!((x, y, turn), (5.0, 69.0, 0.0));
     }

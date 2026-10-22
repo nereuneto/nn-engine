@@ -23,6 +23,25 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - **Ctrl+Z / Ctrl+Y** desfazem e refazem no modelador, e a contagem de triângulos aparece na barra.
 - **Tutorial novo:** **Modele uma casinha**, com paredes, uma porta afundada, um telhado vermelho e a casinha na cena.
 
+### Modelar sem repetir (Sprint 48)
+
+- **🔁 Repetir em linha e em círculo:**
+  - **No modelador**, com as peças escolhidas: cercas, escadas, raios de roda, pedras em volta da fogueira.
+  - **Na cena 2D e 3D**, pelo botão direito de um objeto: fileiras de árvores, moedas em arco.
+  - A prévia aparece enquanto você mexe na quantidade, na distância, no raio, no eixo e em quanto da volta. **Aplicar** fica com as cópias num passo só de desfazer.
+  - No modelador, o círculo pode ser **em volta do meio do modelo**.
+- **Peças que se encaixam:** com o botão direito (ou o Shift+A) em cima de uma face, a peça nova nasce no meio dela, virada para fora.
+- **Kits** no ➕ Peça: **Casa**, **Natureza**, **Personagem** e **Veículo**.
+  - O telhado da Casa fica do tamanho da face.
+  - Os braços e as pernas do Personagem giram no ombro e no quadril, prontos para o animador.
+- **📚 Biblioteca com 10 modelos prontos:** árvore, pinheiro, pedra, cerca, casinha, baú, lampião, fogueira, personagem e carrinho.
+  - O **Começar com** do ➕ Novo > Modelo 3D cria um modelo a partir de um deles.
+  - No ➕ Peça, eles entram no modelo aberto, como peças.
+- **⭐ Guardar na biblioteca:** as suas peças ficam para usar em qualquer modelo e qualquer projeto, numa pasta ao lado das preferências.
+- **🔀 Criar variação:** uma cópia do modelo (com o `.glb`), aberta numa aba nova.
+- **Cores:** o botão direito numa cor da paleta **troca ela no modelo todo** ou **escolhe as faces dela**.
+- **Tutorial novo:** **Uma cerca e uma fogueira**.
+
 ## 0.5.0
 
 A versão do **NN Studio mais gostoso de usar**. O **botão direito** funciona em todo lugar e cria onde você clicou. A **busca rápida (Shift+A)** acha o que criar pelo nome, até com erro de digitação. Duplicar ficou sem trabalho repetido (**Ctrl+D que repete o passo**, **Alt+arrastar**, **Shift+D**), e dá para **copiar e colar** objetos e componentes. O Inspetor edita **vários objetos de uma vez**, os **⭐ favoritos** guardam o que você monta toda hora, os **avisos rápidos com Desfazer** deixam errar sem medo, os painéis vazios ensinam e as **Preferências** trazem a cor de destaque, as animações e os sons. A engine não mudou: os jogos rodam igual. Para começar: [A aba da cena](docs/studio.md#a-aba-da-cena), [Inspetor](docs/studio.md#inspetor) e [Preferências](docs/studio.md#preferências).

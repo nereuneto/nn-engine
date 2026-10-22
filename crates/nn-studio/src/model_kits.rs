@@ -55,11 +55,7 @@ fn opening(mut p: Part, w: f32, y0: f32, y1: f32, depth: f32, color: &str) -> Pa
     };
     p.inset(&[front], 0.3);
     let inner = p.faces[front].v.clone();
-    let mid = inner
-        .iter()
-        .map(|&k| p.verts[k as usize].y)
-        .sum::<f32>()
-        / inner.len() as f32;
+    let mid = inner.iter().map(|&k| p.verts[k as usize].y).sum::<f32>() / inner.len() as f32;
     for &k in &inner {
         let v = &mut p.verts[k as usize];
         v.y = if v.y < mid { y0 } else { y1 };
@@ -115,9 +111,8 @@ fn pine_top() -> Part {
 
 /// Uma pedra: uma esfera achatada, um pouco torta (sempre do mesmo jeito).
 fn rock() -> Part {
-    let mut p = Part::sphere_n("Pedra", PEDRA, 6, 4).baked(Mat4::from_scale(Vec3::new(
-        0.9, 0.55, 0.7,
-    )));
+    let mut p =
+        Part::sphere_n("Pedra", PEDRA, 6, 4).baked(Mat4::from_scale(Vec3::new(0.9, 0.55, 0.7)));
     for (i, v) in p.verts.iter_mut().enumerate() {
         let k = (i as f32 * 2.399).sin() * 0.06;
         if v.y > 0.01 {
@@ -243,16 +238,38 @@ pub const KITS: [Kit; 4] = [
             item!(
                 "Parede com porta",
                 false,
-                vec![opening(wall("Parede com porta"), 0.4, 0.0, 1.15, 0.1, MADEIRA_ESCURA)]
+                vec![opening(
+                    wall("Parede com porta"),
+                    0.4,
+                    0.0,
+                    1.15,
+                    0.1,
+                    MADEIRA_ESCURA
+                )]
             ),
             item!(
                 "Parede com janela",
                 false,
-                vec![opening(wall("Parede com janela"), 0.4, 0.6, 1.2, 0.06, AZUL)]
+                vec![opening(
+                    wall("Parede com janela"),
+                    0.4,
+                    0.6,
+                    1.2,
+                    0.06,
+                    AZUL
+                )]
             ),
             item!("Telhado", true, vec![gable("Telhado")]),
-            item!("Chaminé", false, vec![boxed("Chaminé", Vec3::new(0.3, 0.8, 0.3), PEDRA)]),
-            item!("Porta", false, vec![boxed("Porta", Vec3::new(0.8, 1.2, 0.08), MADEIRA)]),
+            item!(
+                "Chaminé",
+                false,
+                vec![boxed("Chaminé", Vec3::new(0.3, 0.8, 0.3), PEDRA)]
+            ),
+            item!(
+                "Porta",
+                false,
+                vec![boxed("Porta", Vec3::new(0.8, 1.2, 0.08), MADEIRA)]
+            ),
         ],
     },
     Kit {
@@ -309,13 +326,21 @@ fn fence() -> ModelData {
     let mut parts = Vec::new();
     for (i, x) in [-1.0, 0.0, 1.0].into_iter().enumerate() {
         parts.push(at(
-            boxed(&format!("Estaca {}", i + 1), Vec3::new(0.14, 1.0, 0.14), MADEIRA),
+            boxed(
+                &format!("Estaca {}", i + 1),
+                Vec3::new(0.14, 1.0, 0.14),
+                MADEIRA,
+            ),
             Vec3::new(x, 0.0, 0.0),
         ));
     }
     for (i, y) in [0.35, 0.75].into_iter().enumerate() {
         parts.push(at(
-            boxed(&format!("Ripa {}", i + 1), Vec3::new(2.2, 0.1, 0.06), MADEIRA_ESCURA),
+            boxed(
+                &format!("Ripa {}", i + 1),
+                Vec3::new(2.2, 0.1, 0.06),
+                MADEIRA_ESCURA,
+            ),
             Vec3::new(0.0, y, 0.08),
         ));
     }
@@ -338,7 +363,10 @@ fn house() -> ModelData {
     model(vec![
         walls,
         at(roof, Vec3::Y * 1.6),
-        at(boxed("Chaminé", Vec3::new(0.3, 0.8, 0.3), PEDRA), Vec3::new(0.55, 1.75, -0.45)),
+        at(
+            boxed("Chaminé", Vec3::new(0.3, 0.8, 0.3), PEDRA),
+            Vec3::new(0.55, 1.75, -0.45),
+        ),
     ])
 }
 
@@ -347,7 +375,10 @@ fn chest() -> ModelData {
     lock.pos = Vec3::new(0.0, 0.45, 0.32);
     model(vec![
         boxed("Caixa", Vec3::new(1.0, 0.55, 0.6), MADEIRA),
-        at(boxed("Tampa", Vec3::new(1.04, 0.22, 0.64), MADEIRA_ESCURA), Vec3::Y * 0.55),
+        at(
+            boxed("Tampa", Vec3::new(1.04, 0.22, 0.64), MADEIRA_ESCURA),
+            Vec3::Y * 0.55,
+        ),
         lock,
     ])
 }
@@ -355,7 +386,10 @@ fn chest() -> ModelData {
 fn lamp_post() -> ModelData {
     model(vec![
         ring("Poste", PRETO, 6, 1.0, Vec3::new(0.12, 2.0, 0.12)),
-        at(boxed("Luz", Vec3::new(0.32, 0.4, 0.32), AMARELO), Vec3::Y * 2.0),
+        at(
+            boxed("Luz", Vec3::new(0.32, 0.4, 0.32), AMARELO),
+            Vec3::Y * 2.0,
+        ),
         at(
             Part::pyramid("Chapéu", PRETO).baked(Mat4::from_scale(Vec3::new(0.5, 0.25, 0.5))),
             Vec3::Y * 2.4,
@@ -379,7 +413,11 @@ fn campfire() -> ModelData {
     let mut parts = Vec::new();
     for i in 0..3 {
         let a = i as f32 * 60.0;
-        let mut log = boxed(&format!("Lenha {}", i + 1), Vec3::new(1.0, 0.14, 0.14), MADEIRA_ESCURA);
+        let mut log = boxed(
+            &format!("Lenha {}", i + 1),
+            Vec3::new(1.0, 0.14, 0.14),
+            MADEIRA_ESCURA,
+        );
         log.rot = Vec3::new(0.0, a, 0.0);
         parts.push(log);
     }
@@ -404,16 +442,56 @@ pub struct Ready {
 }
 
 pub const READY: [Ready; 10] = [
-    Ready { name: "Árvore", file: "arvore", make: tree },
-    Ready { name: "Pinheiro", file: "pinheiro", make: pine },
-    Ready { name: "Pedra", file: "pedra", make: rock_model },
-    Ready { name: "Cerca", file: "cerca", make: fence },
-    Ready { name: "Casinha", file: "casinha", make: house },
-    Ready { name: "Baú", file: "bau", make: chest },
-    Ready { name: "Lampião", file: "lampiao", make: lamp_post },
-    Ready { name: "Fogueira", file: "fogueira", make: campfire },
-    Ready { name: "Personagem", file: "personagem", make: character_model },
-    Ready { name: "Carrinho", file: "carrinho", make: car_model },
+    Ready {
+        name: "Árvore",
+        file: "arvore",
+        make: tree,
+    },
+    Ready {
+        name: "Pinheiro",
+        file: "pinheiro",
+        make: pine,
+    },
+    Ready {
+        name: "Pedra",
+        file: "pedra",
+        make: rock_model,
+    },
+    Ready {
+        name: "Cerca",
+        file: "cerca",
+        make: fence,
+    },
+    Ready {
+        name: "Casinha",
+        file: "casinha",
+        make: house,
+    },
+    Ready {
+        name: "Baú",
+        file: "bau",
+        make: chest,
+    },
+    Ready {
+        name: "Lampião",
+        file: "lampiao",
+        make: lamp_post,
+    },
+    Ready {
+        name: "Fogueira",
+        file: "fogueira",
+        make: campfire,
+    },
+    Ready {
+        name: "Personagem",
+        file: "personagem",
+        make: character_model,
+    },
+    Ready {
+        name: "Carrinho",
+        file: "carrinho",
+        make: car_model,
+    },
 ];
 
 /// A pasta da biblioteca pessoal (ao lado das preferências).
@@ -438,7 +516,7 @@ pub fn user_models(dir: &Path) -> Vec<(String, PathBuf)> {
             (name, p)
         })
         .collect();
-    out.sort_by(|a, b| a.0.to_lowercase().cmp(&b.0.to_lowercase()));
+    out.sort_by_key(|a| a.0.to_lowercase());
     out
 }
 
@@ -456,7 +534,11 @@ pub fn save_user(dir: &Path, name: &str, model: &ModelData) -> Result<PathBuf, S
         .chars()
         .filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
         .collect();
-    let clean = if clean.is_empty() { "peças".to_string() } else { clean };
+    let clean = if clean.is_empty() {
+        "peças".to_string()
+    } else {
+        clean
+    };
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let mut path = dir.join(format!("{clean}.modelo"));
     let mut n = 2;
