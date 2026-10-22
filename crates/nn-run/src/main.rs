@@ -4,6 +4,7 @@
 //! nn novo <pasta> [opções]       cria um jogo novo a partir de um modelo
 //! nn [pasta]                     roda o jogo da pasta (padrão: pasta atual)
 //! nn exportar <pasta> [opções]   gera um executável único para distribuir
+//! nn mcp [pasta]                 servidor MCP para agentes de IA
 //! ```
 
 use std::path::PathBuf;
@@ -16,6 +17,8 @@ uso:
   nn novo <pasta> [opções]       cria um jogo novo, pronto para rodar
   nn [pasta]                     roda o jogo em Lua da pasta (padrão: pasta atual)
   nn exportar <pasta> [opções]   gera um executável único com o jogo
+  nn mcp [pasta]                 servidor MCP: liga um agente de IA (Claude Code,
+                                 Claude Desktop, Cursor...) ao jogo da pasta
   nn --versao                    mostra a versão
 
 opções de novo:
@@ -35,7 +38,14 @@ opções de exportar:
                        passe o nn-jogo daquele sistema (ex.: nn-jogo.exe)";
 
 fn main() -> ExitCode {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // O servidor MCP usa a saída padrão para o protocolo: o log vai para a
+    // saída de erros (o padrão do env_logger) e só os avisos.
+    let level = if std::env::args().nth(1).as_deref() == Some("mcp") {
+        "warn"
+    } else {
+        "info"
+    };
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or(level)).init();
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     match args.first().map(String::as_str) {
@@ -49,6 +59,7 @@ fn main() -> ExitCode {
         }
         Some("exportar") => exportar(&args[1..]),
         Some("novo") => novo(&args[1..]),
+        Some("mcp") => mcp(&args[1..]),
         Some(dir) => rodar(dir),
         None => rodar("."),
     }
@@ -178,6 +189,29 @@ fn exportar(args: &[String]) -> ExitCode {
             );
             ExitCode::SUCCESS
         }
+        Err(e) => {
+            eprintln!("erro: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `nn mcp [pasta]`: servidor MCP pela entrada e saída padrão.
+fn mcp(args: &[String]) -> ExitCode {
+    let dir = match args {
+        [] => PathBuf::from("."),
+        [dir] if !dir.starts_with("--") => PathBuf::from(dir),
+        _ => {
+            eprintln!("uso: nn mcp [pasta do jogo]");
+            return ExitCode::FAILURE;
+        }
+    };
+    if !dir.is_dir() {
+        eprintln!("erro: a pasta {} não existe", dir.display());
+        return ExitCode::FAILURE;
+    }
+    match nn_mcp::serve_stdio(nn_mcp::Server::new(dir, nn_run::mcp_hooks())) {
+        Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("erro: {e}");
             ExitCode::FAILURE

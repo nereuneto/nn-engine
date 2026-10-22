@@ -532,7 +532,7 @@ impl SceneData {
     pub fn environment_now(&self) -> EnvironmentNow {
         thread_local! {
             static LUA: (Lua, Table) = {
-                let lua = Lua::new();
+                let lua = crate::quiet_lua();
                 let module: Table = lua
                     .load(nn_script::SCENE_RUNTIME)
                     .eval()
@@ -748,7 +748,7 @@ impl Schema {
 pub fn schema() -> &'static Schema {
     static SCHEMA: OnceLock<Schema> = OnceLock::new();
     SCHEMA.get_or_init(|| {
-        let lua = Lua::new();
+        let lua = crate::quiet_lua();
         let module: Table = lua
             .load(nn_script::SCENE_RUNTIME)
             .eval()
@@ -891,7 +891,7 @@ fn string(t: &Table, key: &str) -> String {
 
 /// Lê um `.cena`. Ids que faltam ou se repetem são corrigidos.
 pub fn read(text: &str, name: &str) -> Result<SceneData, String> {
-    let lua = Lua::new();
+    let lua = crate::quiet_lua();
     let value: Value = lua
         .load(text)
         .set_name(format!("@{name}"))
@@ -1140,7 +1140,7 @@ fn write_rules(s: &mut String, rules: &[Rule], depth: usize) {
 
 /// Lê um `.prefab`: um objeto (com filhos).
 pub fn read_prefab(text: &str, name: &str) -> Result<Object, String> {
-    let lua = Lua::new();
+    let lua = crate::quiet_lua();
     let value: Value = lua
         .load(text)
         .set_name(format!("@{name}"))
@@ -1911,6 +1911,102 @@ impl History {
     }
 }
 
+/// Nome e descrição de cada componente.
+pub fn component_info(kind: &str) -> (&'static str, &'static str) {
+    match kind {
+        "sprite" => (
+            "Imagem (sprite)",
+            "Mostra uma imagem ou um quadro de spritesheet.",
+        ),
+        "text" => ("Texto", "Escreve um texto no mundo."),
+        "shape" => ("Forma", "Retângulo ou círculo de uma cor."),
+        "body" => (
+            "Corpo físico",
+            "Cai, colide, para no chão. Mexa nele pelo script: objeto.body.vx.",
+        ),
+        "map" => (
+            "Mapa de tiles",
+            "Desenha um mapa .tmj (do editor ou do Tiled), com a colisão dos tiles.",
+        ),
+        "camera" => ("Câmera", "Onde a câmera começa, ou quem ela segue."),
+        "sound" => ("Som", "Toca um som ou música quando a cena começa."),
+        "particles" => ("Partículas", "Fumaça, faíscas, poeira, chuva..."),
+        "panel" => (
+            "Painel",
+            "Fundo de menu ou de HUD: cantos arredondados, borda ou uma moldura.",
+        ),
+        "button" => (
+            "Botão",
+            "Aperta com o mouse, o teclado ou o controle. Troca de cena, abre por cima, fecha...",
+        ),
+        "bar" => (
+            "Barra",
+            "Vida, energia, tempo: mostra uma variável do jogo.",
+        ),
+        "icons" => (
+            "Ícones",
+            "Corações, vidas, moedas: um ícone para cada ponto da variável.",
+        ),
+        "slider" => (
+            "Deslizador",
+            "Escolhe um valor arrastando: volume, dificuldade...",
+        ),
+        "checkbox" => (
+            "Caixa de marcar",
+            "Liga e desliga: tela cheia, uma opção do jogo.",
+        ),
+        "textfield" => (
+            "Campo de texto",
+            "Para digitar: o nome do jogador, um código.",
+        ),
+        "layout" => (
+            "Grupo (arrumar)",
+            "Arruma os filhos sozinho, em coluna, em linha ou em grade.",
+        ),
+        "model" => (
+            "Modelo 3D",
+            "Um modelo .glb ou .gltf (do Blender e outros).",
+        ),
+        "shape3d" => (
+            "Forma 3D",
+            "Cubo, esfera, cilindro, cone, cápsula ou plano, de uma cor.",
+        ),
+        "light3d" => (
+            "Luz",
+            "Uma lâmpada, uma tocha ou um holofote: ilumina o que está em volta (as luzes não fazem sombra; só o sol).",
+        ),
+        "camera3d" => (
+            "Câmera 3D",
+            "A câmera do jogo: ele mostra o que ela vê, de onde ela está.",
+        ),
+        "terrain" => (
+            "Terreno",
+            "Um chão com morros, vales, cores e água, pintado com o ✏ Pintar terreno da vista 3D.",
+        ),
+        "text3d" => (
+            "Texto 3D",
+            "Escreve no mundo 3D: placas, nomes em cima dos personagens, avisos.",
+        ),
+        "anim3d" => (
+            "Animação 3D",
+            "Toca uma animação do modelo 3D (andar, acenar...), com velocidade e repetir.",
+        ),
+        "bone" => (
+            "Preso a um osso",
+            "Para segurar: uma espada ou um cajado na mão do personagem, que acompanha a animação. Ponha o objeto como filho do personagem.",
+        ),
+        "body3d" => (
+            "Corpo 3D",
+            "Física 3D: chão e paredes que bloqueiam, caixas que caem, plataformas que andam.",
+        ),
+        "behavior" => (
+            "Comportamento",
+            "Um script com propriedades: pronto (andar, pular, coletar...) ou do jogo.",
+        ),
+        _ => ("Componente", ""),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2173,85 +2269,6 @@ mod tests {
         };
         // A instância não grava as regras (elas são do prefab).
         assert!(!write(&s).contains("events"));
-    }
-
-    /// Ferramenta: regrava as cenas e prefabs dos modelos no formato do
-    /// editor (`cargo test -p nn-studio --lib reescrever_modelos -- --ignored`).
-    #[test]
-    #[ignore]
-    fn reescrever_modelos() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../nn-run/modelos");
-        fn walk(dir: &std::path::Path) {
-            for e in std::fs::read_dir(dir).unwrap() {
-                let p = e.unwrap().path();
-                if p.is_dir() {
-                    walk(&p);
-                    continue;
-                }
-                let name = p.to_string_lossy().to_string();
-                let text = std::fs::read_to_string(&p).unwrap_or_default();
-                let out = if name.ends_with(".cena") {
-                    let mut scene = read(&text, &name).unwrap();
-                    // Os Grupos já arrumados, como o editor deixa.
-                    let dir = p.parent().and_then(|d| d.parent()).unwrap();
-                    crate::scene_render::arrange_all(&mut scene, dir, &mut Default::default());
-                    write(&scene)
-                } else if name.ends_with(".prefab") {
-                    write_prefab(&read_prefab(&text, &name).unwrap())
-                } else {
-                    continue;
-                };
-                std::fs::write(&p, out).unwrap();
-            }
-        }
-        walk(&root);
-    }
-
-    #[test]
-    fn modelos_ja_vem_no_formato_do_editor() {
-        // Abrir e salvar pelo editor não muda nada nas cenas e prefabs que
-        // vêm prontos nos modelos.
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../nn-run/modelos");
-        let mut files = Vec::new();
-        fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
-            for e in std::fs::read_dir(dir).unwrap() {
-                let p = e.unwrap().path();
-                if p.is_dir() {
-                    walk(&p, out);
-                } else if p
-                    .extension()
-                    .is_some_and(|x| x == "cena" || x == "prefab" || x == "dialogo")
-                {
-                    out.push(p);
-                }
-            }
-        }
-        walk(&root, &mut files);
-        assert!(files.len() >= 12, "{files:?}");
-        for p in files {
-            // (No Windows, o git pode trazer o arquivo com CRLF.)
-            let text = std::fs::read_to_string(&p).unwrap().replace("\r\n", "\n");
-            let name = p.to_string_lossy().to_string();
-            let written = if name.ends_with(".prefab") {
-                write_prefab(&read_prefab(&text, &name).unwrap())
-            } else if name.ends_with(".dialogo") {
-                crate::dialogue::write(&crate::dialogue::read(&text, &name).unwrap())
-            } else {
-                let mut scene = read(&text, &name).unwrap();
-                let dir = p.parent().and_then(|d| d.parent()).unwrap();
-                crate::scene_render::arrange_all(&mut scene, dir, &mut Default::default());
-                write(&scene)
-            };
-            // NN_REESCREVER=1: grava no formato do editor (para modelos
-            // gerados por script).
-            if std::env::var_os("NN_REESCREVER").is_some() && written != text {
-                std::fs::write(&p, &written).unwrap();
-                continue;
-            }
-            assert_eq!(written, text, "{name}");
-        }
-        let template = crate::files::visual_scene_template();
-        assert_eq!(write(&read(&template, "novo").unwrap()), template);
     }
 
     #[test]

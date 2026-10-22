@@ -106,7 +106,7 @@ fn modelo_minimo_e_titulo_escolhido() {
         template: Template::Minimo,
     })
     .unwrap();
-    assert_eq!(r.files.len(), 3);
+    assert_eq!(r.files.len(), 4);
     let project = Project::open(&dir).unwrap();
     assert_eq!(project.config.title, "Meu \"Primeiro\" Jogo");
     assert_eq!(project.start, "main.lua");

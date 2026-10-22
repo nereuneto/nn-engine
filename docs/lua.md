@@ -42,6 +42,8 @@ meu-jogo/
 
 Todos os caminhos (`nn.assets.*`, `nn.scene.*`, `require`) são relativos à pasta do projeto.
 
+Os projetos criados pelo `nn novo` (ou pelo NN Studio) também trazem um `AGENTS.md`: ele explica o projeto a um agente de IA. Para desenvolver com um agente, veja [O servidor MCP](mcp.md).
+
 ### config.lua
 
 ```lua

@@ -1,7 +1,7 @@
 //! Lê e altera o `config.lua` de um projeto sem perder os comentários nem a
 //! organização do arquivo: só os valores mudados são reescritos.
 
-use mlua::{Lua, Table, Value};
+use mlua::{Table, Value};
 
 use crate::scene_data::Prop;
 
@@ -127,7 +127,7 @@ pub fn read(text: &str, default_title: &str) -> Result<ConfigValues, String> {
     if text.trim().is_empty() {
         return Ok(v);
     }
-    let lua = Lua::new();
+    let lua = crate::quiet_lua();
     let t: Table = lua
         .load(text)
         .set_name("@config.lua")

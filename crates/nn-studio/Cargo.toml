@@ -23,6 +23,7 @@ nn-audio.workspace = true
 nn-core.workspace = true
 nn-render.workspace = true
 nn-run.workspace = true
+nn-projeto.workspace = true
 nn-script.workspace = true
 nn-tilemap.workspace = true
 directories.workspace = true

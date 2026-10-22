@@ -14,7 +14,34 @@ use nn_script::{Project, ScriptRuntime};
 
 mod novo;
 
-pub use novo::{NewOptions, NewReport, Template, create_project};
+pub use novo::{NewOptions, NewReport, Template, agents_md, create_project};
+
+/// O que o servidor MCP (`nn mcp`) precisa da ferramenta: os modelos de
+/// projeto e como criar um.
+pub fn mcp_hooks() -> nn_mcp::Hooks {
+    fn create(dir: &Path, template: &str, title: Option<&str>) -> Result<Vec<String>, String> {
+        let template = Template::from_name(template)
+            .ok_or_else(|| format!("modelo desconhecido: {template}"))?;
+        create_project(&NewOptions {
+            dir: dir.to_path_buf(),
+            title: title.map(str::to_string),
+            template,
+        })
+        .map(|r| r.files)
+    }
+    nn_mcp::Hooks {
+        templates: Template::ALL
+            .iter()
+            .map(|t| nn_mcp::TemplateInfo {
+                name: t.name().to_string(),
+                description: t.description().to_string(),
+                three_d: t.is_3d(),
+            })
+            .collect(),
+        create_project: Some(create),
+        agents_md: agents_md(Template::Visual, "Seu jogo"),
+    }
+}
 
 /// Sufixo dos executáveis nesta plataforma (`.exe` no Windows).
 pub const EXE_SUFFIX: &str = std::env::consts::EXE_SUFFIX;

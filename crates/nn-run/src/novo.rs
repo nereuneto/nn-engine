@@ -57,6 +57,35 @@ impl Template {
         )
     }
 
+    /// O que o modelo traz (para quem escolhe: a ajuda do `nn` e o MCP).
+    pub fn description(self) -> &'static str {
+        match self {
+            Template::Padrao => {
+                "jogo completo em código Lua: título com menu, partida, pausa, fim e recorde"
+            }
+            Template::Minimo => "só uma cena em Lua com um quadrado que anda",
+            Template::Visual => {
+                "fase de plataforma montada sem código: comportamentos, eventos, prefabs, mapa de tiles e menus"
+            }
+            Template::Aventura => {
+                "aventura vista de cima, sem código: chave, porta, inimigos, diálogos e tesouro"
+            }
+            Template::Nave => "jogo de nave, sem código: tiros, asteroides, pontos e recorde",
+            Template::Vazio => "cena visual 2D vazia com um pacote de imagens e sons",
+            Template::TresD => "jogo 3D em terceira pessoa feito em código Lua",
+            Template::Visual3D => {
+                "ilha 3D montada sem código: Jogador 3D, plataformas que andam, prefabs e eventos"
+            }
+            Template::Vazio3D => "mundo 3D vazio (câmera e chão) com modelos e sons",
+            Template::Vale3D => "vale 3D num terreno pintado (morros, lago, trilha), sem código",
+        }
+    }
+
+    /// O jogo é montado em cenas visuais (`.cena`), e não em código?
+    pub fn is_visual(self) -> bool {
+        !matches!(self, Template::Padrao | Template::Minimo | Template::TresD)
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             Template::Padrao => "padrao",
@@ -404,6 +433,10 @@ pub fn create_project(opts: &NewOptions) -> Result<NewReport, String> {
             .map_err(|e| format!("não foi possível criar {}: {e}", target.display()))?;
         files.push(path.to_string());
     }
+    // Para agentes de IA (Claude Code, Cursor...): como o projeto funciona.
+    std::fs::write(dir.join("AGENTS.md"), agents_md(opts.template, &title))
+        .map_err(|e| format!("não foi possível criar AGENTS.md: {e}"))?;
+    files.push("AGENTS.md".into());
     // Para quem usar git: a pasta da exportação não vai para o repositório.
     std::fs::write(dir.join(".gitignore"), "dist/\n")
         .map_err(|e| format!("não foi possível criar .gitignore: {e}"))?;
@@ -415,6 +448,71 @@ pub fn create_project(opts: &NewOptions) -> Result<NewReport, String> {
         id,
         files,
     })
+}
+
+/// O `AGENTS.md` de um projeto novo: o que um agente de IA precisa saber
+/// para trabalhar nele (e como ligar o servidor MCP da engine).
+pub fn agents_md(template: Template, title: &str) -> String {
+    let kind = if template.is_3d() { "3D" } else { "2D" };
+    let how = if template.is_visual() {
+        "O jogo é montado em **cenas visuais** (`.cena`): objetos com componentes \
+         (imagem, forma, texto, corpo físico, câmera, partículas, botões...) e **comportamentos \
+         prontos** (jogador, inimigo, coletável, vida, porta...). As regras do jogo são **eventos \
+         \"Quando... Então...\"** guardados na própria cena. Código Lua só para o que os prontos \
+         não fazem: um comportamento seu em `scripts/`."
+    } else {
+        "O jogo é feito em **código Lua**: cada cena é um script com `load`, `update(dt)` e \
+         `draw`, e o jogo usa a API `nn.*`. Dá para misturar com cenas visuais (`.cena`), \
+         montadas no NN Studio."
+    };
+    format!(
+        "# {title}: guia para agentes de IA\n\
+         \n\
+         Jogo {kind} feito com a [nn-engine](https://github.com/nereuneto/nn-engine) \
+         (engine em Rust, jogos em Lua). Tudo na engine é em português: documentação, \
+         mensagens de erro e nomes de comportamentos e eventos.\n\
+         \n\
+         {how}\n\
+         \n\
+         ## Arquivos\n\
+         \n\
+         - `config.lua`: título, tamanho da janela, cena inicial (`start`) e as variáveis do \
+         jogo (`vars`, que valem de uma cena para outra).\n\
+         - `cenas/`: as cenas (`.cena` visuais, ou `.lua` em código).\n\
+         - `prefabs/`: objetos prontos para pôr em várias cenas (`.prefab`).\n\
+         - `scripts/`: comportamentos e scripts em Lua.\n\
+         - `assets/`: imagens, sons, fontes e modelos 3D. Mapas de tiles em `mapas/` \
+         (`.tmj`), diálogos em `dialogos/` (`.dialogo`).\n\
+         \n\
+         As cenas e prefabs são tabelas Lua legíveis, no formato que o editor NN Studio grava. \
+         Mude-as pelas ferramentas do servidor MCP (abaixo), que conferem cada campo; à mão, \
+         mantenha o formato (`format = 1`, um objeto por bloco).\n\
+         \n\
+         ## Servidor MCP da engine\n\
+         \n\
+         A ferramenta `nn` tem um servidor MCP: `nn mcp <pasta-do-jogo>`. No Claude Code, \
+         de dentro desta pasta:\n\
+         \n\
+         ```\n\
+         claude mcp add nn -- nn mcp .\n\
+         ```\n\
+         \n\
+         Ferramentas principais: `ver_projeto` (comece por ela), `ver_cena`, `criar_objeto`, \
+         `mudar_objeto`, `listar_componentes`, `listar_comportamentos`, `listar_eventos`, \
+         `por_regra`, `buscar_documentacao`, `escrever_arquivo` (confere o Lua antes de gravar), \
+         `conferir_projeto` e `desfazer`.\n\
+         \n\
+         ## Jeito de trabalhar\n\
+         \n\
+         1. Antes de mudar, veja o projeto e a cena (`ver_projeto`, `ver_cena`).\n\
+         2. Prefira comportamentos prontos e eventos a código novo.\n\
+         3. Antes de escrever Lua, busque a API (`buscar_documentacao`).\n\
+         4. Depois de uma leva de mudanças, rode `conferir_projeto` e conserte o que aparecer.\n\
+         5. Para jogar: `nn .` nesta pasta (ou abra no NN Studio e aperte F5).\n\
+         \n\
+         Coordenadas: no 2D, pixels, y para cima e (0, 0) no meio da tela; no 3D, metros e y é \
+         a altura.\n"
+    )
 }
 
 /// Troca os marcadores do modelo. Em `.lua`, o título vai dentro de uma
