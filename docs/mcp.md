@@ -1,6 +1,6 @@
 # O servidor MCP: desenvolver com um agente de IA
 
-A ferramenta `nn` tem um **servidor MCP** (Model Context Protocol). Ele liga um agente de IA (Claude Code, Claude Desktop, Cursor ou outro cliente MCP) a um projeto de jogo. O agente conhece o projeto, monta cenas, põe comportamentos e eventos, escreve scripts Lua e confere o que fez, tudo pelas mesmas regras do NN Studio. O que ele grava o editor abre igual, e o contrário também.
+A ferramenta `nn` tem um **servidor MCP** (Model Context Protocol). Ele liga um agente de IA (Claude Code, Claude Desktop, Cursor ou outro cliente MCP) a um projeto de jogo. O agente conhece o projeto, monta cenas, põe comportamentos e eventos, escreve scripts Lua e confere o que fez, tudo pelas mesmas regras do NN Studio. O que ele grava o editor abre igual, e o contrário também. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela, e roda os **testes de jogo** do projeto.
 
 ```
 nn mcp <pasta-do-jogo>
@@ -89,6 +89,8 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `listar_eventos`, `por_regra`, `tirar_regra` | Os eventos "Quando... Então..." sem código. |
 | `buscar_documentacao` | A API Lua `nn.*` e os guias (este, o de Lua, o de 3D e o do NN Studio). |
 | `conferir_lua` | A sintaxe de um trecho de Lua, sem gravar. |
+| `rodar_jogo` | Roda o jogo **sem janela**, com teclas e cliques simulados, e mostra os erros (com arquivo e linha), avisos, prints, as regras que dispararam, as trocas de cena, o que mudou nos objetos e variáveis, e **capturas da tela**. Veja [Rodar e ver](#rodar-e-ver). |
+| `rodar_testes` | Roda os [testes de jogo](lua.md#testes-de-jogo) do projeto (`testes/*.lua`) e mostra quem falhou, a linha, os prints e a tela na hora da falha. |
 
 Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
 
@@ -122,6 +124,62 @@ As regras de eventos também vão no formato do arquivo:
 }
 ```
 
+## Rodar e ver
+
+`rodar_jogo` roda o jogo sem janela: 60 quadros por segundo de jogo, o mais rápido que der (não no tempo do relógio), sem som, com o `math.random` sempre na mesma sequência e com o salvo (`nn.save`) só na memória. Rodar não mexe nos recordes de quem joga.
+
+O jogador é simulado com **ações**, cada uma no seu tempo (`em`, em segundos desde o começo):
+
+```json
+{
+  "cena": "cenas/fase.cena",
+  "segundos": 3,
+  "acoes": [
+    {"em": 0.2, "segurar": "right", "por": 1.5},
+    {"em": 1.0, "apertar": "space"},
+    {"em": 1.2, "capturar": "no pulo"}
+  ],
+  "objetos": ["heroi"],
+  "olhar": ["nn.vars.moedas"]
+}
+```
+
+| Ação | O que faz |
+|---|---|
+| `"apertar": "space"` | Aperta e solta a tecla. |
+| `"segurar": "right", "por": 1.5` | Segura a tecla (sem `por`, até o fim). |
+| `"soltar": "right"` | Solta uma tecla segurada. |
+| `"clicar": [x, y]` | Clica num ponto da tela (pixels, y para baixo). Com `"botao": "right"`, o botão direito. |
+| `"clicar": "jogar"` | Clica no objeto com esse nome (um botão do menu, por exemplo). |
+| `"mouse": [x, y]` | Põe o mouse num ponto, sem clicar. |
+| `"digitar": "Nereu"` | Escreve num campo de texto. |
+| `"capturar": true` ou `"capturar": "nome"` | Guarda uma captura da tela agora. |
+| `"lua": "self.objects.heroi:move_to(0, 0)"` | Roda código com `self` = a cena da frente: para preparar a situação (levar o herói até a porta, mudar uma variável). |
+
+As teclas têm os nomes do `nn.input`: `a` a `z`, `0` a `9`, `space`, `enter`, `escape`, `left`, `right`, `up`, `down`, `shift`, `ctrl`, `alt`, `tab`... Sem `cena`, o jogo começa na cena inicial do `config.lua`. Com `"segundos": 0`, só mostra a primeira tela.
+
+A resposta conta o que aconteceu, com o tempo de cada coisa:
+
+```
+Rodou 3.00 s de jogo (180 quadros), começando em cenas/fase.cena.
+
+Erros: nenhum.
+
+Regras dos eventos que dispararam:
+  1.00 s  cenas/fase.cena: regra 4 da cena: quando tecla e no_chao → soltar_particulas
+  1.70 s  cenas/fase.cena: regra 5 da cena: quando pegar → criar
+
+O que mudou em cenas/fase.cena do começo ao fim:
+  heroi (5): x 0 → 480, y -180 → -210
+  moeda (8): sumiu (destruído)
+  moedas (15): text.text "Moedas: 0" → "Moedas: 1"
+Variáveis que mudaram: moedas 0 → 1
+```
+
+e traz as capturas (a do fim e as pedidas) como imagens. Se um script dá erro, o jogo para ali, e a resposta mostra o erro com o arquivo e a linha. Um laço sem fim (`while true do end`) vira erro depois de 5 segundos, em vez de travar o servidor.
+
+Para conferir o que importa de novo depois de cada mudança, o agente escreve **testes de jogo** em `testes/` e roda com `rodar_testes`. Os testes estão no [guia de Lua](lua.md#testes-de-jogo); `nn testar` roda os mesmos testes no terminal.
+
 ## Segurança
 
 - O servidor recusa caminhos fora da pasta do jogo (`..`, caminhos absolutos, links que saem dela) e não mexe em `.git`, `dist` e `target`.
@@ -130,8 +188,7 @@ As regras de eventos também vão no formato do arquivo:
 
 ## O que vem depois
 
-Esta é a primeira parte (v0.7). As próximas sprints trazem:
+As próximas partes da v0.7 trazem:
 
-- **Rodar e ver:** o agente roda o jogo sem janela, com teclas simuladas, e recebe os erros, os prints, o estado dos objetos e uma captura da tela. Vêm também os **testes de jogo** (`nn testar`).
 - **Ao vivo:** ligar no jogo aberto e no NN Studio, ler o estado e mudar valores na hora.
 - **Arte, modelagem e animação (v0.8):** pixel art, sons, modelos 3D e animações pelas ferramentas, com prévias em imagem.

@@ -42,3 +42,7 @@ No Inspetor, **Adicionar componente > Script do jogo > Novo script** cria um com
 ## Distribuir
 
 No NN Studio, **Jogo > Exportar jogo**. Ou, com o `nn`: `nn exportar .`
+
+## Testes
+
+`testes/jogo.lua` joga o jogo sozinho, sem janela, e confere se o principal funciona (o botão Jogar, andar e pular, pegar moedas, a saída). Com o `nn` instalado, de dentro desta pasta: `nn testar`. Mudou o jogo? Rode de novo para ver se nada quebrou, e escreva testes seus no mesmo jeito (veja "Testes de jogo" na documentação da engine).

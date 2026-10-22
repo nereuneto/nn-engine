@@ -4,6 +4,33 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Rodar e ver (Sprint 52)
+
+- **O agente joga o jogo: `rodar_jogo`.** A ferramenta nova do servidor MCP roda o jogo **sem janela** e conta o que aconteceu. O jogador é simulado com ações no tempo certo: apertar e segurar teclas, clicar num ponto ou num botão pelo nome, escrever e capturar a tela. A resposta traz:
+  - os erros, com o arquivo e a linha (o jogo para ali);
+  - os avisos e os `print`;
+  - as regras dos eventos que dispararam;
+  - as trocas de cena;
+  - o que mudou nos objetos e nas variáveis;
+  - as capturas da tela, como imagens.
+
+  Uma ação `lua` prepara a situação (levar o herói até a porta). Como usar: [Rodar e ver](docs/mcp.md#rodar-e-ver).
+- **Testes de jogo.** Arquivos Lua em `testes/` que jogam o jogo e conferem o resultado: `t:hold("right", 1)`, `t:press("space")`, `t:click("jogar")`, `t:find("heroi")`, `t:check(...)`, `t:wait_until(...)`. Cada teste roda num jogo novo, e o que falha diz a linha, o motivo e o que o jogo escreveu. Como escrever: [Testes de jogo](docs/lua.md#testes-de-jogo).
+  - **`nn testar [pasta]`** roda os testes no terminal e sai com erro se algum falhar. Opções: `--filtro`, `--capturas` (grava a tela de quem falhou) e `--tamanho`.
+  - **`rodar_testes`** roda os mesmos testes pelo servidor MCP, com a tela na hora da falha.
+  - Os modelos `visual`, `aventura`, `nave`, `visual3d` e `padrao` vêm com **`testes/jogo.lua`**, que confere o principal de cada jogo.
+  - A pasta `testes/` não vai para o jogo exportado.
+- **O jogo sem janela é igual toda vez:**
+  - 60 quadros por segundo de jogo, o mais rápido que der;
+  - sem som;
+  - o `math.random` sempre na mesma sequência;
+  - o `nn.save` só na memória: rodar e testar não mexem nos recordes de quem joga.
+
+  Um laço sem fim num script vira erro depois de 5 segundos, em vez de travar.
+- **O servidor diz ao agente para jogar e testar.** As instruções, os prompts `criar_jogo` e `melhorar_jogo` e o `AGENTS.md` dos projetos novos pedem para conferir jogando e para escrever um teste para o que mudou.
+- O erro de uma tecla desconhecida (`nn.input.down("pulo")`) agora lista os nomes que valem.
+- **Para quem usa as crates:** o `nn-script` ganhou o jogo sem janela (`game_run::GameRun`: roteiro de ações, estado da cena, expressões, capturas), os testes de jogo (`testing`) e a captura do log por thread (`capture`). O `ScriptRuntime` diz a cena da frente (`front`) e os erros das cenas (`take_errors`).
+
 ### O servidor MCP (Sprint 51)
 
 - **`nn mcp <pasta>`: um agente de IA desenvolve o jogo.** O servidor MCP liga o Claude Code, o Claude Desktop, o Cursor ou outro cliente MCP ao projeto. O agente vê o projeto, monta cenas, põe comportamentos e eventos, escreve scripts Lua e confere o que fez. Como ligar e o que cada ferramenta faz: [O servidor MCP](docs/mcp.md).

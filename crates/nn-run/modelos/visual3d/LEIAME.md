@@ -26,7 +26,11 @@ WASD ou as setas andam (para onde a câmera olha), espaço pula, o mouse gira a 
 ## Para mudar
 
 - O sol, o céu e a névoa: clique em **☀ Ambiente** na barra da cena.
-- Mais uma estrela: arraste `prefabs/estrela.prefab` para a cena e mude o "5" no evento de vitória.
+- Mais uma estrela: arraste `prefabs/estrela.prefab` para a cena e mude o "6" no evento de vitória.
 - Velocidade e pulo do herói: no Inspetor, no Jogador 3D.
 
 Sem o editor, com o `nn` instalado, de dentro desta pasta: `nn .`
+
+## Testes
+
+`testes/jogo.lua` joga o jogo sozinho, sem janela, e confere se o principal funciona (andar e pular, as moedas, as estrelas). Com o `nn` instalado, de dentro desta pasta: `nn testar`. Mudou o jogo? Rode de novo para ver se nada quebrou, e escreva testes seus no mesmo jeito (veja "Testes de jogo" na documentação da engine).

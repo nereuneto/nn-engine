@@ -428,7 +428,317 @@ fn nn_mcp_so_escreve_o_protocolo_na_saida() {
     );
     send(json!({ "jsonrpc": "2.0", "id": 5, "method": "ping" }));
     assert_eq!(next()["id"], 5);
+    // O jogo rodando sem janela: os prints vão para a resposta, não para a
+    // saída.
+    send(json!({ "jsonrpc": "2.0", "id": 6, "method": "tools/call",
+        "params": { "name": "rodar_jogo", "arguments": { "segundos": 0.5, "captura_final": false,
+            "acoes": [ { "em": 0.1, "lua": "print('oi do jogo')" } ] } } }));
+    let r = next();
+    assert_eq!(r["id"], 6, "{r}");
+    let text = r["result"]["content"][0]["text"].as_str().unwrap();
+    if r["result"]["isError"] == false {
+        assert!(text.contains("0.10 s  oi do jogo"), "{text}");
+    } else {
+        assert!(!gpu_required(), "{text}");
+    }
     drop(stdin);
     assert!(child.wait().unwrap().success());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn gpu_required() -> bool {
+    std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1")
+}
+
+/// As imagens de uma resposta (PNG).
+fn images(s: &mut Server, tool: &str, args: Value) -> (String, Vec<Vec<u8>>) {
+    let r = s
+        .handle(json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": tool, "arguments": args },
+        }))
+        .unwrap();
+    let content = r["result"]["content"].as_array().unwrap();
+    let text = content
+        .iter()
+        .filter_map(|c| c["text"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut pngs = Vec::new();
+    for c in content {
+        if c["type"] == "image" {
+            assert_eq!(c["mimeType"], "image/png");
+            let data = c["data"].as_str().unwrap();
+            pngs.push(decode_base64(data));
+        }
+    }
+    (text, pngs)
+}
+
+fn decode_base64(s: &str) -> Vec<u8> {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = Vec::new();
+    let mut buf = 0u32;
+    let mut bits = 0;
+    for &c in s.as_bytes() {
+        if c == b'=' {
+            break;
+        }
+        let v = T.iter().position(|&x| x == c).unwrap() as u32;
+        buf = (buf << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+            buf &= (1 << bits) - 1;
+        }
+    }
+    out
+}
+
+#[test]
+fn agente_roda_o_jogo_e_os_testes() {
+    let dir = temp("rodar");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "visual" }));
+    // Antes de tudo: a pasta tem um jogo e uma placa de vídeo?
+    let (err, text) = call(&mut s, "rodar_jogo", json!({ "segundos": 0 }));
+    if err {
+        assert!(!gpu_required(), "{text}");
+        assert!(text.contains("sem placa de vídeo"), "{text}");
+        return;
+    }
+    assert!(
+        text.contains("Rodou 0.02 s de jogo (1 quadros), começando em cenas/titulo.cena"),
+        "{text}"
+    );
+
+    // O jogador anda, pula e pega uma moeda.
+    let (text, pngs) = images(
+        &mut s,
+        "rodar_jogo",
+        json!({
+            "cena": "cenas/fase.cena",
+            "segundos": 2.5,
+            "acoes": [
+                { "em": 0.2, "segurar": "right", "por": 1.5 },
+                { "em": 1.0, "apertar": "space" },
+                { "em": 1.2, "capturar": "pulando" },
+            ],
+            "objetos": ["heroi"],
+            "olhar": ["nn.vars.moedas", "self.objects.nada.x"],
+        }),
+    );
+    assert!(
+        text.contains("Rodou 2.50 s de jogo (150 quadros), começando em cenas/fase.cena"),
+        "{text}"
+    );
+    assert!(text.contains("Erros: nenhum."), "{text}");
+    assert!(
+        text.contains("regra 4 da cena: quando tecla e no_chao → soltar_particulas"),
+        "{text}"
+    );
+    assert!(text.contains("heroi (5): x 0 → "), "{text}");
+    assert!(
+        text.contains("moedas (15): text.text \"Moedas: 0\" → \"Moedas: 1\""),
+        "{text}"
+    );
+    assert!(
+        text.contains("Variáveis que mudaram: moedas 0 → 1"),
+        "{text}"
+    );
+    assert!(text.contains("heroi: {\"id\":5"), "{text}");
+    assert!(text.contains("nn.vars.moedas = 1"), "{text}");
+    assert!(text.contains("self.objects.nada.x: erro:"), "{text}");
+    assert!(text.contains("pulando — 1.20 s, 1280x720"), "{text}");
+    assert_eq!(pngs.len(), 2);
+    assert!(pngs.iter().all(|p| p.starts_with(b"\x89PNG")));
+
+    // Um erro no script de um comportamento: o jogo para e diz onde.
+    ok(
+        &mut s,
+        "escrever_arquivo",
+        json!({ "caminho": "scripts/quebra.lua", "conteudo": "local B = { title = \"Quebra\" }\nfunction B:update(dt)\n  if nn.input.pressed(\"x\") then local v = nil; v.campo = 1 end\nend\nreturn B\n" }),
+    );
+    ok(
+        &mut s,
+        "mudar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": "heroi", "componentes": [ { "type": "behavior", "script": "scripts/quebra.lua" } ] }),
+    );
+    let text = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 2, "acoes": [ { "em": 0.5, "apertar": "x" } ], "captura_final": false }),
+    );
+    assert!(text.contains("O JOGO PAROU COM ERRO"), "{text}");
+    assert!(text.contains("0.50 s  em cenas/fase.cena:"), "{text}");
+    assert!(text.contains("scripts/quebra.lua:3"), "{text}");
+    assert!(text.starts_with("Rodou 0.52 s"), "{text}");
+    ok(&mut s, "desfazer", json!({}));
+    ok(&mut s, "desfazer", json!({}));
+
+    // Ações erradas são recusadas antes de rodar.
+    let e = fails(
+        &mut s,
+        "rodar_jogo",
+        json!({ "acoes": [ { "em": 1, "apertar": "pulo" } ] }),
+    );
+    assert!(e.contains("ação 1: tecla desconhecida: \"pulo\""), "{e}");
+    let e = fails(&mut s, "rodar_jogo", json!({ "cena": "cenas/nada.cena" }));
+    assert!(e.contains("cenas/nada.cena não existe"), "{e}");
+
+    // Os testes que vêm no modelo passam; um teste novo que falha mostra a
+    // linha e a tela.
+    let text = ok(&mut s, "rodar_testes", json!({}));
+    assert!(
+        text.starts_with("4 testes: 4 passaram, 0 falharam"),
+        "{text}"
+    );
+    ok(
+        &mut s,
+        "escrever_arquivo",
+        json!({ "caminho": "testes/vidas.lua", "conteudo": "test(\"o herói começa com 5 vidas\", function(t)\n  t:open(\"cenas/fase.cena\")\n  print(\"vidas:\", nn.vars.vidas)\n  t:check_eq(nn.vars.vidas, 5)\nend)\n" }),
+    );
+    let (text, pngs) = images(
+        &mut s,
+        "rodar_testes",
+        json!({ "arquivo": "testes/vidas.lua" }),
+    );
+    assert!(
+        text.starts_with("1 testes: 0 passaram, 1 falharam"),
+        "{text}"
+    );
+    assert!(
+        text.contains("✗ testes/vidas.lua › o herói começa com 5 vidas"),
+        "{text}"
+    );
+    assert!(
+        text.contains("testes/vidas.lua:4: esperava 5, veio 3"),
+        "{text}"
+    );
+    assert!(text.contains("vidas:\t3"), "{text}");
+    assert_eq!(pngs.len(), 1);
+    let text = ok(&mut s, "rodar_testes", json!({ "filtro": "moeda" }));
+    assert!(text.starts_with("2 testes: 2 passaram"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn os_testes_dos_modelos_passam() {
+    for t in nn_run::Template::ALL {
+        let dir = temp(&format!("testes-{}", t.name()));
+        nn_run::create_project(&nn_run::NewOptions {
+            dir: dir.clone(),
+            title: None,
+            template: t,
+        })
+        .unwrap();
+        let project = Project::open(&dir).unwrap();
+        let opts = nn_script::testing::TestOptions {
+            // Pequeno: sem placa de vídeo, desenhar é o que mais demora.
+            run: nn_script::game_run::RunOptions {
+                size: Some((320, 180)),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let summary = match nn_script::testing::run_tests(&project, &opts, |_| {}) {
+            Ok(s) => s,
+            Err(e) => {
+                assert!(!gpu_required(), "{e}");
+                return;
+            }
+        };
+        let has_tests = dir.join("testes").is_dir();
+        assert_eq!(!summary.results.is_empty(), has_tests, "{}", t.name());
+        for r in &summary.results {
+            assert!(
+                r.passed(),
+                "{} › {}: {:?}",
+                t.name(),
+                r.case.name,
+                r.failure
+            );
+        }
+        assert!(
+            summary.file_errors.is_empty(),
+            "{}: {:?}",
+            t.name(),
+            summary.file_errors
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[test]
+fn nn_testar_diz_o_que_falhou() {
+    let dir = temp("testar");
+    nn_run::create_project(&nn_run::NewOptions {
+        dir: dir.clone(),
+        title: None,
+        template: nn_run::Template::Visual,
+    })
+    .unwrap();
+    std::fs::write(
+        dir.join("testes/quebra.lua"),
+        "test(\"cai no abismo\", function(t)\n  t:open(\"cenas/fase.cena\")\n  t:check(false, \"caiu\")\nend)\n",
+    )
+    .unwrap();
+    let caps = dir.join("capturas");
+    let out = Command::new(env!("CARGO_BIN_EXE_nn"))
+        .args([
+            "testar",
+            dir.to_str().unwrap(),
+            "--tamanho",
+            "320x180",
+            "--capturas",
+        ])
+        .arg(&caps)
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if stderr.contains("sem placa de vídeo") {
+        assert!(!gpu_required(), "{stderr}");
+        return;
+    }
+    assert!(!out.status.success(), "{stdout}");
+    assert!(
+        stdout.contains("  ✓ testes/jogo.lua › o herói anda e pula"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("  ✗ testes/quebra.lua › cai no abismo"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("      testes/quebra.lua:3: caiu"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("5 testes: 4 passaram, 1 falhou"),
+        "{stdout}"
+    );
+    let pngs = std::fs::read_dir(&caps).unwrap().count();
+    assert_eq!(pngs, 1);
+
+    // Só os que passam: sai sem erro.
+    let out = Command::new(env!("CARGO_BIN_EXE_nn"))
+        .args([
+            "testar",
+            dir.to_str().unwrap(),
+            "--filtro",
+            "moeda",
+            "--tamanho",
+            "320x180",
+        ])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{stdout}");
+    assert!(
+        stdout.contains("2 testes: 2 passaram, 0 falharam"),
+        "{stdout}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

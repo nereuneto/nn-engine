@@ -170,7 +170,12 @@ pub(crate) fn keys(name: &str) -> Result<&'static [KeyCode]> {
         "f10" => &[F10],
         "f11" => &[F11],
         "f12" => &[F12],
-        _ => return Err(err(format!("tecla desconhecida: \"{name}\""))),
+        _ => {
+            return Err(err(format!(
+                "tecla desconhecida: \"{name}\" (use a até z, 0 até 9, space, enter, escape, \
+                 tab, backspace, delete, shift, ctrl, alt, left, right, up, down ou f1 até f12)"
+            )));
+        }
     })
 }
 
