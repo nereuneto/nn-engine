@@ -222,7 +222,8 @@ impl StudioApp {
         self.close_project();
         let dir = settings::absolute(dir);
         let layout = self.settings.layout(&dir).cloned();
-        let ws = ProjectWorkspace::open(dir.clone(), layout);
+        let mut ws = ProjectWorkspace::open(dir.clone(), layout);
+        ws.library_dir = self.config_dir().map(|d| crate::model_kits::user_dir(&d));
         self.settings
             .touch_recent(&dir, &ws.title, settings::now_secs());
         self.launcher.error = None;

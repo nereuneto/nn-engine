@@ -6084,3 +6084,414 @@ fn tutorial_modele_uma_casinha() {
     h.get_by_label("Próximo").click();
     espera(&mut h, 11);
 }
+
+// Modelar sem repetir (S48) ---------------------------------------------------
+
+#[test]
+fn modelador_repetir_em_linha_e_em_circulo() {
+    use nn_studio::model_editor::Select;
+    let dir = temp("modelador-repetir");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    novo_modelo(&mut h);
+    {
+        let d = modelo(&mut h);
+        d.set_mode(Select::Parts);
+        d.sel_parts = vec![0];
+    }
+    h.run();
+    h.get_by_label("🔁 Repetir").click();
+    h.run();
+    // A prévia: 3 cópias em linha, encostadas (o cubo tem 1 m).
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 4);
+        assert_eq!(d.data.parts[3].name, "Cubo 4");
+        assert!(
+            (d.data.parts[3].pos.x - 3.0).abs() < 1e-4,
+            "{}",
+            d.data.parts[3].pos
+        );
+    }
+    tela(&mut h, "modelador-repetir-linha");
+    // Em círculo, 5 cópias: 6 cubos na mesma distância do meio.
+    h.get_by_label("🔄 Em círculo").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 4);
+    }
+    // Esc cancela: volta a ter só o cubo.
+    h.key_press(Key::Escape);
+    h.run();
+    assert_eq!(modelo(&mut h).data.parts.len(), 1);
+    // De novo, em círculo, e Aplicar: um passo de desfazer.
+    h.get_by_label("🔁 Repetir").click();
+    h.run();
+    h.get_by_label("🔄 Em círculo").click();
+    h.run();
+    tela(&mut h, "modelador-repetir-circulo");
+    h.get_by_label("✔ Aplicar").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 4);
+        let c = d.data.parts[0].pos;
+        let raio = |p: glam::Vec3| ((p.x - (c.x - 1.5)).powi(2) + (p.z - c.z).powi(2)).sqrt();
+        for p in &d.data.parts {
+            assert!((raio(p.pos) - 1.5).abs() < 0.05, "no círculo: {}", p.pos);
+        }
+        assert_eq!(d.sel_parts.len(), 4);
+    }
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(modelo(&mut h).data.parts.len(), 1);
+}
+
+#[test]
+fn cena_3d_repetir_pelo_menu_do_objeto() {
+    let dir = temp("cena-3d-repetir");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena3d(&mut h, &proj);
+    let cubo = objeto(&h, "Cubo").clone();
+    let antes = cena(&h).data.objects.len();
+    let p = na_vista3d(
+        &h,
+        glam::Vec3::new(cubo.x as f32, cubo.y as f32, cubo.z as f32),
+    );
+    clique_direito(&mut h, p);
+    h.get_by_label("🔁 Repetir…").click();
+    h.run();
+    assert_eq!(cena(&h).data.objects.len(), antes + 3, "a prévia");
+    h.get_by_label("🔄 Em círculo").click();
+    h.run();
+    tela(&mut h, "cena-3d-repetir");
+    h.get_by_label("✔ Aplicar").click();
+    h.run_steps(4);
+    assert_eq!(cena(&h).data.objects.len(), antes + 3);
+    assert_eq!(cena(&h).selection.len(), 4);
+    // Desfazer tira as três de uma vez.
+    atalho_passos(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_eq!(cena(&h).data.objects.len(), antes);
+}
+
+#[test]
+fn cena_2d_repetir_em_linha() {
+    let dir = temp("cena-2d-repetir");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    com_cena(&mut h, &proj);
+    let id = cena(&h).data.objects[0].id;
+    let antes = cena(&h).data.objects.len();
+    let x0 = cena(&h).data.world_transform(id).unwrap().x;
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.values_mut().next().unwrap();
+        doc.selection = vec![id];
+        assert!(doc.start_repeat());
+    }
+    h.run();
+    h.get_by_label("✔ Aplicar").click();
+    h.run_steps(4);
+    let d = cena(&h);
+    assert_eq!(d.data.objects.len(), antes + 3);
+    let xs: Vec<f64> = d
+        .selection
+        .iter()
+        .map(|i| d.data.world_transform(*i).unwrap().x)
+        .collect();
+    assert_eq!(xs[0], x0);
+    assert!(xs[3] > xs[2] && xs[2] > xs[1] && xs[1] > xs[0], "{xs:?}");
+}
+
+#[test]
+fn modelador_encaixe_kits_biblioteca_e_variacao() {
+    use nn_studio::model_editor::Select;
+    let dir = temp("modelador-kits");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    novo_modelo(&mut h);
+    // Um cubo mais largo, para o telhado encaixar.
+    modelo(&mut h).data.parts[0].scale = glam::Vec3::new(2.0, 1.0, 1.6);
+    h.run();
+
+    // Botão direito na face de cima > ➕ Peça aqui > Casa > Telhado: nasce em
+    // cima, do tamanho da face.
+    let topo = na_vista_modelo(&mut h, glam::Vec3::new(0.0, 1.0, 0.0));
+    clique_direito(&mut h, topo);
+    submenu(&mut h, "➕ Peça aqui");
+    submenu(&mut h, "🏡 Casa");
+    h.get_by_label("Telhado").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 2);
+        let t = &d.data.parts[1];
+        assert_eq!(t.name, "Telhado");
+        assert!(
+            (t.pos - glam::Vec3::new(0.0, 1.0, 0.0)).length() < 1e-3,
+            "{}",
+            t.pos
+        );
+        assert!(
+            (t.scale.x - 2.0).abs() < 1e-3 && (t.scale.z - 1.6).abs() < 1e-3,
+            "{}",
+            t.scale
+        );
+        assert!(t.rot.length() < 1e-3, "{}", t.rot);
+    }
+    tela(&mut h, "modelador-telhado-encaixado");
+
+    // Numa parede do lado (+X): a peça nasce de lado, virada para fora.
+    let lado = na_vista_modelo(&mut h, glam::Vec3::new(1.0, 0.5, 0.0));
+    clique_direito(&mut h, lado);
+    submenu(&mut h, "➕ Peça aqui");
+    h.get_by_label("◎ Cilindro").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        let c = d.data.parts.last().unwrap();
+        assert!(
+            (c.pos - glam::Vec3::new(1.0, 0.5, 0.0)).length() < 1e-3,
+            "{}",
+            c.pos
+        );
+        let up = c.rotation() * glam::Vec3::Y;
+        assert!(up.x > 0.99, "virado para +X: {up}");
+    }
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+
+    // Trocar cor: o laranja do cubo vira azul no modelo todo.
+    let laranja = h
+        .get_all_by_label("#FF8C42")
+        .next()
+        .unwrap()
+        .rect()
+        .center();
+    clique_direito(&mut h, laranja);
+    submenu(&mut h, "🎨 Trocar por…");
+    h.get_by_label("trocar por #3FA7D6").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert!(d.data.parts[0].faces.iter().all(|f| f.color == "#3FA7D6"));
+    }
+
+    // Guardar o telhado na biblioteca e pôr de novo pelo menu.
+    {
+        let d = modelo(&mut h);
+        d.set_mode(Select::Parts);
+        d.sel_parts = vec![1];
+    }
+    h.run();
+    h.get_by_label("📚 Biblioteca").click();
+    h.run();
+    h.get_by_label("⭐ Guardar a peça na biblioteca…").click();
+    h.run_steps(3);
+    h.key_press(Key::Enter);
+    h.run_steps(3);
+    let guardado = dir.join("biblioteca/Telhado.modelo");
+    assert!(guardado.is_file(), "guardado ao lado das preferências");
+    h.get_by_label("➕ Peça").click();
+    h.run();
+    submenu(&mut h, "📚 Biblioteca");
+    h.get_by_label("⭐ Telhado").click();
+    h.run();
+    assert_eq!(modelo(&mut h).data.parts.len(), 3);
+    assert_eq!(modelo(&mut h).data.parts[2].name, "Telhado 2");
+
+    // Um modelo pronto da biblioteca, como peças.
+    h.get_by_label("➕ Peça").click();
+    h.run();
+    submenu(&mut h, "📚 Biblioteca");
+    h.get_by_label("Árvore").click();
+    h.run();
+    assert_eq!(modelo(&mut h).data.parts.len(), 5);
+
+    // 🔀 Criar variação: grava "modelo 2" com o .glb e abre.
+    h.get_by_label("📚 Biblioteca").click();
+    h.run();
+    h.get_by_label("🔀 Criar variação").click();
+    h.run_steps(4);
+    assert!(proj.join("assets/modelos/modelo 2.modelo").is_file());
+    assert!(proj.join("assets/modelos/modelo 2.glb").is_file());
+    assert!(tabs(&h).contains(&Tab::Model("assets/modelos/modelo 2.modelo".into())));
+}
+
+#[test]
+fn novo_modelo_a_partir_de_um_pronto() {
+    let dir = temp("modelo-pronto");
+    let proj = plataforma(&dir);
+    let mut h = studio(&dir, Some(proj.clone()));
+    h.get_by_label("➕ Novo").click();
+    h.run();
+    h.get_by_label("🎲 Modelo 3D").click();
+    h.run();
+    h.get_by(|n| {
+        n.value().is_some_and(|v| v == "Um cubo") || n.label().is_some_and(|l| l == "Um cubo")
+    })
+    .click();
+    h.run();
+    h.get_by_label("Cerca").click();
+    h.run();
+    h.get_by_label("Criar").click();
+    h.run();
+    let texto = std::fs::read_to_string(proj.join("assets/modelos/cerca.modelo")).unwrap();
+    let m = nn_studio::model_data::ModelData::from_lua(&texto, "cerca.modelo").unwrap();
+    assert_eq!(m.parts.len(), 5, "três estacas e duas ripas");
+    assert!(proj.join("assets/modelos/cerca.glb").is_file());
+}
+
+#[test]
+fn tutorial_uma_cerca_e_uma_fogueira() {
+    let dir = temp("tutorial-fogueira");
+    let mut h = studio_with(&dir, None, fake_game(&dir), true);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("uma-cerca-e-uma-fogueira");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/uma-cerca-e-uma-fogueira");
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    fn novo_de(h: &mut Harness<'_, StudioApp>, pronto: &str) {
+        h.get_by_label("➕ Novo").click();
+        h.run_steps(2);
+        h.get_by_label("🎲 Modelo 3D").click();
+        h.run_steps(6);
+        h.get_by(|n| {
+            n.value().is_some_and(|v| v == "Um cubo") || n.label().is_some_and(|l| l == "Um cubo")
+        })
+        .click();
+        h.run_steps(3);
+        h.get_by_label(pronto).click();
+        h.run_steps(2);
+        h.key_press(Key::Enter);
+        h.run_steps(4);
+    }
+    espera(&mut h, 1);
+    novo_de(&mut h, "Fogueira");
+    espera(&mut h, 2);
+    assert!(projeto.join("assets/modelos/fogueira.modelo").is_file());
+
+    // Botão direito no chão, a um passo da fogueira: Natureza > Pedra.
+    let chao = na_vista_modelo(&mut h, glam::Vec3::new(1.5, 0.0, 0.0));
+    h.hover_at(chao);
+    h.run_steps(1);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: chao,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.step();
+    }
+    h.run_steps(3);
+    for nome in ["➕ Peça aqui", "🌳 Natureza"] {
+        h.get_by(|n| n.label().is_some_and(|l| l.starts_with(nome) && l != nome))
+            .hover();
+        h.run_steps(3);
+    }
+    h.get_by_label("Pedra").click();
+    espera(&mut h, 3);
+
+    // 🔁 Repetir > Em círculo > em volta do meio > 7 cópias > Aplicar.
+    h.get_by_label("🔁 Repetir").click();
+    h.run_steps(2);
+    h.get_by_label("🔄 Em círculo").click();
+    h.run_steps(2);
+    h.get_by_label("Em volta do meio do modelo").click();
+    h.run_steps(2);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let d = ws.models.values_mut().next().unwrap();
+        // (O número de cópias, como se tivesse digitado.)
+        d.set_repeat_count(7);
+    }
+    h.run_steps(2);
+    tela(&mut h, "tutorial-fogueira-pedras");
+    h.get_by_label("✔ Aplicar").click();
+    espera(&mut h, 4);
+    {
+        let d = modelo(&mut h);
+        let pedras: Vec<_> = d
+            .data
+            .parts
+            .iter()
+            .filter(|p| p.name.starts_with("Pedra"))
+            .collect();
+        assert_eq!(pedras.len(), 8);
+        let r0 = glam::Vec2::new(pedras[0].pos.x, pedras[0].pos.z).length();
+        for p in &pedras {
+            let r = glam::Vec2::new(p.pos.x, p.pos.z).length();
+            assert!((r - r0).abs() < 0.05, "em volta da fogueira: {r} {r0}");
+        }
+    }
+    let meio = na_vista_modelo(&mut h, glam::Vec3::ZERO);
+    h.hover_at(meio);
+    atalho_passos(&mut h, Modifiers::COMMAND, Key::S);
+    espera(&mut h, 5);
+    assert!(projeto.join("assets/modelos/fogueira.glb").is_file());
+
+    novo_de(&mut h, "Cerca");
+    espera(&mut h, 6);
+    assert!(projeto.join("assets/modelos/cerca.glb").is_file());
+
+    // Na cena: a fogueira e a cerca.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.open_file("cenas/mundo.cena", None);
+    }
+    h.run_steps(3);
+    let cerca = {
+        let ws = h.state_mut().project_mut().unwrap();
+        let root = ws.root.clone();
+        let mut sizes = nn_studio::scene_render::Sizes::default();
+        let mut maps = std::collections::HashMap::new();
+        let mut tilesets = std::collections::HashMap::new();
+        let mut paint = nn_studio::paint::PaintState::default();
+        let mut env = nn_studio::scene_view::SceneEnv {
+            root: &root,
+            sizes: &mut sizes,
+            renderer: None,
+            design: (640.0, 360.0),
+            clear_color: "#000000",
+            connected: false,
+            time: 0.0,
+            game: None,
+            maps: &mut maps,
+            tilesets: &mut tilesets,
+            paint: &mut paint,
+            animate: false,
+        };
+        let doc = ws.scenes.get_mut("cenas/mundo.cena").unwrap();
+        doc.drop_file3(&mut env, "assets/modelos/fogueira.modelo", glam::Vec3::ZERO)
+            .unwrap();
+        doc.drop_file3(
+            &mut env,
+            "assets/modelos/cerca.modelo",
+            glam::Vec3::new(-3.0, 0.0, 4.0),
+        )
+        .unwrap()
+    };
+    espera(&mut h, 7);
+
+    // Botão direito na cerca > Repetir… > Aplicar.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut("cenas/mundo.cena").unwrap();
+        doc.selection = vec![cerca];
+        assert!(doc.start_repeat());
+    }
+    h.run_steps(3);
+    tela(&mut h, "tutorial-fogueira-cerca");
+    h.get_by_label("✔ Aplicar").click();
+    espera(&mut h, 8);
+}

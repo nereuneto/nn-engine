@@ -228,6 +228,7 @@ pub fn all() -> &'static [Tutorial] {
             portas_e_chaves(),
             uma_conversa(),
             casinha(),
+            fogueira(),
             eventos(),
             desenhe(),
             tiles(),
@@ -1833,6 +1834,117 @@ fn casinha() -> Tutorial {
             Step {
                 title: "Pronto: uma casinha sua!",
                 text: "Você usou faces, Encolher, Puxar, peças, as alças e a paleta. Ideias: janelas (Encolher e Puxar de novo), uma chaminé (Ctrl+D duplica uma peça), ou um personagem com o ↔ Espelho X, que modela uma metade e copia a outra.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// Peças de todos os modelos abertos com o nome começando assim.
+fn parts_named(ws: &ProjectWorkspace, name: &str) -> usize {
+    model_parts(ws)
+        .iter()
+        .filter(|p| p.name.starts_with(name))
+        .count()
+}
+
+/// Objetos da cena com o `.glb` de um modelo do modelador com este nome.
+fn scene_models(ws: &ProjectWorkspace, stem: &str) -> usize {
+    objects(ws)
+        .iter()
+        .filter(|o| {
+            o.component("model").is_some_and(|c| {
+                let file = c.str("file");
+                let name = file.rsplit('/').next().unwrap_or(file);
+                name.starts_with(stem)
+                    && file.ends_with(".glb")
+                    && ws.root.join(file.replace(".glb", ".modelo")).is_file()
+            })
+        })
+        .count()
+}
+
+fn fogueira() -> Tutorial {
+    Tutorial {
+        id: "uma-cerca-e-uma-fogueira",
+        title: "Uma cerca e uma fogueira",
+        summary: "Monte sem repetir trabalho: comece de um modelo pronto, ponha uma peça de kit, repita em círculo no modelador e em linha na cena.",
+        minutes: 8,
+        template: Template::Vazio3D,
+        project: "Uma cerca e uma fogueira",
+        steps: vec![
+            Step {
+                title: "Sem repetir",
+                text: "Pedras em volta de uma fogueira, estacas de uma cerca, árvores em fileira: é a mesma coisa várias vezes. Neste tutorial o NN Studio faz as cópias por você, e você começa de modelos prontos.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "Um modelo pronto",
+                text: "Arquivos > ➕ Novo > 🎲 Modelo 3D. Em \"Começar com\", escolha Fogueira e clique em Criar: ela abre no modelador, com a lenha e o fogo.",
+                target: Some("arquivos.novo"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| parts_named(ws, "Fogo") > 0),
+            },
+            Step {
+                title: "Uma pedra",
+                text: "Clique com o botão direito no chão, a um passo da fogueira: ➕ Peça aqui > 🌳 Natureza > Pedra. Os kits têm peças prontas de casa, natureza, personagem e veículo.",
+                target: Some("modelo"),
+                show: None,
+                done: Some(|ws, _| parts_named(ws, "Pedra") > 0),
+            },
+            Step {
+                title: "Pedras em volta",
+                text: "Com a pedra escolhida, clique em 🔁 Repetir e em 🔄 Em círculo. Marque \"Em volta do meio do modelo\", ponha 7 cópias e clique em Aplicar.",
+                target: Some("modelo.repetir"),
+                show: None,
+                done: Some(|ws, _| parts_named(ws, "Pedra") >= 6),
+            },
+            Step {
+                title: "Salve",
+                text: "Ctrl+S: a fogueira.glb sai junto, pronta para a cena.",
+                target: Some("modelo"),
+                show: None,
+                done: Some(|ws, _| {
+                    let m = models(ws);
+                    !m.is_empty()
+                        && m.iter().all(|m| !m.is_dirty())
+                        && parts_named(ws, "Pedra") >= 6
+                }),
+            },
+            Step {
+                title: "Uma cerca pronta",
+                text: "De novo: ➕ Novo > 🎲 Modelo 3D, agora começando com Cerca. Ela já nasce com o .glb.",
+                target: Some("arquivos.novo"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    models(ws)
+                        .iter()
+                        .any(|m| m.data.parts.iter().any(|p| p.name.starts_with("Estaca")))
+                }),
+            },
+            Step {
+                title: "Na cena",
+                text: "Abra cenas/mundo.cena e arraste do painel Arquivos a fogueira.modelo e a cerca.modelo para a cena.",
+                target: Some("arquivo:cenas/mundo.cena"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| {
+                    scene_models(ws, "fogueira") > 0 && scene_models(ws, "cerca") > 0
+                }),
+            },
+            Step {
+                title: "A cerca em linha",
+                text: "Botão direito na cerca > 🔁 Repetir…: em linha, com 3 cópias, e Aplicar. Uma cerca comprida, sem arrastar nada.",
+                target: Some("cena"),
+                show: None,
+                done: Some(|ws, _| scene_models(ws, "cerca") >= 3),
+            },
+            Step {
+                title: "Pronto: sem trabalho repetido!",
+                text: "Você usou um modelo pronto, uma peça de kit e o Repetir em círculo e em linha. Ideias: 📚 Biblioteca > ⭐ Guardar guarda peças suas para qualquer projeto; 🔀 Criar variação faz uma cópia do modelo para mudar; e o botão direito numa cor da paleta troca ela no modelo todo.",
                 target: None,
                 show: None,
                 done: None,

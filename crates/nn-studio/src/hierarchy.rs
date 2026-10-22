@@ -80,6 +80,14 @@ pub fn object_menu(
             doc.duplicate_any();
             ui.close();
         }
+        if ui
+            .button("🔁 Repetir…")
+            .on_hover_text("Cópias em linha (uma cerca, uma fileira de árvores) ou em círculo (pedras em volta da fogueira)")
+            .clicked()
+        {
+            doc.start_repeat();
+            ui.close();
+        }
         if menu_item(ui, "📋 Copiar", "Ctrl+C").clicked() {
             doc.copy_selection(ui.ctx());
             ui.close();

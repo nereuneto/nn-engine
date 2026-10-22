@@ -14,6 +14,7 @@ use eframe::egui::{self, Color32, Key, Modifiers, Pos2, Rect, Sense, Stroke};
 use glam::{Mat4, Quat, Vec3};
 
 use crate::model_data::{self, MID, ModelData, Part, SHAPES, face_center, face_normal};
+use crate::repeat::{self, RepeatSpec};
 use crate::scene_render::{self, SceneRenderer, View3};
 use crate::scene_view::scene3d::{
     BLUE, Cam3, GREEN, ORANGE, RED, arrow, axis_param, dist_to_segment, ray, ray_plane, ring, snap,
@@ -24,6 +25,8 @@ use crate::scene_view::scene3d::{
 #[derive(Debug, Clone, PartialEq)]
 pub enum ModelAction {
     Save,
+    /// Gravar uma cópia deste modelo (uma variação) e abrir.
+    Variation(ModelData),
     /// Um aviso rápido.
     Notice(String),
 }
@@ -33,6 +36,8 @@ pub enum ModelAction {
 pub struct ModelEnv<'a> {
     pub renderer: Option<&'a mut SceneRenderer>,
     pub root: &'a Path,
+    /// A biblioteca pessoal (ao lado das preferências), se houver.
+    pub library: Option<&'a Path>,
 }
 
 /// O que o clique escolhe.
@@ -120,6 +125,16 @@ enum Modal {
     },
 }
 
+/// Repetindo peças (a janelinha Repetir aberta): como estava antes, quais
+/// peças, como e de onde.
+#[derive(Debug, Clone)]
+struct PartRepeat {
+    before: ModelData,
+    parts: Vec<usize>,
+    spec: RepeatSpec,
+    origin: Vec3,
+}
+
 /// Uma face acertada pelo raio.
 #[derive(Debug, Clone, Copy)]
 struct FaceHit {
@@ -128,10 +143,39 @@ struct FaceHit {
     t: f32,
 }
 
+/// Onde uma peça nova vai: no chão, ou apoiada numa face (virada para fora
+/// dela).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Place {
+    pub pos: Vec3,
+    pub rot: Quat,
+    /// O tamanho da face (para as peças que encaixam nela, como o telhado).
+    pub size: Option<(f32, f32)>,
+}
+
+impl Place {
+    pub fn ground(pos: Vec3) -> Self {
+        Self {
+            pos,
+            rot: Quat::IDENTITY,
+            size: None,
+        }
+    }
+}
+
+/// O que escolheram para pôr no modelo.
+#[derive(Debug, Clone, PartialEq)]
+enum AddPick {
+    Shape(usize),
+    Kit(usize, usize),
+    Ready(usize),
+    User(std::path::PathBuf),
+}
+
 /// Onde o menu do botão direito abriu.
 #[derive(Debug, Clone, Copy)]
 struct MenuAt {
-    ground: Vec3,
+    place: Place,
 }
 
 static NEXT_REV: AtomicU64 = AtomicU64::new(1);
@@ -164,7 +208,9 @@ pub struct ModelDoc {
     menu: Option<MenuAt>,
     menu_reopen: Option<MenuAt>,
     /// Abrir o menu de peças onde o mouse está (Shift+A).
-    add_menu: Option<(Pos2, Vec3)>,
+    add_menu: Option<(Pos2, Place)>,
+    /// Guardando na biblioteca: o nome sendo escrito.
+    saving: Option<String>,
     /// Pintando com o botão segurado (o passo de desfazer já foi guardado).
     stroke: bool,
     renaming: Option<(usize, String)>,
@@ -175,6 +221,7 @@ pub struct ModelDoc {
     stage: crate::scene_data::SceneData,
     pub view_rect: Option<Rect>,
     actions: Vec<ModelAction>,
+    repeat: Option<PartRepeat>,
 }
 
 impl std::fmt::Debug for ModelDoc {
@@ -233,6 +280,7 @@ impl ModelDoc {
             menu: None,
             menu_reopen: None,
             add_menu: None,
+            saving: None,
             stroke: false,
             renaming: None,
             swallow: false,
@@ -244,6 +292,7 @@ impl ModelDoc {
             },
             view_rect: None,
             actions: Vec::new(),
+            repeat: None,
         }
     }
 
@@ -298,6 +347,7 @@ impl ModelDoc {
 
     pub fn undo(&mut self) {
         self.cancel_modal();
+        self.finish_repeat(false);
         if let Some(d) = self.undo.pop() {
             self.redo.push(std::mem::replace(&mut self.data, d));
             self.fix_selection();
@@ -306,6 +356,7 @@ impl ModelDoc {
 
     pub fn redo(&mut self) {
         self.cancel_modal();
+        self.finish_repeat(false);
         if let Some(d) = self.redo.pop() {
             self.undo.push(std::mem::replace(&mut self.data, d));
             self.fix_selection();
@@ -664,23 +715,194 @@ impl ModelDoc {
 
     // Edição -----------------------------------------------------------------
 
-    /// Uma peça nova (forma pronta) em `at`, escolhida.
+    /// Uma peça nova (forma pronta) no chão, em `at`, escolhida.
     pub fn add_part(&mut self, shape: usize, at: Vec3) -> usize {
-        let (label, _, make) = SHAPES[shape.min(SHAPES.len() - 1)];
-        self.record();
-        let name = unique_name(&self.data, label);
-        let mut p = make(&name, &self.color);
+        self.add_shape(shape, self.ground_place(at))
+    }
+
+    /// Onde fica algo posto no chão em `at` (na grade).
+    fn ground_place(&self, at: Vec3) -> Place {
         let step = self.grid.max(0.01);
-        p.pos = Vec3::new(
+        Place::ground(Vec3::new(
             snap(at.x, step),
             snap(at.y.max(0.0), step),
             snap(at.z, step),
-        );
-        self.data.parts.push(p);
-        let i = self.data.parts.len() - 1;
+        ))
+    }
+
+    /// Uma forma pronta em `place`, escolhida.
+    pub fn add_shape(&mut self, shape: usize, place: Place) -> usize {
+        let (label, _, make) = SHAPES[shape.min(SHAPES.len() - 1)];
+        let p = make(label, &self.color);
+        self.insert_parts(vec![p], place, false)[0]
+    }
+
+    /// Põe peças no modelo em `place` (com `fit`, uma peça de 1 × 1 m fica do
+    /// tamanho da face). Escolhe e devolve as novas.
+    pub fn insert_parts(&mut self, parts: Vec<Part>, place: Place, fit: bool) -> Vec<usize> {
+        if parts.is_empty() {
+            return Vec::new();
+        }
+        self.cancel_modal();
+        self.finish_repeat(false);
+        self.record();
+        let stretch = match (fit, place.size) {
+            (true, Some((w, d))) => Vec3::new(w.max(0.05), 1.0, d.max(0.05)),
+            _ => Vec3::ONE,
+        };
+        let t = Mat4::from_rotation_translation(place.rot, place.pos) * Mat4::from_scale(stretch);
+        let mut new = Vec::new();
+        for mut p in parts {
+            let (scale, q, pos) = (t * p.matrix()).to_scale_rotation_translation();
+            p.pos = round3(pos);
+            p.rot = model_data::euler_degrees(q);
+            p.scale = round3(scale);
+            p.name = unique_name(&self.data, &p.name);
+            self.data.parts.push(p);
+            new.push(self.data.parts.len() - 1);
+        }
         self.set_mode(Select::Parts);
-        self.sel_parts = vec![i];
-        i
+        self.sel_parts = new.clone();
+        new
+    }
+
+    /// Onde vai uma peça posta com o mouse em `p`: apoiada na face embaixo
+    /// dele, ou no chão.
+    fn place_at(&self, rect: Rect, p: Pos2) -> Place {
+        let (o, d) = ray(&self.cam, rect, p);
+        if let Some(h) = self.pick_face(o, d)
+            && let Some(place) = self.face_place(h.part, h.face)
+        {
+            return place;
+        }
+        self.ground_place(self.point_under(rect, p))
+    }
+
+    /// Apoiado no meio de uma face, virado para fora dela.
+    pub fn face_place(&self, part: usize, face: usize) -> Option<Place> {
+        let p = self.data.parts.get(part)?;
+        let f = p.faces.get(face)?;
+        let m = p.matrix();
+        let w: Vec<Vec3> =
+            f.v.iter()
+                .map(|&k| m.transform_point3(p.verts[k as usize]))
+                .collect();
+        let idx: Vec<u32> = (0..w.len() as u32).collect();
+        let c = face_center(&w, &idx);
+        let n = face_normal(&w, &idx);
+        if n == Vec3::ZERO {
+            return None;
+        }
+        let rot = Quat::from_rotation_arc(Vec3::Y, n);
+        let inv = rot.inverse();
+        let (mut lo, mut hi) = (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN));
+        for q in &w {
+            let l = inv * (*q - c);
+            lo = lo.min(l);
+            hi = hi.max(l);
+        }
+        Some(Place {
+            pos: round3(c),
+            rot,
+            size: Some((hi.x - lo.x, hi.z - lo.z)),
+        })
+    }
+
+    /// Põe o que foi escolhido num menu de peças.
+    fn add_pick(&mut self, pick: AddPick, place: Place) {
+        match pick {
+            AddPick::Shape(i) => {
+                self.add_shape(i, place);
+            }
+            AddPick::Kit(k, i) => {
+                if let Some(item) = crate::model_kits::KITS.get(k).and_then(|k| k.items.get(i)) {
+                    self.insert_parts((item.make)(), place, item.fit);
+                }
+            }
+            AddPick::Ready(i) => {
+                if let Some(r) = crate::model_kits::READY.get(i) {
+                    let m = (r.make)();
+                    self.add_palette(&m);
+                    self.insert_parts(m.parts, place, false);
+                }
+            }
+            AddPick::User(path) => match crate::model_kits::read_user(&path) {
+                Ok(m) => {
+                    self.add_palette(&m);
+                    self.insert_parts(m.parts, place, false);
+                }
+                Err(e) => self
+                    .actions
+                    .push(ModelAction::Notice(format!("Não deu para abrir: {e}"))),
+            },
+        }
+    }
+
+    /// As cores de outro modelo que faltam na paleta entram nela.
+    fn add_palette(&mut self, m: &ModelData) {
+        for p in &m.parts {
+            for f in &p.faces {
+                if !self.data.palette.contains(&f.color) {
+                    self.data.palette.push(f.color.clone());
+                }
+            }
+        }
+    }
+
+    /// Troca uma cor por outra no modelo todo.
+    pub fn replace_color(&mut self, from: &str, to: &str) -> usize {
+        let n: usize = self
+            .data
+            .parts
+            .iter()
+            .flat_map(|p| &p.faces)
+            .filter(|f| f.color == from)
+            .count();
+        if n == 0 || from == to {
+            return 0;
+        }
+        self.record();
+        for p in &mut self.data.parts {
+            for f in &mut p.faces {
+                if f.color == from {
+                    f.color = to.to_string();
+                }
+            }
+        }
+        n
+    }
+
+    /// Escolhe as faces de uma cor.
+    pub fn select_color(&mut self, color: &str) {
+        self.set_mode(Select::Faces);
+        self.sel_faces = self
+            .data
+            .parts
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.visible)
+            .flat_map(|(pi, p)| {
+                p.faces
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, f)| f.color == color)
+                    .map(move |(fi, _)| (pi, fi))
+            })
+            .collect();
+    }
+
+    /// As peças para guardar na biblioteca: as escolhidas (ou todas).
+    pub fn parts_to_save(&self) -> ModelData {
+        let chosen = self.touched_parts();
+        let parts = if chosen.is_empty() {
+            self.data.parts.clone()
+        } else {
+            chosen.iter().map(|&i| self.data.parts[i].clone()).collect()
+        };
+        ModelData {
+            parts,
+            palette: self.data.palette.clone(),
+        }
     }
 
     /// Apaga o que está escolhido.
@@ -823,6 +1045,201 @@ impl ModelDoc {
         self.sel_faces.clear();
         self.sel_verts.clear();
         self.fix_selection();
+    }
+
+    /// Abre o Repetir com as peças escolhidas (em linha, ao lado delas).
+    pub fn start_repeat(&mut self) -> bool {
+        let parts = self.touched_parts();
+        if parts.is_empty() {
+            return false;
+        }
+        self.cancel_modal();
+        self.finish_repeat(false);
+        let (lo, hi) = parts.iter().filter_map(|&i| self.part_bounds(i)).fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(a, b), (c, d)| (a.min(c), b.max(d)),
+        );
+        let size = (hi - lo).max(Vec3::splat(0.1));
+        let step = self.grid.max(0.05);
+        // Uma encostada na outra; o campo Distância afasta.
+        let mut spec = RepeatSpec::line(3, ((size.x * 100.0).round() / 100.0).max(0.05));
+        spec.radius = snap(size.x.max(size.z) * 1.5, step).max(0.5);
+        self.set_mode(Select::Parts);
+        self.sel_parts = parts.clone();
+        self.repeat = Some(PartRepeat {
+            before: self.data.clone(),
+            parts,
+            spec,
+            origin: (lo + hi) / 2.0,
+        });
+        self.apply_repeat();
+        true
+    }
+
+    /// Refaz as cópias da prévia do Repetir.
+    fn apply_repeat(&mut self) {
+        let Some(r) = self.repeat.clone() else {
+            return;
+        };
+        let mut data = r.before.clone();
+        let mut sel = r.parts.clone();
+        for i in 1..=r.spec.count {
+            let t = r.spec.transform(i, r.origin);
+            for &pi in &r.parts {
+                let Some(base) = r.before.parts.get(pi) else {
+                    continue;
+                };
+                let mut p = base.clone();
+                let (_, q, pos) = (t * base.matrix()).to_scale_rotation_translation();
+                p.pos = round3(pos);
+                p.rot = model_data::euler_degrees(q);
+                p.name = unique_name(&data, &base.name);
+                data.parts.push(p);
+                sel.push(data.parts.len() - 1);
+            }
+        }
+        self.data = data;
+        self.sel_parts = sel;
+    }
+
+    /// Muda quantas cópias o Repetir aberto faz (como no campo Cópias).
+    pub fn set_repeat_count(&mut self, n: u32) {
+        if let Some(r) = &mut self.repeat {
+            r.spec.count = n.clamp(1, 200);
+            self.apply_repeat();
+        }
+    }
+
+    /// Fecha o Repetir: fica com as cópias (`apply`) ou volta como estava.
+    pub fn finish_repeat(&mut self, apply: bool) {
+        if let Some(r) = self.repeat.take() {
+            if apply {
+                self.record_before(r.before);
+            } else {
+                self.data = r.before;
+                self.sel_parts = r.parts;
+                self.fix_selection();
+            }
+        }
+    }
+
+    /// A janelinha do Repetir.
+    fn repeat_window(&mut self, ui: &egui::Ui) {
+        let Some(view) = self.view_rect else {
+            return;
+        };
+        let Some(r) = &mut self.repeat else {
+            return;
+        };
+        let mut changed = false;
+        let mut done = None;
+        let n = r.parts.len();
+        let shown = egui::Window::new("🔁 Repetir")
+            .id(egui::Id::new(("modelo-repetir", &self.rel)))
+            .collapsible(false)
+            .resizable(false)
+            .default_pos(view.left_top() + egui::vec2(12.0, 12.0))
+            .show(ui.ctx(), |ui| {
+                ui.weak(if n == 1 {
+                    "1 peça escolhida".to_string()
+                } else {
+                    format!("{n} peças escolhidas")
+                });
+                changed = repeat::spec_ui(ui, &mut r.spec, true, "m", true);
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    let ok = ui.add(
+                        egui::Button::new("✔ Aplicar")
+                            .fill(crate::theme::ACCENT.gamma_multiply(0.7)),
+                    );
+                    crate::tutorial::anchor(ui.ctx(), "repetir.aplicar", ok.rect);
+                    if ok.on_hover_text("Enter").clicked() {
+                        done = Some(true);
+                    }
+                    if ui.button("Cancelar").on_hover_text("Esc").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+        if let Some(w) = shown {
+            crate::tutorial::anchor(ui.ctx(), "repetir", w.response.rect);
+        }
+        if done.is_none() && !ui.ctx().text_edit_focused() {
+            ui.input_mut(|i| {
+                if i.consume_key(Modifiers::NONE, Key::Enter) {
+                    done = Some(true);
+                } else if i.consume_key(Modifiers::NONE, Key::Escape) {
+                    done = Some(false);
+                }
+            });
+        }
+        if changed {
+            self.apply_repeat();
+        }
+        if let Some(apply) = done {
+            self.finish_repeat(apply);
+        }
+    }
+
+    /// A janelinha do ⭐ Guardar na biblioteca (o nome).
+    fn save_window(&mut self, ui: &egui::Ui, library: Option<&Path>) {
+        let Some(name) = &mut self.saving else {
+            return;
+        };
+        let mut done = None;
+        let r =
+            egui::Modal::new(egui::Id::new(("modelo-guardar", &self.rel))).show(ui.ctx(), |ui| {
+                ui.set_width(320.0);
+                ui.heading("⭐ Guardar na biblioteca");
+                ui.label("Nome:");
+                let r = ui.add(egui::TextEdit::singleline(name).desired_width(f32::INFINITY));
+                if !r.has_focus() && !r.lost_focus() {
+                    r.request_focus();
+                }
+                ui.weak("Fica em ➕ Peça > 📚 Biblioteca, em todos os modelos e projetos.");
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    let ok = ui.add(
+                        egui::Button::new("Guardar").fill(crate::theme::ACCENT.gamma_multiply(0.7)),
+                    );
+                    if ok.clicked() || ui.input(|i| i.key_pressed(Key::Enter)) {
+                        done = Some(true);
+                    }
+                    if ui.button("Cancelar").clicked() {
+                        done = Some(false);
+                    }
+                });
+            });
+        if r.should_close() && done.is_none() {
+            done = Some(false);
+        }
+        let Some(ok) = done else {
+            return;
+        };
+        let name = self.saving.take().unwrap_or_default();
+        if !ok {
+            return;
+        }
+        let Some(dir) = library else {
+            self.actions.push(ModelAction::Notice(
+                "Sem pasta de preferências: não dá para guardar na biblioteca.".into(),
+            ));
+            return;
+        };
+        match crate::model_kits::save_user(dir, &name, &self.parts_to_save()) {
+            Ok(path) => {
+                let file = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                self.actions.push(ModelAction::Notice(format!(
+                    "⭐ {file} guardado na biblioteca"
+                )));
+            }
+            Err(e) => self.actions.push(ModelAction::Notice(format!(
+                "Não deu para guardar na biblioteca: {e}"
+            ))),
+        }
     }
 
     /// Começa a puxar as faces escolhidas.
@@ -1259,7 +1676,7 @@ impl ModelDoc {
             ui.label("Corrija o arquivo (ele é um texto em Lua) e abra de novo.");
             return Vec::new();
         }
-        self.toolbar(ui);
+        self.toolbar(ui, env.library);
         egui::Panel::right(egui::Id::new(("modelo-lado", &self.rel)))
             .resizable(true)
             .default_size(190.0)
@@ -1271,10 +1688,12 @@ impl ModelDoc {
                     .show(ui, |ui| self.side_panel(ui));
             });
         self.view(ui, env);
+        self.repeat_window(ui);
+        self.save_window(ui, env.library);
         std::mem::take(&mut self.actions)
     }
 
-    fn toolbar(&mut self, ui: &mut egui::Ui) {
+    fn toolbar(&mut self, ui: &mut egui::Ui, library: Option<&Path>) {
         ui.horizontal_wrapped(|ui| {
             for (mode, label, tip, key) in [
                 (Select::Points, "• Pontos", "Escolher pontos (1)", "modelo.pontos"),
@@ -1376,16 +1795,63 @@ impl ModelDoc {
                 .on_hover_text("Tamanho da grade, em metros");
             ui.checkbox(&mut self.show_grid, "Grade");
             ui.separator();
-            let r = ui.menu_button("➕ Peça", |ui| {
-                if let Some(i) = shape_menu(ui) {
-                    let at = Vec3::ZERO;
-                    self.add_part(i, at);
-                }
-            });
+            let mut pick = None;
+            let r = ui.menu_button("➕ Peça", |ui| pick = add_menu_ui(ui, library));
             crate::tutorial::anchor(ui.ctx(), "modelo.peca", r.response.rect);
             r.response.on_hover_text(
-                "Uma forma nova (cubo, cilindro...). Com o mouse na vista: botão direito ou Shift+A.",
+                "Uma forma, uma peça de kit ou um modelo pronto. Com o mouse na vista: o botão direito põe em cima da face (ou no chão) onde você clicou, e o Shift+A também.",
             );
+            if let Some(pick) = pick {
+                self.add_pick(pick, Place::ground(Vec3::ZERO));
+            }
+            let r = ui.menu_button("📚 Biblioteca", |ui| {
+                ui.set_min_width(200.0);
+                let n = self.touched_parts().len();
+                let r = ui
+                    .button(if n == 0 {
+                        "⭐ Guardar o modelo na biblioteca…".to_string()
+                    } else if n == 1 {
+                        "⭐ Guardar a peça na biblioteca…".to_string()
+                    } else {
+                        format!("⭐ Guardar as {n} peças na biblioteca…")
+                    })
+                    .on_hover_text("Para usar em outros modelos, em qualquer projeto (➕ Peça > 📚 Biblioteca)");
+                crate::tutorial::anchor(ui.ctx(), "modelo.guardar", r.rect);
+                if r.clicked() {
+                    let name = match self.touched_parts()[..] {
+                        [i] => self.data.parts[i].name.clone(),
+                        _ => self
+                            .rel
+                            .rsplit('/')
+                            .next()
+                            .and_then(|f| f.strip_suffix(".modelo"))
+                            .unwrap_or("peças")
+                            .to_string(),
+                    };
+                    self.saving = Some(name);
+                    ui.close();
+                }
+                let r = ui
+                    .button("🔀 Criar variação")
+                    .on_hover_text("Uma cópia deste modelo (com o .glb), aberta numa aba nova, para mudar as cores ou o jeito sem perder o original");
+                crate::tutorial::anchor(ui.ctx(), "modelo.variacao", r.rect);
+                if r.clicked() {
+                    self.actions.push(ModelAction::Variation(self.data.clone()));
+                    ui.close();
+                }
+            });
+            crate::tutorial::anchor(ui.ctx(), "modelo.biblioteca", r.response.rect);
+            let r = ui
+                .add_enabled(
+                    !self.touched_parts().is_empty() && self.repeat.is_none(),
+                    egui::Button::new("🔁 Repetir"),
+                )
+                .on_hover_text("Cópias das peças escolhidas em linha (cerca, escada) ou em círculo (raios de roda, pétalas)")
+                .on_disabled_hover_text("Escolha uma ou mais peças para repetir");
+            crate::tutorial::anchor(ui.ctx(), "modelo.repetir", r.rect);
+            if r.clicked() {
+                self.start_repeat();
+            }
             if ui.button("⛶ Enquadrar").on_hover_text("F").clicked() {
                 self.frame();
             }
@@ -1520,6 +1986,9 @@ impl ModelDoc {
         ui.weak("Clique numa cor para pintar o que está escolhido.");
         let mut paint = None;
         let mut remove = None;
+        let mut swap: Option<(String, String)> = None;
+        let mut select = None;
+        let palette = self.data.palette.clone();
         let r = ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing = egui::vec2(3.0, 3.0);
             for (i, c) in self.data.palette.iter().enumerate() {
@@ -1540,6 +2009,34 @@ impl ModelDoc {
                     paint = Some(c.clone());
                 }
                 r.context_menu(|ui| {
+                    ui.menu_button("🎨 Trocar por…", |ui| {
+                        ui.weak("No modelo todo");
+                        ui.horizontal_wrapped(|ui| {
+                            ui.set_max_width(150.0);
+                            ui.spacing_mut().item_spacing = egui::vec2(3.0, 3.0);
+                            for to in &palette {
+                                let (rect, r) =
+                                    ui.allocate_exact_size(egui::vec2(20.0, 20.0), Sense::click());
+                                ui.painter()
+                                    .rect_filled(rect, 3.0, scene_render::egui_color(to));
+                                r.widget_info(|| {
+                                    egui::WidgetInfo::labeled(
+                                        egui::WidgetType::Button,
+                                        true,
+                                        format!("trocar por {to}"),
+                                    )
+                                });
+                                if r.on_hover_text(to).clicked() {
+                                    swap = Some((c.clone(), to.clone()));
+                                    ui.close();
+                                }
+                            }
+                        });
+                    });
+                    if ui.button("Escolher as faces desta cor").clicked() {
+                        select = Some(c.clone());
+                        ui.close();
+                    }
                     if ui.button("Tirar da paleta").clicked() {
                         remove = Some(i);
                         ui.close();
@@ -1555,6 +2052,17 @@ impl ModelDoc {
         if let Some(i) = remove {
             self.record();
             self.data.palette.remove(i);
+        }
+        if let Some((from, to)) = swap {
+            let n = self.replace_color(&from, &to);
+            self.actions.push(ModelAction::Notice(if n == 1 {
+                "1 face trocou de cor".into()
+            } else {
+                format!("{n} faces trocaram de cor")
+            }));
+        }
+        if let Some(c) = select {
+            self.select_color(&c);
         }
         ui.horizontal(|ui| {
             let mut c = scene_render::egui_color(&self.color);
@@ -1652,7 +2160,7 @@ impl ModelDoc {
 
         self.input(ui, &response, rect);
         self.overlays(&painter, rect);
-        self.view_menu(ui, &response, rect);
+        self.view_menu(ui, &response, rect, env.library);
         self.hint(&painter, rect);
     }
 
@@ -1756,7 +2264,9 @@ impl ModelDoc {
 
         // Pincel: pinta as faces por onde o mouse passa com o botão apertado.
         let painting = self.tool == MTool::Paint;
-        if painting {
+        // Com o Repetir aberto, a vista só anda (a prévia não muda por baixo).
+        let locked = self.repeat.is_some();
+        if painting && !locked {
             let down = ui.input(|i| i.pointer.primary_down());
             if down && !mods.alt && (response.is_pointer_button_down_on() || self.stroke) {
                 if let Some(p) = ui.input(|i| i.pointer.latest_pos())
@@ -1787,6 +2297,7 @@ impl ModelDoc {
         }
 
         if !painting
+            && (!locked || mods.alt)
             && response.drag_started_by(egui::PointerButton::Primary)
             && let Some(p) = ui
                 .input(|i| i.pointer.press_origin())
@@ -1864,6 +2375,7 @@ impl ModelDoc {
 
         if response.clicked()
             && !painting
+            && !locked
             && !mods.alt
             && let Some(p) = response.interact_pointer_pos()
         {
@@ -1888,14 +2400,21 @@ impl ModelDoc {
         if response.hovered()
             && !secondary
             && !busy
+            && !locked
             && let Some(p) = response.hover_pos()
             && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::A))
         {
-            self.add_menu = Some((p, self.point_under(rect, p)));
+            self.add_menu = Some((p, self.place_at(rect, p)));
         }
 
-        if !busy && (response.hovered() || response.has_focus() || response.dragged()) {
+        if !busy && !locked && (response.hovered() || response.has_focus() || response.dragged()) {
             self.keyboard(ui, rect, flying);
+        } else if locked
+            && response.hovered()
+            && !flying
+            && ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F))
+        {
+            self.frame();
         }
     }
 
@@ -1966,10 +2485,16 @@ impl ModelDoc {
     }
 
     /// O menu do botão direito (clicar e soltar, sem voar) e o do Shift+A.
-    fn view_menu(&mut self, ui: &mut egui::Ui, response: &egui::Response, rect: Rect) {
+    fn view_menu(
+        &mut self,
+        ui: &mut egui::Ui,
+        response: &egui::Response,
+        rect: Rect,
+        library: Option<&Path>,
+    ) {
         let popup_id = egui::Popup::default_response_id(response);
         let was_open = egui::Popup::is_id_open(&response.ctx, popup_id);
-        let open = if response.secondary_clicked() && !self.fly_moved {
+        let open = if response.secondary_clicked() && !self.fly_moved && self.repeat.is_none() {
             let p = response.interact_pointer_pos().unwrap_or(rect.center());
             // Clicar em algo fora da seleção escolhe ele.
             let (o, d) = ray(&self.cam, rect, p);
@@ -1997,7 +2522,7 @@ impl ModelDoc {
                 }
             }
             Some(MenuAt {
-                ground: self.point_under(rect, p),
+                place: self.place_at(rect, p),
             })
         } else {
             None
@@ -2055,6 +2580,9 @@ impl ModelDoc {
                             if crate::hierarchy::menu_item(ui, "✏ Renomear", "F2").clicked() {
                                 op = Some(Key::F2);
                             }
+                            if ui.button("🔁 Repetir…").clicked() {
+                                op = Some(Key::Num0);
+                            }
                             if ui.button("🎨 Pintar com a cor escolhida").clicked() {
                                 op = Some(Key::B);
                             }
@@ -2068,7 +2596,7 @@ impl ModelDoc {
                     }
                     ui.separator();
                 }
-                let r = ui.menu_button("➕ Peça aqui", |ui| add = shape_menu(ui));
+                let r = ui.menu_button("➕ Peça aqui", |ui| add = add_menu_ui(ui, library));
                 crate::tutorial::anchor(ui.ctx(), "modelo.menu.peca", r.response.rect);
                 if crate::hierarchy::menu_item(ui, "⛶ Enquadrar", "F").clicked() {
                     op = Some(Key::F);
@@ -2083,6 +2611,7 @@ impl ModelDoc {
         // Shift+A: o mesmo menu de formas, onde o mouse estava.
         if let Some((p, at)) = self.add_menu {
             let mut close = false;
+            let mut picked = None;
             egui::Area::new(egui::Id::new(("modelo-shift-a", &self.rel)))
                 .order(egui::Order::Foreground)
                 .fixed_pos(p)
@@ -2090,8 +2619,8 @@ impl ModelDoc {
                     egui::Frame::menu(ui.style()).show(ui, |ui| {
                         ui.set_min_width(140.0);
                         ui.weak("Peça nova");
-                        if let Some(i) = shape_menu(ui) {
-                            self.add_part(i, at);
+                        if let Some(pick) = add_menu_ui(ui, library) {
+                            picked = Some(pick);
                             close = true;
                         }
                     });
@@ -2102,13 +2631,22 @@ impl ModelDoc {
                     .ctx()
                     .layer_id_at(ui.input(|i| i.pointer.latest_pos()).unwrap_or_default())
                     .is_none_or(|l| l.id != egui::Id::new(("modelo-shift-a", &self.rel)));
+            // (Um submenu aberto fica numa camada própria: clicar nele não
+            // é clicar fora.)
+            let outside = outside && !egui::Popup::is_any_open(ui.ctx());
             if close || outside || ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape)) {
                 self.add_menu = None;
             }
+            if let Some(pick) = picked {
+                self.add_pick(pick, at);
+            }
         }
-        let at = self.menu.map(|m| m.ground).unwrap_or(Vec3::ZERO);
-        if let Some(i) = add {
-            self.add_part(i, at);
+        let at = self
+            .menu
+            .map(|m| m.place)
+            .unwrap_or(Place::ground(Vec3::ZERO));
+        if let Some(pick) = add {
+            self.add_pick(pick, at);
         }
         let mouse = self
             .selection_center()
@@ -2135,6 +2673,9 @@ impl ModelDoc {
                 }
             }
             Some(Key::X) => self.toggle_mirror(),
+            Some(Key::Num0) => {
+                self.start_repeat();
+            }
             Some(Key::Delete) => self.delete_selection(),
             Some(Key::F) => self.frame(),
             _ => {}
@@ -2336,6 +2877,53 @@ fn polygon(s: &[Pos2], color: Color32) -> egui::Shape {
         mesh.add_triangle(0, k, k + 1);
     }
     egui::Shape::mesh(mesh)
+}
+
+/// O menu do que dá para pôr no modelo: as formas, os kits e a biblioteca.
+fn add_menu_ui(ui: &mut egui::Ui, library: Option<&Path>) -> Option<AddPick> {
+    let mut out = shape_menu(ui).map(AddPick::Shape);
+    ui.separator();
+    for (k, kit) in crate::model_kits::KITS.iter().enumerate() {
+        let r = ui.menu_button(format!("{} {}", kit.icon, kit.name), |ui| {
+            for (i, item) in kit.items.iter().enumerate() {
+                if ui.button(item.label).clicked() {
+                    out = Some(AddPick::Kit(k, i));
+                    ui.close();
+                }
+            }
+        });
+        crate::tutorial::anchor(
+            ui.ctx(),
+            &format!("modelo.kit:{}", kit.name),
+            r.response.rect,
+        );
+    }
+    ui.separator();
+    let r = ui.menu_button("📚 Biblioteca", |ui| {
+        ui.weak("Modelos prontos");
+        for (i, m) in crate::model_kits::READY.iter().enumerate() {
+            if ui.button(m.name).clicked() {
+                out = Some(AddPick::Ready(i));
+                ui.close();
+            }
+        }
+        let mine = library
+            .map(crate::model_kits::user_models)
+            .unwrap_or_default();
+        ui.separator();
+        ui.weak("Minhas peças");
+        if mine.is_empty() {
+            ui.weak("(nada guardado ainda: 📚 > ⭐ Guardar)");
+        }
+        for (name, path) in mine {
+            if ui.button(format!("⭐ {name}")).clicked() {
+                out = Some(AddPick::User(path));
+                ui.close();
+            }
+        }
+    });
+    crate::tutorial::anchor(ui.ctx(), "modelo.menu.biblioteca", r.response.rect);
+    out
 }
 
 /// O menu das formas prontas: devolve qual foi escolhida.
