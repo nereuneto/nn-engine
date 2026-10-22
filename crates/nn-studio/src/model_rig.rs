@@ -164,16 +164,28 @@ pub fn make_rig(kind: RigKind, data: &ModelData) -> Vec<Bone> {
     let at = |fy: f32| lo.y + size.y * fy;
     match kind {
         RigKind::Humanoid => {
-            let leg_l = part_at(data, kind, PERNA_E)
-                .unwrap_or(Vec3::new(c.x + size.x * 0.12, at(0.47), c.z));
-            let leg_r = part_at(data, kind, PERNA_D)
-                .unwrap_or(Vec3::new(c.x - size.x * 0.12, at(0.47), c.z));
+            let leg_l = part_at(data, kind, PERNA_E).unwrap_or(Vec3::new(
+                c.x + size.x * 0.12,
+                at(0.47),
+                c.z,
+            ));
+            let leg_r = part_at(data, kind, PERNA_D).unwrap_or(Vec3::new(
+                c.x - size.x * 0.12,
+                at(0.47),
+                c.z,
+            ));
             let hip = Vec3::new(c.x, (leg_l.y + leg_r.y) / 2.0, c.z);
             let neck = part_at(data, kind, CABECA).unwrap_or(Vec3::new(c.x, at(0.77), c.z));
-            let arm_l = part_at(data, kind, BRACO_E)
-                .unwrap_or(Vec3::new(c.x + size.x * 0.3, at(0.74), c.z));
-            let arm_r = part_at(data, kind, BRACO_D)
-                .unwrap_or(Vec3::new(c.x - size.x * 0.3, at(0.74), c.z));
+            let arm_l = part_at(data, kind, BRACO_E).unwrap_or(Vec3::new(
+                c.x + size.x * 0.3,
+                at(0.74),
+                c.z,
+            ));
+            let arm_r = part_at(data, kind, BRACO_D).unwrap_or(Vec3::new(
+                c.x - size.x * 0.3,
+                at(0.74),
+                c.z,
+            ));
             let arm_len = size.y * 0.33;
             vec![
                 bone(QUADRIL, None, hip, hip + Vec3::Y * size.y * 0.1),
@@ -194,7 +206,12 @@ pub fn make_rig(kind: RigKind, data: &ModelData) -> Vec<Bone> {
             let tail = Vec3::new(c.x, at(0.6), lo.z + size.z * 0.1);
             let foot = |p: Vec3| Vec3::new(p.x, lo.y, p.z);
             vec![
-                bone(CORPO, None, body, Vec3::new(c.x, at(0.55), hi.z - size.z * 0.25)),
+                bone(
+                    CORPO,
+                    None,
+                    body,
+                    Vec3::new(c.x, at(0.55), hi.z - size.z * 0.25),
+                ),
                 bone(CABECA, Some(0), head, Vec3::new(c.x, hi.y, hi.z)),
                 bone(RABO, Some(0), tail, Vec3::new(c.x, at(0.7), lo.z)),
                 bone(PATA_DE, Some(0), leg(1.0, 1.0), foot(leg(1.0, 1.0))),
@@ -473,7 +490,9 @@ fn simple(name: &str) -> Option<Anim> {
 /// o Inimigo 3D e o Chefe procuram vêm primeiro).
 pub fn ready_names(kind: RigKind) -> &'static [&'static str] {
     match kind {
-        RigKind::Humanoid => &["parado", "andar", "correr", "pular", "cair", "golpe", "acenar"],
+        RigKind::Humanoid => &[
+            "parado", "andar", "correr", "pular", "cair", "golpe", "acenar",
+        ],
         RigKind::Quadruped => &["parado", "andar", "correr"],
         RigKind::Simple => &["girar", "balançar", "abrir"],
     }
@@ -555,7 +574,11 @@ mod tests {
         let p0 = m.posed_matrices(Some(&a), 0.0);
         let p_mid = m.posed_matrices(Some(&a), 0.5);
         let p_end = m.posed_matrices(Some(&a), 1.0);
-        let i = m.parts.iter().position(|p| p.name == "Braço direito").unwrap();
+        let i = m
+            .parts
+            .iter()
+            .position(|p| p.name == "Braço direito")
+            .unwrap();
         // A mão (o fim do braço) vai para a frente e para trás.
         let hand = Vec3::new(-0.39, 0.85, 0.0);
         let at = |mats: &[glam::Mat4]| mats[i] * rest[i].inverse() * hand.extend(1.0);
@@ -586,7 +609,8 @@ mod tests {
         m.bones = make_rig(RigKind::Humanoid, &m);
         auto_bind(&mut m);
         for name in ready_names(RigKind::Humanoid) {
-            m.anims.push(ready(RigKind::Humanoid, name, &m.bones).unwrap());
+            m.anims
+                .push(ready(RigKind::Humanoid, name, &m.bones).unwrap());
         }
         let glb = m.to_glb();
         let data = nn_render::d3::ModelData::from_gltf(&glb, &mut |_| None).unwrap();

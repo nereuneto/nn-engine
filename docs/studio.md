@@ -113,6 +113,10 @@ projeto continua aberto.
   3D: uma fogueira da biblioteca, uma pedra do kit Natureza repetida em
   círculo e uma cerca repetida em linha na cena
   ([modelar sem repetir](#modelar-sem-repetir)).
+- **Anime seu personagem** (uns 12 minutos), a partir do modelo Vazio 3D:
+  o esqueleto Humanoide, as animações prontas, um andar mais forte, uma
+  animação pose a pose e o personagem como Jogador 3D
+  ([esqueleto e animações](#esqueleto-e-animações)).
 - **Eventos** (uns 10 minutos), com o modelo Aventura: ler as regras da porta,
   testar e criar regras suas com *Quando* e *Enquanto*.
 - **Desenhe seu herói** (uns 10 minutos), a partir do modelo Vazio: desenhar
@@ -1318,6 +1322,68 @@ e carrinho.
 
 O tutorial **Uma cerca e uma fogueira** usa tudo isso em 8 minutos.
 
+### Esqueleto e animações
+
+![O animador: o personagem no meio do andar, com o braço direito escolhido e a linha do tempo embaixo](imagens/nn-studio-animador.png)
+
+**💀 Esqueleto.** Para animar, o modelo ganha ossos, e **cada peça segue um
+osso inteira**: o braço gira no ombro, a perna no quadril. É o jeito dos
+bonecos de peças, sem entortar nada. Os esqueletos prontos se ajustam ao
+tamanho do modelo:
+
+| Esqueleto | Ossos | Para |
+|---|---|---|
+| 🚶 Humanoide | quadril, tronco, cabeça, braços e pernas | heróis, inimigos, gente |
+| 🐕 Quadrúpede | corpo, cabeça, rabo e quatro patas | bichos |
+| 📌 Simples | um osso só | porta, tampa de baú, hélice, bandeira |
+
+Ao pôr o esqueleto, cada peça vai para o osso do **nome** dela ("Braço
+esquerdo", "Cabeça", "Pata traseira direita"...) ou, se o nome não diz, para o
+osso **mais perto**. O personagem da biblioteca e o kit Personagem já saem
+ligados certinho. A frente dos modelos é o **+Z** (para onde o Jogador 3D
+anda), então o lado esquerdo do personagem fica no +X.
+
+- **💀 Ossos (4)** mostra os ossos e move as **juntas** (com os filhos
+  junto). As peças não saem do lugar: só muda onde elas giram.
+- Com uma peça escolhida (📦 Peças), **Segue** troca o osso dela. A lista
+  **Ossos**, no painel da direita, escolhe e renomeia ossos (duplo clique).
+- **💀 Esqueleto > 🔗 Ligar as peças de novo** refaz as ligações, e **🗑 Tirar
+  o esqueleto** tira os ossos e as animações.
+
+**🎬 Animar.** O modo Animar mostra a linha do tempo embaixo e as animações
+do modelo.
+
+- **🎬 Prontas** põe as animações do esqueleto:
+  - **Humanoide:** parado, andar, correr, pular, cair, golpe e acenar;
+  - **Quadrúpede:** parado, andar e correr;
+  - **Simples:** girar, balançar e abrir.
+  
+  Os nomes são os que o **Jogador 3D**, o **Inimigo 3D** e o **Chefe**
+  procuram, então o personagem já anda e pula sozinho no jogo.
+- **➕ Nova** começa uma animação do zero; **✏** renomeia e **🗑** apaga.
+- **▶ Tocar** (Espaço) toca. **🔁 Repetir** decide se ela repete (andar) ou
+  toca uma vez (pular), e o número ao lado é a duração.
+- **Posar:** clique num osso (ou numa peça) e gire com os círculos, ou
+  arraste em volta dele. Fica um **quadro-chave** no instante da linha do
+  tempo, e entre um quadro e outro o NN Studio faz o movimento. **✋ Mover**
+  (W) anda a junta (o quadril sobe e desce).
+- **Na linha do tempo:**
+  - clicar leva a outro instante;
+  - os losangos de cima são os quadros de todos os ossos, e os grandes
+    embaixo, os do osso escolhido;
+  - arrastar um losango muda o quadro de lugar;
+  - o botão direito apaga, copia e cola;
+  - as setas ← → pulam de quadro em quadro, e **Del** apaga o quadro.
+- **🐇 Mais rápida / 🐢 Mais lenta** mudam o passo, e **💪 Mais forte / Mais
+  fraca** balançam mais ou menos (tudo de uma vez, sem mexer quadro por
+  quadro).
+- **📋 Copiar pose / Colar pose** (Ctrl+C / Ctrl+V) levam a pose de um
+  instante para outro: o fim igual ao começo fecha a volta.
+
+O `.glb` leva o esqueleto e as animações: a **Animação 3D** e o Jogador 3D
+tocam elas na cena e no jogo. O tutorial **Anime seu personagem** passa por
+tudo isso em 12 minutos.
+
 ## Editor de conversa
 
 Arquivos **`.dialogo`** abrem no **editor de conversa**. Crie um em
@@ -1591,6 +1657,8 @@ mensagem diz onde está o erro.
 | 1 / 2 / 3 (no modelador) | Escolher pontos / faces / peças |
 | P / I / M (no modelador) | Puxar / encolher / juntar pontos |
 | B (no modelador) | Pintar faces |
+| 4 (no modelador) | Ossos (com esqueleto) |
+| Espaço / ← → / Del (no Animar) | Tocar / quadro anterior e próximo / apagar o quadro |
 | F1 | Guia do Lua |
 
 A lista também está em **Ajuda > Atalhos do teclado**.

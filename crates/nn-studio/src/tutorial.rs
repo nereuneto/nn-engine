@@ -229,6 +229,7 @@ pub fn all() -> &'static [Tutorial] {
             uma_conversa(),
             casinha(),
             fogueira(),
+            animar(),
             eventos(),
             desenhe(),
             tiles(),
@@ -1945,6 +1946,154 @@ fn fogueira() -> Tutorial {
             Step {
                 title: "Pronto: sem trabalho repetido!",
                 text: "Você usou um modelo pronto, uma peça de kit e o Repetir em círculo e em linha. Ideias: 📚 Biblioteca > ⭐ Guardar guarda peças suas para qualquer projeto; 🔀 Criar variação faz uma cópia do modelo para mudar; e o botão direito numa cor da paleta troca ela no modelo todo.",
+                target: None,
+                show: None,
+                done: None,
+            },
+        ],
+    }
+}
+
+/// As animações de todos os modelos abertos.
+fn model_anims(ws: &ProjectWorkspace) -> Vec<&crate::model_data::Anim> {
+    models(ws).into_iter().flat_map(|m| &m.data.anims).collect()
+}
+
+/// Uma animação que não é das prontas.
+fn own_anim(ws: &ProjectWorkspace) -> Option<&crate::model_data::Anim> {
+    let ready = crate::model_rig::ready_names(crate::model_rig::RigKind::Humanoid);
+    model_anims(ws)
+        .into_iter()
+        .find(|a| !ready.contains(&a.name.as_str()))
+}
+
+fn animar() -> Tutorial {
+    Tutorial {
+        id: "anime-seu-personagem",
+        title: "Anime seu personagem",
+        summary: "Ponha um esqueleto num personagem do modelador, use as animações prontas (parado, andar, correr, pular), ajuste o andar, crie uma animação sua e jogue com ele.",
+        minutes: 12,
+        template: Template::Vazio3D,
+        project: "Anime seu personagem",
+        steps: vec![
+            Step {
+                title: "Um personagem que se mexe",
+                text: "Para animar, o modelo ganha um esqueleto: cada peça segue um osso (o braço segue o ombro, a perna segue o quadril). Depois, as animações giram os ossos. O Jogador 3D toca sozinho as que se chamam parado, andar, correr, pular e cair.",
+                target: Some("cena"),
+                show: None,
+                done: None,
+            },
+            Step {
+                title: "O personagem",
+                text: "Arquivos > ➕ Novo > 🎲 Modelo 3D. Em \"Começar com\", escolha Personagem e clique em Criar.",
+                target: Some("arquivos.novo"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| parts_named(ws, "Braço") > 0),
+            },
+            Step {
+                title: "O esqueleto",
+                text: "💀 Esqueleto > 🚶 Humanoide. Os ossos aparecem por cima do modelo, e cada peça já vai para o osso do nome dela. (No modo 💀 Ossos, dá para mover as juntas.)",
+                target: Some("modelo.esqueleto"),
+                show: None,
+                done: Some(|ws, _| {
+                    models(ws).iter().any(|m| {
+                        m.data.bones.len() >= 7 && m.data.parts.iter().all(|p| !p.bone.is_empty())
+                    })
+                }),
+            },
+            Step {
+                title: "Animações prontas",
+                text: "Clique em 🎬 Animar: embaixo aparece a linha do tempo. Depois, 🎬 Prontas > Todas as que faltam.",
+                target: Some("modelo.animar"),
+                show: None,
+                done: Some(|ws, _| {
+                    let a = model_anims(ws);
+                    a.iter().any(|a| a.name == "andar") && a.iter().any(|a| a.name == "parado")
+                }),
+            },
+            Step {
+                title: "Veja ele andar",
+                text: "Na lista de animações (ao lado de ✏ Modelar), escolha andar e clique em ▶ Tocar (ou aperte Espaço com o mouse na vista).",
+                target: Some("animar.lista"),
+                show: None,
+                done: Some(|ws, _| {
+                    models(ws).iter().any(|m| {
+                        m.rig.animating
+                            && m.current_anim().is_some_and(|a| a.name == "andar")
+                            && (m.rig.playing || m.rig.time > 0.0)
+                    })
+                }),
+            },
+            Step {
+                title: "Um andar mais animado",
+                text: "Clique em 💪 Mais forte: os braços e as pernas balançam mais. 🐇 Mais rápida e 🐢 Mais lenta mudam o passo.",
+                target: Some("animar.forte"),
+                show: None,
+                done: Some(|ws, _| {
+                    model_anims(ws).iter().any(|a| {
+                        a.name == "andar"
+                            && a.track(crate::model_rig::PERNA_E)
+                                .and_then(|t| t.keys.first())
+                                .is_some_and(|k| k.rot.x.abs() > 26.0)
+                    })
+                }),
+            },
+            Step {
+                title: "Uma animação sua",
+                text: "➕ Nova e dê um nome, como comemorar (Enter confirma).",
+                target: Some("animar.nova"),
+                show: None,
+                done: Some(|ws, _| own_anim(ws).is_some()),
+            },
+            Step {
+                title: "Pose a pose",
+                text: "Clique num braço: o osso dele fica laranja. Arraste em volta dele (ou um dos círculos) para girar: nasce um quadro-chave (um losango amarelo) na linha do tempo. Clique mais adiante na linha do tempo e gire de novo: entre um quadro e outro, o NN Studio faz o movimento.",
+                target: Some("animar.tempo"),
+                show: None,
+                done: Some(|ws, _| {
+                    own_anim(ws).is_some_and(|a| a.tracks.iter().any(|t| t.keys.len() >= 2))
+                }),
+            },
+            Step {
+                title: "Salve",
+                text: "Ctrl+S. O personagem.glb leva o esqueleto e as animações: a cena e o jogo tocam elas.",
+                target: Some("modelo"),
+                show: None,
+                done: Some(|ws, _| {
+                    let m = models(ws);
+                    !m.is_empty() && m.iter().all(|m| !m.is_dirty()) && own_anim(ws).is_some()
+                }),
+            },
+            Step {
+                title: "Na cena",
+                text: "Abra cenas/mundo.cena e arraste o personagem.modelo para o chão.",
+                target: Some("arquivo:cenas/mundo.cena"),
+                show: Some(Tab::Files),
+                done: Some(|ws, _| scene_models(ws, "personagem") > 0),
+            },
+            Step {
+                title: "Andar e pular",
+                text: "Com ele selecionado: ➕ Adicionar componente (no fim do Inspetor) > Jogador > Jogador 3D.",
+                target: Some("inspetor.adicionar"),
+                show: Some(Tab::Inspector),
+                done: Some(|ws, _| {
+                    objects(ws).iter().any(|o| {
+                        has_behavior(o, "nn:jogador3d")
+                            && o.component("model")
+                                .is_some_and(|c| c.str("file").ends_with("personagem.glb"))
+                    })
+                }),
+            },
+            Step {
+                title: "Jogue!",
+                text: "F6. Parado, ele respira; andando, balança os braços e as pernas; no pulo (espaço) e na queda, usa as animações pular e cair.",
+                target: Some("cena.testar"),
+                show: None,
+                done: Some(|_, st| st.played),
+            },
+            Step {
+                title: "Pronto: um personagem animado!",
+                text: "Você usou o esqueleto Humanoide, as animações prontas, o Mais forte e uma animação pose a pose. Ideias: no Inspetor, a Animação 3D toca a sua animação num objeto parado; o Inimigo 3D usa parado e andar; e o esqueleto 🐕 Quadrúpede anima bichos.",
                 target: None,
                 show: None,
                 done: None,

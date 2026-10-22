@@ -103,7 +103,11 @@ impl Track {
         for w in self.keys.windows(2) {
             let (a, b) = (w[0], w[1]);
             if t <= b.t {
-                let f = if b.t > a.t { (t - a.t) / (b.t - a.t) } else { 1.0 };
+                let f = if b.t > a.t {
+                    (t - a.t) / (b.t - a.t)
+                } else {
+                    1.0
+                };
                 return (
                     rot_quat(a.rot).slerp(rot_quat(b.rot), f),
                     a.offset.lerp(b.offset, f),
@@ -119,7 +123,11 @@ impl Track {
         match self.keys.iter().position(|k| (k.t - key.t).abs() < 1e-3) {
             Some(i) => self.keys[i] = key,
             None => {
-                let i = self.keys.iter().position(|k| k.t > key.t).unwrap_or(self.keys.len());
+                let i = self
+                    .keys
+                    .iter()
+                    .position(|k| k.t > key.t)
+                    .unwrap_or(self.keys.len());
                 self.keys.insert(i, key);
             }
         }
@@ -892,7 +900,11 @@ impl ModelData {
                         crate::config_lua::lua_string(&p.name)
                     ));
                 }
-                s.push_str(&format!("head = {}, tail = {} }},\n", v3(b.head), v3(b.tail)));
+                s.push_str(&format!(
+                    "head = {}, tail = {} }},\n",
+                    v3(b.head),
+                    v3(b.tail)
+                ));
             }
             s.push_str("  },\n");
         }
@@ -1053,11 +1065,19 @@ impl ModelData {
                     .flatten()
                     .unwrap_or_else(|| format!("animação {}", anims.len() + 1));
                 let duration = num(at.get("duration").unwrap_or(Value::Nil)).max(0.05);
-                let looping = at.get::<Option<bool>>("loop").ok().flatten().unwrap_or(true);
+                let looping = at
+                    .get::<Option<bool>>("loop")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(true);
                 let mut anim = Anim::new(&name, duration, looping);
                 if let Ok(Value::Table(tracks)) = at.get::<Value>("tracks") {
                     for tt in tracks.sequence_values::<Table>().flatten() {
-                        let bone: String = tt.get::<Option<String>>("bone").ok().flatten().unwrap_or_default();
+                        let bone: String = tt
+                            .get::<Option<String>>("bone")
+                            .ok()
+                            .flatten()
+                            .unwrap_or_default();
                         if let Ok(Value::Table(keys)) = tt.get::<Value>("keys") {
                             for kt in keys.sequence_values::<Table>().flatten() {
                                 anim.key(
@@ -1269,7 +1289,8 @@ impl ModelData {
                 channels.push(json!({ "sampler": samplers.len() - 1, "target": { "node": b, "path": "rotation" } }));
                 if samples.iter().any(|(_, o)| *o != Vec3::ZERO) {
                     let parent = self.bones[b].parent.filter(|&p| p < b);
-                    let rest = self.bones[b].head - parent.map_or(Vec3::ZERO, |p| self.bones[p].head);
+                    let rest =
+                        self.bones[b].head - parent.map_or(Vec3::ZERO, |p| self.bones[p].head);
                     let mut pb = Vec::new();
                     for (_, o) in &samples {
                         let v = rest + *o;
@@ -1286,7 +1307,8 @@ impl ModelData {
                 }
             }
             if !channels.is_empty() {
-                animations.push(json!({ "name": a.name, "samplers": samplers, "channels": channels }));
+                animations
+                    .push(json!({ "name": a.name, "samplers": samplers, "channels": channels }));
             }
         }
         while !bin.len().is_multiple_of(4) {

@@ -42,6 +42,25 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - **Cores:** o botão direito numa cor da paleta **troca ela no modelo todo** ou **escolhe as faces dela**.
 - **Tutorial novo:** **Uma cerca e uma fogueira**.
 
+### Esqueleto e animador (Sprint 49)
+
+- **💀 Esqueleto** no modelador: **Humanoide**, **Quadrúpede** ou **Simples**.
+  - O esqueleto se ajusta ao tamanho do modelo.
+  - Cada peça vai para o osso do nome dela (ou para o mais perto) e **segue o osso inteira**, sem entortar.
+  - O personagem da biblioteca e o kit Personagem já saem ligados.
+- **💀 Ossos (4):** mostra os ossos e move as juntas. **Segue** troca o osso de uma peça, e a lista **Ossos** escolhe e renomeia.
+- **🎬 Animar:** a linha do tempo, as animações do modelo, ▶ Tocar (Espaço), repetir ou não, e a duração.
+  - **Posar:** girar um osso com as alças grava um quadro-chave no instante.
+  - **Linha do tempo:** arrastar os quadros muda o lugar deles, e o botão direito apaga, copia e cola a pose.
+- **Animações prontas:**
+  - **Humanoide:** parado, andar, correr, pular, cair, golpe e acenar, com os nomes que o Jogador 3D, o Inimigo 3D e o Chefe já procuram;
+  - **Quadrúpede:** parado, andar e correr;
+  - **Simples:** girar, balançar e abrir.
+- **Ajustes rápidos:** 🐇 Mais rápida, 🐢 Mais lenta, 💪 Mais forte e Mais fraca.
+- **O `.glb` leva o esqueleto e as animações:** a Animação 3D e o Jogador 3D tocam elas na cena e no jogo, e a engine não mudou. O `.modelo` guarda os ossos e os quadros-chave.
+- **O kit Personagem trocou os lados:** o "Braço esquerdo" e a "Perna esquerda" agora ficam no +X, que é o lado esquerdo de quem olha para a frente (+Z). Os modelos já feitos não mudam.
+- **Tutorial novo:** **Anime seu personagem**.
+
 ## 0.5.0
 
 A versão do **NN Studio mais gostoso de usar**. O **botão direito** funciona em todo lugar e cria onde você clicou. A **busca rápida (Shift+A)** acha o que criar pelo nome, até com erro de digitação. Duplicar ficou sem trabalho repetido (**Ctrl+D que repete o passo**, **Alt+arrastar**, **Shift+D**), e dá para **copiar e colar** objetos e componentes. O Inspetor edita **vários objetos de uma vez**, os **⭐ favoritos** guardam o que você monta toda hora, os **avisos rápidos com Desfazer** deixam errar sem medo, os painéis vazios ensinam e as **Preferências** trazem a cor de destaque, as animações e os sons. A engine não mudou: os jogos rodam igual. Para começar: [A aba da cena](docs/studio.md#a-aba-da-cena), [Inspetor](docs/studio.md#inspetor) e [Preferências](docs/studio.md#preferências).

@@ -18,12 +18,12 @@ use crate::repeat::{self, RepeatSpec};
 
 #[path = "model_animator.rs"]
 mod animator;
-pub use animator::RigState;
 use crate::scene_render::{self, SceneRenderer, View3};
 use crate::scene_view::scene3d::{
     BLUE, Cam3, GREEN, ORANGE, RED, arrow, axis_param, dist_to_segment, ray, ray_plane, ring, snap,
     to_screen,
 };
+pub use animator::RigState;
 
 /// O que o modelador pede ao espaço de trabalho.
 #[derive(Debug, Clone, PartialEq)]
@@ -375,7 +375,11 @@ impl ModelDoc {
         if self.rig.anim.is_some_and(|i| i >= self.data.anims.len()) {
             self.rig.anim = (!self.data.anims.is_empty()).then_some(0);
         }
-        if self.rig.sel_bone.is_some_and(|i| i >= self.data.bones.len()) {
+        if self
+            .rig
+            .sel_bone
+            .is_some_and(|i| i >= self.data.bones.len())
+        {
             self.rig.sel_bone = None;
         }
         if self.data.bones.is_empty() {

@@ -10,10 +10,10 @@
 use eframe::egui::{self, Color32, Key, Modifiers, Pos2, Rect, Sense, Stroke};
 use glam::{Mat4, Quat, Vec3};
 
+use super::ray_plane_n as ray_plane_n_pub;
 use super::{DragKind, MTool, ModelAction, ModelDoc, Select};
 use crate::model_data::{self, Anim, Key as AnimKey, ModelData};
 use crate::model_rig::{self, RigKind};
-use super::ray_plane_n as ray_plane_n_pub;
 use crate::scene_view::scene3d::{ORANGE, axis_param, dist_to_segment, ray, snap, to_screen};
 
 /// Arrastando uma alça de um osso: posando (Animar) ou movendo a junta
@@ -216,8 +216,7 @@ impl ModelDoc {
     /// A matriz de cada peça como aparece agora (posada, no Animar).
     pub fn shown_matrices(&self) -> Vec<Mat4> {
         if self.rig.animating {
-            self.data
-                .posed_matrices(self.current_anim(), self.rig.time)
+            self.data.posed_matrices(self.current_anim(), self.rig.time)
         } else {
             self.data.parts.iter().map(|p| p.matrix()).collect()
         }
@@ -384,9 +383,7 @@ impl ModelDoc {
 
     /// A ferramenta das alças nos ossos: girar (posando) ou mover.
     fn rig_tool(&self) -> MTool {
-        if self.rig.bones_mode {
-            MTool::Move
-        } else if self.tool == MTool::Move {
+        if self.rig.bones_mode || self.tool == MTool::Move {
             MTool::Move
         } else {
             MTool::Rotate
@@ -627,14 +624,18 @@ impl ModelDoc {
                 if snapping {
                     deg = snap(deg, 5.0);
                 }
-                (Vec3::ZERO, Some(Quat::from_axis_angle(axis, deg.to_radians())))
+                (
+                    Vec3::ZERO,
+                    Some(Quat::from_axis_angle(axis, deg.to_radians())),
+                )
             }
             _ => return,
         };
-        if delta.length() < 1e-6 && rot.is_none_or(|q| q.angle_between(Quat::IDENTITY) < 1e-5) {
-            if !drag.recorded {
-                return;
-            }
+        if delta.length() < 1e-6
+            && rot.is_none_or(|q| q.angle_between(Quat::IDENTITY) < 1e-5)
+            && !drag.recorded
+        {
+            return;
         }
         drag.recorded = true;
         let before = drag.before.clone();
@@ -683,7 +684,10 @@ impl ModelDoc {
                         .collect();
                     if let Some(mut s) = s {
                         s.push(s[0]);
-                        painter.add(egui::Shape::line(s, Stroke::new(1.0, ORANGE.gamma_multiply(0.7))));
+                        painter.add(egui::Shape::line(
+                            s,
+                            Stroke::new(1.0, ORANGE.gamma_multiply(0.7)),
+                        ));
                     }
                 }
             }
@@ -698,13 +702,23 @@ impl ModelDoc {
             let color = if sel { ORANGE } else { BONE };
             painter.line_segment([*h, *t], Stroke::new(5.0, Color32::from_black_alpha(140)));
             painter.line_segment([*h, *t], Stroke::new(3.0, color));
-            painter.circle(*h, 5.0, color, Stroke::new(1.5, Color32::from_black_alpha(160)));
+            painter.circle(
+                *h,
+                5.0,
+                color,
+                Stroke::new(1.5, Color32::from_black_alpha(160)),
+            );
         }
         if self.rig.drag.is_none()
             && let Some(b) = self.rig.sel_bone
             && let Some(g) = globals.get(b)
         {
-            self.draw_gizmo(painter, rect, g.transform_point3(Vec3::ZERO), self.rig_tool());
+            self.draw_gizmo(
+                painter,
+                rect,
+                g.transform_point3(Vec3::ZERO),
+                self.rig_tool(),
+            );
         }
         // O nome do osso escolhido.
         if let Some(b) = self.rig.sel_bone.and_then(|b| self.data.bones.get(b))
@@ -997,8 +1011,10 @@ impl ModelDoc {
                 None => "Clique num osso (ou numa peça) para posar.".into(),
             });
         });
-        let (rect, response) =
-            ui.allocate_exact_size(egui::vec2(ui.available_width(), 46.0), Sense::click_and_drag());
+        let (rect, response) = ui.allocate_exact_size(
+            egui::vec2(ui.available_width(), 46.0),
+            Sense::click_and_drag(),
+        );
         response.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Linha do tempo")
         });
@@ -1008,7 +1024,8 @@ impl ModelDoc {
         painter.rect_filled(rect, 4.0, visuals.extreme_bg_color);
         let pad = 10.0;
         let x_of = |t: f32| rect.left() + pad + (rect.width() - 2.0 * pad) * (t / dur);
-        let t_of = |x: f32| ((x - rect.left() - pad) / (rect.width() - 2.0 * pad) * dur).clamp(0.0, dur);
+        let t_of =
+            |x: f32| ((x - rect.left() - pad) / (rect.width() - 2.0 * pad) * dur).clamp(0.0, dur);
         // Marcas a cada 0,1 s (com número a cada 0,5 s).
         let steps = (dur / 0.1).round() as i32;
         for i in 0..=steps {
@@ -1016,7 +1033,10 @@ impl ModelDoc {
             let x = x_of(t);
             let big = i % 5 == 0;
             painter.line_segment(
-                [Pos2::new(x, rect.top()), Pos2::new(x, rect.top() + if big { 10.0 } else { 5.0 })],
+                [
+                    Pos2::new(x, rect.top()),
+                    Pos2::new(x, rect.top() + if big { 10.0 } else { 5.0 }),
+                ],
                 Stroke::new(1.0, visuals.weak_text_color()),
             );
             if big && steps <= 120 {
@@ -1079,17 +1099,22 @@ impl ModelDoc {
                 .or_else(|| pick(&all, row_all).map(|t| (t, false)))
         };
         let snapping = self.snap != ui.input(|i| i.modifiers.command);
-        let snap_t = |t: f32| if snapping { (snap(t, 0.05) * 1000.0).round() / 1000.0 } else { t };
+        let snap_t = |t: f32| {
+            if snapping {
+                (snap(t, 0.05) * 1000.0).round() / 1000.0
+            } else {
+                t
+            }
+        };
         if response.drag_started_by(egui::PointerButton::Primary)
             && let Some(p) = ui.input(|i| i.pointer.press_origin())
+            && let Some((t, own)) = near(p)
         {
-            if let Some((t, own)) = near(p) {
-                self.rig.key_drag = Some(KeyDrag {
-                    from: t,
-                    bone: if own { bone.clone() } else { None },
-                    before: self.data.clone(),
-                });
-            }
+            self.rig.key_drag = Some(KeyDrag {
+                from: t,
+                bone: if own { bone.clone() } else { None },
+                before: self.data.clone(),
+            });
         }
         if let Some(p) = response.interact_pointer_pos()
             && (response.dragged() || response.clicked())
@@ -1241,7 +1266,10 @@ impl ModelDoc {
                     current.clone()
                 })
                 .show_ui(ui, |ui| {
-                    if ui.selectable_label(current.is_empty(), "(nenhum osso)").clicked() {
+                    if ui
+                        .selectable_label(current.is_empty(), "(nenhum osso)")
+                        .clicked()
+                    {
                         pick = Some(String::new());
                     }
                     for b in &self.data.bones {

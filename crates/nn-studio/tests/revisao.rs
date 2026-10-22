@@ -865,3 +865,52 @@ fn captura_dos_kits_para_a_documentacao() {
     passos(&mut h);
     tela(&mut h, "nn-studio-modelador-kits");
 }
+
+/// A imagem do animador: o personagem com o esqueleto, no meio do andar,
+/// com o braço direito escolhido.
+#[test]
+#[ignore]
+fn captura_do_animador_para_a_documentacao() {
+    use glam::Vec3;
+    use nn_studio::model_kits::READY;
+    use nn_studio::model_rig::{self, RigKind};
+    let dir = temp("captura-animador");
+    let proj = dir.join("jogo");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Vazio3D,
+    })
+    .unwrap();
+    let mut m = (READY.iter().find(|r| r.name == "Personagem").unwrap().make)();
+    m.bones = model_rig::make_rig(RigKind::Humanoid, &m);
+    model_rig::auto_bind(&mut m);
+    for name in model_rig::ready_names(RigKind::Humanoid) {
+        m.anims
+            .push(model_rig::ready(RigKind::Humanoid, name, &m.bones).unwrap());
+    }
+    let pasta = proj.join("assets/modelos");
+    std::fs::create_dir_all(&pasta).unwrap();
+    std::fs::write(pasta.join("heroi.modelo"), m.to_lua()).unwrap();
+    std::fs::write(pasta.join("heroi.glb"), m.to_glb()).unwrap();
+
+    let mut h = studio(&dir, Some(proj.clone()), egui::vec2(1280.0, 800.0));
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("assets/modelos/heroi.modelo", None);
+    passos(&mut h);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let d = ws.models.values_mut().next().unwrap();
+        d.set_animating(true);
+        d.rig.anim = d.data.anims.iter().position(|a| a.name == "andar");
+        d.rig.time = 0.2;
+        d.rig.sel_bone = d.data.bone_index(model_rig::BRACO_D);
+        d.cam
+            .look_at(Vec3::new(1.3, 1.45, 1.8), Vec3::new(0.0, 0.95, 0.0));
+    }
+    passos(&mut h);
+    passos(&mut h);
+    tela(&mut h, "nn-studio-animador");
+}
