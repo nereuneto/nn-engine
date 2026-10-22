@@ -130,7 +130,7 @@ impl FilePanel {
                     actions.push(Action::NewItem { kind: NewKind::Image, parent: image_dir(tree, &dir) });
                     ui.close();
                 }
-                let r = ui.button("🧊 Modelo 3D").on_hover_text("Um objeto, personagem ou cenário 3D montado no modelador, com peças e cores. Ao salvar, o .glb sai junto para usar nas cenas");
+                let r = ui.button("🎲 Modelo 3D").on_hover_text("Um objeto, personagem ou cenário 3D montado no modelador, com peças e cores. Ao salvar, o .glb sai junto para usar nas cenas");
                 crate::tutorial::anchor_in(ui, "arquivos:novo-modelo", r.rect);
                 if r.clicked() {
                     actions.push(Action::NewItem { kind: NewKind::Model, parent: model_dir(&dir) });
@@ -513,7 +513,7 @@ impl FilePanel {
             });
             ui.close();
         }
-        if ui.button("🧊 Novo modelo 3D aqui").clicked() {
+        if ui.button("🎲 Novo modelo 3D aqui").clicked() {
             actions.push(Action::NewItem {
                 kind: NewKind::Model,
                 parent: dir.to_string(),

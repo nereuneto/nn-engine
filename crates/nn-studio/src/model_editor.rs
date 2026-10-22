@@ -14,11 +14,11 @@ use eframe::egui::{self, Color32, Key, Modifiers, Pos2, Rect, Sense, Stroke};
 use glam::{Mat4, Quat, Vec3};
 
 use crate::model_data::{self, MID, ModelData, Part, SHAPES, face_center, face_normal};
-use crate::scene_view::scene3d::{
-    BLUE, Cam3, GREEN, ORANGE, RED, arrow, axis_param, dist_to_segment, ray, ray_plane, ring,
-    snap, to_screen,
-};
 use crate::scene_render::{self, SceneRenderer, View3};
+use crate::scene_view::scene3d::{
+    BLUE, Cam3, GREEN, ORANGE, RED, arrow, axis_param, dist_to_segment, ray, ray_plane, ring, snap,
+    to_screen,
+};
 
 /// O que o modelador pede ao espaço de trabalho.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,16 +55,37 @@ pub enum MTool {
 
 #[derive(Debug, Clone)]
 enum DragKind {
-    Axis { axis: Vec3, s0: f32 },
+    Axis {
+        axis: Vec3,
+        s0: f32,
+    },
     /// Arrastar o que está escolhido no plano de frente para a câmera.
-    Free { normal: Vec3, hit0: Vec3 },
-    Rotate { axis: Vec3, a0: f32, center: Pos2 },
-    Scale { axis: usize, s0: f32, len: f32 },
+    Free {
+        normal: Vec3,
+        hit0: Vec3,
+    },
+    Rotate {
+        axis: Vec3,
+        a0: f32,
+        center: Pos2,
+    },
+    Scale {
+        axis: usize,
+        s0: f32,
+        len: f32,
+    },
     Look,
-    Orbit { pivot: Vec3 },
-    Pan { dist: f32 },
+    Orbit {
+        pivot: Vec3,
+    },
+    Pan {
+        dist: f32,
+    },
     /// Caixa de seleção.
-    Box { from: Pos2, add: bool },
+    Box {
+        from: Pos2,
+        add: bool,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -367,12 +388,7 @@ impl ModelDoc {
             Select::Faces => self
                 .sel_faces
                 .iter()
-                .flat_map(|&(p, f)| {
-                    self.data.parts[p].faces[f]
-                        .v
-                        .iter()
-                        .map(move |&k| (p, k))
-                })
+                .flat_map(|&(p, f)| self.data.parts[p].faces[f].v.iter().map(move |&k| (p, k)))
                 .collect(),
             Select::Parts => Vec::new(),
         };
@@ -565,7 +581,8 @@ impl ModelDoc {
                         let c = m.transform_point3(face_center(&pts, &idx));
                         let n = m.transform_vector3(face_normal(&pts, &idx));
                         let front = n.dot(c - self.cam.pos) < 0.0;
-                        let inside = to_screen(&self.cam, rect, c).is_some_and(|s| area.contains(s));
+                        let inside =
+                            to_screen(&self.cam, rect, c).is_some_and(|s| area.contains(s));
                         if front && inside && self.sees(c) && !self.sel_faces.contains(&(pi, fi)) {
                             self.sel_faces.push((pi, fi));
                         }
@@ -607,14 +624,13 @@ impl ModelDoc {
 
     pub fn frame(&mut self) {
         let bounds = match self.mode {
-            Select::Parts if !self.sel_parts.is_empty() => {
-                self.sel_parts.iter().filter_map(|&i| self.part_bounds(i)).fold(
-                    None,
-                    |acc: Option<(Vec3, Vec3)>, (a, b)| {
-                        Some(acc.map_or((a, b), |(x, y)| (x.min(a), y.max(b))))
-                    },
-                )
-            }
+            Select::Parts if !self.sel_parts.is_empty() => self
+                .sel_parts
+                .iter()
+                .filter_map(|&i| self.part_bounds(i))
+                .fold(None, |acc: Option<(Vec3, Vec3)>, (a, b)| {
+                    Some(acc.map_or((a, b), |(x, y)| (x.min(a), y.max(b))))
+                }),
             Select::Faces | Select::Points if self.has_selection() => {
                 let mut out: Option<(Vec3, Vec3)> = None;
                 for (p, k) in self.selected_verts() {
@@ -655,7 +671,11 @@ impl ModelDoc {
         let name = unique_name(&self.data, label);
         let mut p = make(&name, &self.color);
         let step = self.grid.max(0.01);
-        p.pos = Vec3::new(snap(at.x, step), snap(at.y.max(0.0), step), snap(at.z, step));
+        p.pos = Vec3::new(
+            snap(at.x, step),
+            snap(at.y.max(0.0), step),
+            snap(at.z, step),
+        );
         self.data.parts.push(p);
         let i = self.data.parts.len() - 1;
         self.set_mode(Select::Parts);
@@ -1141,7 +1161,11 @@ impl ModelDoc {
                 };
                 let mut delta = hit - hit0;
                 if snapping {
-                    delta = Vec3::new(snap(delta.x, step), snap(delta.y, step), snap(delta.z, step));
+                    delta = Vec3::new(
+                        snap(delta.x, step),
+                        snap(delta.y, step),
+                        snap(delta.z, step),
+                    );
                 }
                 if delta.length() < 1e-6 && !drag.recorded {
                     return;
@@ -1254,8 +1278,8 @@ impl ModelDoc {
         ui.horizontal_wrapped(|ui| {
             for (mode, label, tip, key) in [
                 (Select::Points, "• Pontos", "Escolher pontos (1)", "modelo.pontos"),
-                (Select::Faces, "▰ Faces", "Escolher faces (2)", "modelo.faces"),
-                (Select::Parts, "⬛ Peças", "Escolher peças inteiras (3)", "modelo.pecas"),
+                (Select::Faces, "◼ Faces", "Escolher faces (2)", "modelo.faces"),
+                (Select::Parts, "📦 Peças", "Escolher peças inteiras (3)", "modelo.pecas"),
             ] {
                 let r = ui
                     .selectable_label(self.mode == mode, label)
@@ -1270,7 +1294,7 @@ impl ModelDoc {
                 (MTool::Move, "✋ Mover", "Mover (W). Arraste as setas, ou o que está escolhido."),
                 (MTool::Rotate, "⟲ Girar", "Girar (E). Arraste um dos círculos."),
                 (MTool::Scale, "⬈ Escalar", "Escalar (R). A ponta de um eixo, ou o quadrado do meio."),
-                (MTool::Paint, "🖌 Pintar", "Pintar (B). Clique nas faces para pintar com a cor escolhida; com Shift, a peça toda."),
+                (MTool::Paint, "🎨 Pintar", "Pintar (B). Clique nas faces para pintar com a cor escolhida; com Shift, a peça toda."),
             ] {
                 let r = ui
                     .selectable_label(self.tool == tool, label)
@@ -1308,7 +1332,7 @@ impl ModelDoc {
             }
             let can_merge = self.mode != Select::Parts && self.selected_verts().len() >= 2;
             if ui
-                .add_enabled(can_merge, egui::Button::new("⊕ Juntar"))
+                .add_enabled(can_merge, egui::Button::new("🔗 Juntar"))
                 .on_hover_text("Juntar os pontos escolhidos num só (M).")
                 .on_disabled_hover_text("Escolha dois ou mais pontos (1).")
                 .clicked()
@@ -1326,7 +1350,7 @@ impl ModelDoc {
             let parts = self.touched_parts();
             let mirror = !parts.is_empty() && parts.iter().all(|&i| self.data.parts[i].mirror);
             let r = ui
-                .selectable_label(mirror, "🪞 Espelho X")
+                .selectable_label(mirror, "↔ Espelho X")
                 .on_hover_text("Modelar só uma metade: o lado esquerdo copia o direito. Desligar transforma a cópia em pontos e faces de verdade.");
             crate::tutorial::anchor(ui.ctx(), "modelo.espelho", r.rect);
             if r.clicked() {
@@ -1404,7 +1428,7 @@ impl ModelDoc {
                         let selected = touched.contains(&i);
                         let mut label = p.name.clone();
                         if p.mirror {
-                            label.push_str("  🪞");
+                            label.push_str("  ↔");
                         }
                         let r = ui.selectable_label(selected, label);
                         if r.double_clicked() {
@@ -1452,6 +1476,43 @@ impl ModelDoc {
             .clicked()
         {
             self.add_part(0, Vec3::ZERO);
+        }
+
+        // A peça escolhida, em números.
+        if self.mode == Select::Parts
+            && let [i] = self.sel_parts[..]
+            && i < self.data.parts.len()
+        {
+            ui.separator();
+            let before = self.data.clone();
+            let mut record = false;
+            let p = &mut self.data.parts[i];
+            egui::Grid::new(("modelo-peca-numeros", &self.rel))
+                .num_columns(4)
+                .spacing(egui::vec2(3.0, 3.0))
+                .show(ui, |ui| {
+                    for (label, v, speed, suffix) in [
+                        ("Posição", &mut p.pos, 0.05, ""),
+                        ("Rotação", &mut p.rot, 1.0, "°"),
+                        ("Escala", &mut p.scale, 0.05, ""),
+                    ] {
+                        ui.label(label);
+                        for k in 0..3 {
+                            let r = ui.add(
+                                egui::DragValue::new(&mut v[k])
+                                    .speed(speed)
+                                    .max_decimals(2)
+                                    .suffix(suffix),
+                            );
+                            record |= r.drag_started() || (r.changed() && !r.dragged());
+                        }
+                        ui.end_row();
+                    }
+                });
+            if record {
+                self.undo.push(before);
+                self.redo.clear();
+            }
         }
 
         ui.separator();
@@ -1566,7 +1627,11 @@ impl ModelDoc {
                     },
                     size,
                     background: nn_core::Color::hex(0x2B3038),
-                    grid: if self.show_grid { self.grid.max(0.05) } else { 0.0 },
+                    grid: if self.show_grid {
+                        self.grid.max(0.05)
+                    } else {
+                        0.0
+                    },
                     time: 0.0,
                     bursts: Vec::new(),
                     fog: false,
@@ -1723,7 +1788,9 @@ impl ModelDoc {
 
         if !painting
             && response.drag_started_by(egui::PointerButton::Primary)
-            && let Some(p) = response.interact_pointer_pos()
+            && let Some(p) = ui
+                .input(|i| i.pointer.press_origin())
+                .or(response.interact_pointer_pos())
         {
             if mods.alt {
                 let pivot = self.pivot();
@@ -1838,9 +1905,7 @@ impl ModelDoc {
         }
         let pressed =
             |ui: &mut egui::Ui, m: Modifiers, k: Key| ui.input_mut(|i| i.consume_key(m, k));
-        let mouse = ui
-            .input(|i| i.pointer.hover_pos())
-            .unwrap_or(rect.center());
+        let mouse = ui.input(|i| i.pointer.hover_pos()).unwrap_or(rect.center());
         if !flying {
             for (key, mode) in [
                 (Key::Num1, Select::Points),
@@ -1971,30 +2036,31 @@ impl ModelDoc {
                             if crate::hierarchy::menu_item(ui, "▣ Encolher", "I").clicked() {
                                 op = Some(Key::I);
                             }
-                            if ui.button("🖌 Pintar com a cor escolhida").clicked() {
+                            if ui.button("🎨 Pintar com a cor escolhida").clicked() {
                                 op = Some(Key::B);
                             }
                         }
                         Select::Points => {
                             if verts >= 2
-                                && crate::hierarchy::menu_item(ui, "⊕ Juntar pontos", "M").clicked()
+                                && crate::hierarchy::menu_item(ui, "🔗 Juntar pontos", "M")
+                                    .clicked()
                             {
                                 op = Some(Key::M);
                             }
                         }
                         Select::Parts => {
-                            if crate::hierarchy::menu_item(ui, "⧉ Duplicar", "Ctrl+D").clicked() {
+                            if crate::hierarchy::menu_item(ui, "Duplicar", "Ctrl+D").clicked() {
                                 op = Some(Key::D);
                             }
                             if crate::hierarchy::menu_item(ui, "✏ Renomear", "F2").clicked() {
                                 op = Some(Key::F2);
                             }
-                            if ui.button("🖌 Pintar com a cor escolhida").clicked() {
+                            if ui.button("🎨 Pintar com a cor escolhida").clicked() {
                                 op = Some(Key::B);
                             }
                         }
                     }
-                    if ui.button("🪞 Espelho X").clicked() {
+                    if ui.button("↔ Espelho X").clicked() {
                         op = Some(Key::X);
                     }
                     if crate::hierarchy::menu_item(ui, "🗑 Apagar", "Delete").clicked() {
@@ -2102,10 +2168,16 @@ impl ModelDoc {
                 let selected = self.mode == Select::Faces && self.sel_faces.contains(&(pi, fi));
                 let hover = self.hover_face == Some((pi, fi));
                 if selected {
-                    painter.add(polygon(&s, ORANGE.gamma_multiply(if front { 0.35 } else { 0.15 })));
+                    painter.add(polygon(
+                        &s,
+                        ORANGE.gamma_multiply(if front { 0.35 } else { 0.15 }),
+                    ));
                 }
                 if self.tool == MTool::Paint && hover {
-                    painter.add(polygon(&s, scene_render::egui_color(&self.color).gamma_multiply(0.7)));
+                    painter.add(polygon(
+                        &s,
+                        scene_render::egui_color(&self.color).gamma_multiply(0.7),
+                    ));
                 }
                 let stroke = if selected || part_selected {
                     Some(Stroke::new(if front { 2.0 } else { 1.0 }, ORANGE))
@@ -2141,8 +2213,17 @@ impl ModelDoc {
                 } else {
                     (2.5, Color32::from_gray(25))
                 };
-                let color = if mirrored { color.gamma_multiply(0.5) } else { color };
-                painter.circle(s, r, color, Stroke::new(1.0, Color32::from_white_alpha(140)));
+                let color = if mirrored {
+                    color.gamma_multiply(0.5)
+                } else {
+                    color
+                };
+                painter.circle(
+                    s,
+                    r,
+                    color,
+                    Stroke::new(1.0, Color32::from_white_alpha(140)),
+                );
             }
         }
 
@@ -2263,11 +2344,12 @@ fn shape_menu(ui: &mut egui::Ui) -> Option<usize> {
     for (i, (label, words, _)) in SHAPES.iter().enumerate() {
         let icon = match i {
             0 => "⬛",
-            1 => "⛁",
-            2 => "▲",
-            3 => "⚫",
-            4 => "▬",
-            _ => "◢",
+            1 => "◎",
+            2 => "🔺",
+            3 => "🏠",
+            4 => "⚫",
+            5 => "⬜",
+            _ => "📐",
         };
         if ui
             .button(format!("{icon} {label}"))
@@ -2377,7 +2459,11 @@ mod tests {
         d.set_mode(Select::Points);
         d.select_all();
         let before = d.data.clone();
-        d.transform_selection(&before, Mat4::from_translation(Vec3::new(-2.0, 1.0, 0.0)), true);
+        d.transform_selection(
+            &before,
+            Mat4::from_translation(Vec3::new(-2.0, 1.0, 0.0)),
+            true,
+        );
         for v in &d.data.parts[0].verts {
             assert!(v.x >= 0.0, "nada passa para o outro lado");
             assert!(v.y >= 1.0);

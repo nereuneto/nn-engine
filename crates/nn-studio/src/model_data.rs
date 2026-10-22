@@ -176,7 +176,8 @@ impl Part {
         if top > 0.0 {
             for i in 0..n {
                 let a = std::f32::consts::TAU * i as f32 / n as f32;
-                p.verts.push(Vec3::new(a.sin() * 0.5 * top, 1.0, a.cos() * 0.5 * top));
+                p.verts
+                    .push(Vec3::new(a.sin() * 0.5 * top, 1.0, a.cos() * 0.5 * top));
             }
             p.face(&base, color);
             p.face(&(n..2 * n).collect::<Vec<_>>(), color);
@@ -203,6 +204,20 @@ impl Part {
         Self::ring_solid(name, color, 8, 0.0)
     }
 
+    /// Pirâmide de base quadrada (do tamanho do cubo): um telhado.
+    pub fn pyramid(name: &str, color: &str) -> Self {
+        let mut p = Self::new(name);
+        for &(x, z) in &[(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)] {
+            p.verts.push(Vec3::new(x, 0.0, z));
+        }
+        p.verts.push(Vec3::new(0.0, 1.0, 0.0));
+        p.face(&[0, 1, 2, 3], color);
+        for i in 0..4 {
+            p.face(&[(i + 1) % 4, i, 4], color);
+        }
+        p
+    }
+
     /// Esfera low-poly: 8 fatias e 5 anéis.
     pub fn sphere(name: &str, color: &str) -> Self {
         let mut p = Self::new(name);
@@ -224,7 +239,10 @@ impl Part {
         }
         for r in 1..rings - 1 {
             for s in 0..seg {
-                p.face(&[at(r, s), at(r, s + 1), at(r + 1, s + 1), at(r + 1, s)], color);
+                p.face(
+                    &[at(r, s), at(r, s + 1), at(r + 1, s + 1), at(r + 1, s)],
+                    color,
+                );
             }
         }
         for s in 0..seg {
@@ -455,7 +473,10 @@ impl Part {
                 // as duas metades se encontram ali.
                 let flat = out.iter().all(|&k| self.verts[k as usize].x.abs() <= MID);
                 if !flat {
-                    faces.push(Face { v: out, color: f.color });
+                    faces.push(Face {
+                        v: out,
+                        color: f.color,
+                    });
                 }
             }
         }
@@ -515,10 +536,11 @@ pub fn euler_degrees(q: Quat) -> Vec3 {
 
 /// Formas prontas para começar uma peça: (rótulo, palavras para a busca, como faz).
 pub type Maker = fn(&str, &str) -> Part;
-pub const SHAPES: [(&str, &str, Maker); 6] = [
+pub const SHAPES: [(&str, &str, Maker); 7] = [
     ("Cubo", "caixa bloco quadrado", Part::cube),
     ("Cilindro", "tubo coluna tronco roda", Part::cylinder),
-    ("Cone", "ponta telhado chapeu", Part::cone),
+    ("Cone", "ponta chapeu", Part::cone),
+    ("Pirâmide", "telhado ponta", Part::pyramid),
     ("Esfera", "bola cabeca", Part::sphere),
     ("Plano", "chao piso placa", Part::plane),
     ("Rampa", "cunha telhado inclinado", Part::ramp),
@@ -562,7 +584,8 @@ impl ModelData {
     // Arquivo .modelo --------------------------------------------------------
 
     pub fn to_lua(&self) -> String {
-        let n = |v: f32| crate::scene_data::format_num(f64::from((v * 10_000.0).round() / 10_000.0));
+        let n =
+            |v: f32| crate::scene_data::format_num(f64::from((v * 10_000.0).round() / 10_000.0));
         let v3 = |v: Vec3| format!("{{ {}, {}, {} }}", n(v.x), n(v.y), n(v.z));
         let mut s = String::from(
             "-- Modelo 3D do NN Studio (abra no NN Studio para editar). Ao salvar, o\n\
@@ -647,12 +670,25 @@ impl ModelData {
         if let Ok(Value::Table(list)) = t.get::<Value>("parts") {
             for (i, pt) in list.sequence_values::<Table>().enumerate() {
                 let pt = pt.map_err(|e| format!("{name}: peça {}: {e}", i + 1))?;
-                let mut p = Part::new(&pt.get::<Option<String>>("name").ok().flatten().unwrap_or_else(|| format!("peça {}", i + 1)));
+                let mut p = Part::new(
+                    &pt.get::<Option<String>>("name")
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(|| format!("peça {}", i + 1)),
+                );
                 p.pos = v3(&pt, "pos", Vec3::ZERO);
                 p.rot = v3(&pt, "rot", Vec3::ZERO);
                 p.scale = v3(&pt, "scale", Vec3::ONE);
-                p.mirror = pt.get::<Option<bool>>("mirror").ok().flatten().unwrap_or(false);
-                p.visible = pt.get::<Option<bool>>("visible").ok().flatten().unwrap_or(true);
+                p.mirror = pt
+                    .get::<Option<bool>>("mirror")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(false);
+                p.visible = pt
+                    .get::<Option<bool>>("visible")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(true);
                 if let Ok(Value::Table(vs)) = pt.get::<Value>("verts") {
                     for v in vs.sequence_values::<Table>().flatten() {
                         p.verts.push(Vec3::new(
@@ -700,7 +736,7 @@ impl ModelData {
         let mut meshes = Vec::new();
         let mut nodes = Vec::new();
         let mut push_view = |bin: &mut Vec<u8>, data: &[u8], target: u32| -> usize {
-            while bin.len() % 4 != 0 {
+            while !bin.len().is_multiple_of(4) {
                 bin.push(0);
             }
             let offset = bin.len();
@@ -798,7 +834,7 @@ impl ModelData {
             }
             nodes.push(node);
         }
-        while bin.len() % 4 != 0 {
+        while !bin.len().is_multiple_of(4) {
             bin.push(0);
         }
         let doc = json!({
@@ -813,7 +849,7 @@ impl ModelData {
             "buffers": [{ "byteLength": bin.len() }]
         });
         let mut text = serde_json::to_vec(&doc).expect("json");
-        while text.len() % 4 != 0 {
+        while !text.len().is_multiple_of(4) {
             text.push(b' ');
         }
         let total = 12 + 8 + text.len() + 8 + bin.len();
@@ -1003,7 +1039,10 @@ mod tests {
         assert_eq!(data.triangle_count(), m.triangle_count());
         let (lo, hi) = data.bounds();
         let (elo, ehi) = m.bounds().unwrap();
-        assert!((lo - elo).length() < 1e-4 && (hi - ehi).length() < 1e-4, "{lo} {hi}");
+        assert!(
+            (lo - elo).length() < 1e-4 && (hi - ehi).length() < 1e-4,
+            "{lo} {hi}"
+        );
         // As cores voltam em sRGB, como estão no modelo.
         let azul = crate::scene_render::parse_color("#3FA7D6");
         let achou = data.parts.iter().any(|p| {
