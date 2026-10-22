@@ -6495,3 +6495,291 @@ fn tutorial_uma_cerca_e_uma_fogueira() {
     h.get_by_label("✔ Aplicar").click();
     espera(&mut h, 8);
 }
+
+// Esqueleto e animador (S49) --------------------------------------------------
+
+fn novo_modelo_de(h: &mut Harness<'_, StudioApp>, pronto: &str) {
+    h.get_by_label("➕ Novo").click();
+    h.run();
+    h.get_by_label("🎲 Modelo 3D").click();
+    h.run();
+    h.get_by(|n| {
+        n.value().is_some_and(|v| v == "Um cubo") || n.label().is_some_and(|l| l == "Um cubo")
+    })
+    .click();
+    h.run();
+    h.get_by_label(pronto).click();
+    h.run();
+    h.key_press(Key::Enter);
+    h.run();
+}
+
+#[test]
+fn esqueleto_e_animador_do_personagem() {
+    use nn_studio::model_rig;
+    let dir = temp("animador");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    novo_modelo_de(&mut h, "Personagem");
+    // Sem esqueleto, o Animar não entra.
+    h.get_by_label("🎬 Animar").click();
+    h.run();
+    assert!(!modelo(&mut h).rig.animating);
+
+    // 💀 Esqueleto > Humanoide: 7 ossos, todas as peças ligadas pelo nome.
+    h.get_by_label("💀 Esqueleto").click();
+    h.run();
+    h.get_by_label("🚶 Humanoide").click();
+    h.run_steps(3);
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.bones.len(), 7);
+        assert!(d.data.parts.iter().all(|p| !p.bone.is_empty()));
+        assert!(d.rig.bones_mode);
+        let braco = d
+            .data
+            .parts
+            .iter()
+            .find(|p| p.name == "Braço direito")
+            .unwrap();
+        assert_eq!(braco.bone, model_rig::BRACO_D);
+    }
+    tela(&mut h, "animador-esqueleto");
+
+    // 🎬 Animar > Prontas > Todas.
+    h.get_by_label("🎬 Animar").click();
+    h.run();
+    h.get_by_label("🎬 Prontas").click();
+    h.run();
+    h.get_by_label("Todas as que faltam").click();
+    h.run_steps(3);
+    {
+        let d = modelo(&mut h);
+        assert!(d.rig.animating);
+        let names: Vec<&str> = d.data.anims.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, model_rig::ready_names(model_rig::RigKind::Humanoid));
+        d.rig.anim = d.data.anims.iter().position(|a| a.name == "andar");
+    }
+    h.run();
+    // ▶ toca: o tempo anda.
+    h.get_by_label("▶ Tocar").click();
+    h.run_steps(4);
+    assert!(modelo(&mut h).rig.time > 0.1);
+    tela(&mut h, "animador-andar");
+    h.get_by_label("⏸ Pausar").click();
+    h.run();
+
+    // ➕ Nova, com o nome "oi".
+    h.get_by_label("➕ Nova").click();
+    h.run_steps(2);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.run_steps(1);
+    h.event(egui::Event::Text("oi".into()));
+    h.run_steps(1);
+    h.key_press(Key::Enter);
+    h.run_steps(2);
+    assert_eq!(modelo(&mut h).current_anim().unwrap().name, "oi");
+
+    // Clicar no braço direito escolhe o osso dele; arrastar gira: um quadro
+    // em 0.
+    let mao = na_vista_modelo(&mut h, glam::Vec3::new(-0.39, 0.9, 0.0));
+    clicar(&mut h, mao);
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.rig.sel_bone, d.data.bone_index(model_rig::BRACO_D));
+    }
+    let ombro = na_vista_modelo(&mut h, glam::Vec3::new(-0.39, 1.45, 0.0));
+    let lado = mao + (mao - ombro).rot90() * 0.8;
+    arrastar(&mut h, mao, lado);
+    let k0 = modelo(&mut h)
+        .key_at(model_rig::BRACO_D, 0.0)
+        .expect("quadro em 0");
+    assert!(k0.rot.length() > 10.0, "girou: {}", k0.rot);
+
+    // Na linha do tempo, o meio (0,5 s), e outro giro.
+    let linha = h.get_by_label("Linha do tempo").rect();
+    clicar(
+        &mut h,
+        egui::pos2(
+            linha.left() + 10.0 + (linha.width() - 20.0) * 0.5,
+            linha.center().y,
+        ),
+    );
+    assert!((modelo(&mut h).rig.time - 0.5).abs() < 0.03);
+    // (Arrastar fora do modelo gira o osso escolhido em volta da junta.)
+    let fora = ombro + egui::vec2(-170.0, 40.0);
+    arrastar(&mut h, fora, fora + egui::vec2(0.0, -80.0));
+    assert!(modelo(&mut h).key_at(model_rig::BRACO_D, 0.5).is_some());
+    tela(&mut h, "animador-posando");
+    // Desfazer tira o segundo quadro.
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert!(modelo(&mut h).key_at(model_rig::BRACO_D, 0.5).is_none());
+    atalho(&mut h, Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
+    assert!(modelo(&mut h).key_at(model_rig::BRACO_D, 0.5).is_some());
+
+    // Ctrl+S: o .glb tem as animações, que a engine toca.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    let glb = std::fs::read(proj.join("assets/modelos/personagem.glb")).unwrap();
+    let lido = nn_render::d3::ModelData::from_gltf(&glb, &mut |_| None).unwrap();
+    let s = lido.skeleton.expect("esqueleto no .glb");
+    assert!(s.animation("andar").is_some());
+    assert!(s.animation("oi").is_some());
+
+    // ✏ Modelar volta às peças em repouso.
+    h.get_by_label("✏ Modelar").click();
+    h.run();
+    assert!(!modelo(&mut h).rig.animating);
+}
+
+#[test]
+fn tutorial_anime_seu_personagem() {
+    let dir = temp("tutorial-animar");
+    let mut h = studio_with(&dir, None, fake_game(&dir), true);
+    h.state_mut().settings.projects_dir = Some(dir.join("projetos"));
+    h.state_mut().start_tutorial("anime-seu-personagem");
+    h.run_steps(4);
+    let projeto = dir.join("projetos/anime-seu-personagem");
+    h.state_mut().tutorial.as_mut().unwrap().pause = std::time::Duration::ZERO;
+    h.get_by_label("Próximo").click();
+    fn espera(h: &mut Harness<'_, StudioApp>, esperado: usize) {
+        h.run_steps(6);
+        assert_eq!(
+            h.state().tutorial.as_ref().map(|t| t.step),
+            Some(esperado),
+            "o tutorial devia estar no passo {esperado}"
+        );
+    }
+    espera(&mut h, 1);
+    h.get_by_label("➕ Novo").click();
+    h.run_steps(2);
+    h.get_by_label("🎲 Modelo 3D").click();
+    h.run_steps(6);
+    h.get_by(|n| {
+        n.value().is_some_and(|v| v == "Um cubo") || n.label().is_some_and(|l| l == "Um cubo")
+    })
+    .click();
+    h.run_steps(3);
+    h.get_by_label("Personagem").click();
+    h.run_steps(2);
+    h.key_press(Key::Enter);
+    espera(&mut h, 2);
+
+    h.get_by_label("💀 Esqueleto").click();
+    h.run_steps(2);
+    h.get_by_label("🚶 Humanoide").click();
+    espera(&mut h, 3);
+
+    h.get_by_label("🎬 Animar").click();
+    h.run_steps(2);
+    h.get_by_label("🎬 Prontas").click();
+    h.run_steps(2);
+    h.get_by_label("Todas as que faltam").click();
+    espera(&mut h, 4);
+
+    // A lista: andar; ▶ Tocar.
+    h.get_by(|n| {
+        n.value().is_some_and(|v| v == "parado") || n.label().is_some_and(|l| l == "parado")
+    })
+    .click();
+    h.run_steps(3);
+    h.get_by_label("andar").click();
+    h.run_steps(2);
+    h.get_by_label("▶ Tocar").click();
+    espera(&mut h, 5);
+    h.get_by_label("⏸ Pausar").click();
+    h.run_steps(2);
+
+    h.get_by_label("💪 Mais forte").click();
+    espera(&mut h, 6);
+
+    h.get_by_label("➕ Nova").click();
+    h.run_steps(2);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.run_steps(1);
+    h.event(egui::Event::Text("comemorar".into()));
+    h.run_steps(1);
+    h.key_press(Key::Enter);
+    espera(&mut h, 7);
+
+    // O braço esquerdo, dois quadros.
+    let ombro = {
+        let d = modelo(&mut h);
+        d.rig.sel_bone = d.data.bone_index(nn_studio::model_rig::BRACO_E);
+        glam::Vec3::new(0.39, 1.45, 0.0)
+    };
+    let ombro = na_vista_modelo(&mut h, ombro);
+    let fora = ombro + egui::vec2(170.0, 40.0);
+    arrastar_passos(&mut h, fora, fora + egui::vec2(0.0, -80.0));
+    let linha = h.get_by_label("Linha do tempo").rect();
+    clicar_passos(
+        &mut h,
+        egui::pos2(
+            linha.left() + 10.0 + (linha.width() - 20.0) * 0.6,
+            linha.center().y,
+        ),
+    );
+    arrastar_passos(&mut h, fora, fora + egui::vec2(0.0, 60.0));
+    espera(&mut h, 8);
+    tela(&mut h, "tutorial-animar-pose");
+
+    let meio = na_vista_modelo(&mut h, glam::Vec3::Y);
+    h.hover_at(meio);
+    atalho_passos(&mut h, Modifiers::COMMAND, Key::S);
+    espera(&mut h, 9);
+    assert!(projeto.join("assets/modelos/personagem.glb").is_file());
+
+    // Na cena, com o Jogador 3D.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.open_file("cenas/mundo.cena", None);
+    }
+    h.run_steps(3);
+    let id = {
+        let ws = h.state_mut().project_mut().unwrap();
+        let root = ws.root.clone();
+        let mut sizes = nn_studio::scene_render::Sizes::default();
+        let mut maps = std::collections::HashMap::new();
+        let mut tilesets = std::collections::HashMap::new();
+        let mut paint = nn_studio::paint::PaintState::default();
+        let mut env = nn_studio::scene_view::SceneEnv {
+            root: &root,
+            sizes: &mut sizes,
+            renderer: None,
+            design: (640.0, 360.0),
+            clear_color: "#000000",
+            connected: false,
+            time: 0.0,
+            game: None,
+            maps: &mut maps,
+            tilesets: &mut tilesets,
+            paint: &mut paint,
+            animate: false,
+        };
+        let doc = ws.scenes.get_mut("cenas/mundo.cena").unwrap();
+        doc.drop_file3(
+            &mut env,
+            "assets/modelos/personagem.modelo",
+            glam::Vec3::ZERO,
+        )
+        .unwrap()
+    };
+    espera(&mut h, 10);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut("cenas/mundo.cena").unwrap();
+        let info = nn_studio::behaviors::builtins()
+            .iter()
+            .find(|b| b.script == "nn:jogador3d")
+            .unwrap();
+        doc.data
+            .find_mut(id)
+            .unwrap()
+            .components
+            .push(nn_studio::scene_data::Component::behavior(
+                &info.script,
+                &info.defaults_for(true),
+            ));
+    }
+    espera(&mut h, 11);
+    tela(&mut h, "tutorial-animar-cena");
+}
