@@ -17,8 +17,10 @@
 //! testes em paralelo não misturam as mensagens.
 
 use std::cell::{Cell, RefCell};
+use std::collections::VecDeque;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use log::{LevelFilter, Log, Metadata, Record};
 
@@ -81,6 +83,52 @@ impl Sink {
             time: self.time.get(),
             kind,
             text,
+        });
+    }
+}
+
+/// O que o jogo aberto escreveu desde a última olhada do agente
+/// ([`crate::remote`]): de todas as threads, as mais novas.
+static LIVE: Mutex<Option<(VecDeque<LogLine>, usize)>> = Mutex::new(None);
+static LIVE_ON: AtomicBool = AtomicBool::new(false);
+/// O tempo do jogo aberto (bits de um f64).
+static LIVE_TIME: AtomicU64 = AtomicU64::new(0);
+const MAX_LIVE: usize = 500;
+
+/// Começa a guardar as linhas do jogo aberto.
+pub fn enable_live() {
+    let mut live = LIVE.lock().unwrap_or_else(|e| e.into_inner());
+    live.get_or_insert_with(|| (VecDeque::new(), 0));
+    LIVE_ON.store(true, Ordering::Relaxed);
+}
+
+/// O tempo de jogo das próximas linhas do jogo aberto.
+pub fn set_live_time(t: f64) {
+    LIVE_TIME.store(t.to_bits(), Ordering::Relaxed);
+}
+
+/// Tira as linhas guardadas do jogo aberto e quantas ficaram de fora.
+pub fn take_live() -> (Vec<LogLine>, usize) {
+    let mut live = LIVE.lock().unwrap_or_else(|e| e.into_inner());
+    match live.as_mut() {
+        Some((lines, dropped)) => (lines.drain(..).collect(), std::mem::take(dropped)),
+        None => (Vec::new(), 0),
+    }
+}
+
+fn push_live(kind: LineKind, text: &str) {
+    let Ok(mut live) = LIVE.try_lock() else {
+        return;
+    };
+    if let Some((lines, dropped)) = live.as_mut() {
+        if lines.len() >= MAX_LIVE {
+            lines.pop_front();
+            *dropped += 1;
+        }
+        lines.push_back(LogLine {
+            time: f64::from_bits(LIVE_TIME.load(Ordering::Relaxed)),
+            kind,
+            text: text.to_string(),
         });
     }
 }
@@ -151,7 +199,7 @@ impl std::fmt::Debug for Logger {
 
 impl Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        (capturing() && metadata.level() <= log::Level::Info)
+        ((capturing() || LIVE_ON.load(Ordering::Relaxed)) && metadata.level() <= log::Level::Info)
             || self.inner.as_ref().is_some_and(|l| l.enabled(metadata))
     }
 
@@ -161,10 +209,14 @@ impl Log for Logger {
         {
             inner.log(record);
         }
-        if !capturing() {
+        let live = LIVE_ON.load(Ordering::Relaxed);
+        if !capturing() && !live {
             return;
         }
         if let Some((kind, text)) = classify(record) {
+            if live {
+                push_live(kind, &text);
+            }
             let _ = SINKS.try_with(|s| {
                 if let Ok(s) = s.try_borrow()
                     && let Some(sink) = s.last()

@@ -8,6 +8,7 @@ pub enum Command {
     Play,
     TestHere,
     Stop,
+    RunTests,
     Undo,
     Redo,
     Save,
@@ -57,6 +58,7 @@ impl Command {
         Command::Play,
         Command::TestHere,
         Command::Stop,
+        Command::RunTests,
         Command::Undo,
         Command::Redo,
         Command::Save,
@@ -109,6 +111,7 @@ impl Command {
             Command::Undo => "Desfazer (cena)",
             Command::Redo => "Refazer (cena)",
             Command::Stop => "Parar o jogo",
+            Command::RunTests => "Conferir com os testes",
             Command::Save => "Salvar",
             Command::SaveAll => "Salvar tudo",
             Command::NewScene => "Nova cena visual",
@@ -160,6 +163,7 @@ impl Command {
             Command::Undo => "voltar ctrl z",
             Command::Redo => "refazer ctrl y",
             Command::Stop => "fechar encerrar",
+            Command::RunTests => "rodar testes de jogo testar verificar nn testar automatico",
             Command::ProjectSettings => "config titulo janela tamanho tela cheia",
             Command::Export => "executavel distribuir publicar build exe",
             Command::Find => "procurar pesquisar",
@@ -194,6 +198,7 @@ impl Command {
             Command::Play => k(Modifiers::NONE, Key::F5),
             Command::Stop => k(Modifiers::SHIFT, Key::F5),
             Command::TestHere => k(Modifiers::NONE, Key::F6),
+            Command::RunTests => k(ctrl, Key::F5),
             Command::Undo => k(ctrl, Key::Z),
             Command::Redo => k(ctrl, Key::Y),
             Command::Save => k(ctrl, Key::S),
@@ -369,6 +374,8 @@ mod tests {
         // Palavras extras: "rodar" acha Jogar.
         let r = search("rodar", &items);
         assert_eq!(r[0], PaletteItem::Command(Command::Play));
+        let r = search("testes", &items);
+        assert_eq!(r[0], PaletteItem::Command(Command::RunTests));
         // Arquivo pelo nome.
         let r = search("jogador", &items);
         assert_eq!(r[0], PaletteItem::File("lib/jogador.lua".into()));

@@ -214,9 +214,10 @@ local function chunk(scene, code, name)
   return f
 end
 
---- O valor de uma expressão (ou o erro), como texto.
-function D.inspect(scene, code)
-  local ok, f = pcall(chunk, scene, code, "olhar")
+--- O valor de uma expressão (ou o erro), como texto. `name` é o nome do
+--- trecho nas mensagens de erro (padrão "olhar").
+function D.inspect(scene, code, name)
+  local ok, f = pcall(chunk, scene, code, name or "olhar")
   if not ok then return false, f end
   local r = table.pack(pcall(f))
   if not r[1] then return false, tostring(r[2]) end
@@ -460,6 +461,77 @@ function D.run(f, t, ...)
   local ok, err = xpcall(f, handler, t, ...)
   if ok then return true end
   return false, err
+end
+
+-- O jogo aberto (servidor MCP) ------------------------------------------------
+
+--- As regras que dispararam desde a última olhada, juntas pelo texto:
+--- { { texto, primeiro, vezes } }.
+function D.live_fired(scene)
+  if M.events then M.events.log_fired = true end
+  if type(scene) ~= "table" then return {} end
+  local log = rawget(scene, "_fired_log")
+  scene._fired_log = {}
+  local out, by = {}, {}
+  for _, e in ipairs(log or {}) do
+    local text = describe(scene, e.k)
+    local item = by[text]
+    if item then
+      item.vezes = item.vezes + 1
+    else
+      item = { texto = text, primeiro = e.t, vezes = 1 }
+      by[text] = item
+      table.insert(out, item)
+    end
+  end
+  return out
+end
+
+--- Muda um campo de um objeto na hora (sem gravar), como o NN Studio faz
+--- com o jogo aberto. `ref`: id ou nome; `comp`: o tipo do componente, o
+--- script do comportamento ("nn:plataforma", "plataforma") ou o número dele.
+function D.live_set(scene, ref, field, value, comp)
+  if type(scene) ~= "table" or not rawget(scene, "object_list") then
+    return false, "a cena da frente não é uma cena visual (use \"lua\")"
+  end
+  local o
+  if type(ref) == "number" then
+    o = scene._by_id and scene._by_id[ref]
+  else
+    o = scene:find(tostring(ref))
+  end
+  if not o then
+    return false, ("não achei o objeto %s (tem: %s)"):format(fmt(ref), names(scene))
+  end
+  if o.id <= 0 then
+    return false, ("o objeto %s foi criado pelo jogo; mude-o com \"lua\""):format(o.name)
+  end
+  if type(field) ~= "string" or field == "" then return false, "falta o campo" end
+  local msg = { id = o.id, field = field, value = value }
+  if comp ~= nil then
+    local index
+    if type(comp) == "number" then
+      index = o.components[comp] and comp
+    else
+      local want = tostring(comp)
+      for i, c in ipairs(o.components) do
+        local script = c.script or ""
+        if c.type == want or script == want or script == "nn:" .. want then
+          index = i
+          break
+        end
+      end
+    end
+    if not index then
+      local have = {}
+      for _, c in ipairs(o.components) do table.insert(have, c.script or c.type) end
+      return false, ("o objeto %s não tem o componente %s (tem: %s)"):format(o.name, fmt(comp),
+        table.concat(have, ", "))
+    end
+    msg.component = index
+  end
+  M.live(scene, msg)
+  return true, ("%s.%s%s = %s"):format(o.name, comp and (tostring(comp) .. ".") or "", field, fmt(value))
 end
 
 -- Arquivos de testes ----------------------------------------------------------

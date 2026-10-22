@@ -507,7 +507,12 @@ impl StudioApp {
                 }
             });
             ui.menu_button("Jogo", |ui| {
-                for c in [Command::Play, Command::TestHere, Command::Stop] {
+                for c in [
+                    Command::Play,
+                    Command::TestHere,
+                    Command::Stop,
+                    Command::RunTests,
+                ] {
                     if self.command_button(ui, c) {
                         out.push(c);
                     }

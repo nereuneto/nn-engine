@@ -283,7 +283,7 @@ impl GameRun {
         )
         .map_err(|e| e.to_string())?;
 
-        let driver = install_driver(&runtime).map_err(|e| format_error(&e))?;
+        let driver = runtime.driver().map_err(|e| format_error(&e))?;
 
         let mut config = project.config.clone();
         config.hot_reload = false;
@@ -778,7 +778,7 @@ fn plan_table(lua: &mlua::Lua, plan: &Plan) -> mlua::Result<Table> {
 }
 
 /// As funções do Rust que o `testes.lua` usa e o módulo dele.
-fn install_driver(runtime: &ScriptRuntime) -> mlua::Result<Table> {
+pub(crate) fn install_driver(runtime: &ScriptRuntime) -> mlua::Result<Table> {
     let lua = runtime.lua();
     let driver = lua.create_table()?;
     driver.set(

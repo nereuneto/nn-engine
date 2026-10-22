@@ -28,7 +28,7 @@ mod texture;
 pub use animation::{Animation, AnimationPlayer, Playback, SpriteSheet};
 pub use camera::{Bounds, Camera2D, Follow};
 pub use context::GpuContext;
-pub use offscreen::OffscreenTarget;
+pub use offscreen::{OffscreenTarget, read_texture_rgba};
 pub use panel::{Panel, PanelImage};
 pub use parallax::Parallax;
 pub use particles::{EmitArea, ParticleConfig, ParticleEmitter};

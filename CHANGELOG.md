@@ -4,6 +4,29 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Ao vivo (Sprint 53)
+
+- **O agente acompanha o jogo aberto.** Com o jogo aberto numa janela (pelo ▶ Jogar do NN Studio, por `nn .` ou pela ferramenta nova `abrir_jogo`), o agente de IA vê e mexe nele enquanto você joga. Como usar: [O jogo aberto](docs/mcp.md#o-jogo-aberto).
+  - **`ver_jogo_aberto`:**
+    - a cena da frente e se está pausado;
+    - os erros, avisos e prints e as regras que dispararam desde a última olhada;
+    - o que mudou nos objetos e nas variáveis;
+    - a imagem da tela agora.
+  - **`mexer_no_jogo`**, na hora e sem gravar:
+    - muda campos de objetos e comportamentos (o pulo do herói, a velocidade do inimigo) e as variáveis;
+    - roda Lua;
+    - pausa, avança quadros e fecha o jogo.
+
+    Bom para acertar um número junto com você antes de gravar no arquivo.
+  - **`abrir_jogo`** abre o jogo numa janela (também numa `cena`) e liga nele; se o jogo já estiver aberto, usa ele.
+- **Seguro:** o jogo aberto atende numa porta do próprio computador, com uma senha num arquivo que só o seu usuário lê. Um jogo exportado não atende ninguém.
+- **NN Studio: Jogo > Conferir com os testes (Ctrl+F5).** Roda os testes de `testes/` em segundo plano e mostra no Console ✓ para o que passou e ✗ com o motivo para o que falhou, com link para a linha.
+- **`nn <pasta> --cena <arquivo>`** abre o jogo começando numa cena.
+- **Para quem usa as crates:**
+  - o `nn-script` ganhou o canal do jogo aberto (`remote`: `listen`, `Client`) e `run_project_from`;
+  - o `nn-app` tira a imagem do quadro da janela (`Context::request_screenshot` e `take_screenshot`);
+  - o `nn-render` lê qualquer textura (`read_texture_rgba`, também BGRA).
+
 ### Rodar e ver (Sprint 52)
 
 - **O agente joga o jogo: `rodar_jogo`.** A ferramenta nova do servidor MCP roda o jogo **sem janela** e conta o que aconteceu. O jogador é simulado com ações no tempo certo: apertar e segurar teclas, clicar num ponto ou num botão pelo nome, escrever e capturar a tela. A resposta traz:

@@ -47,6 +47,17 @@ pub struct Context {
     pub(crate) exit_requested: bool,
     /// O título do jogo (do config).
     pub(crate) title: String,
+    /// Alguém pediu a imagem do próximo quadro.
+    pub(crate) screenshot_request: bool,
+    pub(crate) screenshot: Option<Result<Screenshot, String>>,
+}
+
+/// A imagem de um quadro: RGBA de 8 bits por canal, de cima para baixo.
+#[derive(Debug, Clone)]
+pub struct Screenshot {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<u8>,
 }
 
 impl Context {
@@ -82,6 +93,8 @@ impl Context {
                 .map(|(w, h)| (UVec2::new(w, h), config.scale_mode)),
             exit_requested: false,
             title: config.title.clone(),
+            screenshot_request: false,
+            screenshot: None,
         };
         ctx.set_window_size(viewport);
         ctx
@@ -171,6 +184,18 @@ impl Context {
 
     pub fn mouse_captured(&self) -> bool {
         self.mouse_captured
+    }
+
+    /// Pede a imagem do próximo quadro desenhado (pegue com
+    /// [`Context::take_screenshot`] depois dele).
+    pub fn request_screenshot(&mut self) {
+        self.screenshot_request = true;
+    }
+
+    /// A imagem pedida com [`Context::request_screenshot`], quando já saiu
+    /// (ou o erro, se não deu para ler).
+    pub fn take_screenshot(&mut self) -> Option<Result<Screenshot, String>> {
+        self.screenshot.take()
     }
 }
 

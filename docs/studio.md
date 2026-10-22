@@ -1589,6 +1589,15 @@ O campo de tile tem um **…** para escolher no tileset. No Lua:
   falta aparece como um cubo rosa.
 - Filtros do console: **Erros**, **Avisos** e **Mensagens** (e **Engine**, no
   modo Completo). **Limpar ao jogar** começa cada partida com o console limpo.
+- **Jogo > Conferir com os testes (Ctrl+F5)** salva tudo e roda os
+  [testes de jogo](lua.md#testes-de-jogo) (os arquivos de `testes/`) sem
+  janela, em segundo plano. Cada teste aparece no Console: ✓ quando passa, ✗
+  com o motivo quando falha, e o `arquivo.lua:12` da falha é um link para a
+  linha. Os modelos Plataforma, Aventura, Nave, 3D e Padrão já vêm com testes.
+- **Com um agente de IA:** o jogo aberto pelo ▶ Jogar também atende o
+  [servidor MCP](mcp.md#o-jogo-aberto). O agente vê o que acontece enquanto
+  você joga, muda valores na hora (sem gravar), pausa e avança quadros. O que
+  ele grava nos arquivos aparece no editor sozinho, e o jogo recarrega.
 
 ## Configurações do projeto
 
@@ -1623,6 +1632,7 @@ mensagem diz onde está o erro.
 |---|---|
 | F5 / Shift+F5 | Jogar (ou reiniciar) / Parar |
 | F6 | Testar a partir da cena visual aberta |
+| Ctrl+F5 | Conferir com os testes (os testes de jogo) |
 | Ctrl+S / Ctrl+Shift+S | Salvar / Salvar tudo |
 | Ctrl+Z / Ctrl+Y | Desfazer / refazer (na cena visual, nos mapas e no editor de pixel art) |
 | Ctrl+N | Nova cena visual |

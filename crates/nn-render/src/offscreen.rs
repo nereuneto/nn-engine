@@ -51,67 +51,7 @@ impl OffscreenTarget {
     /// Copia os pixels para a CPU: RGBA sRGB, 8 bits por canal, linha a linha a
     /// partir do topo. Bloqueia até a GPU terminar.
     pub fn read_rgba(&self, gpu: &GpuContext) -> Result<Vec<u8>, RenderError> {
-        let unpadded = 4 * self.size.x;
-        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let padded = unpadded.div_ceil(align) * align;
-
-        let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("nn offscreen readback"),
-            size: u64::from(padded) * u64::from(self.size.y),
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("nn offscreen readback"),
-            });
-        encoder.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: &self.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &buffer,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded),
-                    rows_per_image: Some(self.size.y),
-                },
-            },
-            wgpu::Extent3d {
-                width: self.size.x,
-                height: self.size.y,
-                depth_or_array_layers: 1,
-            },
-        );
-        gpu.queue.submit([encoder.finish()]);
-
-        let slice = buffer.slice(..);
-        let (tx, rx) = std::sync::mpsc::channel();
-        slice.map_async(wgpu::MapMode::Read, move |result| {
-            let _ = tx.send(result);
-        });
-        gpu.device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .map_err(|e| RenderError::Readback(e.to_string()))?;
-        rx.recv()
-            .map_err(|e| RenderError::Readback(e.to_string()))?
-            .map_err(|e| RenderError::Readback(e.to_string()))?;
-
-        let data = slice
-            .get_mapped_range()
-            .map_err(|e| RenderError::Readback(e.to_string()))?;
-        let mut pixels = Vec::with_capacity((unpadded * self.size.y) as usize);
-        for row in data.chunks(padded as usize) {
-            pixels.extend_from_slice(&row[..unpadded as usize]);
-        }
-        drop(data);
-        buffer.unmap();
-        Ok(pixels)
+        read_texture_rgba(gpu, &self.texture, self.size, Self::FORMAT)
     }
 
     /// Salva o conteúdo atual como PNG.
@@ -130,4 +70,91 @@ impl OffscreenTarget {
         )?;
         Ok(())
     }
+}
+
+/// Copia os pixels de uma textura (com `COPY_SRC`) para a CPU, como RGBA de 8
+/// bits por canal, linha a linha a partir do topo. Aceita os formatos RGBA e
+/// BGRA de 8 bits (o da janela costuma ser BGRA). Bloqueia até a GPU terminar.
+pub fn read_texture_rgba(
+    gpu: &GpuContext,
+    texture: &wgpu::Texture,
+    size: UVec2,
+    format: wgpu::TextureFormat,
+) -> Result<Vec<u8>, RenderError> {
+    use wgpu::TextureFormat as F;
+    let bgra = match format {
+        F::Rgba8Unorm | F::Rgba8UnormSrgb => false,
+        F::Bgra8Unorm | F::Bgra8UnormSrgb => true,
+        other => {
+            return Err(RenderError::Readback(format!(
+                "formato de imagem sem leitura: {other:?}"
+            )));
+        }
+    };
+    let unpadded = 4 * size.x;
+    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let padded = unpadded.div_ceil(align) * align;
+
+    let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("nn readback"),
+        size: u64::from(padded) * u64::from(size.y),
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+
+    let mut encoder = gpu
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("nn readback"),
+        });
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded),
+                rows_per_image: Some(size.y),
+            },
+        },
+        wgpu::Extent3d {
+            width: size.x,
+            height: size.y,
+            depth_or_array_layers: 1,
+        },
+    );
+    gpu.queue.submit([encoder.finish()]);
+
+    let slice = buffer.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |result| {
+        let _ = tx.send(result);
+    });
+    gpu.device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .map_err(|e| RenderError::Readback(e.to_string()))?;
+    rx.recv()
+        .map_err(|e| RenderError::Readback(e.to_string()))?
+        .map_err(|e| RenderError::Readback(e.to_string()))?;
+
+    let data = slice
+        .get_mapped_range()
+        .map_err(|e| RenderError::Readback(e.to_string()))?;
+    let mut pixels = Vec::with_capacity((unpadded * size.y) as usize);
+    for row in data.chunks(padded as usize) {
+        pixels.extend_from_slice(&row[..unpadded as usize]);
+    }
+    drop(data);
+    buffer.unmap();
+    if bgra {
+        for px in pixels.as_chunks_mut::<4>().0 {
+            px.swap(0, 2);
+        }
+    }
+    Ok(pixels)
 }
