@@ -165,6 +165,8 @@ projetos:
 **Voltar ao padrão** desfaz o tema, a cor, o modo, o tamanho, as animações,
 as comemorações e os sons.
 
+![A janela de Preferências](imagens/nn-studio-preferencias.png)
+
 ### Modo Simples e modo Completo
 
 No alto, à direita. O **Simples** mostra só o essencial; o **Completo** mostra
@@ -269,14 +271,21 @@ retângulo "tela do jogo" mostra o que cabe na janela (o tamanho do
   ➕ Objeto, e o objeto nasce **onde você clicou**. Em cima de um objeto, o
   menu dele: Renomear, Duplicar, ⛶ Focar, Copiar e Colar posição, ➕ Criar
   dentro, Criar filho vazio, 📦 Criar prefab, Excluir e ➕ Criar aqui. Num
-  chão (um mapa de tiles, um plano, um terreno) o menu é de criar em cima,
-  com o menu do chão no fim. Arrastar com o botão direito continua movendo a
-  vista.
+  chão (um mapa de tiles, um plano, um terreno, ou algo grande e baixo como
+  uma ilha) o menu é de criar em cima, com o menu do chão no fim. Com o menu
+  aberto, o botão direito em outro lugar abre o menu ali; **Esc** fecha.
+  Arrastar com o botão direito continua movendo a vista.
+
+  ![O botão direito no chão da ilha: o menu de criar, com o menu da Ilha no fim](imagens/nn-studio-botao-direito.png)
+
 - **Shift+A** com o mouse na cena abre a **busca rápida**: digite o que quer
   (*luz*, *cubo*, *inimigo*, o nome de um prefab ou de uma imagem) e aperte
   **Enter**; o objeto nasce onde o mouse estava. Acha sem acento e com um
   erro de digitação (*tocah* acha a Tocha), e os últimos que você usou vêm
   primeiro. **Esc** fecha.
+
+  ![Shift+A na ilha: a busca com "luz" mostra a Tocha, a Lâmpada e o Holofote](imagens/nn-studio-busca-rapida.png)
+
 - **F2** renomeia o selecionado (na Hierarquia).
 - **Duplicar sem repetir trabalho:**
   - **Ctrl+D** duplica um passo ao lado. Se você mover a cópia e apertar
@@ -296,8 +305,8 @@ retângulo "tela do jogo" mostra o que cabe na janela (o tamanho do
   `favoritos/<nome>.favorito`. Os favoritos aparecem no topo do ➕ Objeto, do
   botão direito e do **Shift+A**. Diferente do [prefab](#prefabs), cada cópia
   é livre: mudar uma não muda as outras (e mudar o favorito não muda as
-  cópias já feitas). Para tirar um favorito, apague o arquivo no painel
-  Arquivos.
+  cópias já feitas). Para tirar um, **⭐ Favoritos > 🗑 Tirar dos
+  favoritos** (o arquivo vai para a lixeira, perguntando antes).
 - **Arrastar arquivos** do painel Arquivos para a cena: uma imagem vira um
   sprite, um mapa `.tmj` vira um mapa, um som vira um objeto de som e um
   `.prefab` vira uma instância do prefab.
@@ -341,15 +350,17 @@ direito no nome dele) sobe, desce, **📋 copia o componente**, **📋 cola os
 valores** de um copiado do mesmo tipo, **↺ restaura o padrão** (os valores do
 começo; o arquivo, a forma e o tipo continuam) ou remove. Com um componente
 copiado, **📋 Colar componente** (embaixo do ➕ Adicionar componente) põe uma
-cópia dele no objeto.
+cópia dele no objeto. Campos de arquivo aceitam arrastar do painel Arquivos.
+No modo Simples, opções avançadas ficam escondidas.
 
 **Vários objetos selecionados:** o Inspetor mostra a Transformação e os
 componentes que **todos** têm, com os valores do último selecionado. O que
 você mudar muda em todos (só o campo mexido: mudar o X não iguala o Y). Um
 **≠** laranja ao lado do nome marca os campos em que eles têm valores
 diferentes. Componentes adicionados, colados ou removidos ali também valem
-para todos. Campos de arquivo aceitam arrastar do painel Arquivos. No modo
-Simples, opções avançadas ficam escondidas.
+para todos.
+
+![Três árvores selecionadas: o Inspetor marca com ≠ a posição, a rotação e a escala, que são diferentes](imagens/nn-studio-varios.png)
 
 Imagem, texto e forma têm a opção **HUD**: o objeto fica **fixo na tela**
 (placar, vidas, botões), em vez de andar com o mundo. Na cena, ele aparece
@@ -1514,22 +1525,19 @@ quase não usa o processador.
 
 ## O que vem depois
 
-A **v0.4** deixa os mundos 3D mais vivos: luzes (tochas, lâmpadas e
-holofotes), coisas que brilham no escuro, dia e noite, água com ondas que
-reflete o céu, vento que balança árvores e grama e o halo em volta do que
-brilha. Antes dela, a v0.3 trouxe o combate (caminhos, espada, tiros, ondas
-e chefes) e a v0.2, o 3D. Está tudo no [CHANGELOG](../CHANGELOG.md).
+A **v0.5** deixa o NN Studio mais gostoso de usar: o botão direito em todo
+lugar, a busca rápida (Shift+A), jeitos de duplicar sem repetir trabalho,
+copiar e colar objetos e componentes, editar vários objetos de uma vez, os
+favoritos, os avisos com Desfazer, painéis que ensinam e as Preferências.
+Antes dela, a v0.4 deixou os mundos 3D mais vivos (luzes, dia e noite, água
+e vento), a v0.3 trouxe o combate e a v0.2, o 3D. Está tudo no
+[CHANGELOG](../CHANGELOG.md).
 
-Os próximos passos já escolhidos:
-
-- **v0.5, um NN Studio mais gostoso de usar:** o botão direito, a busca
-  rápida (Shift+A), os jeitos de duplicar, copiar e colar, editar vários
-  objetos de uma vez, os favoritos, os avisos com Desfazer, os painéis
-  vazios que ensinam e as Preferências já entraram; falta a revisão antes
-  de lançar;
-- **v0.6, modelar e animar dentro do NN Studio:** um modelador de peças
-  low-poly coloridas, com espelho, variações e peças que se encaixam, e um
-  animador com esqueletos e animações prontas para ajustar.
+O próximo passo já escolhido é a **v0.6, modelar e animar dentro do NN
+Studio**: um modelador de peças low-poly coloridas (formas prontas, puxar
+faces, pintar, espelho), com variações e peças que se encaixam, e um animador
+com esqueletos prontos e animações para ajustar (parado, andar, correr,
+pular, atacar).
 
 Ainda não tem, e são ideias para depois:
 

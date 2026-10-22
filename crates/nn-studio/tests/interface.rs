@@ -4871,6 +4871,19 @@ fn botao_direito_na_cena_3d() {
     assert!(h.query_by_label_contains("Renomear").is_none());
     assert_ne!(cena(&h).cam3.yaw, antes.yaw, "a câmera girou");
 
+    // Esc fecha o menu (e não só limpa a seleção); com o menu aberto, Shift+A
+    // não abre a busca por trás dele.
+    clique_direito(&mut h, pa);
+    h.get_by_label("Criar aqui");
+    h.key_press_modifiers(Modifiers::SHIFT, Key::A);
+    h.run();
+    assert!(cena(&h).quick_add.is_none(), "a busca espera o menu");
+    h.key_press(Key::Escape);
+    h.run();
+    assert!(
+        h.query_by_label("Criar aqui").is_none(),
+        "Esc fechou o menu"
+    );
     // F2 com o mouse na vista: renomeia pela Hierarquia.
     cena_mut(&mut h).selection = vec![cubo.id];
     h.hover_at(rect.center());
@@ -4973,6 +4986,21 @@ fn botao_direito_na_cena_2d_na_hierarquia_e_no_inspetor() {
         circulo.y
     );
 
+    // Com o menu aberto, o botão direito em outro lugar abre o menu ali.
+    clique_direito(&mut h, rect.left_top() + egui::vec2(40.0, 40.0));
+    h.get_by_label("Criar aqui");
+    let q0 = objeto(&h, "quadrado").clone();
+    let pq0 = cena(&h).camera.to_screen(rect, q0.x, q0.y);
+    clique_direito(&mut h, pq0);
+    h.run_steps(2);
+    h.get_by_label_contains("Renomear");
+    assert_eq!(
+        cena(&h).selection,
+        vec![q0.id],
+        "o menu reabriu no quadrado"
+    );
+    h.key_press(Key::Escape);
+    h.run();
     // Arrastar com o direito move a vista, sem menu.
     let antes = cena(&h).camera.x;
     arrastar_direito(&mut h, p, p + egui::vec2(-100.0, 0.0));
@@ -5432,6 +5460,17 @@ fn favoritos_do_projeto() {
     let fav = nn_studio::catalog::favorites(&proj);
     assert_eq!(fav.len(), 1);
     assert!(!fav[0].three_d);
+    // ⭐ Favoritos > 🗑 Tirar dos favoritos: pergunta antes de mandar para a lixeira.
+    h.get_by_label("➕ Objeto").click();
+    h.run();
+    submenu(&mut h, "⭐ Favoritos");
+    submenu(&mut h, "🗑 Tirar dos favoritos");
+    h.get_all_by(|n| n.role() == Role::Button && n.label().as_deref() == Some("quadrado"))
+        .max_by(|a, b| a.rect().left().total_cmp(&b.rect().left()))
+        .unwrap()
+        .click();
+    h.run_steps(3);
+    h.get_by_label("Mandar para a lixeira?");
 }
 
 // Amigável e divertido (S45) ----------------------------------------------------

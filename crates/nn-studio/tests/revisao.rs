@@ -441,3 +441,258 @@ fn modelos_o_jogo_comeca_igual_ao_editor() {
     }
     assert!(conferidos > 200, "{conferidos}");
 }
+
+/// Uso de ponta a ponta da etapa "Studio mais gostoso de usar" (v0.5): monta
+/// uma cena 3D e uma 2D só com o que entrou nela, gravando cada tela.
+#[test]
+#[ignore]
+fn uso_de_ponta_a_ponta_v05() {
+    use egui::{Key, Modifiers};
+    let dir = temp("ponta-a-ponta");
+    let proj = dir.join("ilha");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: None,
+        template: Template::Visual3D,
+    })
+    .unwrap();
+    let mut h = studio(&dir, Some(proj.clone()), egui::vec2(1280.0, 720.0));
+    let ws = h.state_mut().project_mut().unwrap();
+    ws.open_file("cenas/ilha.cena", None);
+    passos(&mut h);
+    passos(&mut h);
+    fn cena<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        h.state_mut()
+            .project_mut()
+            .unwrap()
+            .scenes
+            .get_mut("cenas/ilha.cena")
+            .unwrap()
+    }
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let direito = |h: &mut Harness<'_, StudioApp>, p: egui::Pos2| {
+        h.hover_at(p);
+        h.step();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos: p,
+                button: egui::PointerButton::Secondary,
+                pressed,
+                modifiers: Modifiers::NONE,
+            });
+            h.step();
+        }
+        passos(h);
+    };
+    // (A Hierarquia e o Inspetor também têm "Luz...": fica o do meio.)
+    let meio = (rect.left(), rect.right() + 40.0);
+    let submenu = |h: &mut Harness<'_, StudioApp>, nome: &str| {
+        h.get_all_by(|n| n.label().is_some_and(|l| l.starts_with(nome) && l != nome))
+            .find(|n| n.rect().left() > meio.0 && n.rect().left() < meio.1)
+            .unwrap()
+            .hover();
+        passos(h);
+    };
+    let ponto = |_: &mut Harness<'_, StudioApp>, x: f32, y: f32| rect.min + egui::vec2(x, y);
+    tela(&mut h, "e2e-3d-01-aberta");
+
+    // Botão direito no chão: Luz > Tocha.
+    let p = ponto(&mut h, 330.0, 215.0);
+    direito(&mut h, p);
+    tela(&mut h, "e2e-3d-02-menu");
+    submenu(&mut h, "Luz");
+    h.get_by_label("Tocha").click();
+    passos(&mut h);
+    tela(&mut h, "e2e-3d-03-tocha");
+    // Ctrl+D duas vezes: uma fileira.
+    h.hover_at(p);
+    h.step();
+    for _ in 0..2 {
+        h.key_press_modifiers(Modifiers::COMMAND, Key::D);
+        passos(&mut h);
+    }
+    tela(&mut h, "e2e-3d-04-fileira");
+    // Shift+A: a busca.
+    let p2 = ponto(&mut h, 250.0, 240.0);
+    h.hover_at(p2);
+    h.step();
+    h.key_press_modifiers(Modifiers::SHIFT, Key::A);
+    passos(&mut h);
+    h.event(egui::Event::Text("lamp".into()));
+    passos(&mut h);
+    tela(&mut h, "e2e-3d-05-busca");
+    h.key_press(Key::Enter);
+    passos(&mut h);
+    // As três tochas selecionadas: o Inspetor de vários.
+    let tochas: Vec<u32> = cena(&mut h)
+        .data
+        .objects
+        .iter()
+        .filter(|o| o.name.starts_with("Tocha"))
+        .map(|o| o.id)
+        .collect();
+    cena(&mut h).selection = tochas.clone();
+    passos(&mut h);
+    tela(&mut h, "e2e-3d-06-varios");
+    // Guardar uma nos favoritos, pelo botão direito na Hierarquia.
+    cena(&mut h).selection = vec![tochas[0]];
+    cena(&mut h).reveal(tochas[0]);
+    passos(&mut h);
+    h.get_all_by_label("Tocha")
+        .next()
+        .unwrap()
+        .click_secondary();
+    passos(&mut h);
+    tela(&mut h, "e2e-3d-07-menu-objeto");
+    h.get_by_label("⭐ Guardar nos favoritos").click();
+    passos(&mut h);
+    tela(&mut h, "e2e-3d-08-favorito");
+    // Shift+A sem digitar: o favorito e os recentes primeiro.
+    h.hover_at(p2);
+    h.step();
+    h.key_press_modifiers(Modifiers::SHIFT, Key::A);
+    passos(&mut h);
+    tela(&mut h, "e2e-3d-09-busca-vazia");
+    h.key_press(Key::Escape);
+    passos(&mut h);
+    // Apagar: o aviso com Desfazer.
+    cena(&mut h).selection = tochas.clone();
+    h.hover_at(p);
+    h.step();
+    h.key_press(Key::Delete);
+    passos(&mut h);
+    tela(&mut h, "e2e-3d-10-apagou");
+
+    // Tema claro e cor roxa: os avisos, o menu e a busca.
+    h.state_mut().settings.theme = nn_studio::settings::ThemeChoice::Claro;
+    h.state_mut().settings.accent = nn_studio::settings::Accent::Roxo;
+    passos(&mut h);
+    direito(&mut h, p);
+    tela(&mut h, "e2e-3d-11-claro-menu");
+    h.key_press(Key::Escape);
+    passos(&mut h);
+    h.hover_at(p2);
+    h.step();
+    h.key_press_modifiers(Modifiers::SHIFT, Key::A);
+    passos(&mut h);
+    tela(&mut h, "e2e-3d-12-claro-busca");
+    h.key_press(Key::Escape);
+    passos(&mut h);
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .show_tab(nn_studio::project::Tab::Home);
+    passos(&mut h);
+    tela(&mut h, "e2e-3d-13-claro-inicio");
+}
+
+/// Quanto custa um quadro do NN Studio com a ilha (cena 3D do modelo, uns
+/// 220 objetos) aberta, com o mouse passando por cima da vista.
+#[test]
+#[ignore]
+fn ilha_quadros_por_segundo() {
+    let dir = temp("ilha-tempo");
+    let proj = dir.join("ilha");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: None,
+        template: Template::Visual3D,
+    })
+    .unwrap();
+    let mut h = studio(&dir, Some(proj.clone()), egui::vec2(1600.0, 900.0));
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("cenas/ilha.cena", None);
+    passos(&mut h);
+    passos(&mut h);
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let n = 40;
+    let start = std::time::Instant::now();
+    for i in 0..n {
+        let t = i as f32 / n as f32;
+        h.hover_at(rect.min + egui::vec2(rect.width() * t, rect.height() * 0.6));
+        h.step();
+    }
+    let ms = start.elapsed().as_secs_f64() * 1000.0 / n as f64;
+    eprintln!("ilha: {ms:.1} ms por quadro");
+}
+
+/// As imagens da documentação da v0.5: o botão direito, a busca rápida, o
+/// Inspetor com vários objetos e as Preferências (na ilha do modelo 3D).
+#[test]
+#[ignore]
+fn capturas_da_v05_para_a_documentacao() {
+    use egui::{Key, Modifiers};
+    let dir = temp("capturas-v05");
+    let proj = dir.join("jogo");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Visual3D,
+    })
+    .unwrap();
+    let mut h = studio(&dir, Some(proj.clone()), egui::vec2(1280.0, 800.0));
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("cenas/ilha.cena", None);
+    passos(&mut h);
+    passos(&mut h);
+    fn cena<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::scene_view::SceneDoc {
+        h.state_mut()
+            .project_mut()
+            .unwrap()
+            .scenes
+            .get_mut("cenas/ilha.cena")
+            .unwrap()
+    }
+    let rect = h.get_by_label("Vista da cena 3D").rect();
+    let p = rect.min + egui::vec2(rect.width() * 0.42, rect.height() * 0.62);
+    // O botão direito no chão da ilha.
+    h.hover_at(p);
+    h.step();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: p,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.step();
+    }
+    passos(&mut h);
+    tela(&mut h, "nn-studio-botao-direito");
+    h.key_press(Key::Escape);
+    passos(&mut h);
+    // A busca rápida.
+    h.hover_at(p);
+    h.step();
+    h.key_press_modifiers(Modifiers::SHIFT, Key::A);
+    passos(&mut h);
+    h.event(egui::Event::Text("luz".into()));
+    passos(&mut h);
+    tela(&mut h, "nn-studio-busca-rapida");
+    h.key_press(Key::Escape);
+    passos(&mut h);
+    // Três árvores selecionadas: o Inspetor de vários.
+    let arvores: Vec<u32> = {
+        let mut v = Vec::new();
+        nn_studio::scene_data::visit(&cena(&mut h).data.objects, &mut |o| {
+            if o.component("model")
+                .is_some_and(|m| m.str("file").ends_with("arvore.glb"))
+            {
+                v.push(o.id);
+            }
+        });
+        v.into_iter().take(3).collect()
+    };
+    cena(&mut h).selection = arvores;
+    passos(&mut h);
+    tela(&mut h, "nn-studio-varios");
+    // As Preferências.
+    cena(&mut h).selection.clear();
+    h.state_mut().preferences = true;
+    passos(&mut h);
+    tela(&mut h, "nn-studio-preferencias");
+}

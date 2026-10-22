@@ -152,9 +152,11 @@ impl NewKind {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     Command(Command),
-    /// Uma linha no Console (informação ou erro).
+    /// Uma linha no Console (informação ou erro) e o aviso rápido (`toast`,
+    /// ou o mesmo texto).
     Notice {
         text: String,
+        toast: Option<String>,
         error: bool,
     },
     OpenFile {
@@ -1826,13 +1828,14 @@ impl ProjectWorkspace {
                 }
                 Action::ImportPaths { paths, dest } => self.import_paths(&paths, dest.as_deref()),
                 Action::Rename { rel, new_name } => self.rename(&rel, &new_name),
-                Action::Notice { text, error } => {
+                Action::Notice { text, toast, error } => {
+                    let short = toast.unwrap_or_else(|| text.clone());
                     if error {
                         self.console.error(&text);
-                        self.toasts.push(text, crate::toast::Kind::Error);
+                        self.toasts.push(short, crate::toast::Kind::Error);
                     } else {
                         self.console.info(&text);
-                        self.toasts.push(text, crate::toast::Kind::Success);
+                        self.toasts.push(short, crate::toast::Kind::Success);
                     }
                 }
                 Action::NewMap => {
@@ -2932,13 +2935,25 @@ fn hierarchy_action(actions: &mut Vec<Action>, a: HierarchyAction) {
         HierarchyAction::ShowHierarchy => {
             actions.push(Action::Command(Command::ShowHierarchy));
         }
-        HierarchyAction::Saved(rel) => actions.push(Action::Notice {
-            text: format!(
-                "⭐ Guardado nos favoritos: {rel}. Ele aparece no topo do ➕ Objeto e no Shift+A."
-            ),
-            error: false,
+        HierarchyAction::Saved(rel) => {
+            let name = std::path::Path::new(&rel)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            actions.push(Action::Notice {
+                text: format!(
+                    "⭐ Guardado nos favoritos: {rel}. Ele aparece no topo do ➕ Objeto e no Shift+A."
+                ),
+                toast: Some(format!("{name} guardado nos favoritos ⭐")),
+                error: false,
+            });
+        }
+        HierarchyAction::Error(text) => actions.push(Action::Notice {
+            text,
+            toast: None,
+            error: true,
         }),
-        HierarchyAction::Error(text) => actions.push(Action::Notice { text, error: true }),
+        HierarchyAction::AskDelete(rel) => actions.push(Action::AskDelete(rel)),
     }
 }
 

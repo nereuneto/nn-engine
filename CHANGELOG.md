@@ -2,7 +2,36 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
-## Não lançado
+## 0.5.0
+
+A versão do **NN Studio mais gostoso de usar**. O **botão direito** funciona em todo lugar e cria onde você clicou. A **busca rápida (Shift+A)** acha o que criar pelo nome, até com erro de digitação. Duplicar ficou sem trabalho repetido (**Ctrl+D que repete o passo**, **Alt+arrastar**, **Shift+D**), e dá para **copiar e colar** objetos e componentes. O Inspetor edita **vários objetos de uma vez**, os **⭐ favoritos** guardam o que você monta toda hora, os **avisos rápidos com Desfazer** deixam errar sem medo, os painéis vazios ensinam e as **Preferências** trazem a cor de destaque, as animações e os sons. A engine não mudou: os jogos rodam igual. Para começar: [A aba da cena](docs/studio.md#a-aba-da-cena), [Inspetor](docs/studio.md#inspetor) e [Preferências](docs/studio.md#preferências).
+
+### Para quem vem da 0.4
+
+- **Os projetos da 0.4 abrem e rodam.** Conferido com os dez modelos de projeto da 0.4, também depois de abrir e gravar cada cena no NN Studio da 0.5. A 0.4 também roda as cenas gravadas pela 0.5.
+- **A engine, a API Lua, os comportamentos prontos e as crates do Rust não mudaram**: só o NN Studio.
+- **As preferências da 0.4 abrem na 0.5**, com o novo no padrão. Voltando para a 0.4, ela abre as da 0.5 e ignora o que não conhece.
+- **O que muda sem você mexer:**
+  - o botão direito na cena abre um menu (segurar e arrastar continua movendo a vista);
+  - **Alt + arrastar** um objeto no 2D faz uma cópia;
+  - o **Ctrl+D** repete o passo da duplicação anterior;
+  - a Lâmpada e o Holofote do ➕ Objeto nascem no alto;
+  - os avisos rápidos aparecem embaixo, no meio da janela.
+- **Pasta nova, só se você usar:** os ⭐ favoritos ficam em `favoritos/`, dentro do projeto.
+
+### Revisão (Sprint 46)
+
+- **Chão grande no botão direito:** algo grande e baixo (como a ilha do modelo 3D, um cilindro de 28 × 4 × 28 m) conta como chão: o botão direito nele abre o menu de criar, e o menu dele vai para o fim. Passar o mouse por cima também não desenha mais a caixa dele, que cobria a vista inteira.
+- **O menu do botão direito reabre** no ponto novo quando você clica com o botão direito em outro lugar com ele aberto. Antes, esse clique só fechava o menu.
+- **Esc fecha o menu.** Antes, com o mouse na cena, o Esc limpava a seleção e o menu ficava aberto. Com um menu aberto, os atalhos da cena (Shift+A, Del, Ctrl+C...) também esperam.
+- **🗑 Tirar dos favoritos**, no submenu ⭐ Favoritos: o arquivo vai para a lixeira, perguntando antes.
+- O aviso de favorito ficou curto ("tocha guardado nos favoritos ⭐"); o caminho completo continua no Console.
+- **Desempenho:** o NN Studio mede o mesmo da 0.4 numa cena 2D com 2.000 objetos e na ilha com o mouse passando por cima.
+- **Documentação:** imagens novas do botão direito, da busca rápida, do Inspetor com vários objetos e das Preferências, e o "O que vem depois" agora fala do modelador e do animador.
+- **Ferramentas de revisão** (`tests/revisao.rs`):
+  - `uso_de_ponta_a_ponta_v05` monta uma cena só com o que é novo e grava as telas;
+  - `ilha_quadros_por_segundo` mede o tempo de um quadro com a ilha aberta;
+  - `capturas_da_v05_para_a_documentacao` grava as imagens da documentação.
 
 ### Amigável e divertido (Sprint 45)
 

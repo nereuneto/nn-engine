@@ -494,6 +494,12 @@ impl SceneDoc {
                 actions.push(SceneAction::NewMap);
                 None
             }
+            Picked::Remove(rel) => {
+                actions.push(SceneAction::Object(
+                    crate::hierarchy::HierarchyAction::AskDelete(rel),
+                ));
+                None
+            }
         }
     }
 
@@ -1097,7 +1103,7 @@ impl SceneDoc {
         }
         if response.hovered()
             && !secondary
-            && !ui.ctx().text_edit_focused()
+            && !super::busy(ui)
             && let Some(p) = response.hover_pos()
             && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::D))
         {
@@ -1308,7 +1314,7 @@ impl SceneDoc {
         });
 
         // Ctrl+C, Ctrl+X e Ctrl+V (colar onde o mouse aponta).
-        if response.hovered() && !ui.ctx().text_edit_focused() && self.quick_add.is_none() {
+        if response.hovered() && !super::busy(ui) && self.quick_add.is_none() {
             let at = response.hover_pos().map(|p| {
                 let w = self.point_under3(env, rect, p);
                 super::WorldPos {
@@ -1321,7 +1327,7 @@ impl SceneDoc {
         // Shift+A: a busca rápida para criar, onde o mouse está.
         if response.hovered()
             && !secondary
-            && !ui.ctx().text_edit_focused()
+            && !super::busy(ui)
             && let Some(p) = response.hover_pos()
             && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::A))
         {
@@ -1332,6 +1338,7 @@ impl SceneDoc {
         }
 
         if self.quick_add.is_none()
+            && !super::busy(ui)
             && (response.hovered() || response.has_focus() || response.dragged())
         {
             self.keyboard3(ui, env, actions, secondary);
@@ -1357,6 +1364,7 @@ impl SceneDoc {
                 target,
                 at2: self.camera.to_world(rect, p),
                 at3: self.point_under3(env, rect, p),
+                ground: false,
             })
         } else {
             None
@@ -1586,8 +1594,10 @@ impl SceneDoc {
             });
         }
         boxes.extend(self.selection.iter().map(|id| (*id, ORANGE)));
+        // (Um chão grande, como a ilha, não ganha a caixa: ela cobriria a vista.)
         if let Some(h) = self.hover
             && !self.selection.contains(&h)
+            && !self.is_ground(h, env)
         {
             boxes.push((h, Color32::from_white_alpha(120)));
         }
