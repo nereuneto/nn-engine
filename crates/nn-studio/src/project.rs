@@ -314,6 +314,8 @@ pub struct ProjectWorkspace {
     pub models: HashMap<String, crate::model_editor::ModelDoc>,
     /// A biblioteca pessoal do modelador (ao lado das preferências).
     pub library_dir: Option<PathBuf>,
+    /// O modelo com o foco (o Inspetor mostra o resumo dele).
+    active_model: Option<String>,
     /// Paleta do projeto (`paleta.hex`), lida na primeira vez.
     palette: Option<Vec<crate::pixel_ops::Color>>,
     sounds: HashMap<String, SoundView>,
@@ -440,6 +442,7 @@ impl ProjectWorkspace {
             dialogues: HashMap::new(),
             models: HashMap::new(),
             library_dir: None,
+            active_model: None,
             palette: None,
             sounds: HashMap::new(),
             maps: HashMap::new(),
@@ -2264,6 +2267,7 @@ impl ProjectWorkspace {
                 dialogues: &mut self.dialogues,
                 models: &mut self.models,
                 library: self.library_dir.as_deref(),
+                active_model: self.active_model.as_deref(),
                 map_docs: &mut self.map_docs,
                 tilesets: &mut self.tilesets,
                 paint: &mut self.paint,
@@ -2322,12 +2326,24 @@ impl ProjectWorkspace {
                 .show_inside(ui, &mut viewer);
         }
         env.settings.clear_console_on_play = clear_on_play;
-        // A Hierarquia e o Inspetor seguem a cena com o foco.
-        if let Some((_, Tab::Scene(r))) = self.dock.find_active_focused() {
-            let r = r.clone();
-            if self.scenes.contains_key(&r) {
-                self.active_scene = Some(r);
+        // A Hierarquia e o Inspetor seguem a cena (ou o modelo) com o foco.
+        match self.dock.find_active_focused() {
+            Some((_, Tab::Scene(r))) => {
+                let r = r.clone();
+                if self.scenes.contains_key(&r) {
+                    self.active_scene = Some(r);
+                }
+                self.active_model = None;
             }
+            Some((_, Tab::Model(r))) => self.active_model = Some(r.clone()),
+            _ => {}
+        }
+        if self
+            .active_model
+            .as_ref()
+            .is_some_and(|r| !self.models.contains_key(r))
+        {
+            self.active_model = None;
         }
         // Avisos das cenas (apagou, colou...), com Desfazer, e os sons.
         for (rel, doc) in self.scenes.iter_mut() {
@@ -3117,6 +3133,59 @@ fn frame_hint(
 
 /// Cria um PNG transparente (e o `.anim` com o tamanho do quadro, se tiver
 /// mais de um quadro).
+/// O Inspetor com um modelo do modelador na frente: o resumo dele.
+fn model_summary(ui: &mut egui::Ui, doc: &crate::model_editor::ModelDoc) {
+    let name = doc.rel.rsplit('/').next().unwrap_or(&doc.rel);
+    ui.heading(name);
+    ui.weak(&doc.rel);
+    ui.add_space(6.0);
+    let d = &doc.data;
+    egui::Grid::new("inspetor-modelo")
+        .num_columns(2)
+        .striped(true)
+        .show(ui, |ui| {
+            ui.label("Peças");
+            ui.label(d.parts.len().to_string());
+            ui.end_row();
+            ui.label("Triângulos");
+            ui.label(d.triangle_count().to_string());
+            ui.end_row();
+            if let Some((lo, hi)) = d.bounds() {
+                let s = hi - lo;
+                let f =
+                    |v: f32| crate::scene_data::format_num(f64::from((v * 100.0).round() / 100.0));
+                ui.label("Tamanho");
+                ui.label(format!("{} × {} × {} m", f(s.x), f(s.y), f(s.z)));
+                ui.end_row();
+            }
+            ui.label("Ossos");
+            ui.label(if d.bones.is_empty() {
+                "nenhum".to_string()
+            } else {
+                d.bones.len().to_string()
+            });
+            ui.end_row();
+            ui.label("Animações");
+            ui.label(if d.anims.is_empty() {
+                "nenhuma".to_string()
+            } else {
+                d.anims
+                    .iter()
+                    .map(|a| a.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            });
+            ui.end_row();
+        });
+    ui.add_space(8.0);
+    ui.label(format!(
+        "Ao salvar, o {} sai junto: é ele que vai para as cenas e para o jogo.",
+        crate::model_data::glb_path(name)
+    ));
+    ui.add_space(4.0);
+    ui.weak("A peça escolhida (posição, rotação, escala e osso) fica no painel da direita do modelador.");
+}
+
 /// Um modelo novo (um cubo), já com o `.glb` dele.
 fn create_model(
     root: &Path,
@@ -3197,6 +3266,7 @@ struct Viewer<'a> {
     dialogues: &'a mut HashMap<String, crate::dialogue::DialogueDoc>,
     models: &'a mut HashMap<String, crate::model_editor::ModelDoc>,
     library: Option<&'a Path>,
+    active_model: Option<&'a str>,
     palette: &'a mut Vec<crate::pixel_ops::Color>,
     map_docs: &'a mut HashMap<String, crate::map_doc::MapDoc>,
     tilesets: &'a mut HashMap<String, crate::tileset::TilesetDoc>,
@@ -3704,6 +3774,16 @@ impl TabViewer for Viewer<'_> {
                 }
             }
             Tab::Tiles => self.tiles(ui),
+            Tab::Inspector
+                if self
+                    .active_model
+                    .is_some_and(|r| self.models.contains_key(r)) =>
+            {
+                let rel = self.active_model.unwrap_or_default();
+                if let Some(doc) = self.models.get(rel) {
+                    model_summary(ui, doc);
+                }
+            }
             Tab::Inspector => {
                 let active = self.active_scene.clone();
                 let doc = active.as_deref().and_then(|r| self.scenes.get_mut(r));

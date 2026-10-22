@@ -914,3 +914,341 @@ fn captura_do_animador_para_a_documentacao() {
     passos(&mut h);
     tela(&mut h, "nn-studio-animador");
 }
+
+/// O modelador com um modelo grande: uma vila com 12 casinhas, árvores e
+/// cercas (centenas de peças, milhares de triângulos). Mede o quadro com o
+/// mouse passando por cima, nos modos Peças, Faces e Pontos (com tudo
+/// escolhido), e puxando uma face.
+#[test]
+#[ignore]
+fn modelador_grande_quadros_por_segundo() {
+    use glam::Vec3;
+    use nn_studio::model_data::ModelData;
+    use nn_studio::model_editor::Select;
+    use nn_studio::model_kits::READY;
+    let dir = temp("modelador-grande");
+    let proj = dir.join("jogo");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: None,
+        template: Template::Vazio3D,
+    })
+    .unwrap();
+    let pronto = |nome: &str| (READY.iter().find(|r| r.name == nome).unwrap().make)();
+    let mut modelo = ModelData::new_default();
+    modelo.parts.clear();
+    for i in 0..12 {
+        let (x, z) = ((i % 4) as f32 * 6.0, (i / 4) as f32 * 6.0);
+        for (nome, off) in [
+            ("Casinha", Vec3::ZERO),
+            ("Árvore", Vec3::new(2.6, 0.0, -0.6)),
+            ("Pinheiro", Vec3::new(-2.5, 0.0, -0.8)),
+            ("Cerca", Vec3::new(0.0, 0.0, 2.6)),
+            ("Lampião", Vec3::new(-1.5, 0.0, 1.5)),
+        ] {
+            for mut p in pronto(nome).parts {
+                p.pos += Vec3::new(x, 0.0, z) + off;
+                modelo.parts.push(p);
+            }
+        }
+    }
+    eprintln!(
+        "modelo: {} peças, {} triângulos",
+        modelo.parts.len(),
+        modelo.triangle_count()
+    );
+    let pasta = proj.join("assets/modelos");
+    std::fs::create_dir_all(&pasta).unwrap();
+    std::fs::write(pasta.join("vila.modelo"), modelo.to_lua()).unwrap();
+    let mut h = studio(&dir, Some(proj.clone()), egui::vec2(1600.0, 900.0));
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("assets/modelos/vila.modelo", None);
+    passos(&mut h);
+    passos(&mut h);
+    let rect = h.get_by_label("Vista do modelo").rect();
+    let medir = |h: &mut Harness<'_, StudioApp>, nome: &str| {
+        let n = 30;
+        let start = std::time::Instant::now();
+        for i in 0..n {
+            let t = i as f32 / n as f32;
+            h.hover_at(rect.min + egui::vec2(rect.width() * t, rect.height() * 0.6));
+            h.step();
+        }
+        let ms = start.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        eprintln!("{nome}: {ms:.1} ms por quadro");
+    };
+    let modo = |h: &mut Harness<'_, StudioApp>, m: Select, tudo: bool| {
+        let ws = h.state_mut().project_mut().unwrap();
+        let d = ws.models.values_mut().next().unwrap();
+        d.set_mode(m);
+        if tudo {
+            d.select_all();
+        }
+    };
+    modo(&mut h, Select::Parts, false);
+    medir(&mut h, "peças");
+    modo(&mut h, Select::Faces, false);
+    medir(&mut h, "faces");
+    modo(&mut h, Select::Points, false);
+    medir(&mut h, "pontos");
+    modo(&mut h, Select::Points, true);
+    medir(&mut h, "pontos, tudo escolhido");
+    modo(&mut h, Select::Parts, true);
+    medir(&mut h, "peças, tudo escolhido");
+    // Arrastando uma peça: o modelo muda a cada quadro (as malhas e o mapa
+    // de profundidade são refeitos).
+    modo(&mut h, Select::Parts, false);
+    let n = 30;
+    let start = std::time::Instant::now();
+    for i in 0..n {
+        {
+            let ws = h.state_mut().project_mut().unwrap();
+            let d = ws.models.values_mut().next().unwrap();
+            d.data.parts[0].pos.y = i as f32 * 0.01;
+        }
+        h.step();
+    }
+    let ms = start.elapsed().as_secs_f64() * 1000.0 / n as f64;
+    eprintln!("mudando o modelo a cada quadro: {ms:.1} ms por quadro");
+}
+
+/// Uso de ponta a ponta da v0.6: do cubo ao personagem animado na cena,
+/// gravando cada tela (`NN_STUDIO_TELAS`) para conferir de olho.
+#[test]
+#[ignore]
+fn uso_de_ponta_a_ponta_v06() {
+    use egui::{Key, Modifiers};
+    use glam::Vec3;
+    use nn_studio::model_editor::Select;
+    use nn_studio::model_rig;
+    let dir = temp("ponta-a-ponta-06");
+    let proj = dir.join("jogo");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Vazio3D,
+    })
+    .unwrap();
+    let mut h = studio(&dir, Some(proj.clone()), egui::vec2(1280.0, 800.0));
+    fn modelo<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::model_editor::ModelDoc {
+        let ws = h.state_mut().project_mut().unwrap();
+        let rel = match ws.dock.find_active_focused() {
+            Some((_, nn_studio::project::Tab::Model(r))) => r.clone(),
+            _ => ws.models.keys().max().unwrap().clone(),
+        };
+        ws.models.get_mut(&rel).unwrap()
+    }
+    fn na_vista(h: &mut Harness<'_, StudioApp>, p: Vec3) -> egui::Pos2 {
+        let rect = h.get_by_label("Vista do modelo").rect();
+        let s = modelo(h)
+            .cam
+            .camera()
+            .screen_point(p, glam::Vec2::new(rect.width(), rect.height()))
+            .unwrap();
+        rect.min + egui::vec2(s.x, s.y)
+    }
+    fn clique(h: &mut Harness<'_, StudioApp>, p: egui::Pos2) {
+        h.hover_at(p);
+        passos(h);
+        h.drag_at(p);
+        h.step();
+        h.drop_at(p);
+        passos(h);
+    }
+    // 1. Modelo novo (um cubo).
+    h.get_by_label("➕ Novo").click();
+    passos(&mut h);
+    h.get_by_label("🎲 Modelo 3D").click();
+    passos(&mut h);
+    tela(&mut h, "06-01-novo-modelo");
+    h.key_press(Key::Enter);
+    passos(&mut h);
+    tela(&mut h, "06-02-cubo");
+    // 2. A face de cima, puxar.
+    let topo = na_vista(&mut h, Vec3::new(0.0, 1.0, 0.0));
+    clique(&mut h, topo);
+    h.hover_at(topo);
+    passos(&mut h);
+    h.key_press(Key::P);
+    passos(&mut h);
+    for i in 1..=4 {
+        h.hover_at(topo - egui::vec2(0.0, 10.0 * i as f32));
+        passos(&mut h);
+    }
+    tela(&mut h, "06-03-puxando");
+    clique(&mut h, topo - egui::vec2(0.0, 40.0));
+    // 3. Encolher a frente e pintar.
+    let frente = na_vista(&mut h, Vec3::new(0.0, 0.5, 0.5));
+    clique(&mut h, frente);
+    h.hover_at(frente + egui::vec2(40.0, -30.0));
+    passos(&mut h);
+    h.key_press(Key::I);
+    passos(&mut h);
+    h.hover_at(frente + egui::vec2(15.0, -10.0));
+    passos(&mut h);
+    clique(&mut h, frente + egui::vec2(15.0, -10.0));
+    h.get_by_label("#6B4423").click();
+    passos(&mut h);
+    tela(&mut h, "06-04-porta");
+    // 4. Pontos, espelho.
+    h.key_press(Key::Num1);
+    passos(&mut h);
+    tela(&mut h, "06-05-pontos");
+    h.get_by_label("↔ Espelho X").click();
+    passos(&mut h);
+    tela(&mut h, "06-06-espelho");
+    h.get_by_label("↔ Espelho X").click();
+    passos(&mut h);
+    // 5. Kit e encaixe: telhado em cima, pelo botão direito.
+    let topo = {
+        let (_, hi) = modelo(&mut h).data.bounds().unwrap();
+        na_vista(&mut h, Vec3::new(0.0, hi.y, 0.0))
+    };
+    h.hover_at(topo);
+    h.step();
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos: topo,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+        h.step();
+    }
+    passos(&mut h);
+    tela(&mut h, "06-07-menu-face");
+    h.get_by(|n| {
+        n.label()
+            .is_some_and(|l| l.starts_with("➕ Peça aqui") && l != "➕ Peça aqui")
+    })
+    .hover();
+    passos(&mut h);
+    h.get_by(|n| {
+        n.label()
+            .is_some_and(|l| l.starts_with("🏡 Casa") && l != "🏡 Casa")
+    })
+    .hover();
+    passos(&mut h);
+    tela(&mut h, "06-08-kit-casa");
+    h.get_by_label("Telhado").click();
+    passos(&mut h);
+    tela(&mut h, "06-09-telhado");
+    // 6. Repetir o telhado em círculo (só para ver a janelinha).
+    h.get_by_label("🔁 Repetir").click();
+    passos(&mut h);
+    h.get_by_label("🔄 Em círculo").click();
+    passos(&mut h);
+    tela(&mut h, "06-10-repetir");
+    h.key_press(Key::Escape);
+    passos(&mut h);
+    // 7. Biblioteca.
+    h.get_by_label("📚 Biblioteca").click();
+    passos(&mut h);
+    tela(&mut h, "06-11-biblioteca");
+    h.key_press(Key::Escape);
+    passos(&mut h);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::S);
+    passos(&mut h);
+    // 8. Um personagem: esqueleto e animações.
+    h.get_by_label("➕ Novo").click();
+    passos(&mut h);
+    h.get_by_label("🎲 Modelo 3D").click();
+    passos(&mut h);
+    h.get_by(|n| {
+        n.value().is_some_and(|v| v == "Um cubo") || n.label().is_some_and(|l| l == "Um cubo")
+    })
+    .click();
+    passos(&mut h);
+    tela(&mut h, "06-12-comecar-com");
+    h.get_by_label("Personagem").click();
+    passos(&mut h);
+    h.key_press(Key::Enter);
+    passos(&mut h);
+    h.get_by_label("💀 Esqueleto").click();
+    passos(&mut h);
+    tela(&mut h, "06-13-esqueleto-menu");
+    h.get_by_label("🚶 Humanoide").click();
+    passos(&mut h);
+    tela(&mut h, "06-14-ossos");
+    h.get_by_label("🎬 Animar").click();
+    passos(&mut h);
+    tela(&mut h, "06-15-animar-vazio");
+    h.get_by_label("🎬 Prontas").click();
+    passos(&mut h);
+    h.get_by_label("Todas as que faltam").click();
+    passos(&mut h);
+    {
+        let d = modelo(&mut h);
+        d.rig.anim = d.data.anims.iter().position(|a| a.name == "correr");
+        d.rig.time = 0.15;
+        d.rig.sel_bone = d.data.bone_index(model_rig::PERNA_E);
+    }
+    passos(&mut h);
+    tela(&mut h, "06-16-correr");
+    {
+        let d = modelo(&mut h);
+        d.rig.anim = d.data.anims.iter().position(|a| a.name == "golpe");
+        d.rig.time = 0.15;
+        d.rig.sel_bone = d.data.bone_index(model_rig::BRACO_D);
+    }
+    passos(&mut h);
+    tela(&mut h, "06-17-golpe");
+    h.key_press_modifiers(Modifiers::COMMAND, Key::S);
+    passos(&mut h);
+    // 9. Na cena: o personagem com Animação 3D (prévia) e a casinha.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.open_file("cenas/mundo.cena", None);
+    }
+    passos(&mut h);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let root = ws.root.clone();
+        let mut sizes = nn_studio::scene_render::Sizes::default();
+        let mut maps = std::collections::HashMap::new();
+        let mut tilesets = std::collections::HashMap::new();
+        let mut paint = nn_studio::paint::PaintState::default();
+        let mut env = nn_studio::scene_view::SceneEnv {
+            root: &root,
+            sizes: &mut sizes,
+            renderer: None,
+            design: (640.0, 360.0),
+            clear_color: "#000000",
+            connected: false,
+            time: 0.0,
+            game: None,
+            maps: &mut maps,
+            tilesets: &mut tilesets,
+            paint: &mut paint,
+            animate: false,
+        };
+        let doc = ws.scenes.get_mut("cenas/mundo.cena").unwrap();
+        let p = doc
+            .drop_file3(
+                &mut env,
+                "assets/modelos/personagem.modelo",
+                Vec3::new(0.0, 0.0, 0.0),
+            )
+            .unwrap();
+        doc.drop_file3(
+            &mut env,
+            "assets/modelos/modelo.modelo",
+            Vec3::new(3.0, 0.0, -2.0),
+        )
+        .unwrap();
+        let mut c = nn_studio::scene_data::Component::new("anim3d");
+        c.set(
+            "animation",
+            nn_studio::scene_data::Prop::Str("andar".into()),
+        );
+        doc.data.find_mut(p).unwrap().components.push(c);
+        doc.selection = vec![p];
+        doc.frame3(&root, &mut sizes);
+    }
+    passos(&mut h);
+    passos(&mut h);
+    tela(&mut h, "06-18-cena");
+    let _ = Select::Faces;
+}

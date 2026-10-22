@@ -68,6 +68,10 @@ O NN Studio é o jeito mais fácil de fazer um jogo: crie um projeto a partir de
 
 ![Terreno sendo pintado no NN Studio](docs/imagens/nn-studio-terreno.png)
 
+**Modelar e animar:** um **modelador** de peças low-poly coloridas (formas prontas, puxar e encolher faces, pintar, espelho, repetir em linha e em círculo, kits e uma biblioteca de modelos prontos) e um **animador** com esqueletos prontos, linha do tempo e animações prontas (parado, andar, correr, pular...). Ao salvar, sai o `.glb` que as cenas e o jogo usam.
+
+![O modelador com uma vila feita de modelos prontos](docs/imagens/nn-studio-modelador-kits.png)
+
 **Conversas:** falas, escolhas e personagens montados num **editor de conversa** visual, numa caixa de fala com o tema do projeto, no 2D e no 3D.
 
 ![Editor de conversa](docs/imagens/nn-studio-conversa.png)

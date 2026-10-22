@@ -325,6 +325,20 @@ mod tests {
     }
 
     #[test]
+    fn preferencias_da_0_5_abrem() {
+        let dir = temp("da-0-5");
+        let path = dir.join(SETTINGS_FILE);
+        std::fs::write(&path, include_str!("../tests/dados/preferencias-0.5.json")).unwrap();
+        let s = Settings::load(&path);
+        assert_eq!(s.recent.len(), 1);
+        assert_eq!(s.recent[0].title, "Ilha");
+        assert_eq!(s.layouts.len(), 1, "o layout do projeto ficou");
+        assert_eq!(s.accent, Accent::Verde);
+        assert!(s.celebrated.contains("primeiro-jogo"));
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    }
+
+    #[test]
     fn recentes_sem_repetir_e_com_limite() {
         let dir = temp("recentes");
         let mut s = Settings::default();
