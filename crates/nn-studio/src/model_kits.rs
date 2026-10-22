@@ -149,14 +149,16 @@ fn leg(name: &str) -> Part {
         .baked(Mat4::from_translation(Vec3::Y * -0.75))
 }
 
+/// O personagem olha para +Z (a frente dos modelos no jogo): o lado
+/// esquerdo dele fica no +X.
 fn character() -> Vec<Part> {
     vec![
-        at(leg("Perna esquerda"), Vec3::new(-0.15, 0.75, 0.0)),
-        at(leg("Perna direita"), Vec3::new(0.15, 0.75, 0.0)),
+        at(leg("Perna esquerda"), Vec3::new(0.15, 0.75, 0.0)),
+        at(leg("Perna direita"), Vec3::new(-0.15, 0.75, 0.0)),
         at(body(), Vec3::new(0.0, 0.75, 0.0)),
         at(head(), Vec3::new(0.0, 1.5, 0.0)),
-        at(arm("Braço esquerdo"), Vec3::new(-0.39, 1.45, 0.0)),
-        at(arm("Braço direito"), Vec3::new(0.39, 1.45, 0.0)),
+        at(arm("Braço esquerdo"), Vec3::new(0.39, 1.45, 0.0)),
+        at(arm("Braço direito"), Vec3::new(-0.39, 1.45, 0.0)),
     ]
 }
 
@@ -311,6 +313,7 @@ fn model(parts: Vec<Part>) -> ModelData {
     ModelData {
         parts,
         palette: DEFAULT_PALETTE.iter().map(|s| s.to_string()).collect(),
+        ..Default::default()
     }
 }
 

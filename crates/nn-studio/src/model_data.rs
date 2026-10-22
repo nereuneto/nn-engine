@@ -38,6 +38,145 @@ pub struct Part {
     pub mirror: bool,
     /// Escondida só no editor (o `.glb` leva todas).
     pub visible: bool,
+    /// O osso que a peça segue inteira ("" = nenhum).
+    pub bone: String,
+}
+
+/// Um osso do esqueleto, em repouso: gira na junta (`head`) e aponta para a
+/// ponta (`tail`), no espaço do modelo.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Bone {
+    pub name: String,
+    /// O osso pai (sempre antes deste na lista).
+    pub parent: Option<usize>,
+    pub head: Vec3,
+    pub tail: Vec3,
+}
+
+/// Um quadro-chave de um osso: o giro (graus, como as peças: Y, X, Z) e o
+/// quanto a junta anda.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Key {
+    pub t: f32,
+    pub rot: Vec3,
+    pub offset: Vec3,
+}
+
+/// Os quadros-chave de um osso numa animação (em ordem de tempo).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Track {
+    pub bone: String,
+    pub keys: Vec<Key>,
+}
+
+/// Uma animação: "parado", "andar"...
+#[derive(Debug, Clone, PartialEq)]
+pub struct Anim {
+    pub name: String,
+    /// Segundos.
+    pub duration: f32,
+    /// Repete sem parar (andar) ou toca uma vez (pular).
+    pub looping: bool,
+    pub tracks: Vec<Track>,
+}
+
+/// O giro de um quadro (graus, na ordem das peças).
+pub fn rot_quat(rot: Vec3) -> Quat {
+    Quat::from_euler(
+        EulerRot::YXZ,
+        rot.y.to_radians(),
+        rot.x.to_radians(),
+        rot.z.to_radians(),
+    )
+}
+
+impl Track {
+    /// O giro e o deslocamento no tempo `t` (entre os quadros, no meio do
+    /// caminho; antes do primeiro e depois do último, eles).
+    pub fn sample(&self, t: f32) -> (Quat, Vec3) {
+        let Some(first) = self.keys.first() else {
+            return (Quat::IDENTITY, Vec3::ZERO);
+        };
+        if t <= first.t || self.keys.len() == 1 {
+            return (rot_quat(first.rot), first.offset);
+        }
+        for w in self.keys.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            if t <= b.t {
+                let f = if b.t > a.t { (t - a.t) / (b.t - a.t) } else { 1.0 };
+                return (
+                    rot_quat(a.rot).slerp(rot_quat(b.rot), f),
+                    a.offset.lerp(b.offset, f),
+                );
+            }
+        }
+        let last = self.keys[self.keys.len() - 1];
+        (rot_quat(last.rot), last.offset)
+    }
+
+    /// Põe (ou troca) o quadro do tempo `key.t`, mantendo a ordem.
+    pub fn set(&mut self, key: Key) {
+        match self.keys.iter().position(|k| (k.t - key.t).abs() < 1e-3) {
+            Some(i) => self.keys[i] = key,
+            None => {
+                let i = self.keys.iter().position(|k| k.t > key.t).unwrap_or(self.keys.len());
+                self.keys.insert(i, key);
+            }
+        }
+    }
+}
+
+impl Anim {
+    pub fn new(name: &str, duration: f32, looping: bool) -> Self {
+        Self {
+            name: name.into(),
+            duration,
+            looping,
+            tracks: Vec::new(),
+        }
+    }
+
+    pub fn track(&self, bone: &str) -> Option<&Track> {
+        self.tracks.iter().find(|t| t.bone == bone)
+    }
+
+    pub fn track_mut(&mut self, bone: &str) -> &mut Track {
+        if let Some(i) = self.tracks.iter().position(|t| t.bone == bone) {
+            return &mut self.tracks[i];
+        }
+        self.tracks.push(Track {
+            bone: bone.into(),
+            keys: Vec::new(),
+        });
+        self.tracks.last_mut().expect("trilha nova")
+    }
+
+    /// Um quadro-chave do osso (no tempo `t`).
+    pub fn key(&mut self, bone: &str, t: f32, rot: Vec3, offset: Vec3) {
+        self.track_mut(bone).set(Key { t, rot, offset });
+    }
+
+    /// O giro e o deslocamento do osso no tempo `t` (parado se não tiver
+    /// quadros).
+    pub fn sample(&self, bone: &str, t: f32) -> (Quat, Vec3) {
+        self.track(bone)
+            .map(|tr| tr.sample(t))
+            .unwrap_or((Quat::IDENTITY, Vec3::ZERO))
+    }
+
+    /// Todos os tempos com quadro-chave (sem repetir).
+    pub fn times(&self) -> Vec<f32> {
+        let mut out: Vec<f32> = Vec::new();
+        for tr in &self.tracks {
+            for k in &tr.keys {
+                if !out.iter().any(|t| (t - k.t).abs() < 1e-3) {
+                    out.push(k.t);
+                }
+            }
+        }
+        out.sort_by(f32::total_cmp);
+        out
+    }
 }
 
 /// Um modelo inteiro.
@@ -45,6 +184,9 @@ pub struct Part {
 pub struct ModelData {
     pub parts: Vec<Part>,
     pub palette: Vec<String>,
+    /// O esqueleto (vazio: sem ossos).
+    pub bones: Vec<Bone>,
+    pub anims: Vec<Anim>,
 }
 
 /// Pontos com |x| menor que isso estão no meio (no espelho).
@@ -80,6 +222,7 @@ impl Part {
             scale: Vec3::ONE,
             mirror: false,
             visible: true,
+            bone: String::new(),
         }
     }
 
@@ -593,6 +736,68 @@ impl ModelData {
         Self {
             parts: vec![Part::cube("Cubo", "#FF8C42")],
             palette: DEFAULT_PALETTE.iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
+        }
+    }
+
+    pub fn bone_index(&self, name: &str) -> Option<usize> {
+        self.bones.iter().position(|b| b.name == name)
+    }
+
+    pub fn anim(&self, name: &str) -> Option<&Anim> {
+        self.anims.iter().find(|a| a.name == name)
+    }
+
+    /// A matriz de cada osso no modelo, posado pela animação no tempo `t`
+    /// (sem animação, em repouso: só a posição da junta).
+    pub fn bone_globals(&self, anim: Option<&Anim>, t: f32) -> Vec<Mat4> {
+        let mut out: Vec<Mat4> = Vec::with_capacity(self.bones.len());
+        for b in &self.bones {
+            let (q, off) = anim
+                .map(|a| a.sample(&b.name, t))
+                .unwrap_or((Quat::IDENTITY, Vec3::ZERO));
+            let parent = b.parent.filter(|&p| p < out.len());
+            let rel = b.head - parent.map_or(Vec3::ZERO, |p| self.bones[p].head);
+            let local = Mat4::from_rotation_translation(q, rel + off);
+            out.push(match parent {
+                Some(p) => out[p] * local,
+                None => local,
+            });
+        }
+        out
+    }
+
+    /// A matriz de cada peça, com os ossos posados (as peças sem osso ficam
+    /// onde estão).
+    pub fn posed_matrices(&self, anim: Option<&Anim>, t: f32) -> Vec<Mat4> {
+        let globals = self.bone_globals(anim, t);
+        self.parts
+            .iter()
+            .map(|p| match self.bone_index(&p.bone) {
+                Some(b) => globals[b] * Mat4::from_translation(-self.bones[b].head) * p.matrix(),
+                None => p.matrix(),
+            })
+            .collect()
+    }
+
+    /// Troca o nome de um osso (nas peças e nas animações também).
+    pub fn rename_bone(&mut self, old: &str, new: &str) {
+        for b in &mut self.bones {
+            if b.name == old {
+                b.name = new.into();
+            }
+        }
+        for p in &mut self.parts {
+            if p.bone == old {
+                p.bone = new.into();
+            }
+        }
+        for a in &mut self.anims {
+            for t in &mut a.tracks {
+                if t.bone == old {
+                    t.bone = new.into();
+                }
+            }
         }
     }
 
@@ -652,6 +857,12 @@ impl ModelData {
             if !p.visible {
                 s.push_str("      visible = false,\n");
             }
+            if !p.bone.is_empty() {
+                s.push_str(&format!(
+                    "      bone = {},\n",
+                    crate::config_lua::lua_string(&p.bone)
+                ));
+            }
             s.push_str("      verts = {\n");
             for q in &p.verts {
                 s.push_str(&format!("        {},\n", v3(*q)));
@@ -667,7 +878,52 @@ impl ModelData {
             }
             s.push_str("      },\n    },\n");
         }
-        s.push_str("  },\n}\n");
+        s.push_str("  },\n");
+        if !self.bones.is_empty() {
+            s.push_str("  bones = {\n");
+            for b in &self.bones {
+                s.push_str(&format!(
+                    "    {{ name = {}, ",
+                    crate::config_lua::lua_string(&b.name)
+                ));
+                if let Some(p) = b.parent.and_then(|p| self.bones.get(p)) {
+                    s.push_str(&format!(
+                        "parent = {}, ",
+                        crate::config_lua::lua_string(&p.name)
+                    ));
+                }
+                s.push_str(&format!("head = {}, tail = {} }},\n", v3(b.head), v3(b.tail)));
+            }
+            s.push_str("  },\n");
+        }
+        if !self.anims.is_empty() {
+            s.push_str("  anims = {\n");
+            for a in &self.anims {
+                s.push_str(&format!(
+                    "    {{ name = {}, duration = {}, loop = {},\n      tracks = {{\n",
+                    crate::config_lua::lua_string(&a.name),
+                    n(a.duration),
+                    a.looping
+                ));
+                for t in &a.tracks {
+                    s.push_str(&format!(
+                        "        {{ bone = {}, keys = {{\n",
+                        crate::config_lua::lua_string(&t.bone)
+                    ));
+                    for k in &t.keys {
+                        s.push_str(&format!("          {{ t = {}, rot = {}", n(k.t), v3(k.rot)));
+                        if k.offset != Vec3::ZERO {
+                            s.push_str(&format!(", offset = {}", v3(k.offset)));
+                        }
+                        s.push_str(" },\n");
+                    }
+                    s.push_str("        } },\n");
+                }
+                s.push_str("      },\n    },\n");
+            }
+            s.push_str("  },\n");
+        }
+        s.push_str("}\n");
         s
     }
 
@@ -730,6 +986,11 @@ impl ModelData {
                     .ok()
                     .flatten()
                     .unwrap_or(true);
+                p.bone = pt
+                    .get::<Option<String>>("bone")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
                 if let Ok(Value::Table(vs)) = pt.get::<Value>("verts") {
                     for v in vs.sequence_values::<Table>().flatten() {
                         p.verts.push(Vec3::new(
@@ -760,13 +1021,72 @@ impl ModelData {
                 parts.push(p);
             }
         }
-        Ok(Self { parts, palette })
+        let mut bones: Vec<Bone> = Vec::new();
+        if let Ok(Value::Table(list)) = t.get::<Value>("bones") {
+            for bt in list.sequence_values::<Table>().flatten() {
+                let name = bt
+                    .get::<Option<String>>("name")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| format!("osso {}", bones.len() + 1));
+                // O pai tem que vir antes (assim não há volta).
+                let parent = bt
+                    .get::<Option<String>>("parent")
+                    .ok()
+                    .flatten()
+                    .and_then(|p| bones.iter().position(|b| b.name == p));
+                let head = v3(&bt, "head", Vec3::ZERO);
+                bones.push(Bone {
+                    name,
+                    parent,
+                    head,
+                    tail: v3(&bt, "tail", head + Vec3::Y * 0.3),
+                });
+            }
+        }
+        let mut anims = Vec::new();
+        if let Ok(Value::Table(list)) = t.get::<Value>("anims") {
+            for at in list.sequence_values::<Table>().flatten() {
+                let name: String = at
+                    .get::<Option<String>>("name")
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| format!("animação {}", anims.len() + 1));
+                let duration = num(at.get("duration").unwrap_or(Value::Nil)).max(0.05);
+                let looping = at.get::<Option<bool>>("loop").ok().flatten().unwrap_or(true);
+                let mut anim = Anim::new(&name, duration, looping);
+                if let Ok(Value::Table(tracks)) = at.get::<Value>("tracks") {
+                    for tt in tracks.sequence_values::<Table>().flatten() {
+                        let bone: String = tt.get::<Option<String>>("bone").ok().flatten().unwrap_or_default();
+                        if let Ok(Value::Table(keys)) = tt.get::<Value>("keys") {
+                            for kt in keys.sequence_values::<Table>().flatten() {
+                                anim.key(
+                                    &bone,
+                                    num(kt.get("t").unwrap_or(Value::Nil)),
+                                    v3(&kt, "rot", Vec3::ZERO),
+                                    v3(&kt, "offset", Vec3::ZERO),
+                                );
+                            }
+                        }
+                    }
+                }
+                anims.push(anim);
+            }
+        }
+        Ok(Self {
+            parts,
+            palette,
+            bones,
+            anims,
+        })
     }
 
     // Arquivo .glb -----------------------------------------------------------
 
     /// O `.glb` do modelo: um nó por peça (com posição, rotação e escala), um
-    /// material por cor e as faces já com o espelho.
+    /// material por cor e as faces já com o espelho. Com esqueleto, cada osso
+    /// é um nó, as peças ficam dentro do osso que seguem e as animações
+    /// giram (e andam) os ossos: a engine toca isso como um modelo animado.
     pub fn to_glb(&self) -> Vec<u8> {
         use serde_json::json;
         let mut bin: Vec<u8> = Vec::new();
@@ -775,16 +1095,33 @@ impl ModelData {
         let mut materials: Vec<serde_json::Value> = Vec::new();
         let mut material_of: HashMap<String, usize> = HashMap::new();
         let mut meshes = Vec::new();
-        let mut nodes = Vec::new();
+        let mut nodes: Vec<serde_json::Value> = Vec::new();
+        // Os ossos vêm primeiro: o nó `i` é o osso `i`.
+        let nb = self.bones.len();
+        for (i, b) in self.bones.iter().enumerate() {
+            let parent = b.parent.filter(|&p| p < i);
+            let rel = b.head - parent.map_or(Vec3::ZERO, |p| self.bones[p].head);
+            nodes.push(json!({ "name": b.name, "translation": [rel.x, rel.y, rel.z] }));
+        }
+        let mut children: Vec<Vec<usize>> = vec![Vec::new(); nb];
+        let mut roots: Vec<usize> = Vec::new();
+        for (i, b) in self.bones.iter().enumerate() {
+            match b.parent.filter(|&p| p < i) {
+                Some(p) => children[p].push(i),
+                None => roots.push(i),
+            }
+        }
         let mut push_view = |bin: &mut Vec<u8>, data: &[u8], target: u32| -> usize {
             while !bin.len().is_multiple_of(4) {
                 bin.push(0);
             }
             let offset = bin.len();
             bin.extend_from_slice(data);
-            views.push(json!({
-                "buffer": 0, "byteOffset": offset, "byteLength": data.len(), "target": target
-            }));
+            let mut view = json!({ "buffer": 0, "byteOffset": offset, "byteLength": data.len() });
+            if target != 0 {
+                view["target"] = json!(target);
+            }
+            views.push(view);
             views.len() - 1
         };
         for p in &self.parts {
@@ -863,9 +1200,12 @@ impl ModelData {
                 }));
             }
             let q = p.rotation();
+            // Dentro do osso: a posição fica relativa à junta.
+            let bone = self.bone_index(&p.bone);
+            let pos = p.pos - bone.map_or(Vec3::ZERO, |b| self.bones[b].head);
             let mut node = json!({
                 "name": p.name,
-                "translation": [p.pos.x, p.pos.y, p.pos.z],
+                "translation": [pos.x, pos.y, pos.z],
                 "rotation": [q.x, q.y, q.z, q.w],
                 "scale": [p.scale.x, p.scale.y, p.scale.z]
             });
@@ -873,15 +1213,89 @@ impl ModelData {
                 meshes.push(json!({ "name": p.name, "primitives": prims }));
                 node["mesh"] = json!(meshes.len() - 1);
             }
+            match bone {
+                Some(b) => children[b].push(nodes.len()),
+                None => roots.push(nodes.len()),
+            }
             nodes.push(node);
+        }
+        for (i, c) in children.iter().enumerate() {
+            if !c.is_empty() {
+                nodes[i]["children"] = json!(c);
+            }
+        }
+        // As animações: um giro (e, se andar, a posição) por osso.
+        let mut animations = Vec::new();
+        for a in &self.anims {
+            let mut samplers = Vec::new();
+            let mut channels = Vec::new();
+            for tr in &a.tracks {
+                let Some(b) = self.bone_index(&tr.bone) else {
+                    continue;
+                };
+                if tr.keys.is_empty() {
+                    continue;
+                }
+                let mut times: Vec<f32> = tr
+                    .keys
+                    .iter()
+                    .map(|k| k.t)
+                    .filter(|&t| t > 0.0 && t < a.duration)
+                    .collect();
+                times.insert(0, 0.0);
+                times.push(a.duration.max(0.01));
+                let mut tb = Vec::new();
+                for t in &times {
+                    tb.extend_from_slice(&t.to_le_bytes());
+                }
+                let tv = push_view(&mut bin, &tb, 0);
+                accessors.push(json!({
+                    "bufferView": tv, "componentType": 5126, "count": times.len(), "type": "SCALAR",
+                    "min": [times[0]], "max": [times[times.len() - 1]]
+                }));
+                let input = accessors.len() - 1;
+                let samples: Vec<(Quat, Vec3)> = times.iter().map(|&t| tr.sample(t)).collect();
+                let mut rb = Vec::new();
+                for (q, _) in &samples {
+                    for v in [q.x, q.y, q.z, q.w] {
+                        rb.extend_from_slice(&v.to_le_bytes());
+                    }
+                }
+                let rv = push_view(&mut bin, &rb, 0);
+                accessors.push(json!({
+                    "bufferView": rv, "componentType": 5126, "count": samples.len(), "type": "VEC4"
+                }));
+                samplers.push(json!({ "input": input, "output": accessors.len() - 1, "interpolation": "LINEAR" }));
+                channels.push(json!({ "sampler": samplers.len() - 1, "target": { "node": b, "path": "rotation" } }));
+                if samples.iter().any(|(_, o)| *o != Vec3::ZERO) {
+                    let parent = self.bones[b].parent.filter(|&p| p < b);
+                    let rest = self.bones[b].head - parent.map_or(Vec3::ZERO, |p| self.bones[p].head);
+                    let mut pb = Vec::new();
+                    for (_, o) in &samples {
+                        let v = rest + *o;
+                        for c in [v.x, v.y, v.z] {
+                            pb.extend_from_slice(&c.to_le_bytes());
+                        }
+                    }
+                    let pv = push_view(&mut bin, &pb, 0);
+                    accessors.push(json!({
+                        "bufferView": pv, "componentType": 5126, "count": samples.len(), "type": "VEC3"
+                    }));
+                    samplers.push(json!({ "input": input, "output": accessors.len() - 1, "interpolation": "LINEAR" }));
+                    channels.push(json!({ "sampler": samplers.len() - 1, "target": { "node": b, "path": "translation" } }));
+                }
+            }
+            if !channels.is_empty() {
+                animations.push(json!({ "name": a.name, "samplers": samplers, "channels": channels }));
+            }
         }
         while !bin.len().is_multiple_of(4) {
             bin.push(0);
         }
-        let doc = json!({
+        let mut doc = json!({
             "asset": { "version": "2.0", "generator": "NN Studio (modelador)" },
             "scene": 0,
-            "scenes": [{ "nodes": (0..nodes.len()).collect::<Vec<_>>() }],
+            "scenes": [{ "nodes": roots }],
             "nodes": nodes,
             "meshes": meshes,
             "materials": materials,
@@ -889,6 +1303,9 @@ impl ModelData {
             "bufferViews": views,
             "buffers": [{ "byteLength": bin.len() }]
         });
+        if !animations.is_empty() {
+            doc["animations"] = json!(animations);
+        }
         let mut text = serde_json::to_vec(&doc).expect("json");
         while !text.len().is_multiple_of(4) {
             text.push(b' ');
@@ -965,7 +1382,7 @@ mod tests {
         assert!(closed(&p), "continua fechado");
         let (_, hi) = ModelData {
             parts: vec![p],
-            palette: vec![],
+            ..Default::default()
         }
         .bounds()
         .unwrap();

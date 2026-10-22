@@ -894,14 +894,14 @@ impl ModelDoc {
     /// As peças para guardar na biblioteca: as escolhidas (ou todas).
     pub fn parts_to_save(&self) -> ModelData {
         let chosen = self.touched_parts();
-        let parts = if chosen.is_empty() {
-            self.data.parts.clone()
-        } else {
-            chosen.iter().map(|&i| self.data.parts[i].clone()).collect()
-        };
+        if chosen.is_empty() {
+            // O modelo todo vai com o esqueleto e as animações.
+            return self.data.clone();
+        }
         ModelData {
-            parts,
+            parts: chosen.iter().map(|&i| self.data.parts[i].clone()).collect(),
             palette: self.data.palette.clone(),
+            ..Default::default()
         }
     }
 
