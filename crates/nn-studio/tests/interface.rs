@@ -5656,3 +5656,151 @@ fn preferencias_cor_animacoes_e_sons() {
     let gravado = std::fs::read_to_string(dir.join("preferencias.json")).unwrap();
     assert!(gravado.contains("\"accent\""), "{gravado}");
 }
+
+// Modelador (S47) -------------------------------------------------------------
+
+fn modelo<'a>(h: &'a mut Harness<'_, StudioApp>) -> &'a mut nn_studio::model_editor::ModelDoc {
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .models
+        .values_mut()
+        .next()
+        .expect("um modelo aberto")
+}
+
+/// Onde um ponto do modelo aparece na vista do modelador.
+fn na_vista_modelo(h: &mut Harness<'_, StudioApp>, p: glam::Vec3) -> egui::Pos2 {
+    let rect = h.get_by_label("Vista do modelo").rect();
+    let s = modelo(h)
+        .cam
+        .camera()
+        .screen_point(p, glam::Vec2::new(rect.width(), rect.height()))
+        .expect("na frente da câmera");
+    rect.min + egui::vec2(s.x, s.y)
+}
+
+fn novo_modelo(h: &mut Harness<'_, StudioApp>) {
+    h.get_by_label("➕ Novo").click();
+    h.run_steps(2);
+    h.get_by_label("🧊 Modelo 3D").click();
+    h.run_steps(2);
+    h.key_press(Key::Enter);
+    h.run_steps(4);
+}
+
+#[test]
+fn modelador_puxa_pinta_salva_e_vai_para_a_cena() {
+    use nn_studio::model_editor::Select;
+    let dir = temp("modelador");
+    let proj = plataforma(&dir);
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    novo_modelo(&mut h);
+    assert!(proj.join("assets/modelos/modelo.modelo").is_file());
+    assert!(proj.join("assets/modelos/modelo.glb").is_file(), "o .glb nasce junto");
+    assert!(tabs(&h).contains(&Tab::Model("assets/modelos/modelo.modelo".into())));
+    h.get_by_label("Vista do modelo");
+    assert_eq!(modelo(&mut h).mode, Select::Faces);
+
+    // Clicar na face de cima do cubo escolhe ela.
+    let topo = na_vista_modelo(&mut h, glam::Vec3::new(0.0, 1.0, 0.0));
+    clicar(&mut h, topo);
+    let (peca, face) = *modelo(&mut h).sel_faces.first().expect("face escolhida");
+    {
+        let d = modelo(&mut h);
+        let n = nn_studio::model_data::face_normal(
+            &d.data.parts[peca].verts,
+            &d.data.parts[peca].faces[face].v,
+        );
+        assert!(n.y > 0.9, "a de cima");
+    }
+    tela(&mut h, "modelador-face");
+
+    // P puxa: o mouse sobe e o clique termina. Vira um bloco mais alto.
+    h.hover_at(topo);
+    h.run();
+    atalho(&mut h, Modifiers::NONE, Key::P);
+    for i in 1..=5 {
+        h.hover_at(topo - egui::vec2(0.0, 12.0 * i as f32));
+        h.run();
+    }
+    tela(&mut h, "modelador-puxando");
+    clicar(&mut h, topo - egui::vec2(0.0, 60.0));
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts[0].faces.len(), 10, "o bloco ganhou 4 paredes");
+        let (_, hi) = d.data.bounds().unwrap();
+        assert!(hi.y > 1.2, "mais alto: {hi}");
+    }
+
+    // Uma cor da paleta pinta a face escolhida.
+    h.get_by_label("#3FA7D6").click();
+    h.run();
+    assert_eq!(modelo(&mut h).data.parts[0].faces[face].color, "#3FA7D6");
+
+    // Desfazer volta a cor, refazer põe de volta.
+    atalho(&mut h, Modifiers::COMMAND, Key::Z);
+    assert_ne!(modelo(&mut h).data.parts[0].faces[face].color, "#3FA7D6");
+    atalho(&mut h, Modifiers::COMMAND | Modifiers::SHIFT, Key::Z);
+    assert_eq!(modelo(&mut h).data.parts[0].faces[face].color, "#3FA7D6");
+
+    // Botão direito no vazio: ➕ Peça aqui > Cone.
+    let rect = h.get_by_label("Vista do modelo").rect();
+    clique_direito(&mut h, rect.left_top() + egui::vec2(60.0, 60.0));
+    submenu(&mut h, "➕ Peça aqui");
+    h.get_by_label("▲ Cone").click();
+    h.run();
+    {
+        let d = modelo(&mut h);
+        assert_eq!(d.data.parts.len(), 2);
+        assert_eq!(d.data.parts[1].name, "Cone");
+        assert_eq!(d.mode, Select::Parts);
+        assert_eq!(d.sel_parts, vec![1]);
+    }
+    h.get_by_label("Cone");
+    tela(&mut h, "modelador-cone");
+
+    // Ctrl+S grava o .modelo e o .glb, que a engine abre com as cores.
+    atalho(&mut h, Modifiers::COMMAND, Key::S);
+    assert!(!modelo(&mut h).is_dirty());
+    let texto = std::fs::read_to_string(proj.join("assets/modelos/modelo.modelo")).unwrap();
+    assert!(texto.contains("\"Cone\""), "{texto}");
+    let glb = std::fs::read(proj.join("assets/modelos/modelo.glb")).unwrap();
+    let lido = nn_render::d3::ModelData::from_gltf(&glb, &mut |_| None).unwrap();
+    assert_eq!(lido.triangle_count(), modelo(&mut h).data.triangle_count());
+
+    // Soltar o .modelo numa cena 3D cria o objeto com o .glb.
+    com_cena3d(&mut h, &proj);
+    let id = {
+        let ws = h.state_mut().project_mut().unwrap();
+        let root = ws.root.clone();
+        let mut sizes = nn_studio::scene_render::Sizes::default();
+        let doc = ws.scenes.get_mut("cenas/teste.cena").unwrap();
+        let mut maps = std::collections::HashMap::new();
+        let mut tilesets = std::collections::HashMap::new();
+        let mut paint = nn_studio::paint::PaintState::default();
+        let mut env = nn_studio::scene_view::SceneEnv {
+            root: &root,
+            sizes: &mut sizes,
+            renderer: None,
+            design: (640.0, 360.0),
+            clear_color: "#000000",
+            connected: false,
+            time: 0.0,
+            game: None,
+            maps: &mut maps,
+            tilesets: &mut tilesets,
+            paint: &mut paint,
+            animate: false,
+        };
+        doc.drop_file3(&mut env, "assets/modelos/modelo.modelo", glam::Vec3::ZERO)
+            .expect("criou o objeto")
+    };
+    h.run();
+    let o = cena(&h).data.find(id).unwrap();
+    assert_eq!(o.name, "modelo");
+    assert_eq!(
+        o.component("model").unwrap().str("file"),
+        "assets/modelos/modelo.glb"
+    );
+}

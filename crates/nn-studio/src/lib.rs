@@ -29,6 +29,8 @@ pub mod launcher;
 pub mod lua_syntax;
 pub mod map_doc;
 pub mod map_editor;
+pub mod model_data;
+pub mod model_editor;
 pub mod new_map;
 pub mod paint;
 pub mod particle_presets;

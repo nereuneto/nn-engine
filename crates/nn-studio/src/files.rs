@@ -29,6 +29,8 @@ pub enum FileKind {
     Font,
     /// Modelo 3D (`.glb`, `.gltf`).
     Model,
+    /// Modelo 3D do modelador (`.modelo`), que grava o `.glb` junto.
+    ModelSource,
     /// Diálogo do editor de conversa (`.dialogo`).
     Dialogue,
     Other,
@@ -52,6 +54,7 @@ impl FileKind {
             "md" | "txt" | "json" | "csv" | "toml" | "gitignore" => FileKind::Text,
             "ttf" | "otf" => FileKind::Font,
             "glb" | "gltf" => FileKind::Model,
+            "modelo" => FileKind::ModelSource,
             "dialogo" => FileKind::Dialogue,
             _ => FileKind::Other,
         }
@@ -72,6 +75,7 @@ impl FileKind {
             FileKind::Text => "texto",
             FileKind::Font => "fonte",
             FileKind::Model => "modelo 3D",
+            FileKind::ModelSource => "modelo 3D (modelador)",
             FileKind::Dialogue => "diálogo",
             FileKind::Other => "arquivo",
         }
@@ -321,7 +325,9 @@ pub fn default_import_dir(root: &Path, kind: FileKind) -> String {
         FileKind::Image => &["assets/imagens", "assets/images", "assets/img", "imagens"],
         FileKind::Sound => &["assets/sons", "assets/sounds", "assets/audio", "sons"],
         FileKind::Font => &["assets/fontes", "assets/fonts", "fontes"],
-        FileKind::Model => &["assets/modelos", "assets/models", "modelos", "models"],
+        FileKind::Model | FileKind::ModelSource => {
+            &["assets/modelos", "assets/models", "modelos", "models"]
+        }
         FileKind::Map | FileKind::Tileset => &["fases", "mapas", "maps", "tilesets"],
         _ => &[],
     };
@@ -334,7 +340,7 @@ pub fn default_import_dir(root: &Path, kind: FileKind) -> String {
         FileKind::Image => "assets/imagens".into(),
         FileKind::Sound => "assets/sons".into(),
         FileKind::Font => "assets/fontes".into(),
-        FileKind::Model => "assets/modelos".into(),
+        FileKind::Model | FileKind::ModelSource => "assets/modelos".into(),
         _ => String::new(),
     }
 }

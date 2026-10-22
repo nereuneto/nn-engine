@@ -21,10 +21,10 @@ use crate::catalog::{self, Picked, QuickResult};
 use crate::scene_data::{self, Component, Object, Prop};
 use crate::scene_render::{self, Sizes};
 
-const RED: Color32 = Color32::from_rgb(0xE8, 0x4A, 0x4A);
-const GREEN: Color32 = Color32::from_rgb(0x5C, 0xC8, 0x5C);
-const BLUE: Color32 = Color32::from_rgb(0x4A, 0x82, 0xF0);
-const ORANGE: Color32 = Color32::from_rgb(0xFF, 0xA5, 0x2E);
+pub(crate) const RED: Color32 = Color32::from_rgb(0xE8, 0x4A, 0x4A);
+pub(crate) const GREEN: Color32 = Color32::from_rgb(0x5C, 0xC8, 0x5C);
+pub(crate) const BLUE: Color32 = Color32::from_rgb(0x4A, 0x82, 0xF0);
+pub(crate) const ORANGE: Color32 = Color32::from_rgb(0xFF, 0xA5, 0x2E);
 
 /// A câmera do editor na vista 3D (não é a câmera do jogo).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -91,21 +91,21 @@ impl Cam3 {
 }
 
 /// Ponto da tela onde um ponto 3D aparece (ou `None`, atrás da câmera).
-fn to_screen(cam: &Cam3, rect: Rect, p: Vec3) -> Option<Pos2> {
+pub(crate) fn to_screen(cam: &Cam3, rect: Rect, p: Vec3) -> Option<Pos2> {
     let size = Vec2::new(rect.width(), rect.height());
     let s = cam.camera().screen_point(p, size)?;
     Some(rect.min + egui::vec2(s.x, s.y))
 }
 
 /// O raio que sai da câmera pelo ponto da tela.
-fn ray(cam: &Cam3, rect: Rect, p: Pos2) -> (Vec3, Vec3) {
+pub(crate) fn ray(cam: &Cam3, rect: Rect, p: Pos2) -> (Vec3, Vec3) {
     let size = Vec2::new(rect.width(), rect.height());
     let local = p - rect.min;
     cam.camera().ray(Vec2::new(local.x, local.y), size)
 }
 
 /// Onde o raio corta o plano horizontal na altura `y`.
-fn ray_plane(o: Vec3, d: Vec3, y: f32) -> Option<Vec3> {
+pub(crate) fn ray_plane(o: Vec3, d: Vec3, y: f32) -> Option<Vec3> {
     if d.y.abs() < 1e-5 {
         return None;
     }
@@ -139,7 +139,7 @@ pub fn ray_box(o: Vec3, d: Vec3, m: Mat4, bounds: (Vec3, Vec3)) -> Option<f32> {
 }
 
 /// Parâmetro (ao longo do eixo) do ponto do eixo mais perto do raio.
-fn axis_param(o: Vec3, d: Vec3, c: Vec3, a: Vec3) -> Option<f32> {
+pub(crate) fn axis_param(o: Vec3, d: Vec3, c: Vec3, a: Vec3) -> Option<f32> {
     let w0 = o - c;
     let b = d.dot(a);
     let denom = 1.0 - b * b;
@@ -151,13 +151,13 @@ fn axis_param(o: Vec3, d: Vec3, c: Vec3, a: Vec3) -> Option<f32> {
     Some((f - b * e) / denom)
 }
 
-fn dist_to_segment(p: Pos2, a: Pos2, b: Pos2) -> f32 {
+pub(crate) fn dist_to_segment(p: Pos2, a: Pos2, b: Pos2) -> f32 {
     let ab = b - a;
     let t = ((p - a).dot(ab) / ab.length_sq().max(1e-6)).clamp(0.0, 1.0);
     (a + ab * t - p).length()
 }
 
-fn snap(v: f32, step: f32) -> f32 {
+pub(crate) fn snap(v: f32, step: f32) -> f32 {
     if step > 0.0 {
         (v / step).round() * step
     } else {
@@ -587,6 +587,17 @@ impl SceneDoc {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "objeto".into());
         let kind = crate::files::FileKind::of(Path::new(rel));
+        if kind == crate::files::FileKind::ModelSource {
+            // Um modelo do modelador: vai o .glb dele (gravado agora, se
+            // ainda não existir).
+            let glb = crate::model_data::glb_path(rel);
+            if !env.root.join(&glb).is_file() {
+                let text = std::fs::read_to_string(env.root.join(rel)).ok()?;
+                let model = crate::model_data::ModelData::from_lua(&text, rel).ok()?;
+                std::fs::write(env.root.join(&glb), model.to_glb()).ok()?;
+            }
+            return self.drop_file3(env, &glb, pos);
+        }
         let mut o = Object::new(0, &name);
         match kind {
             crate::files::FileKind::Model => {
@@ -1769,7 +1780,7 @@ impl SceneDoc {
 
 /// Pontos de um círculo de raio `r` em volta de `center`, perpendicular ao
 /// eixo.
-fn ring(center: Vec3, axis: Vec3, r: f32) -> Vec<Vec3> {
+pub(crate) fn ring(center: Vec3, axis: Vec3, r: f32) -> Vec<Vec3> {
     let a = if axis.y.abs() > 0.9 { Vec3::X } else { Vec3::Y };
     let u = axis.cross(a).normalize();
     let v = axis.cross(u);
@@ -1781,7 +1792,7 @@ fn ring(center: Vec3, axis: Vec3, r: f32) -> Vec<Vec3> {
         .collect()
 }
 
-fn arrow(painter: &egui::Painter, from: Pos2, to: Pos2, color: Color32) {
+pub(crate) fn arrow(painter: &egui::Painter, from: Pos2, to: Pos2, color: Color32) {
     painter.line_segment([from, to], Stroke::new(2.5, color));
     let dir = (to - from).normalized();
     let side = egui::vec2(-dir.y, dir.x);

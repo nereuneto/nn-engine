@@ -817,6 +817,8 @@ pub struct SceneRenderer {
     meshes3: HashMap<&'static str, nn_render::d3::MeshId>,
     /// 3D: modelos (arquivo, achatado) → modelo na GPU (`None` se não abriu).
     models3: HashMap<(String, bool), Option<nn_render::d3::Model>>,
+    /// O modelador: as malhas das peças de cada aba (versão, malhas).
+    model_meshes: HashMap<String, (u64, Vec<nn_render::d3::MeshId>)>,
 }
 
 /// Como desenhar uma cena 3D: a câmera do editor, o tamanho e o fundo.
@@ -888,7 +890,31 @@ impl SceneRenderer {
             terrains: HashMap::new(),
             meshes3: HashMap::new(),
             models3: HashMap::new(),
+            model_meshes: HashMap::new(),
         }
+    }
+
+    /// As malhas do modelador para a aba `key`: montadas de novo (com
+    /// `make`) só quando a versão muda.
+    pub fn model_meshes(
+        &mut self,
+        key: &str,
+        rev: u64,
+        make: impl FnOnce() -> Vec<nn_render::d3::Mesh>,
+    ) -> Vec<nn_render::d3::MeshId> {
+        let entry = self.model_meshes.entry(key.to_string()).or_default();
+        if entry.0 != rev || rev == 0 {
+            let meshes = make();
+            for (i, m) in meshes.iter().enumerate() {
+                match entry.1.get(i) {
+                    Some(id) => self.renderer.update_mesh(*id, m),
+                    None => entry.1.push(self.renderer.create_mesh(m)),
+                }
+            }
+            entry.0 = rev;
+            return entry.1[..meshes.len()].to_vec();
+        }
+        entry.1.clone()
     }
 
     fn mesh3(&mut self, shape: &str) -> nn_render::d3::MeshId {
@@ -935,6 +961,18 @@ impl SceneRenderer {
         root: &Path,
         scene: &SceneData,
         view: &View3,
+    ) -> egui::TextureId {
+        self.render3d_with(key, root, scene, view, &[])
+    }
+
+    /// [`Self::render3d`] com malhas a mais (as peças do modelador).
+    pub fn render3d_with(
+        &mut self,
+        key: &str,
+        root: &Path,
+        scene: &SceneData,
+        view: &View3,
+        extra: &[(nn_render::d3::MeshId, glam::Mat4)],
     ) -> egui::TextureId {
         use glam::{Mat4, Quat, Vec3};
         use nn_render::d3::{Fog, Light3D, Shadows, Sky3D};
@@ -1241,6 +1279,10 @@ impl SceneRenderer {
             }
         }
         self.previews3.retain(|k, _| k.0 != key || seen.contains(k));
+        for (mesh, m) in extra {
+            self.renderer
+                .draw_mesh_with(*mesh, *m, Color::WHITE, None, true);
+        }
 
         // A grade do chão (em volta de onde a câmera olha) e os eixos.
         if view.grid > 0.0 {
