@@ -138,11 +138,31 @@ const FRONT: Rgba<u8> = Rgba([0xff, 0xd1, 0x66, 255]);
 /// Um quadro de `cell` x `cell` com o modelo visto de `view`. `span` é
 /// quantos metros cabem na largura (o mesmo nas vistas retas, para comparar).
 fn draw_view(tris: &[Tri], view: View, cell: u32, span: f32) -> RgbaImage {
+    match bounds(tris) {
+        Some(area) => draw_view_in(tris, view, cell, span, area, &[]),
+        None => RgbaImage::from_pixel(cell, cell, BG),
+    }
+}
+
+/// Um osso desenhado: da junta até a ponta.
+pub type BoneLine = (Vec3, Vec3);
+
+const BONE: Rgba<u8> = Rgba([0x5c, 0xff, 0x9d, 255]);
+const JOINT: Rgba<u8> = Rgba([0xff, 0xff, 0xff, 255]);
+
+/// Como [`draw_view`], enquadrando `area` (o mesmo em todos os quadros de
+/// uma animação) e com os ossos por cima.
+fn draw_view_in(
+    tris: &[Tri],
+    view: View,
+    cell: u32,
+    span: f32,
+    area: (Vec3, Vec3),
+    bones: &[BoneLine],
+) -> RgbaImage {
     let mut img = RgbaImage::from_pixel(cell, cell, BG);
     let (right, up, toward) = view.basis();
-    let Some((min, max)) = bounds(tris) else {
-        return img;
-    };
+    let (min, max) = area;
     // O meio do que se vê, na tela.
     let corners = [
         Vec3::new(min.x, min.y, min.z),
@@ -306,7 +326,89 @@ fn draw_view(tris: &[Tri], view: View, cell: u32, span: f32) -> RgbaImage {
             }
         }
     }
+    // Os ossos por cima de tudo: a linha verde e a junta branca.
+    let dot = |img: &mut RgbaImage, x: f32, y: f32, r: i32, c: Rgba<u8>| {
+        for dy in -r..=r {
+            for dx in -r..=r {
+                let (px, py) = (x as i32 + dx, y as i32 + dy);
+                if dx * dx + dy * dy <= r * r
+                    && px >= 0
+                    && py >= 0
+                    && (px as u32) < cell
+                    && (py as u32) < cell
+                {
+                    img.put_pixel(px as u32, py as u32, c);
+                }
+            }
+        }
+    };
+    for (a, b) in bones {
+        let (x0, y0, _) = to_screen(*a);
+        let (x1, y1, _) = to_screen(*b);
+        let steps = ((x1 - x0).abs().max((y1 - y0).abs()) as i32).max(1);
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            dot(&mut img, x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, 1, BONE);
+        }
+        dot(&mut img, x0, y0, 3, JOINT);
+    }
     img
+}
+
+/// As quatro vistas com os ossos por cima.
+pub fn render_bones(tris: &[Tri], cell: u32, bones: &[BoneLine]) -> RgbaImage {
+    let gap = 2;
+    let mut out = RgbaImage::from_pixel(
+        cell * 2 + gap,
+        cell * 2 + gap,
+        Rgba([0x10, 0x12, 0x18, 255]),
+    );
+    let Some(mut area) = bounds(tris) else {
+        return out;
+    };
+    for (a, b) in bones {
+        area = (area.0.min(a.min(*b)), area.1.max(a.max(*b)));
+    }
+    let span = ((area.1 - area.0).max_element() * 1.2).max(0.5);
+    for (i, view) in [View::Front, View::Side, View::Top, View::ThreeQuarter]
+        .into_iter()
+        .enumerate()
+    {
+        let img = draw_view_in(tris, view, cell, span, area, bones);
+        let (x, y) = ((i as u32 % 2) * (cell + gap), (i as u32 / 2) * (cell + gap));
+        image::imageops::replace(&mut out, &img, i64::from(x), i64::from(y));
+    }
+    out
+}
+
+/// Os quadros de uma animação lado a lado, todos no mesmo enquadramento (o
+/// que mexe, mexe na tira), cada um com os seus ossos.
+pub fn render_strip(frames: &[(Vec<Tri>, Vec<BoneLine>)], view: View, cell: u32) -> RgbaImage {
+    let gap = 2;
+    let n = frames.len().max(1) as u32;
+    let mut out = RgbaImage::from_pixel(
+        cell * n + gap * (n - 1),
+        cell,
+        Rgba([0x10, 0x12, 0x18, 255]),
+    );
+    let mut area: Option<(Vec3, Vec3)> = None;
+    for (tris, _) in frames {
+        if let Some(b) = bounds(tris) {
+            area = Some(match area {
+                Some(a) => (a.0.min(b.0), a.1.max(b.1)),
+                None => b,
+            });
+        }
+    }
+    let Some(area) = area else {
+        return out;
+    };
+    let span = ((area.1 - area.0).max_element() * 1.2).max(0.5);
+    for (i, (tris, bones)) in frames.iter().enumerate() {
+        let img = draw_view_in(tris, view, cell, span, area, bones);
+        image::imageops::replace(&mut out, &img, i64::from(i as u32 * (cell + gap)), 0);
+    }
+    out
 }
 
 /// Quantos metros cabem numa vista: o modelo com uma folga.
