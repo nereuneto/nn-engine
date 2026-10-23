@@ -18,6 +18,7 @@ pub mod lua_syntax;
 pub mod map;
 pub mod model;
 pub mod model_kits;
+pub mod model_view;
 pub mod particles;
 pub mod pixel;
 pub mod scene_data;
