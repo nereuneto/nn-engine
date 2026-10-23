@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use glam::{Mat4, Quat, Vec3};
 
-use crate::model_data::{DEFAULT_PALETTE, ModelData, Part};
+use crate::model::{DEFAULT_PALETTE, ModelData, Part};
 
 const MADEIRA: &str = "#9C6B43";
 const MADEIRA_ESCURA: &str = "#6B4423";

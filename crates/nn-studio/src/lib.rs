@@ -8,7 +8,8 @@
 
 pub mod agent;
 pub use nn_projeto::{
-    anim as anim_file, map as map_doc, particles as particle_presets, pixel as pixel_ops, tileset,
+    anim as anim_file, map as map_doc, model as model_data, model_kits,
+    particles as particle_presets, pixel as pixel_ops, tileset,
 };
 pub use nn_projeto::{behaviors, config_lua, events, lua_syntax, scene_data};
 pub mod app;
@@ -28,9 +29,7 @@ pub mod hierarchy;
 pub mod inspector;
 pub mod launcher;
 pub mod map_editor;
-pub mod model_data;
 pub mod model_editor;
-pub mod model_kits;
 pub mod model_rig;
 pub mod new_map;
 pub mod new_sound;

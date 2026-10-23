@@ -2,8 +2,9 @@
 //! gravar cenas (`.cena`), prefabs (`.prefab`), regras de eventos, o
 //! `config.lua`, diálogos (`.dialogo`), imagens de pixel art e as animações
 //! delas (`.anim`), mapas de tiles do Tiled (`.tmj`, `.tsj`), efeitos de
-//! partículas prontos, efeitos sonoros sintetizados (`.sfx` → `.wav`) e
-//! conferir scripts Lua.
+//! partículas prontos, efeitos sonoros sintetizados (`.sfx` → `.wav`), modelos
+//! 3D do modelador (`.modelo`, com as peças e os modelos prontos) e conferir
+//! scripts Lua.
 //!
 //! O NN Studio e o servidor MCP (`nn mcp`) usam este mesmo código, então o
 //! que um grava o outro abre igual.
@@ -15,6 +16,8 @@ pub mod dialogue;
 pub mod events;
 pub mod lua_syntax;
 pub mod map;
+pub mod model;
+pub mod model_kits;
 pub mod particles;
 pub mod pixel;
 pub mod scene_data;

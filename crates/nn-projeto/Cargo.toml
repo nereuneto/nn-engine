@@ -9,6 +9,8 @@ license.workspace = true
 
 [dependencies]
 nn-script.workspace = true
+nn-render.workspace = true
+nn-core.workspace = true
 glam.workspace = true
 image.workspace = true
 nn-tilemap.workspace = true

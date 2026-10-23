@@ -10,6 +10,20 @@ use std::collections::HashMap;
 use glam::{EulerRot, Mat4, Quat, Vec3};
 use mlua::{Lua, Table, Value};
 
+/// Uma cor `"#rrggbb"` ou `"#rrggbbaa"` (branco se não der para ler).
+pub fn parse_color(s: &str) -> nn_core::Color {
+    use nn_core::Color;
+    let hex = s.trim().trim_start_matches('#');
+    let Ok(v) = u32::from_str_radix(hex, 16) else {
+        return Color::WHITE;
+    };
+    match hex.len() {
+        6 => Color::hex(v),
+        8 => Color::hex(v >> 8).with_alpha((v & 0xFF) as f32 / 255.0),
+        _ => Color::WHITE,
+    }
+}
+
 /// As cores que um modelo novo traz na paleta.
 pub const DEFAULT_PALETTE: [&str; 16] = [
     "#FFFFFF", "#B8B8B8", "#5C5C5C", "#1E1E1E", "#E84A4A", "#FF8C42", "#FFD166", "#7BC86C",
@@ -465,7 +479,7 @@ impl Part {
     pub fn mesh(&self) -> nn_render::d3::Mesh {
         let mut mesh = nn_render::d3::Mesh::new();
         for (pts, color, _, _) in self.all_faces() {
-            let c = crate::scene_render::parse_color(color);
+            let c = parse_color(color);
             for k in 1..pts.len().saturating_sub(1) {
                 mesh.flat_triangle(pts[0], pts[k], pts[k + 1], c);
             }
@@ -1172,7 +1186,7 @@ impl ModelData {
                     continue;
                 }
                 let mat = *material_of.entry(color.clone()).or_insert_with(|| {
-                    let c = crate::scene_render::parse_color(&color);
+                    let c = parse_color(&color);
                     let lin = |v: f32| {
                         if v <= 0.04045 {
                             v / 12.92
@@ -1553,7 +1567,7 @@ mod tests {
             "{lo} {hi}"
         );
         // As cores voltam em sRGB, como estão no modelo.
-        let azul = crate::scene_render::parse_color("#3FA7D6");
+        let azul = parse_color("#3FA7D6");
         let achou = data.parts.iter().any(|p| {
             p.mesh
                 .vertices

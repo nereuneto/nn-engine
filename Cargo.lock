@@ -2880,6 +2880,8 @@ dependencies = [
  "image",
  "log",
  "mlua",
+ "nn-core",
+ "nn-render",
  "nn-script",
  "nn-tilemap",
  "serde_json",
