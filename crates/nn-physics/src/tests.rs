@@ -349,3 +349,141 @@ fn grade_de_caminhos_com_paredes_tiles_e_o_que_nao_bloqueia() {
     assert!(p.complete);
     assert!(p.points.iter().any(|q| q.x.abs() > 100.0), "{:?}", p.points);
 }
+
+/// Um mundo cheio e bagunçado: chão, tiles, plataformas móveis, sensores,
+/// mão única, círculos, camadas e corpos nascendo uns dentro dos outros.
+fn crowd(n: usize, spread: f32, seed: u64) -> World {
+    let mut r = seed;
+    let mut f = move || {
+        r = r
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        ((r >> 33) as f32) / (1u64 << 31) as f32
+    };
+    let mut w = World::default();
+    let mut g = CollisionGrid::new(100, 10, Vec2::splat(32.0), Vec2::new(-1600.0, -800.0));
+    for c in 0..100 {
+        g.set(c, 0, Cell::Solid);
+        if c % 7 == 0 {
+            g.set(c, 4, Cell::OneWay);
+        }
+    }
+    w.add_grid(g);
+    w.add(Body::fixed(Shape::rect(4000.0, 40.0)).at(Vec2::new(0.0, -400.0)));
+    for i in 0..n {
+        let at = Vec2::new(
+            (f() * 3000.0 - 1500.0) * spread,
+            (f() * 1200.0 - 300.0) * spread,
+        );
+        let s = if i % 5 == 0 {
+            Shape::circle(4.0 + f() * 12.0)
+        } else {
+            Shape::rect(6.0 + f() * 30.0, 6.0 + f() * 30.0)
+        };
+        let b = match i % 11 {
+            0 => Body::fixed(s).at(at),
+            1 => Body::kinematic(Shape::rect(80.0, 12.0))
+                .at(at)
+                .with_velocity(Vec2::new(f() * 100.0 - 50.0, f() * 60.0 - 30.0)),
+            2 => Body::fixed(s).at(at).as_sensor(),
+            3 => Body::fixed(Shape::rect(60.0, 8.0)).at(at).as_one_way(),
+            4 => Body::dynamic(s).at(at).as_sensor(),
+            5 => Body::dynamic(s)
+                .at(at)
+                .with_bounce(0.5)
+                .with_velocity(Vec2::new(f() * 600.0 - 300.0, 0.0)),
+            6 => Body::dynamic(s).at(at).with_layer(2, 2),
+            _ => Body::dynamic(s)
+                .at(at)
+                .with_velocity(Vec2::new(f() * 400.0 - 200.0, f() * 400.0 - 200.0)),
+        };
+        w.add(b);
+    }
+    w
+}
+
+fn snapshot(w: &World) -> Vec<(BodyId, Vec2, Vec2, Touching, Option<BodyId>)> {
+    w.bodies()
+        .map(|(id, b)| (id, b.position, b.velocity, b.touching(), b.ground_body()))
+        .collect()
+}
+
+#[test]
+fn a_grade_da_o_mesmo_resultado_que_conferir_todos() {
+    for (n, spread, seed) in [(300, 1.0, 42), (500, 0.2, 7), (200, 0.05, 3)] {
+        let mut a = crowd(n, spread, seed);
+        let mut b = crowd(n, spread, seed);
+        b.cell_override = Some(1.0e9);
+        for step in 0..180 {
+            let ea = a.step(DT).to_vec();
+            let eb = b.step(DT).to_vec();
+            assert_eq!(ea, eb, "eventos no passo {step} ({n} corpos)");
+        }
+        assert_eq!(snapshot(&a), snapshot(&b), "{n} corpos");
+        // As consultas também.
+        for k in 0..40 {
+            let o = Vec2::new(k as f32 * 70.0 - 1400.0, 300.0);
+            let d = Vec2::new((k as f32).sin(), -1.0);
+            assert_eq!(
+                a.raycast(o, d, 2000.0, u32::MAX),
+                b.raycast(o, d, 2000.0, u32::MAX)
+            );
+            assert_eq!(a.raycast(o, d, 30.0, 2), b.raycast(o, d, 30.0, 2));
+            let p = Vec2::new(k as f32 * 50.0 - 1000.0, -380.0 + k as f32 * 9.0);
+            assert_eq!(a.query_point(p), b.query_point(p));
+            let area = Aabb::from_center(p, Vec2::splat(60.0));
+            assert_eq!(a.query_aabb(area), b.query_aabb(area));
+        }
+        for (id, _) in a.bodies().take(50).collect::<Vec<_>>() {
+            assert_eq!(a.overlapping(id), b.overlapping(id));
+        }
+    }
+}
+
+#[test]
+fn o_passo_nao_depende_de_ordem_escondida() {
+    // Dois mundos iguais dão o mesmo resultado (antes, a ordem das
+    // plataformas móveis vinha de um HashMap e mudava de um para o outro).
+    let mut a = crowd(400, 0.3, 11);
+    let mut b = crowd(400, 0.3, 11);
+    run(&mut a, 3.0);
+    run(&mut b, 3.0);
+    assert_eq!(snapshot(&a), snapshot(&b));
+}
+
+#[test]
+fn a_grade_confere_so_quem_esta_perto() {
+    // 2.000 caixas paradas espalhadas e 200 caindo: sem a grade seriam
+    // milhões de conferências por passo.
+    let mut w = with_floor();
+    for i in 0..2000 {
+        let x = (i % 100) as f32 * 40.0 - 2000.0;
+        let y = (i / 100) as f32 * 40.0 + 400.0;
+        w.add(Body::fixed(Shape::rect(16.0, 16.0)).at(Vec2::new(x, y)));
+    }
+    for i in 0..200 {
+        let x = (i % 20) as f32 * 30.0 - 300.0;
+        let y = (i / 20) as f32 * 30.0 + 50.0;
+        w.add(Body::dynamic(Shape::rect(12.0, 12.0)).at(Vec2::new(x, y)));
+    }
+    run(&mut w, 1.0);
+    let s = w.stats();
+    assert_eq!(s.bodies, 2201);
+    assert!(s.checks < 20_000, "{s:?}");
+}
+
+/// Só no modo otimizado (`cargo test --release`): o tempo do passo.
+#[cfg(not(debug_assertions))]
+#[test]
+fn quinhentos_corpos_caindo_em_menos_de_4_ms() {
+    let mut w = with_floor();
+    for i in 0..500 {
+        let x = (i % 50) as f32 * 18.0 - 450.0;
+        let y = (i / 50) as f32 * 30.0 + 2000.0;
+        w.add(Body::dynamic(Shape::rect(8.0, 8.0)).at(Vec2::new(x, y)));
+    }
+    let t = std::time::Instant::now();
+    run(&mut w, 5.0);
+    let ms = t.elapsed().as_secs_f64() * 1000.0 / 300.0;
+    assert!(ms < 4.0, "{ms:.2} ms por passo");
+}

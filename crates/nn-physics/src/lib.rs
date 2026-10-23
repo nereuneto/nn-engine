@@ -256,7 +256,24 @@ pub struct World {
     broad: Broad,
     scratch: Scratch,
     stats: std::cell::Cell<StepStats>,
+    /// Nos testes: uma célula enorme põe todos juntos (o mesmo que conferir
+    /// todos contra todos, como antes da grade).
+    cell_override: Option<f32>,
+    /// A grade das consultas (raios, pontos, caixas), refeita na primeira
+    /// consulta depois que algum corpo pode ter mudado.
+    query: std::cell::RefCell<QueryIndex>,
 }
+
+#[derive(Debug, Clone, Default)]
+struct QueryIndex {
+    fresh: bool,
+    broad: Broad,
+    near: Vec<u32>,
+}
+
+/// Com menos corpos que isto, as consultas olham todos (é mais rápido que
+/// montar a grade).
+const QUERY_GRID_MIN: usize = 48;
 
 /// Quanto trabalho o último [`World::step`] deu (para medir e para testes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -310,6 +327,8 @@ impl World {
             broad: Broad::default(),
             scratch: Scratch::default(),
             stats: std::cell::Cell::new(StepStats::default()),
+            cell_override: None,
+            query: std::cell::RefCell::new(QueryIndex::default()),
         }
     }
 
@@ -318,6 +337,7 @@ impl World {
     // ------------------------------------------------------------------
 
     pub fn add(&mut self, body: Body) -> BodyId {
+        self.query.get_mut().fresh = false;
         if let Some(index) = self.free.pop() {
             let slot = &mut self.slots[index as usize];
             slot.body = Some(body);
@@ -339,6 +359,7 @@ impl World {
 
     /// Remove o corpo. Sobreposições com ele terminam sem gerar `Exit`.
     pub fn remove(&mut self, id: BodyId) -> Option<Body> {
+        self.query.get_mut().fresh = false;
         let slot = self.slots.get_mut(id.index as usize)?;
         if slot.generation != id.generation {
             return None;
@@ -358,6 +379,7 @@ impl World {
     }
 
     pub fn get_mut(&mut self, id: BodyId) -> Option<&mut Body> {
+        self.query.get_mut().fresh = false;
         let slot = self.slots.get_mut(id.index as usize)?;
         if slot.generation != id.generation {
             return None;
@@ -411,6 +433,44 @@ impl World {
 
     pub fn grids(&self) -> impl Iterator<Item = &CollisionGrid> {
         self.grids.iter().flatten()
+    }
+
+    /// Os corpos que podem tocar a caixa, em ordem; `None` = olhe todos
+    /// (poucos corpos).
+    fn query_near(&self, area: &Aabb) -> Option<Vec<BodyId>> {
+        let count = self.slots.len();
+        if count < QUERY_GRID_MIN {
+            return None;
+        }
+        let mut q = self.query.borrow_mut();
+        let q = &mut *q;
+        if !q.fresh {
+            let mut sizes: Vec<f32> = self
+                .bodies()
+                .map(|(_, b)| b.shape.half_extents().max_element() * 2.0)
+                .collect();
+            let cell = self
+                .cell_override
+                .unwrap_or_else(|| broad::cell_size(&mut sizes));
+            q.broad.build(
+                cell,
+                self.bodies().map(|(id, b)| {
+                    let a = b.aabb();
+                    (id.index, Aabb::new(a.min - EPS, a.max + EPS))
+                }),
+            );
+            q.fresh = true;
+        }
+        q.broad.query(area, &mut q.near);
+        Some(q.near.iter().map(|&i| self.id_at(i)).collect())
+    }
+
+    /// Os corpos (com o id) que podem tocar a caixa, na ordem de sempre.
+    fn bodies_near(&self, area: Aabb) -> impl Iterator<Item = (BodyId, &Body)> {
+        let near = self.query_near(&area);
+        let all = near.is_none().then(|| self.bodies());
+        let some = near.map(|v| v.into_iter().filter_map(|id| self.get(id).map(|b| (id, b))));
+        all.into_iter().flatten().chain(some.into_iter().flatten())
     }
 
     /// O trabalho do último passo.
@@ -473,13 +533,14 @@ impl World {
     pub fn step(&mut self, dt: f32) -> &[Event] {
         self.events.clear();
         self.stats.set(StepStats::default());
+        self.query.get_mut().fresh = false;
         if dt <= 0.0 {
             return &self.events;
         }
         let mut ids = std::mem::take(&mut self.scratch.ids);
         ids.clear();
         ids.extend(self.bodies().map(|(id, _)| id));
-        let cell = self.cell_size();
+        let cell = self.cell_override.unwrap_or_else(|| self.cell_size());
 
         // 1. Cinemáticos andam e empurram quem estiver no caminho.
         let mut moved: BTreeMap<BodyId, Vec2> = BTreeMap::new();
@@ -941,7 +1002,7 @@ impl World {
 
     /// Corpos que contêm o ponto.
     pub fn query_point(&self, p: Vec2) -> Vec<BodyId> {
-        self.bodies()
+        self.bodies_near(Aabb::new(p, p))
             .filter(|(_, b)| match b.shape {
                 Shape::Rect { .. } => b.aabb().contains(p),
                 Shape::Circle { radius } => b.position.distance_squared(p) <= radius * radius,
@@ -954,7 +1015,7 @@ impl World {
     pub fn query_aabb(&self, aabb: Aabb) -> Vec<BodyId> {
         let shape = Shape::Rect { half: aabb.half() };
         let center = aabb.center();
-        self.bodies()
+        self.bodies_near(aabb)
             .filter(|(_, b)| overlap(center, &shape, b.position, &b.shape))
             .map(|(id, _)| id)
             .collect()
@@ -977,7 +1038,7 @@ impl World {
         let Some(body) = self.get(id) else {
             return Vec::new();
         };
-        self.bodies()
+        self.bodies_near(body.aabb())
             .filter(|(oid, other)| {
                 *oid != id
                     && body.interacts(other)
@@ -1065,7 +1126,8 @@ impl World {
                 consider(t, n, None);
             }
         }
-        for (id, b) in self.bodies() {
+        let end = origin + dir * max_distance;
+        for (id, b) in self.bodies_near(Aabb::new(origin.min(end), origin.max(end))) {
             if b.sensor || (b.layer & mask) == 0 {
                 continue;
             }
