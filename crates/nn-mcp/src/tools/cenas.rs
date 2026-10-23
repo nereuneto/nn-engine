@@ -391,6 +391,9 @@ fn criar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
     for v in &objects {
         let obj = s.object_from_json(v, three_d, &mut next, &mut notes)?;
         notes.extend(valores::missing_files(&s.root, &obj));
+        if !three_d {
+            notes.extend(valores::size_notes(&obj));
+        }
         created.push(format!("\"{}\" (id {})", obj.name, obj.id));
         let len = match parent {
             Some(p) => doc.data.find(p).map(|o| o.children.len()).unwrap_or(0),
@@ -523,6 +526,9 @@ fn mudar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
         &s.root,
         doc.data.find(id).expect("objeto"),
     ));
+    if !three_d {
+        notes.extend(valores::size_notes(doc.data.find(id).expect("objeto")));
+    }
     let mut lookup = s.behavior_lookup();
     let now = valores::object_json(
         doc.data.find(id).expect("objeto"),

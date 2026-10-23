@@ -176,14 +176,14 @@ return {
 }
 ```
 
-Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), `scale_x`, `scale_y`, `visible`, `locked` (só para o editor), `layer` (camada maior é desenhada por cima), `anchor` (num objeto da raiz que fica na tela: o ponto da tela de onde a posição conta, veja abaixo), `components` e `children`. Campos que faltam usam o valor padrão. Os componentes:
+Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), `scale_x`, `scale_y`, `visible`, `locked` (só para o editor), `layer` (camada maior é desenhada por cima), `anchor` (num objeto da raiz que fica na tela: o ponto da tela de onde a posição conta: "top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom" ou "bottom_right"; veja "Preso na tela" abaixo), `components` e `children`. Campos que faltam usam o valor padrão. Os componentes:
 
 | `type` | Campos (padrão) |
 |---|---|
 | `sprite` | `image`, `frame_w`, `frame_h` (0 = imagem inteira, ou o tamanho do `.anim` da imagem), `frame` (1), `w`, `h` (0 = tamanho da imagem), `color` ("#FFFFFF"), `flip_x`, `flip_y`, `pixel_art` (true), `fill` ("stretch" ou "repeat": repete a imagem lado a lado; `w` e `h` são o tamanho de cada cópia e a escala do objeto diz quantas cabem), `animation` ("": uma [animação](#animações-anim) da imagem para tocar desde o começo) |
 | `text` | `text`, `size` (32), `color`, `anchor` ("center", "left", "right"...), `font` ("": a do tema), `outline` ("": uma cor para a borda em volta das letras, que deixa o texto legível em cima de qualquer fundo) |
 | `shape` | `shape` ("rect" ou "circle"), `w`, `h` (64), `radius` (32), `color` |
-| `body` | `body` ("dynamic", "static" ou "kinematic"), `shape` ("box" ou "circle"), `w`, `h` (32), `radius` (16), `sensor`, `one_way`, `bounce` (0), `gravity_scale` (1), `tag` (padrão: o nome do objeto) |
+| `body` | `body` ("dynamic", "static" ou "kinematic"), `shape` ("box" ou "circle"), `w`, `h` (32), `radius` (16): como o `w` e o `h` do sprite, também multiplicados pela escala do objeto (para cobrir um sprite repetido, use o mesmo `w` e `h` dele), `sensor`, `one_way`, `bounce` (0), `gravity_scale` (1), `tag` (padrão: o nome do objeto) |
 | `map` | `map` (arquivo .tmj), `scale` (1), `collision` (true) |
 | (sprite, text, shape) | `hud` (false): fixo na tela, em vez de andar com o mundo. A posição conta a partir do centro da tela, ou do ponto escolhido em `anchor` (y para cima). |
 
@@ -376,7 +376,7 @@ No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um
 | `nn:vida` | (2D e 3D) Pontos de vida; recebe `dano(n, quem)` (quem bateu) e `curar(n)`. | `vidas` (3), `variavel` ("vidas": espelha numa variável do jogo; "vidas" só vale no jogador, num inimigo use outro nome), `invencivel` (1 s), `ao_acabar` ("reiniciar", "checkpoint", "cena", "destruir", "nada"), `cena`, `piscar` (true), `barra` (false: uma barra de vida flutuando em cima), `cor_barra`, `numeros` (false: um número sobe de quem leva dano, com quanto tirou), `vermelho` (true: fica vermelho um instante ao levar dano), `tremer` (0: a força do tremor da câmera ao levar dano; 6 é leve) |
 | `nn:patrulha` | Anda até uma parede (ou a beirada) e volta. Precisa de corpo. | `velocidade` (120), `direcao` ("direita"), `beirada` (true), `espelhar` (true) |
 | `nn:perseguir` | Vai atrás do alvo quando ele chega perto. Voando (ou num jogo visto de cima), contorna as paredes pelos [caminhos](#caminhos-inimigos-que-contornam-paredes). | `alvo` ("" = jogador), `velocidade` (150), `visao` (320), `voar` (false), `contornar` (true, só voando), `espelhar` (true) |
-| `nn:perigo` | (2D e 3D) Machuca quem encosta. | `quem` (""), `acao` ("dano", "checkpoint", "reiniciar"), `dano` (1), `pisar` (false: pular em cima destrói), `some` (false), `empurrao` (520; no 3D, 7 m/s) |
+| `nn:perigo` | (2D e 3D) Machuca quem encosta. | `quem` (""), `acao` ("dano", "checkpoint", "reiniciar" ou "cena": vai para a `cena`, como uma tela de fim de jogo), `dano` (1), `cena` (""), `pisar` (false: pular em cima destrói), `some` (false), `empurrao` (520; no 3D, 7 m/s) |
 | `nn:inimigo3d` | (3D) Anda sozinho, persegue o jogador quando ele chega perto e machuca quem encosta. Cria o próprio corpo (como o Jogador 3D) e, num modelo animado, toca parado e andar. Pisado: manda `dano` para a Vida dele (sem Vida, some), `derrotado` e, para quem pisou, `derrotou`. Com um [Golpe](#combate-golpes-tiros-e-dano) no mesmo objeto, só o golpe machuca (encostar não). Empurrado (por um golpe ou um tiro), para de andar um instante. | `andar` ("patrulha": de onde começa até `x`, `z` e volta; "vagar": sem rumo até `raio` m; "parado"), `x` (6), `z` (0), `raio` (6), `velocidade` (2), `perseguir` (true), `visao` (8 m; desiste a 1,6 × isso), `correr` (3.5), `contornar` (true: acha um [caminho](#caminhos-inimigos-que-contornam-paredes) em volta de paredes, árvores, buracos e água), `dano` (1), `empurrao` (7), `pisar` (true), `virar` (true), `animar` (true), `anim_parado`, `anim_andar` |
 | `nn:coletavel` | Some ao ser tocado e soma numa variável; pode guardar um item no [inventário](#inventário-nninventory). | `quem` (""), `variavel` ("moedas"; "" = não soma), `valor` (1), `item` ("": o nome do item que vai para o inventário, como "chave"), `icone` (a imagem do item; vazio = a do objeto, no 2D), `som`, `brilho` (true), `cor_brilho` |
 | `nn:gatilho` | (2D e 3D) Zona de gatilho: avisa quando alguém entra ou sai dela (pela caixa do objeto) e some no jogo. Manda `entrou` e `saiu` (com quem) para a própria zona e a mensagem escolhida para os objetos `alvo`. | `quem` (""), `alvo` (""), `mensagem` ("abrir"), `mensagem_saida` (""), `uma_vez` (false), `som`, `invisivel` (true) |
@@ -512,7 +512,7 @@ Cada cena com física tem uma **grade de caminhos**: o chão dividido em quadrad
 - **No 2D** (jogos vistos de cima), células de 16 unidades. Bloqueiam os corpos parados (menos sensores e plataformas de mão única) e os tiles sólidos, com uma folga de 12.
 - Corpos que se movem (portas, plataformas que andam, caixas) não entram na grade: quem anda desvia deles pela física.
 
-O Inimigo 3D e o Perseguir (voando) usam a grade com **Contorna paredes** ligado: vão em linha reta quando dá e, quando não dá, seguem o caminho, refeito a cada meio segundo. No NN Studio, com o jogo aberto, **🧭 Caminhos** (na barra da cena) mostra no jogo as células andáveis e o caminho de cada inimigo; `NN_CAMINHOS=1` faz o mesmo ao abrir o jogo pelo terminal.
+O Inimigo 3D e o Perseguir (voando) usam a grade com **Contorna paredes** ligado: vão em linha reta quando dá e, quando não dá, seguem o caminho, refeito a cada meio segundo. No NN Studio, com o jogo aberto, **🗺 Caminhos** (na barra da cena) mostra no jogo as células andáveis e o caminho de cada inimigo; `NN_CAMINHOS=1` faz o mesmo ao abrir o jogo pelo terminal.
 
 No Lua:
 
@@ -578,7 +578,7 @@ events = {
 - **`when`**: as condições (todas precisam valer). `nao = true` inverte uma condição.
 - **`actions`**: as ações, em ordem. `esperar` atrasa as seguintes.
 - **`mode`**: sem ele (ou `"quando"`), a regra roda uma vez quando as condições **passam a valer**, ou a cada vez que um gatilho (apertar uma tecla, encostar...) acontece. Com `"enquanto"`, roda a cada quadro enquanto tudo vale.
-- **`off = true`** desliga a regra; **`comment`** sozinho é uma linha de comentário.
+- **`off = true`** desliga a regra; **`comment`** sozinho (sem `when` e `actions`) é uma linha de comentário, e numa regra é só o nome dela.
 - **Quem é quem**, nos campos `quem`, `em` e `alvo`: `"@este"` é o dono da regra (numa regra da cena, o jogador), `"@outro"` é o outro objeto da condição (em quem encostou, o item pego, quem mandou a mensagem), `"@jogador"` são os objetos com comportamento de jogador, e qualquer outro texto é o nome de um objeto (todos com esse nome).
 - Textos aceitam `{variavel}` (trocado pelo valor): `"Pontos: {pontos}"`, e o `valor` de uma variável pode ser outra: `valor = "{pontos}"`.
 - As regras rodam a cada quadro, depois dos comportamentos. Com o jogo aberto pelo editor, mudar as regras vale na hora.
@@ -594,7 +594,7 @@ Condições (`cond`):
 | `chance` | `chance` (%) |
 | `tecla` | `modo` ("apertar", "soltar", "segurar"), `tecla` (uma tecla como "space", "x", "shift", ou um grupo: "pular", "confirmar", "voltar", "acao", "esquerda", "direita", "cima", "baixo", "qualquer") |
 | `clicar` | `quem` (clique do mouse no objeto, ou Enter num Botão) |
-| `encostar` / `desencostar` / `encostando` | `quem`, `em` |
+| `encostar` / `desencostar` / `encostando` | `quem`, `em`. Encostar é as caixas se tocarem (ou uma dentro da outra, com 2 px de folga): a do corpo (`body`), se houver, senão a do sprite ou da forma. Vale para qualquer par, com ou sem corpo, sensor ou não (no 3D, a caixa do modelo ou do corpo 3D) |
 | `perto` | `quem`, `distancia`, `alvo` |
 | `variavel` | `var`, `op` ("==", "~=", "<", ">", "<=", ">="), `valor` |
 | `acabaram` | `nome` (não sobrou nenhum objeto com esse nome) |

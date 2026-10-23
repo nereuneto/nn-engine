@@ -518,6 +518,10 @@ impl StudioApp {
                     }
                 }
                 ui.separator();
+                if self.command_button(ui, Command::ConnectAgent) {
+                    out.push(Command::ConnectAgent);
+                }
+                ui.separator();
                 if self.command_button(ui, Command::Export) {
                     out.push(Command::Export);
                 }

@@ -378,6 +378,10 @@ pub struct ProjectWorkspace {
     tiles_panel: crate::tiles_view::TilesPanel,
     /// O mapa que o painel Tiles mostra.
     pub tiles_map: Option<String>,
+    /// Jogo > Ligar um agente de IA (aberta).
+    pub agent_dialog: Option<crate::agent::AgentDialog>,
+    /// O editor atendendo o servidor MCP (o agente de IA).
+    agent_link: Option<crate::agent::EditorLink>,
 }
 
 impl std::fmt::Debug for ProjectWorkspace {
@@ -455,6 +459,8 @@ impl ProjectWorkspace {
             form: SettingsForm::default(),
             lua: mlua::Lua::new(),
             dialog: None,
+            agent_dialog: None,
+            agent_link: None,
             actions: Vec::new(),
             focused_code: None,
             console_drawn: 0,
@@ -1232,7 +1238,7 @@ impl ProjectWorkspace {
         let (tx, rx) = std::sync::mpsc::channel();
         let wake = ctx.clone();
         self.console
-            .info("🧪 Rodando os testes do jogo (os arquivos de testes/), sem janela...");
+            .info("🔬 Rodando os testes do jogo (os arquivos de testes/), sem janela...");
         self.show_tab(Tab::Console);
         std::thread::spawn(move || {
             let send = |m: TestMsg| {
@@ -1254,7 +1260,7 @@ impl ProjectWorkspace {
                 let mut lines: Vec<(bool, String)> = s
                     .file_errors
                     .iter()
-                    .map(|e| (true, format!("✗ {} não carregou:\n{}", e.file, e.message)))
+                    .map(|e| (true, format!("✖ {} não carregou:\n{}", e.file, e.message)))
                     .collect();
                 let total = s.results.len();
                 lines.push((
@@ -1265,7 +1271,7 @@ impl ProjectWorkspace {
                             .to_string()
                     } else {
                         format!(
-                            "🧪 {total} {}: {} {}, {} {}.",
+                            "🔬 {total} {}: {} {}, {} {}.",
                             if total == 1 { "teste" } else { "testes" },
                             s.passed(),
                             if s.passed() == 1 { "passou" } else { "passaram" },
@@ -1649,6 +1655,7 @@ impl ProjectWorkspace {
             Command::ShowEvents => self.show_tab(Tab::Events),
             Command::ShowTiles => self.show_tab(Tab::Tiles),
             Command::ClearConsole => self.console.clear(),
+            Command::ConnectAgent => self.agent_dialog = Some(Default::default()),
             Command::ResetLayout => {
                 self.dock = default_layout();
                 env.settings.remove_layout(&self.root);
@@ -2484,7 +2491,108 @@ impl ProjectWorkspace {
             drop_overlay(&ctx, self.file_panel.target_dir(&self.files));
         }
         self.dialogs(&ctx);
+        if let Some(d) = &mut self.agent_dialog {
+            let connected = self.agent_link.as_ref().is_some_and(|l| l.listening());
+            if !crate::agent::dialog_ui(&ctx, d, &self.root, env.exe, connected) {
+                self.agent_dialog = None;
+            }
+        }
+        self.serve_agent(&ctx);
         self.handle_actions(&ctx, env)
+    }
+
+    /// Atende o servidor MCP (o agente de IA): o estado do editor e o que
+    /// ele avisa que mudou.
+    fn serve_agent(&mut self, ctx: &egui::Context) {
+        if self.agent_link.is_none() {
+            self.agent_link = Some(crate::agent::EditorLink::start(&self.root, ctx));
+        }
+        let snapshot = self.agent_snapshot();
+        let notes = match &mut self.agent_link {
+            Some(link) => link.update(ctx, snapshot),
+            None => Vec::new(),
+        };
+        for n in notes {
+            let text = match n.text.lines().next() {
+                Some(first) if !first.is_empty() => format!("Agente ({}): {first}", n.tool),
+                _ => format!("Agente: {}", n.tool),
+            };
+            self.console.agent(text, n.files);
+        }
+    }
+
+    /// O que o agente de IA vê do editor (`ver_editor`).
+    pub fn agent_snapshot(&mut self) -> serde_json::Value {
+        use serde_json::json;
+        let focused = self.dock.find_active_focused().map(|(_, t)| t.clone());
+        // A aba de documento com o foco; com um painel em foco (Hierarquia,
+        // Inspetor...), a cena que ele mostra.
+        let front = match &focused {
+            Some(t) if t.rel().is_some() => t.rel().map(str::to_string),
+            _ => self
+                .active_scene
+                .clone()
+                .or_else(|| self.focused_code.clone()),
+        };
+        let kind = |rel: &str| match FileKind::of(Path::new(rel)) {
+            FileKind::Scene => "cena",
+            FileKind::Prefab => "prefab",
+            FileKind::Lua => "código Lua",
+            FileKind::Image => "imagem",
+            FileKind::Map => "mapa",
+            FileKind::Sound => "som",
+            FileKind::Dialogue => "diálogo",
+            FileKind::ModelSource => "modelo 3D",
+            _ => "arquivo",
+        };
+        let tabs: Vec<String> = self
+            .dock
+            .iter_all_tabs()
+            .filter_map(|(_, t)| t.rel().map(str::to_string))
+            .collect();
+        let scene_rel = front
+            .as_ref()
+            .filter(|r| self.scenes.contains_key(r.as_str()))
+            .cloned()
+            .or_else(|| self.active_scene.clone());
+        let scene = scene_rel.as_ref().and_then(|r| self.scenes.get(r)).map(|doc| {
+            let selected: Vec<serde_json::Value> = doc
+                .selection
+                .iter()
+                .filter_map(|id| doc.data.find(*id))
+                .map(|o| {
+                    let mut v = json!({
+                        "id": o.id, "nome": o.name, "x": o.x, "y": o.y,
+                        "componentes": o.components.iter().map(|c| {
+                            if c.kind == crate::scene_data::BEHAVIOR { c.str("script").to_string() } else { c.kind.clone() }
+                        }).collect::<Vec<_>>(),
+                    });
+                    if doc.data.three_d {
+                        v["z"] = json!(o.z);
+                    }
+                    if let Some(p) = &o.prefab {
+                        v["prefab"] = json!(p.path);
+                    }
+                    v
+                })
+                .collect();
+            json!({
+                "arquivo": doc.rel,
+                "3d": doc.data.three_d,
+                "objetos": doc.data.objects.len(),
+                "escolhidos": selected,
+                "erro": doc.error,
+            })
+        });
+        json!({
+            "projeto": self.title,
+            "pasta": self.root,
+            "aba": front.as_ref().map(|r| json!({ "arquivo": r, "tipo": kind(r) })),
+            "abas": tabs,
+            "cena": scene,
+            "nao_gravados": self.dirty_files(),
+            "jogo_aberto": self.game.is_some(),
+        })
     }
 
     fn status_bar(&mut self, ui: &mut egui::Ui) {
@@ -3603,6 +3711,9 @@ impl TabViewer for Viewer<'_> {
                         self.actions.push(Action::OpenLocation { path, line });
                     }
                     Some(ConsoleAction::Play) => self.actions.push(Action::Command(Command::Play)),
+                    Some(ConsoleAction::OpenFile(rel)) => {
+                        self.actions.push(Action::OpenFile { rel, line: None });
+                    }
                     None => {}
                 }
             }
@@ -4689,17 +4800,17 @@ enum TestMsg {
     Done(Result<Vec<(bool, String)>, String>),
 }
 
-/// A linha do Console de um teste: ✓, ou ✗ com o motivo (o arquivo:linha vira
+/// A linha do Console de um teste: ✔, ou ✖ com o motivo (o arquivo:linha vira
 /// link) e o que o jogo escreveu.
 fn test_line(r: &nn_script::testing::TestResult) -> (bool, String) {
     let secs = |t: f64| format!("{t:.2} s").replace('.', ",");
     match &r.failure {
         None => (
             false,
-            format!("✓ {} › {} ({})", r.case.file, r.case.name, secs(r.time)),
+            format!("✔ {} › {} ({})", r.case.file, r.case.name, secs(r.time)),
         ),
         Some(f) => {
-            let mut text = format!("✗ {} › {}: {f}", r.case.file, r.case.name);
+            let mut text = format!("✖ {} › {}: {f}", r.case.file, r.case.name);
             for l in r.report.lines.iter().take(20) {
                 let kind = match l.kind {
                     nn_script::capture::LineKind::Print => "print",

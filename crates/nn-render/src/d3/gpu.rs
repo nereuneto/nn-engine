@@ -1158,6 +1158,15 @@ impl Renderer3D {
         out
     }
 
+    /// Joga fora o que foi pedido neste quadro sem desenhar.
+    pub(crate) fn discard(&mut self) {
+        self.draws.clear();
+        self.joint_data.clear();
+        self.billboards.clear();
+        self.transparent.clear();
+        self.lamps.clear();
+    }
+
     pub(crate) fn has_draws(&self) -> bool {
         !self.draws.is_empty() || !self.billboards.is_empty() || !self.transparent.is_empty()
     }

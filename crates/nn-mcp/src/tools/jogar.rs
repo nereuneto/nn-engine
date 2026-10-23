@@ -193,8 +193,14 @@ fn rodar_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
     let look = string_list(a, "olhar")?;
     let objects = string_list(a, "objetos")?;
     let final_capture = opt_bool(a, "captura_final")?.unwrap_or(true);
+    let show_bodies = opt_bool(a, "ver_corpos")?.unwrap_or(false);
 
     let mut run = open_run(s, opt_str(a, "cena")?)?;
+    if show_bodies {
+        run.runtime()
+            .set_show_bodies(true)
+            .map_err(|e| e.to_string())?;
+    }
     let start_scene = run.front().to_string();
     let before = run.snapshot();
     let plan = Plan { duration, actions };
@@ -483,6 +489,12 @@ pub(super) fn write_state_since(
                 lines.push(format!("{}: {}", object_label(a), changes.join(", ")));
             }
         }
+        let before_objs = objects_by_id(before);
+        for (id, a) in &after_objs {
+            if !before_objs.iter().any(|(i, _)| i == id) {
+                lines.push(format!("{}: apareceu", object_label(a)));
+            }
+        }
         if after.get("visual").is_none() {
             lines.extend(diff_maps(
                 &map_of(before.get("fields")),
@@ -704,6 +716,13 @@ pub static TOOLS: &[&Tool] = &[
                 (
                     "captura_final",
                     s_bool("Mandar a captura da tela do fim (padrão true)"),
+                    false,
+                ),
+                (
+                    "ver_corpos",
+                    s_bool(
+                        "Desenhar nas capturas os corpos da física (o que colide de verdade): cinza parado, verde que cai, azul que se move sozinho, amarelo sensor. Bom quando algo não encosta ou bate no ar.",
+                    ),
                     false,
                 ),
             ]

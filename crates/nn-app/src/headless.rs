@@ -28,6 +28,8 @@ pub struct Headless<G: Game> {
     pub game: G,
     gpu: GpuContext,
     target: OffscreenTarget,
+    /// O último quadro foi desenhado no alvo?
+    drawn: bool,
 }
 
 impl<G: Game> Headless<G> {
@@ -55,13 +57,46 @@ impl<G: Game> Headless<G> {
             game,
             gpu,
             target,
+            drawn: false,
         })
     }
 
     /// Roda um frame completo que durou `dt`: simulação, desenho e fim de frame.
     pub fn frame(&mut self, dt: Duration) {
+        self.frame_with(dt, true);
+    }
+
+    /// Como [`Headless::frame`], mas sem a GPU: o `render` do jogo roda (os
+    /// erros dele aparecem), e o que ele pediu é jogado fora. Bem mais
+    /// rápido sem placa de vídeo. Antes de ler a tela, [`Headless::redraw`].
+    pub fn frame_undrawn(&mut self, dt: Duration) {
+        self.frame_with(dt, false);
+    }
+
+    /// Desenha de novo o quadro atual, sem avançar o jogo (se o último foi
+    /// sem desenho). Pedidos de imagem da tela são atendidos aqui.
+    pub fn redraw(&mut self) {
+        if !self.drawn {
+            draw(&mut self.ctx, &mut self.game, Some(self.target.view()));
+            self.drawn = true;
+        }
+    }
+
+    /// O último quadro foi desenhado (a tela que [`Headless::pixels`] lê)?
+    pub fn drawn(&self) -> bool {
+        self.drawn
+    }
+
+    fn frame_with(&mut self, dt: Duration, gpu: bool) {
         simulate(&mut self.ctx, &mut self.game, dt);
-        draw(&mut self.ctx, &mut self.game, self.target.view());
+        // Pedir a imagem da tela força o desenho.
+        let gpu = gpu || self.ctx.screenshot_request;
+        draw(
+            &mut self.ctx,
+            &mut self.game,
+            gpu.then(|| self.target.view()),
+        );
+        self.drawn = gpu;
         if std::mem::take(&mut self.ctx.screenshot_request) {
             let size = self.target.size();
             let shot = self
@@ -89,7 +124,7 @@ impl<G: Game> Headless<G> {
         }
     }
 
-    /// Pixels do último frame (RGBA, de cima para baixo).
+    /// Pixels do último frame desenhado (RGBA, de cima para baixo).
     pub fn pixels(&self) -> Result<Vec<u8>, RenderError> {
         self.target.read_rgba(&self.gpu)
     }

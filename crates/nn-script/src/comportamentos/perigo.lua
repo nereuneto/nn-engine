@@ -11,8 +11,11 @@ local B = {
         { "dano", "tira vida (comportamento Vida)" },
         { "checkpoint", "volta ao checkpoint" },
         { "reiniciar", "reinicia a cena" },
+        { "cena", "vai para outra cena (fim de jogo)" },
       } },
     { "dano", 1, label = "Dano", min = 0, show_if = { "acao", "dano" } },
+    { "cena", "", type = "scene", label = "Cena", show_if = { "acao", "cena" },
+      help = "A tela de fim de jogo, por exemplo." },
     { "pisar", false, label = "Morre se pisarem em cima",
       help = "Como num jogo de plataforma: quem cai em cima derrota o perigo." },
     { "some", false, label = "Some ao acertar", help = "Para tiros e projéteis." },
@@ -71,7 +74,13 @@ function B:encostou(quem)
     end
     return
   end
-  if self.acao == "reiniciar" then
+  if self.acao == "cena" then
+    if self.cena ~= "" then
+      self.enabled = false
+      nn.scene.switch(self.cena, nil, { fade = 0.4 })
+    end
+    return
+  elseif self.acao == "reiniciar" then
     self.enabled = false
     self.scene:restart({ checkpoint = true })
   elseif self.acao == "checkpoint" then

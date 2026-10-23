@@ -25,6 +25,9 @@ type RVec = rapier3d::math::Vector;
 type RRot = rapier3d::math::Rotation;
 type RPose = rapier3d::math::Pose;
 
+/// A folga que o personagem mantém do chão e das paredes (metros).
+const CHARACTER_GAP: f32 = 0.02;
+
 fn rv(v: Vec3) -> RVec {
     RVec::new(v.x, v.y, v.z)
 }
@@ -474,8 +477,10 @@ impl World3 {
     pub fn add_character(&mut self, desc: &CharacterDesc) -> BodyId3 {
         let r = desc.radius.max(0.05);
         let h = desc.height.max(r * 2.0 + 0.01);
+        // Um pouco acima: começando encostado no chão (como fica quem é posto
+        // no editor), o controle do rapier deixa o personagem afundar.
         let body = RigidBodyBuilder::kinematic_position_based()
-            .translation(rv(desc.position + Vec3::Y * h / 2.0));
+            .translation(rv(desc.position + Vec3::Y * (h / 2.0 + CHARACTER_GAP)));
         let collider = ColliderBuilder::capsule_y(h / 2.0 - r, r)
             .active_events(ActiveEvents::COLLISION_EVENTS)
             .active_collision_types(ActiveCollisionTypes::all());
@@ -720,6 +725,45 @@ impl World3 {
         }
     }
 
+    /// Mantém o personagem a `CHARACTER_GAP` do que é parado ou se move
+    /// sozinho. Mais perto que isso (começou encostado no chão, como fica
+    /// quem é posto no editor, ou foi posto dentro de uma parede), o controle
+    /// do rapier não segura e ele afunda devagar.
+    fn depenetrate(&self, handle: RigidBodyHandle, collider: ColliderHandle, pos: Pose) -> Pose {
+        let shape = self.world.colliders[collider].shared_shape().clone();
+        let filter = QueryFilter::exclude_dynamic()
+            .exclude_rigid_body(handle)
+            .exclude_sensors();
+        let mut pos = pos;
+        // Algumas voltas: sair de um pode encostar noutro.
+        for _ in 0..4 {
+            let aabb = shape.compute_aabb(&pos).loosened(CHARACTER_GAP);
+            let mut push = Vec3::ZERO;
+            let queries = self.world.query_pipeline_with_filter(filter);
+            for (_, co) in queries.intersect_aabb_conservative(aabb) {
+                if let Ok(Some(hit)) = rapier3d::parry::query::contact(
+                    &pos,
+                    shape.as_ref(),
+                    co.position(),
+                    co.shape(),
+                    CHARACTER_GAP,
+                ) && hit.dist < CHARACTER_GAP - 0.0001
+                {
+                    // normal1 aponta do personagem para o outro: sai ao contrário.
+                    let out = -gv(hit.normal1) * (CHARACTER_GAP + 0.0005 - hit.dist);
+                    if out.length() > push.length() {
+                        push = out;
+                    }
+                }
+            }
+            if push.length_squared() < 1e-10 {
+                break;
+            }
+            pos.translation += rv(push);
+        }
+        pos
+    }
+
     fn move_characters(&mut self, dt: f32) {
         let gravity = self.world.gravity.y;
         let handles: Vec<RigidBodyHandle> = self.characters.keys().copied().collect();
@@ -730,7 +774,7 @@ impl World3 {
             let Some(body) = self.world.bodies.get(handle) else {
                 continue;
             };
-            let pos = *body.position();
+            let pos = self.depenetrate(handle, c.collider, *body.position());
             if let Some(speed) = c.jump.take() {
                 c.vy = speed;
             } else if c.on_ground && c.vy <= 0.0 {
@@ -763,7 +807,7 @@ impl World3 {
                 } else {
                     Some(CharacterLength::Absolute(c.desc.step.max(0.05)))
                 },
-                offset: CharacterLength::Absolute(0.02),
+                offset: CharacterLength::Absolute(CHARACTER_GAP),
                 ..self.controller
             };
             let shape = self.world.colliders[c.collider].shared_shape().clone();

@@ -9,6 +9,7 @@ pub enum Command {
     TestHere,
     Stop,
     RunTests,
+    ConnectAgent,
     Undo,
     Redo,
     Save,
@@ -59,6 +60,7 @@ impl Command {
         Command::TestHere,
         Command::Stop,
         Command::RunTests,
+        Command::ConnectAgent,
         Command::Undo,
         Command::Redo,
         Command::Save,
@@ -112,6 +114,7 @@ impl Command {
             Command::Redo => "Refazer (cena)",
             Command::Stop => "Parar o jogo",
             Command::RunTests => "Conferir com os testes",
+            Command::ConnectAgent => "Ligar um agente de IA...",
             Command::Save => "Salvar",
             Command::SaveAll => "Salvar tudo",
             Command::NewScene => "Nova cena visual",
@@ -164,6 +167,9 @@ impl Command {
             Command::Redo => "refazer ctrl y",
             Command::Stop => "fechar encerrar",
             Command::RunTests => "rodar testes de jogo testar verificar nn testar automatico",
+            Command::ConnectAgent => {
+                "ia inteligencia artificial claude cursor mcp assistente agente chat"
+            }
             Command::ProjectSettings => "config titulo janela tamanho tela cheia",
             Command::Export => "executavel distribuir publicar build exe",
             Command::Find => "procurar pesquisar",

@@ -198,8 +198,9 @@ fn modelo_com_forma_exata_e_desenho_pelo_corpo() {
     );
     assert!((f("ry") - 45.0).abs() < 0.1);
     let p = pixel(&h, 32, 32);
+    // Vermelho, com o verde (corpo que cai) do debug por cima: sem azul.
     assert!(
-        p[0] > 200 && p[1] < 120,
+        p[0] > 180 && p[2] < 120,
         "o cubo vermelho (com o debug por cima): {p:?}"
     );
 }
@@ -311,4 +312,33 @@ fn camera_em_terceira_pessoa() {
         f(&h, "cz")
     );
     assert!(h.ctx.mouse_captured());
+}
+
+/// Posto no editor com os pés no chão (y = 0 em cima de uma caixa), o
+/// personagem fica parado em vez de afundar devagar.
+#[test]
+fn personagem_parado_no_chao_nao_afunda() {
+    let dir = projeto(
+        "afunda",
+        r##"
+        local c = {}
+        function c:enter()
+          self.mundo = nn.physics3d.world({ gravity = -20 })
+          self.mundo:body({ type = "static", w = 40, h = 1, d = 40, y = -0.5 })
+          self.heroi = self.mundo:character({ x = 0, y = 0, z = 0, radius = 0.45, height = 1.8 })
+          self.menor = 1
+        end
+        function c:fixed_update(dt)
+          self.mundo:step(dt)
+          self.y = self.heroi.y
+          self.menor = math.min(self.menor, self.heroi.y)
+        end
+        return c
+        "##,
+    );
+    let Some(mut h) = cena(&dir) else { return };
+    h.run_frames(480);
+    let f = |k: &str| h.game.0.field::<f64>(k).unwrap();
+    assert!(f("menor") > 0.0, "afundou até {}", f("menor"));
+    assert!((f("y") - 0.02).abs() < 0.002, "y = {}", f("y"));
 }

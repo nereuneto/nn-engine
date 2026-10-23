@@ -227,11 +227,12 @@ pub(crate) fn simulate<G: Game>(ctx: &mut Context, game: &mut G, dt: Duration) {
     game.update(ctx);
 }
 
-/// Desenho de um frame em `target`.
+/// Desenho de um frame em `target` (`None`: só roda o `render` do jogo e
+/// joga fora o que ele pediu, sem usar a GPU).
 pub(crate) fn draw<G: Game>(
     ctx: &mut Context,
     game: &mut G,
-    target: &nn_render::wgpu::TextureView,
+    target: Option<&nn_render::wgpu::TextureView>,
 ) {
     game.render(ctx);
     // Quem ouve os sons 3D é a câmera 3D.
@@ -244,6 +245,10 @@ pub(crate) fn draw<G: Game>(
     });
     ctx.finish_panel();
     ctx.draw_overlays();
+    let Some(target) = target else {
+        ctx.renderer.discard_frame();
+        return;
+    };
     let clear = ctx.clear_color;
     let camera = ctx.render_camera();
     let window = ctx.window;

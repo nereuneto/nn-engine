@@ -916,6 +916,14 @@ impl Renderer {
         self.last_stats
     }
 
+    /// Joga fora o que foi pedido neste quadro, sem desenhar nada (para
+    /// rodar a lógica sem gastar a GPU, como nos testes sem janela).
+    pub fn discard_frame(&mut self) {
+        self.world.clear();
+        self.screen.clear();
+        self.d3.discard();
+    }
+
     // ------------------------------------------------------------------
     // 3D
     // ------------------------------------------------------------------

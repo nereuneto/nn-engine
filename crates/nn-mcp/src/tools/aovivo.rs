@@ -79,6 +79,12 @@ fn abrir_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
         return Err(format!("a cena {scene} não existe"));
     }
     let reopen = opt_bool(a, "reabrir")?.unwrap_or(false);
+    let Some(play) = s.hooks.play else {
+        return Err(
+            "este servidor não sabe abrir o jogo; abra com ▶ Jogar no NN Studio ou `nn .` na pasta"
+                .into(),
+        );
+    };
     if let Ok(mut c) = Client::connect(&s.root) {
         if !reopen {
             let st = c.request(json!({ "pedido": "estado" }))?;
@@ -95,12 +101,6 @@ fn abrir_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
             std::thread::sleep(Duration::from_millis(100));
         }
     }
-    let Some(play) = s.hooks.play else {
-        return Err(
-            "este servidor não sabe abrir o jogo; abra com ▶ Jogar no NN Studio ou `nn .` na pasta"
-                .into(),
-        );
-    };
     let log = std::env::temp_dir().join(format!(
         "nn-jogo-{}.log",
         nn_script::remote::connection_file(&s.root)
@@ -181,6 +181,24 @@ fn ver_jogo_aberto(s: &mut Server, a: &Value) -> Result<Output, String> {
             "rodando"
         }
     );
+    // Quadros por segundo desde a última olhada (rodando, com um tempo
+    // razoável no meio).
+    let frame = st["quadro"].as_u64().unwrap_or(0);
+    let now = std::time::Instant::now();
+    if let Some((then, last)) = s.live_clock
+        && st["pausado"] != true
+        && frame > last
+    {
+        let secs = now.duration_since(then).as_secs_f64();
+        let fps = (frame - last) as f64 / secs.max(1e-3);
+        if secs >= 0.5 && fps < 30.0 {
+            out.push_str(&format!(
+                "Atenção: o jogo aberto está rodando a uns {fps:.0} quadros por segundo (lento: o computador está ocupado). \
+                 Com a janela aberta, rodar_jogo e rodar_testes também ficam mais lentos; feche com mexer_no_jogo se não precisar dela.\n",
+            ));
+        }
+    }
+    s.live_clock = Some((now, frame));
     if let Some(e) = st["erro_na_tela"].as_str() {
         out.push_str(&format!(
             "\nA CENA ESTÁ PARADA NUM ERRO (o jogo mostra a tela de erro):\n  {}\n\
@@ -281,6 +299,56 @@ fn ver_jogo_aberto(s: &mut Server, a: &Value) -> Result<Output, String> {
 
 // mexer_no_jogo ---------------------------------------------------------------
 
+/// As teclas de `mexer_no_jogo` viram apertar e soltar no tempo de jogo.
+fn parse_keys(list: &Value) -> Result<(Vec<Value>, String), String> {
+    let list = list
+        .as_array()
+        .ok_or("\"teclas\" é uma lista, como [{\"segurar\": \"right\", \"por\": 1}, {\"em\": 0.5, \"apertar\": \"space\"}]")?;
+    let mut events = Vec::new();
+    let mut said = Vec::new();
+    for (i, t) in list.iter().enumerate() {
+        let n = i + 1;
+        let at = t.get("em").and_then(Value::as_f64).unwrap_or(0.0).max(0.0);
+        let key = |k: &str| -> Result<String, String> {
+            let name = t[k]
+                .as_str()
+                .ok_or_else(|| format!("tecla {n}: \"{k}\" é o nome da tecla"))?;
+            nn_script::game_run::check_key(name).map_err(|e| format!("tecla {n}: {e}"))?;
+            Ok(name.to_string())
+        };
+        let ev = |at: f64, k: &str, down: bool| json!({ "em": at, "tecla": k, "baixo": down });
+        if t.get("apertar").is_some() {
+            let k = key("apertar")?;
+            events.push(ev(at, &k, true));
+            events.push(ev(at + 1.0 / 30.0, &k, false));
+            said.push(format!("apertar {k} em {at:.2} s"));
+        } else if t.get("segurar").is_some() {
+            let k = key("segurar")?;
+            events.push(ev(at, &k, true));
+            match t.get("por").and_then(Value::as_f64) {
+                Some(p) => {
+                    events.push(ev(at + p.max(0.0), &k, false));
+                    said.push(format!("segurar {k} de {at:.2} s por {p:.2} s"));
+                }
+                None => said.push(format!("segurar {k} em {at:.2} s (até soltar)")),
+            }
+        } else if t.get("soltar").is_some() {
+            let k = key("soltar")?;
+            events.push(ev(at, &k, false));
+            said.push(format!("soltar {k} em {at:.2} s"));
+        } else {
+            return Err(format!(
+                "tecla {n}: use \"apertar\", \"segurar\" (com \"por\") ou \"soltar\""
+            ));
+        }
+    }
+    let said = format!(
+        "{} (contando do próximo quadro que andar; pausado, espera o avancar)",
+        said.join(", ")
+    );
+    Ok((events, said))
+}
+
 fn mexer_no_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
     let mut client = connect(s)?;
     let mut done = Vec::new();
@@ -331,6 +399,11 @@ fn mexer_no_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
         }
         None => {}
     }
+    if let Some(list) = a.get("teclas").filter(|v| !v.is_null()) {
+        let (events, said) = parse_keys(list)?;
+        client.request(json!({ "pedido": "teclas", "teclas": events }))?;
+        done.push(format!("✓ teclas: {said}"));
+    }
     if let Some(n) = opt_num(a, "avancar")? {
         let n = n.clamp(1.0, 600.0) as u64;
         client.request(json!({ "pedido": "avancar", "quadros": n }))?;
@@ -345,7 +418,9 @@ fn mexer_no_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
         done.push("✓ jogo fechado".into());
     }
     if done.is_empty() && failed.is_empty() {
-        return Err("diga o que fazer: mudar, variaveis, lua, pausar, avancar ou fechar".into());
+        return Err(
+            "diga o que fazer: mudar, variaveis, lua, teclas, pausar, avancar ou fechar".into(),
+        );
     }
     let mut text = done.join("\n");
     if !failed.is_empty() {
@@ -425,7 +500,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "mexer_no_jogo",
         title: "Mexer no jogo aberto",
-        description: "Muda o jogo aberto na hora, sem gravar nada (para experimentar um valor antes de mudar o arquivo): \"mudar\" campos de objetos e componentes ([{\"objeto\": \"heroi\", \"componente\": \"nn:plataforma\", \"campo\": \"pulo\", \"valor\": 1000}]; sem componente, o próprio objeto: x, y, visible...), \"variaveis\" do jogo ({\"vidas\": 9}), rodar \"lua\" com self = a cena da frente (\"self.objects.heroi:move_to(0, 0)\"), \"pausar\" (true/false), \"avancar\" N quadros com o jogo pausado (60 = 1 s) e \"fechar\" o jogo.",
+        description: "Muda o jogo aberto na hora, sem gravar nada (para experimentar um valor antes de mudar o arquivo): \"mudar\" campos de objetos e componentes ([{\"objeto\": \"heroi\", \"componente\": \"nn:plataforma\", \"campo\": \"pulo\", \"valor\": 1000}]; sem componente, o próprio objeto: x, y, visible...), \"variaveis\" do jogo ({\"vidas\": 9}), rodar \"lua\" com self = a cena da frente (\"self.objects.heroi:move_to(0, 0)\"), \"teclas\" como se alguém jogasse ([{\"segurar\": \"right\", \"por\": 1}, {\"em\": 0.5, \"apertar\": \"space\"}], com \"em\" em segundos de jogo), \"pausar\" (true/false), \"avancar\" N quadros com o jogo pausado (60 = 1 s) e \"fechar\" o jogo. Na ordem: mudar, variaveis, lua, pausar, teclas, avancar, fechar; então dá para pausar, pôr teclas e avançar na mesma chamada e ver o resultado com ver_jogo_aberto. Quando um arquivo é gravado, o jogo recarrega a cena: os objetos voltam ao que está no arquivo, mas as variáveis (nn.vars) e o que o Lua guardou fora da cena continuam.",
         params: || {
             vec![
                 (
@@ -447,6 +522,14 @@ pub static TOOLS: &[&Tool] = &[
                     "lua",
                     s_str(
                         "Código Lua para rodar agora, com self = a cena da frente; volta o valor",
+                    ),
+                    false,
+                ),
+                (
+                    "teclas",
+                    s_list(
+                        "Teclas como se alguém jogasse, no tempo de jogo: {\"apertar\": \"space\"}, {\"segurar\": \"right\", \"por\": 1}, {\"soltar\": \"right\"}, cada uma com \"em\" (segundos, padrão 0). Nomes do nn.input",
+                        s_obj("{\"em\": segundos, e uma de: apertar, segurar (+ por), soltar}"),
                     ),
                     false,
                 ),

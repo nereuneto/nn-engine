@@ -3276,7 +3276,7 @@ pub fn add_object_menu(ui: &mut egui::Ui, root: &Path) -> Option<crate::catalog:
 pub(crate) fn paths_button(ui: &mut egui::Ui, env: &SceneEnv, actions: &mut Vec<SceneAction>) {
     let on = env.game.is_some_and(|g| g.paths);
     let r = ui
-        .selectable_label(on, "🧭 Caminhos")
+        .selectable_label(on, "🗺 Caminhos")
         .on_hover_text("Mostra no jogo aberto por onde os inimigos podem andar (a grade de caminhos) e o caminho que cada um está seguindo");
     crate::tutorial::anchor(ui.ctx(), "cena.caminhos", r.rect);
     if r.clicked() {

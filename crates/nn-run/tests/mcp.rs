@@ -391,12 +391,14 @@ fn nn_mcp_so_escreve_o_protocolo_na_saida() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let mut stdin = child.stdin.take().unwrap();
+    let stdin = std::cell::RefCell::new(child.stdin.take().unwrap());
     let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
-    let mut send = |msg: Value| {
-        writeln!(stdin, "{msg}").unwrap();
+    let raw = |bytes: &[u8]| {
+        let mut stdin = stdin.borrow_mut();
+        stdin.write_all(bytes).unwrap();
         stdin.flush().unwrap();
     };
+    let send = |msg: Value| raw(format!("{msg}\n").as_bytes());
     let mut next = || -> Value { serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap() };
     send(json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize",
         "params": { "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "teste", "version": "1" } } }));
@@ -428,6 +430,17 @@ fn nn_mcp_so_escreve_o_protocolo_na_saida() {
     );
     send(json!({ "jsonrpc": "2.0", "id": 5, "method": "ping" }));
     assert_eq!(next()["id"], 5);
+    // Lixo na entrada (bytes que não são UTF-8, JSON cortado) vira erro, e o
+    // servidor continua.
+    raw(b"\xff\xfe{\"jsonrpc\"\n");
+    assert_eq!(next()["error"]["code"], -32700);
+    raw(b"{\"jsonrpc\": \"2.0\", \"id\": 50, \"method\"\n");
+    assert_eq!(next()["error"]["code"], -32700);
+    send(json!({ "jsonrpc": "2.0", "id": 51, "method": "tools/call",
+        "params": { "name": "ver_cena", "arguments": { "caminho": "cenas/\u{1F600}.cena" } } }));
+    let r = next();
+    assert_eq!(r["id"], 51);
+    assert_eq!(r["result"]["isError"], true, "{r}");
     // O jogo rodando sem janela: os prints vão para a resposta, não para a
     // saída.
     send(json!({ "jsonrpc": "2.0", "id": 6, "method": "tools/call",

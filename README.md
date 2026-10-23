@@ -1,6 +1,6 @@
 # nn-engine
 
-Engine de jogos **2D e 3D** em Rust, construída sobre [wgpu](https://wgpu.rs) e [winit](https://github.com/rust-windowing/winit), com um editor próprio, o **NN Studio**. Os jogos podem ser montados no editor **sem código**, ou escritos em **Lua** ou em **Rust**.
+Engine de jogos **2D e 3D** em Rust, construída sobre [wgpu](https://wgpu.rs) e [winit](https://github.com/rust-windowing/winit), com um editor próprio, o **NN Studio**. Os jogos podem ser montados no editor **sem código**, ou escritos em **Lua** ou em **Rust**, e um **agente de IA** (como o Claude) pode fazer o jogo junto com você, pelo [servidor MCP](docs/mcp.md) que vem com a engine.
 
 ![A ilha 3D, um dos modelos de projeto, feita sem código](docs/imagens/jogo-ilha-3d.png)
 
@@ -94,7 +94,9 @@ cargo nn mcp ../meu-jogo    # servidor MCP para o Claude Code, Claude Desktop, C
 claude mcp add nn -- nn mcp .   # no Claude Code, de dentro da pasta do jogo
 ```
 
-O **servidor MCP** da engine liga um agente de IA ao projeto. O agente vê o projeto, monta cenas com componentes, comportamentos prontos e eventos, escreve scripts Lua e confere o que fez. Cada campo é conferido antes de gravar, com erros em português que dizem o que vale. As cenas que ele grava são as mesmas que o NN Studio grava, ele não sai da pasta do jogo e tudo pode ser desfeito. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela. Com o jogo aberto numa janela (pelo NN Studio ou por `nn .`), ele acompanha você jogando e muda valores na hora, sem gravar, para acertar o pulo ou a velocidade junto com você. Como ligar e as ferramentas: [docs/mcp.md](docs/mcp.md).
+No NN Studio, **Jogo > Ligar um agente de IA…** mostra e grava a configuração de cada cliente.
+
+O **servidor MCP** da engine liga um agente de IA ao projeto. O agente vê o projeto, monta cenas com componentes, comportamentos prontos e eventos, escreve scripts Lua e confere o que fez. Cada campo é conferido antes de gravar, com erros em português que dizem o que vale. As cenas que ele grava são as mesmas que o NN Studio grava, ele não sai da pasta do jogo e tudo pode ser desfeito. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela. Com o jogo aberto numa janela (pelo NN Studio ou por `nn .`), ele acompanha você jogando e muda valores na hora, sem gravar, para acertar o pulo ou a velocidade junto com você. Com o NN Studio aberto, ele vê os objetos que você escolheu ("deixa este inimigo mais rápido"), não grava por cima do que você ainda não salvou e o que ele muda aparece no Console. Na revisão da v0.7, dois agentes fizeram cada um um jogo do zero (um de plataforma 2D e um de coletar em 3D, com testes) só pelo servidor. Como ligar e as ferramentas: [docs/mcp.md](docs/mcp.md).
 
 ### Testes de jogo
 

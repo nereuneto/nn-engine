@@ -756,6 +756,26 @@ pub fn looks_like_file(v: &str) -> bool {
     !v.starts_with("nn:") && !v.contains(' ') && ASSET_EXTS.iter().any(|e| lower.ends_with(e))
 }
 
+/// Arquivos que uma regra cita e que não existem (uma cena que ainda vai
+/// ser criada, um som com o nome errado).
+pub fn rule_missing_files(root: &std::path::Path, rule: &scene_data::Rule) -> Vec<String> {
+    let mut out = Vec::new();
+    for item in rule.when.iter().chain(&rule.actions) {
+        for (k, v) in &item.props {
+            if let Prop::Str(path) = v
+                && looks_like_file(path)
+                && !root.join(path).is_file()
+            {
+                out.push(format!(
+                    "aviso: {}.{k} = \"{path}\" não existe (ainda?): crie antes de rodar, ou confira em listar_arquivos",
+                    item.id
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// Arquivos que o objeto (e os filhos) cita e que não existem.
 pub fn missing_files(root: &std::path::Path, o: &Object) -> Vec<String> {
     let mut out = Vec::new();
@@ -772,6 +792,43 @@ pub fn missing_files(root: &std::path::Path, o: &Object) -> Vec<String> {
                     ));
                 }
             }
+        }
+    });
+    out
+}
+
+/// Avisa quando o corpo da física de um objeto 2D com escala fica bem
+/// maior ou menor que o sprite: o `w`/`h` dos dois é multiplicado pela
+/// escala, e é fácil pôr no corpo o tamanho já multiplicado.
+pub fn size_notes(o: &Object) -> Vec<String> {
+    let mut out = Vec::new();
+    scene_data::visit(std::slice::from_ref(o), &mut |o| {
+        let (sx, sy) = (o.scale_x, o.scale_y);
+        if (sx - 1.0).abs() < 1e-9 && (sy - 1.0).abs() < 1e-9 {
+            return;
+        }
+        let (Some(sprite), Some(body)) = (o.component("sprite"), o.component("body")) else {
+            return;
+        };
+        if body.str("shape") == "circle" {
+            return;
+        }
+        let num = |c: &scene_data::Component, k: &str, d: f64| c.get(k).map(Prop::num).unwrap_or(d);
+        let (spw, sph) = (num(sprite, "w", 0.0), num(sprite, "h", 0.0));
+        let (bw, bh) = (num(body, "w", 32.0), num(body, "h", 32.0));
+        if spw <= 0.0 || sph <= 0.0 {
+            return;
+        }
+        let off = |b: f64, s: f64| b > s * 2.0 || b < s / 2.0;
+        if off(bw, spw) || off(bh, sph) {
+            out.push(format!(
+                "aviso: \"{}\": o corpo (body) fica {:.0}×{:.0} px no jogo e o sprite {:.0}×{:.0}: o w e o h dos dois são multiplicados pela escala ({sx}×{sy}). Para o corpo cobrir o sprite, use o mesmo w e h dele ({spw}×{sph}).",
+                o.name,
+                bw * sx.abs(),
+                bh * sy.abs(),
+                spw * sx.abs(),
+                sph * sy.abs(),
+            ));
         }
     });
     out

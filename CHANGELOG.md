@@ -2,30 +2,100 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
-## Não lançado
+## 0.7.0
 
-### Ao vivo (Sprint 53)
+A versão do **desenvolvimento guiado por IA**. O **servidor MCP** (`nn mcp`) liga um agente de IA (Claude Code, Claude Desktop, Cursor...) ao projeto, com **30 ferramentas em português**. O agente monta cenas, objetos, prefabs e eventos, escreve Lua e confere tudo antes de gravar. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela. Ele escreve e roda os **testes de jogo** (`testes/*.lua`, também com `nn testar` e no NN Studio) e acompanha o **jogo aberto** enquanto você joga, mudando valores na hora. Com o **NN Studio** aberto, ele vê os objetos que você escolheu, não grava por cima do que você não salvou e o que ele muda aparece no Console. Para ligar: **Jogo > Ligar um agente de IA…** no NN Studio. Na revisão, dois agentes fizeram cada um um jogo do zero só pelo servidor, um de plataforma 2D e um de coletar em 3D, com testes. Como usar: [O servidor MCP](docs/mcp.md) e [Testes de jogo](docs/lua.md#testes-de-jogo).
 
-- **O agente acompanha o jogo aberto.** Com o jogo aberto numa janela (pelo ▶ Jogar do NN Studio, por `nn .` ou pela ferramenta nova `abrir_jogo`), o agente de IA vê e mexe nele enquanto você joga. Como usar: [O jogo aberto](docs/mcp.md#o-jogo-aberto).
-  - **`ver_jogo_aberto`:**
-    - a cena da frente e se está pausado;
-    - os erros, avisos e prints e as regras que dispararam desde a última olhada;
-    - o que mudou nos objetos e nas variáveis;
-    - a imagem da tela agora.
-  - **`mexer_no_jogo`**, na hora e sem gravar:
-    - muda campos de objetos e comportamentos (o pulo do herói, a velocidade do inimigo) e as variáveis;
-    - roda Lua;
-    - pausa, avança quadros e fecha o jogo.
+### Para quem vem da 0.6
 
-    Bom para acertar um número junto com você antes de gravar no arquivo.
-  - **`abrir_jogo`** abre o jogo numa janela (também numa `cena`) e liga nele; se o jogo já estiver aberto, usa ele.
-- **Seguro:** o jogo aberto atende numa porta do próprio computador, com uma senha num arquivo que só o seu usuário lê. Um jogo exportado não atende ninguém.
-- **NN Studio: Jogo > Conferir com os testes (Ctrl+F5).** Roda os testes de `testes/` em segundo plano e mostra no Console ✓ para o que passou e ✗ com o motivo para o que falhou, com link para a linha.
-- **`nn <pasta> --cena <arquivo>`** abre o jogo começando numa cena.
+- **Os projetos da 0.6 abrem e rodam.** Conferido com os dez modelos de projeto da 0.6.0 publicada:
+  - abertos e gravados no NN Studio novo, saem iguais, byte a byte;
+  - rodam no `nn` novo sem erro nem aviso;
+  - o servidor MCP vê, confere e roda todos.
+
+  Os projetos novos da 0.7 também rodam no `nn` da 0.6.
+- **As preferências da 0.6 abrem na 0.7** como estão.
+- **Arquivos novos, só se você usar:**
+  - `testes/` (os testes de jogo) e o `AGENTS.md` (o guia do agente) vêm nos projetos novos;
+  - `.mcp.json` e `.cursor/mcp.json` só se você ligar um agente;
+  - nada disso vai para o jogo exportado.
+- **O que muda sem você mexer:**
+  - **Uma regra de evento com `comment` e condições agora roda:** o `comment` vira o nome dela. Antes, ela era ignorada; o NN Studio não faz regras assim, mas um arquivo editado à mão pode ter.
+  - **O Jogador 3D (e todo personagem do `nn.physics3d`) nasce 2 cm acima e fica a 2 cm do chão.** Antes, posto com os pés no chão, ele afundava devagar.
+  - O `nn:mostrar_valor` já mostra os valores no primeiro quadro.
+  - O `debug_draw` do 3D usa as cores do 2D: verde para o que cai e amarelo para os sensores.
 - **Para quem usa as crates:**
-  - o `nn-script` ganhou o canal do jogo aberto (`remote`: `listen`, `Client`) e `run_project_from`;
-  - o `nn-app` tira a imagem do quadro da janela (`Context::request_screenshot` e `take_screenshot`);
-  - o `nn-render` lê qualquer textura (`read_texture_rgba`, também BGRA).
+  - a API do Lua, os comportamentos prontos e os formatos dos arquivos são os mesmos;
+  - o que é novo está nas seções abaixo;
+  - no `nn-app`, o `Headless` ganhou `frame_undrawn` e `redraw` (rodar sem desenhar na GPU);
+  - no `nn-render`, o `Renderer` ganhou `discard_frame`.
+
+### Revisão (Sprint 54)
+
+- **A prova: agentes fazendo jogos do zero só pelo servidor.** Dois agentes, sem acesso ao código, fizeram cada um um jogo pelas ferramentas, com testes que passam e `conferir_projeto` limpo:
+  - um de **plataforma 2D**: moedas, inimigo, placar, vitória e derrota, e o pulo ajustado ao vivo;
+  - um de **coletar cristais em 3D**: obstáculos, cronômetro, vitória e derrota.
+
+  O que atrapalhou os dois virou as correções abaixo.
+- **NN Studio: o agente de IA junto com você.**
+  - **Jogo > Ligar um agente de IA…** (ou "claude" na paleta) mostra como ligar o Claude Code, o Claude Desktop, o Cursor ou outro cliente, já com o caminho do `nn` e da pasta, com botões para copiar. Ele também grava a configuração: o `.mcp.json`, a do Claude Desktop (com uma cópia da de antes) ou o `.cursor/mcp.json`.
+  - **`ver_editor`**, a ferramenta nova, mostra ao agente a aba da frente, os **objetos escolhidos** (*"deixa este inimigo mais rápido"*), o que não foi gravado e a imagem da janela.
+  - **O agente não grava por cima do que você não salvou:** com mudanças suas numa cena, as ferramentas que gravam nela (e o `desfazer`) pedem para salvar ou descartar antes.
+  - **O que o agente muda aparece no Console** com ✨, a ferramenta e o arquivo (clique para abrir).
+- **Defeitos:**
+  - **Uma regra com `comment` nunca rodava**, sem aviso nenhum. Agora roda, e o `por_regra` mostra o nome dela e se está desligada.
+  - **O Jogador 3D afundava devagar quando ficava parado**, se começasse com os pés exatamente no chão (o normal no editor). O personagem agora mantém a folga do chão e das paredes.
+  - **No Inspetor, as opções que dependem de um sim/não nunca apareciam**, por exemplo as animações do Jogador 3D quando "Animar" está ligado.
+  - Alguns ícones apareciam como quadradinhos no NN Studio: 🧪 (os testes), 🧭 (Caminhos), ✓ e ✗. Agora são 🔬, 🗺, ✔ e ✖.
+  - `abrir_jogo` não abria mais o jogo depois que o `nn` era atualizado com o servidor aberto. O erro agora diz o caminho do arquivo, e `reabrir` não fecha o jogo antes de saber que dá para abrir de novo.
+- **Para o agente:**
+  - **`mexer_no_jogo` aperta e segura teclas** no jogo aberto (`teclas`), contando o tempo de jogo: pausado, elas esperam o `avancar`. Assim dá para ajustar o pulo sem ninguém jogando.
+  - **`rodar_jogo` com `ver_corpos`** desenha os corpos da física nas capturas (2D e 3D).
+  - **`buscar_documentacao`** devolve só os trechos que citam a busca (antes, seções inteiras de até 27 KB). Se nada cita todas as palavras, mostra o que cita parte delas. Com `secao`, mostra uma seção inteira.
+  - **Avisos novos:**
+    - um corpo (`body`) bem maior ou menor que o sprite: o `w` e o `h` dos dois são multiplicados pela escala;
+    - uma regra que cita um arquivo que ainda não existe;
+    - o jogo aberto lento.
+  - O `ver_jogo_aberto` diz os objetos que voltaram ao recarregar a cena, e o `mexer_no_jogo` explica o que recarrega e o que fica.
+  - O `ver_projeto` lista os textos (`AGENTS.md`, `LEIAME.md`) e os testes.
+  - O **`nn:perigo`** ganhou "ir para outra cena" (uma tela de fim de jogo).
+  - A documentação ficou mais clara em alguns pontos:
+    - o encostar;
+    - os valores de `anchor`;
+    - o `comment`;
+    - a câmera do Jogador 3D;
+    - a pasta dos modelos no `AGENTS.md`.
+- **Os testes de jogo e o `rodar_jogo` ficaram cerca de 9 vezes mais rápidos** sem placa de vídeo: o jogo sem janela só desenha na GPU quando alguém pede a tela.
+- **Robustez:**
+  - o servidor não cai mais com bytes que não são UTF-8 na entrada, nem com um defeito numa ferramenta, que vira uma resposta de erro;
+  - o canal do jogo aberto confere a senha sem deixar o tempo dizer quanto acertou, recusa pedidos acima de 1 MB e ligações que não mandam a senha em 5 segundos, e aceita até 8 ligações.
+- **`nn mcp` sem pasta** usa a do projeto do Claude Code (`CLAUDE_PROJECT_DIR`), ou a atual.
+- O `AGENTS.md` não vai mais para o jogo exportado.
+- **Documentação:**
+  - o guia do servidor ganhou *Junto com o NN Studio*, as teclas e o `ver_corpos`;
+  - o do NN Studio ganhou *Agente de IA*;
+  - README e "O que vem depois" atualizados.
+
+### O servidor MCP (Sprint 51)
+
+- **`nn mcp <pasta>`: um agente de IA desenvolve o jogo.** O servidor MCP liga o Claude Code, o Claude Desktop, o Cursor ou outro cliente MCP ao projeto. O agente vê o projeto, monta cenas, põe comportamentos e eventos, escreve scripts Lua e confere o que fez. Como ligar e o que cada ferramenta faz: [O servidor MCP](docs/mcp.md).
+- **24 ferramentas em português:**
+  - **o projeto:** `ver_projeto`, `criar_projeto` (pelos modelos), `mudar_config` (sem perder os comentários do `config.lua`) e `conferir_projeto`;
+  - **arquivos:** `listar_arquivos`, `ler_arquivo` (uma imagem volta como imagem), `escrever_arquivo`, `apagar_arquivo` e `desfazer`;
+  - **cenas e prefabs:** `ver_cena`, `criar_cena`, `mudar_cena`, `criar_objeto`, `mudar_objeto`, `copiar_objeto`, `apagar_objeto` e `criar_prefab`;
+  - **o que existe:** `listar_componentes`, `listar_comportamentos` e `listar_eventos`, com campos, padrões, opções e ajuda;
+  - **eventos sem código:** `por_regra` e `tirar_regra`;
+  - **código:** `buscar_documentacao` (a API `nn.*` e os guias) e `conferir_lua`.
+- **Tudo é conferido antes de gravar.** Um campo com nome ou tipo errado, uma cor fora do formato ou uma opção que não existe voltam como erro, com a lista do que vale (e os nomes parecidos). Um Lua com erro de sintaxe não é gravado: volta a linha e o erro em português. Um arquivo citado que não existe vira aviso.
+- **O mesmo formato do NN Studio.** As cenas e prefabs que o agente grava são idênticas às que o editor grava, e o agente vê os objetos no formato do arquivo `.cena`. Um comportamento que precisa de corpo físico já ganha um, como no editor.
+- **Seguro:**
+  - o servidor não sai da pasta do jogo (nem por `..`, caminho absoluto ou link) e não mexe em `.git`, `dist` e `target`;
+  - cada arquivo é gravado de uma vez, então o jogo aberto e o editor nunca veem um arquivo pela metade;
+  - `desfazer` volta as mudanças do agente e não passa por cima do que você mudou depois no editor.
+- **A documentação vai junto:** os guias de Lua, de 3D, do NN Studio e do MCP são recursos do servidor, e há dois prompts prontos: `criar_jogo` e `melhorar_jogo`.
+- **Todo projeto novo vem com um `AGENTS.md`,** que explica a um agente como o projeto se organiza e como ligar o servidor.
+- **No AppImage:** `NN-Studio-<versão>-x86_64.AppImage nn mcp <pasta>` roda o `nn` que vem dentro dele.
+- **Para quem usa as crates:** as cenas, prefabs, eventos, comportamentos e o `config.lua` saíram do NN Studio para a crate nova **`nn-projeto`**, usada pelo editor e pelo servidor. A crate **`nn-mcp`** tem o servidor.
 
 ### Rodar e ver (Sprint 52)
 
@@ -54,26 +124,28 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - O erro de uma tecla desconhecida (`nn.input.down("pulo")`) agora lista os nomes que valem.
 - **Para quem usa as crates:** o `nn-script` ganhou o jogo sem janela (`game_run::GameRun`: roteiro de ações, estado da cena, expressões, capturas), os testes de jogo (`testing`) e a captura do log por thread (`capture`). O `ScriptRuntime` diz a cena da frente (`front`) e os erros das cenas (`take_errors`).
 
-### O servidor MCP (Sprint 51)
+### Ao vivo (Sprint 53)
 
-- **`nn mcp <pasta>`: um agente de IA desenvolve o jogo.** O servidor MCP liga o Claude Code, o Claude Desktop, o Cursor ou outro cliente MCP ao projeto. O agente vê o projeto, monta cenas, põe comportamentos e eventos, escreve scripts Lua e confere o que fez. Como ligar e o que cada ferramenta faz: [O servidor MCP](docs/mcp.md).
-- **24 ferramentas em português:**
-  - **o projeto:** `ver_projeto`, `criar_projeto` (pelos modelos), `mudar_config` (sem perder os comentários do `config.lua`) e `conferir_projeto`;
-  - **arquivos:** `listar_arquivos`, `ler_arquivo` (uma imagem volta como imagem), `escrever_arquivo`, `apagar_arquivo` e `desfazer`;
-  - **cenas e prefabs:** `ver_cena`, `criar_cena`, `mudar_cena`, `criar_objeto`, `mudar_objeto`, `copiar_objeto`, `apagar_objeto` e `criar_prefab`;
-  - **o que existe:** `listar_componentes`, `listar_comportamentos` e `listar_eventos`, com campos, padrões, opções e ajuda;
-  - **eventos sem código:** `por_regra` e `tirar_regra`;
-  - **código:** `buscar_documentacao` (a API `nn.*` e os guias) e `conferir_lua`.
-- **Tudo é conferido antes de gravar.** Um campo com nome ou tipo errado, uma cor fora do formato ou uma opção que não existe voltam como erro, com a lista do que vale (e os nomes parecidos). Um Lua com erro de sintaxe não é gravado: volta a linha e o erro em português. Um arquivo citado que não existe vira aviso.
-- **O mesmo formato do NN Studio.** As cenas e prefabs que o agente grava são idênticas às que o editor grava, e o agente vê os objetos no formato do arquivo `.cena`. Um comportamento que precisa de corpo físico já ganha um, como no editor.
-- **Seguro:**
-  - o servidor não sai da pasta do jogo (nem por `..`, caminho absoluto ou link) e não mexe em `.git`, `dist` e `target`;
-  - cada arquivo é gravado de uma vez, então o jogo aberto e o editor nunca veem um arquivo pela metade;
-  - `desfazer` volta as mudanças do agente e não passa por cima do que você mudou depois no editor.
-- **A documentação vai junto:** os guias de Lua, de 3D, do NN Studio e do MCP são recursos do servidor, e há dois prompts prontos: `criar_jogo` e `melhorar_jogo`.
-- **Todo projeto novo vem com um `AGENTS.md`,** que explica a um agente como o projeto se organiza e como ligar o servidor.
-- **No AppImage:** `NN-Studio-<versão>-x86_64.AppImage nn mcp <pasta>` roda o `nn` que vem dentro dele.
-- **Para quem usa as crates:** as cenas, prefabs, eventos, comportamentos e o `config.lua` saíram do NN Studio para a crate nova **`nn-projeto`**, usada pelo editor e pelo servidor. A crate **`nn-mcp`** tem o servidor.
+- **O agente acompanha o jogo aberto.** Com o jogo aberto numa janela (pelo ▶ Jogar do NN Studio, por `nn .` ou pela ferramenta nova `abrir_jogo`), o agente de IA vê e mexe nele enquanto você joga. Como usar: [O jogo aberto](docs/mcp.md#o-jogo-aberto).
+  - **`ver_jogo_aberto`:**
+    - a cena da frente e se está pausado;
+    - os erros, avisos e prints e as regras que dispararam desde a última olhada;
+    - o que mudou nos objetos e nas variáveis;
+    - a imagem da tela agora.
+  - **`mexer_no_jogo`**, na hora e sem gravar:
+    - muda campos de objetos e comportamentos (o pulo do herói, a velocidade do inimigo) e as variáveis;
+    - roda Lua;
+    - pausa, avança quadros e fecha o jogo.
+
+    Bom para acertar um número junto com você antes de gravar no arquivo.
+  - **`abrir_jogo`** abre o jogo numa janela (também numa `cena`) e liga nele; se o jogo já estiver aberto, usa ele.
+- **Seguro:** o jogo aberto atende numa porta do próprio computador, com uma senha num arquivo que só o seu usuário lê. Um jogo exportado não atende ninguém.
+- **NN Studio: Jogo > Conferir com os testes (Ctrl+F5).** Roda os testes de `testes/` em segundo plano e mostra no Console ✔ para o que passou e ✖ com o motivo para o que falhou, com link para a linha.
+- **`nn <pasta> --cena <arquivo>`** abre o jogo começando numa cena.
+- **Para quem usa as crates:**
+  - o `nn-script` ganhou o canal do jogo aberto (`remote`: `listen`, `Client`) e `run_project_from`;
+  - o `nn-app` tira a imagem do quadro da janela (`Context::request_screenshot` e `take_screenshot`);
+  - o `nn-render` lê qualquer textura (`read_texture_rgba`, também BGRA).
 
 ## 0.6.0
 

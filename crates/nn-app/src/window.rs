@@ -223,7 +223,7 @@ impl State {
                 let view = texture
                     .texture
                     .create_view(&nn_render::wgpu::TextureViewDescriptor::default());
-                draw(&mut self.ctx, game, &view);
+                draw(&mut self.ctx, game, Some(&view));
                 if std::mem::take(&mut self.ctx.screenshot_request) {
                     let shot = if self
                         .surface_config

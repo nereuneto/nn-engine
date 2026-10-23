@@ -39,6 +39,14 @@ impl History {
         });
     }
 
+    /// Os arquivos que o passo atual mudou até agora.
+    pub fn current_files(&self) -> Vec<String> {
+        self.open
+            .as_ref()
+            .map(|s| s.files.iter().map(|f| f.rel.clone()).collect())
+            .unwrap_or_default()
+    }
+
     /// Fecha o passo atual (se mudou algo, ele entra na lista).
     pub fn end(&mut self) {
         if let Some(step) = self.open.take()

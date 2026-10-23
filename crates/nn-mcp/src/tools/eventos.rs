@@ -141,7 +141,14 @@ fn por_regra(s: &mut Server, a: &Value) -> Result<Output, String> {
     let replace = opt_num(a, "trocar")?;
     let (rules, in_object, owner) = rules_of(&mut doc, a)?;
     let rule = super::valores::rule_from_json(rule_json, in_object, three_d)?;
-    let summary = events::rule_summary(&rule, in_object);
+    let mut summary = events::rule_summary(&rule, in_object);
+    if rule.off {
+        summary.push_str(" (DESLIGADA: off = true)");
+    }
+    if let Some(c) = rule.comment.as_ref().filter(|_| !rule.when.is_empty()) {
+        summary = format!("[{c}] {summary}");
+    }
+    let notes = super::valores::rule_missing_files(&s.root, &rule);
     let at = if let Some(n) = replace {
         let i = n as usize;
         if i == 0 || i > rules.len() {
@@ -158,9 +165,11 @@ fn por_regra(s: &mut Server, a: &Value) -> Result<Output, String> {
     };
     let total = rules.len();
     s.save_doc(&doc)?;
-    Ok(Output::text(format!(
-        "Regra {at} de {total} em {owner}: {summary}"
-    )))
+    let mut msg = format!("Regra {at} de {total} em {owner}: {summary}");
+    for n in notes {
+        msg.push_str(&format!("\n- {n}"));
+    }
+    Ok(Output::text(msg))
 }
 
 fn tirar_regra(s: &mut Server, a: &Value) -> Result<Output, String> {

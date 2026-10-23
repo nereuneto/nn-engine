@@ -238,7 +238,11 @@ fn exportar(args: &[String]) -> ExitCode {
 /// `nn mcp [pasta]`: servidor MCP pela entrada e saída padrão.
 fn mcp(args: &[String]) -> ExitCode {
     let dir = match args {
-        [] => PathBuf::from("."),
+        // Sem pasta: a do projeto do Claude Code (se for ele quem abriu), ou a atual.
+        [] => std::env::var_os("CLAUDE_PROJECT_DIR")
+            .filter(|d| !d.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(".")),
         [dir] if !dir.starts_with("--") => PathBuf::from(dir),
         _ => {
             eprintln!("uso: nn mcp [pasta do jogo]");
