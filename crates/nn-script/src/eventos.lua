@@ -401,6 +401,7 @@ E.CONDITIONS = {
   {
     id = "perto", name = "Estiver perto de", category = "Toques",
     text = "{quem} estiver a menos de {distancia} de {alvo}",
+    help = "A distância é entre as posições dos dois objetos (no 3D, o meio da base de cada um), não entre as bordas: perto de algo grande (um baú, uma porta), some a metade do tamanho dele.",
     props = { who("quem"), { "distancia", 200, min = 0, default3d = 3 }, who("alvo", "@jogador", "De") },
     lua = "distancia({quem}, {alvo}) < {distancia}",
     test = function(ctx, p, st, b)

@@ -772,7 +772,7 @@ As duas tabelas têm as mesmas funções; muda só o espaço.
 Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`, `tile_w`, `tile_h` (repetir em vez de esticar: o tamanho de cada cópia; `{ w = 640, h = 32, tile_w = 32, tile_h = 32 }` desenha 20 blocos).
 
 Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `font`.
-`anchor` diz qual ponto do texto fica em `x, y`: `topleft` (padrão), `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright`.
+`anchor` diz qual ponto do texto fica em `x, y`: `topleft` (padrão), `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright` (também com sublinhado, como a âncora do objeto: `top_left`).
 `align` alinha as linhas de um texto com `\n`: `left`, `center`, `right`.
 
 Opções de `panel`: `color`, `radius` (cantos), `border` (largura) e `border_color`, ou `image` (uma imagem, ou uma spritesheet com `frame`) com `slice` (pixels de cada canto que não esticam) e `slice_scale` (quanto cada pixel do canto cresce; 3 ou 4 para pixel art). No mundo, `x, y` é o centro; na tela, o canto de cima à esquerda. Cores com transparência ficam certas, sem a borda escurecer o fundo.

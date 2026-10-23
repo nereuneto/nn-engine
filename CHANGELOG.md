@@ -81,6 +81,14 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
   - **`ver_modelo`** desenha os ossos por cima num modelo com esqueleto.
 - **Esqueleto pronto mais certo:** as juntas das pernas, dos braços, das patas, da cabeça e do rabo ficam em cima das peças com esses nomes (antes, num quadrúpede feito de cubos, as patas giravam fora do lugar). Vale também para o NN Studio.
 - **Abrir porta:** uma animação pronta nova do esqueleto simples. As do esqueleto simples agora vão para o osso do modelo mesmo quando ele tem outro nome.
+- **A prova:** um agente fez **"A Chave do Lobo"** em cerca de 80 chamadas, com o herói, o lobo e o baú modelados e animados por ele (o "parado" respirando e o pulo de braços para cima com quadros-chave próprios). Do que ele achou, isto foi acertado:
+  - **Abrir num modelo com vários ossos:** a pronta girava o osso de baixo, e o baú inteiro tombava. Agora ela vai para o osso do nome ("Tampa", "Porta") ou para o último osso, e `osso` escolhe outro. A resposta diz que ossos a animação move.
+  - **Âncora:** a do objeto é `top_left` e a do texto era `topleft`, e uma valia onde a outra quebrava o jogo. Agora as duas valem nos dois lugares, e um valor que não existe na âncora do texto é recusado ao criar o objeto (antes só quebrava ao jogar).
+  - **Mostrar valor** apagava, no quadro seguinte, o texto que uma regra punha no mesmo objeto. Agora ele só escreve quando o valor muda.
+  - **`rodar_jogo`** diz que animações 3D começaram a tocar em cada modelo, e quando.
+  - **Tiras maiores** com menos quadros, e `"ossos": false` para ver só o modelo.
+  - **Descrições:** a câmera "atrás" do Jogador 3D (gira com o mouse, não quando o jogador vira); andar e correr no teclado; a distância do "estiver perto de" (das posições, não das bordas); o limite de 5 imagens do `rodar_jogo`.
+  - **`buscar_documentacao`** com `secao` também acha os parágrafos com título em negrito ("Preso na tela").
 - **Para quem usa as crates:** o esqueleto e as animações prontas saíram do NN Studio para o `nn-projeto` (`model_rig`), e o `model_view` ganhou `render_bones` e `render_strip`. `ModelData::bone_lines` dá a junta e a ponta de cada osso num instante da animação.
 
 ## 0.7.0

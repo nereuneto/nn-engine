@@ -346,12 +346,12 @@ Um modelo 3D (`.modelo`) ganha ossos com `esqueleto` e animações com `animar_m
   - `ligar` (`{"Espada": "Braço direito"}`; `""` desliga), `ligar_sozinho` (as peças sem osso vão para o mais perto) e `apagar`.
   - Volta os ossos, as peças de cada um, as que ficaram sem osso e as vistas com os ossos em verde. O `ver_modelo` também desenha os ossos (`"ossos": false` esconde).
 - `animar_modelo`:
-  - `pronta`: humanoide tem parado, andar, correr, pular, cair, golpe e acenar; quadrupede tem parado, andar e correr; simples tem girar, balançar, abrir (uma tampa) e abrir_porta. `forca` muda quanto mexe (0.5 = metade; −1 = para o outro lado) e `velocidade` muda o ritmo (2 = duas vezes mais rápida).
+  - `pronta`: humanoide tem parado, andar, correr, pular, cair, golpe e acenar; quadrupede tem parado, andar e correr; simples tem girar, balançar, abrir (uma tampa) e abrir_porta. Num modelo com vários ossos, as do simples vão para o osso do nome ("Tampa", "Porta", "Dobradiça"); senão, abrir vai para o último osso (a tampa presa na base) e girar para o primeiro; `osso` escolhe outro. A resposta diz que ossos a animação move. `forca` muda quanto mexe (0.5 = metade; −1 = para o outro lado) e `velocidade` muda o ritmo (2 = duas vezes mais rápida).
   - `chaves`: quadros-chave por osso, `{"osso": "Braço esquerdo", "t": 0.5, "giro": [x, y, z], "andar": [x, y, z]}`. O `giro` é em graus, na junta; num personagem virado para +Z, um giro negativo em X leva o braço ou a perna para a frente. O `andar` é quanto a junta anda, em metros (o quadril subindo num pulo). Entre os quadros o movimento é suave, e antes do primeiro quadro de um osso vale o primeiro.
   - `duracao` e `repete` (true para andar e parado; false para pular e golpe). Numa animação nova, sem `duracao`, ela dura até a última chave. Com o mesmo `nome`, as chaves se somam à animação; `limpar` começa do zero e `apagar` apaga.
-  - Volta uma **tira** com o modelo em vários momentos (`quadros`, padrão 6), vistos de lado (`vista`: lado, frente, cima, diagonal ou tras), todos no mesmo enquadramento.
+  - Volta uma **tira** com o modelo em vários momentos (`quadros`, padrão 6; com menos, cada um sai maior), vistos de lado (`vista`: lado, frente, cima, diagonal ou tras), todos no mesmo enquadramento. `"ossos": false` tira os ossos da tira.
 
-No jogo, o **Jogador 3D** toca sozinho parado, andar, correr, pular e cair (e o Golpe, golpe), e o **Inimigo 3D**, parado e andar. Outra animação toca com a ação **Tocar animação** numa regra ou com o componente `anim3d`.
+No jogo, o **Jogador 3D** toca sozinho parado, andar, correr, pular e cair (e o Golpe, golpe), e o **Inimigo 3D**, parado e andar. Outra animação toca com a ação **Tocar animação** numa regra ou com o componente `anim3d`. O `rodar_jogo` diz que animações 3D começaram a tocar em cada modelo, e quando.
 
 ## O que vem depois
 

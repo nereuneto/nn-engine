@@ -25,9 +25,33 @@ struct Track {
     looped: bool,
 }
 
+thread_local! {
+    /// As animações que começaram a tocar (o modelo e o nome), quando o
+    /// relatório do `rodar_jogo` pede ([`record_plays`]).
+    static PLAYED: std::cell::RefCell<Option<Vec<(String, String)>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Liga (ou desliga) o registro das animações 3D que começam a tocar.
+pub fn record_plays(on: bool) {
+    PLAYED.with(|p| *p.borrow_mut() = on.then(Vec::new));
+}
+
+/// As animações que começaram desde a última vez: (modelo, animação).
+pub fn take_plays() -> Vec<(String, String)> {
+    PLAYED.with(|p| {
+        p.borrow_mut()
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    })
+}
+
 /// Toca as animações de um modelo para um objeto.
 #[derive(Debug, Clone)]
 pub(crate) struct LAnimator {
+    /// O arquivo do modelo (para o relatório).
+    label: String,
     skeleton: Option<Arc<Skeleton>>,
     current: Option<Track>,
     /// A animação de antes, enquanto mistura com a nova.
@@ -39,8 +63,9 @@ pub(crate) struct LAnimator {
 }
 
 impl LAnimator {
-    pub(crate) fn new(skeleton: Option<Arc<Skeleton>>) -> Self {
+    pub(crate) fn new(label: &str, skeleton: Option<Arc<Skeleton>>) -> Self {
         Self {
+            label: label.to_string(),
             skeleton,
             current: None,
             previous: None,
@@ -153,6 +178,13 @@ impl LAnimator {
             time: 0.0,
             looped,
         });
+        PLAYED.with(|p| {
+            if let Some(list) = p.borrow_mut().as_mut()
+                && list.len() < 4096
+            {
+                list.push((self.label.clone(), name.to_string()));
+            }
+        });
         Ok(true)
     }
 
@@ -261,7 +293,7 @@ mod tests {
 
     #[test]
     fn toca_repete_mistura_e_termina() {
-        let mut a = LAnimator::new(Some(esqueleto()));
+        let mut a = LAnimator::new("m.glb", Some(esqueleto()));
         assert!(a.play("andar", true, 0.0, false).unwrap());
         assert!(
             !a.play("andar", true, 0.0, false).unwrap(),

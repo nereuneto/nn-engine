@@ -251,6 +251,14 @@ pub fn apply_fields(
                     convert(key, v, default, key.contains("color"))
                         .map_err(|e| format!("{kind}: {e}"))?
                 };
+                // Escrito de outro jeito ("top_left" no texto): vira o certo.
+                let p = match &p {
+                    Prop::Str(text) => match scene_data::choice_like(kind, key, text) {
+                        Some(c) => Prop::Str(c.to_string()),
+                        None => p,
+                    },
+                    _ => p,
+                };
                 if let (Prop::Str(text), Some(choices)) = (&p, scene_data::field_choices(kind, key))
                     && !choices.contains(&text.as_str())
                 {
@@ -524,6 +532,11 @@ pub fn set_object_field(o: &mut Object, key: &str, v: &Value) -> Result<(), Stri
         "locked" => o.locked = v.as_bool().ok_or("\"locked\" precisa ser true ou false")?,
         "anchor" => {
             let s = v.as_str().ok_or("\"anchor\" precisa ser um texto")?;
+            let s = if s.is_empty() {
+                s
+            } else {
+                scene_data::screen_anchor_like(s).unwrap_or(s)
+            };
             let ok = s.is_empty() || scene_data::SCREEN_ANCHORS.iter().any(|a| a.0 == s);
             if !ok {
                 let all: Vec<&str> = scene_data::SCREEN_ANCHORS.iter().map(|a| a.0).collect();

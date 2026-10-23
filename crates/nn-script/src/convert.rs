@@ -72,7 +72,13 @@ pub(crate) fn opt_color(opts: Option<&Table>, key: &str) -> Result<Option<Color>
 }
 
 pub(crate) fn anchor(name: &str) -> Result<Anchor> {
-    Ok(match name {
+    // "top_left" e "topleft" valem igual (a âncora do objeto tem o "_").
+    let plain: String = name
+        .chars()
+        .filter(|c| !matches!(c, '_' | '-' | ' '))
+        .flat_map(char::to_lowercase)
+        .collect();
+    Ok(match plain.as_str() {
         "topleft" => Anchor::TopLeft,
         "top" => Anchor::TopCenter,
         "topright" => Anchor::TopRight,
@@ -276,6 +282,17 @@ pub(crate) fn mouse_button(name: &str) -> Result<MouseButton> {
 mod tests {
     use super::*;
     use mlua::Lua;
+
+    #[test]
+    fn ancora_com_e_sem_sublinhado() {
+        assert!(matches!(anchor("topleft").unwrap(), Anchor::TopLeft));
+        assert!(matches!(anchor("top_left").unwrap(), Anchor::TopLeft));
+        assert!(matches!(
+            anchor("Bottom_Right").unwrap(),
+            Anchor::BottomRight
+        ));
+        assert!(anchor("meio").is_err());
+    }
 
     #[test]
     fn cores_em_varios_formatos() {

@@ -315,6 +315,16 @@ fn animar_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
                 )
             })?;
             an.name = name.clone();
+            // Num esqueleto simples, o osso que ela move pode ser escolhido.
+            if let Some(o) = opt_str(a, "osso")? {
+                if kind != RigKind::Simple {
+                    return Err("\"osso\" é para as prontas do esqueleto simples (girar, balançar, abrir); nas outras, cada osso já tem o seu movimento".into());
+                }
+                let bi = bone_index(&md, o)?;
+                for tr in &mut an.tracks {
+                    tr.bone = md.bones[bi].name.clone();
+                }
+            }
             an
         }
         None => match md.anims.iter().find(|x| x.name == name) {
@@ -433,19 +443,36 @@ fn animar_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
             }
         })
         .collect();
+    let bones = opt_bool(a, "ossos")?.unwrap_or(true);
     let frames: Vec<_> = times
         .iter()
         .map(|t| {
             (
                 model_view::triangles(&data, Some((gi, *t))),
-                md.bone_lines(Some(&anim), *t),
+                if bones {
+                    md.bone_lines(Some(&anim), *t)
+                } else {
+                    Vec::new()
+                },
             )
         })
         .collect();
-    let strip = model_view::render_strip(&frames, view, 200);
+    // Menos quadros, cada um maior (a tira tem até uns 1450 pixels).
+    let cell = (1450 / n as u32).clamp(120, 360);
+    let strip = model_view::render_strip(&frames, view, cell);
     let keys: usize = anim.tracks.iter().map(|t| t.keys.len()).sum();
+    let moved: Vec<String> = anim
+        .tracks
+        .iter()
+        .map(|t| format!("\"{}\"", t.bone))
+        .collect();
+    let moved = if moved.len() <= 3 {
+        format!(" ({})", moved.join(", "))
+    } else {
+        String::new()
+    };
     let mut text = format!(
-        "{rel}: animação \"{name}\", {} s, {}, {} osso(s), {keys} quadro(s)-chave.\n{}",
+        "{rel}: animação \"{name}\", {} s, {}, {} osso(s){moved}, {keys} quadro(s)-chave.\n{}",
         m(anim.duration),
         if anim.looping {
             "repete"
@@ -460,7 +487,7 @@ fn animar_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
         nn_projeto::model::glb_path(&rel)
     ));
     text.push_str(&format!(
-        "A tira: {n} momentos (em {} s), vistos {}, no mesmo enquadramento; os ossos em verde.",
+        "A tira: {n} momentos (em {} s), vistos {}, no mesmo enquadramento{}.",
         times.iter().map(|t| m(*t)).collect::<Vec<_>>().join(", "),
         match view {
             View::Side => "de lado (de +X: a frente fica à esquerda)",
@@ -468,6 +495,11 @@ fn animar_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
             View::Top => "de cima",
             View::ThreeQuarter => "na diagonal",
             View::Back => "de trás",
+        },
+        if bones {
+            "; os ossos em verde (\"ossos\": false esconde)"
+        } else {
+            ""
         }
     ));
     Ok(Output::text(text).and_image(&png(&strip)?, "image/png"))
@@ -509,7 +541,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "animar_modelo",
         title: "Animar modelo 3D",
-        description: "Cria ou muda uma animação de um modelo 3D com ossos (.modelo; ponha os ossos com esqueleto) e devolve uma tira com o modelo em vários momentos dela. \"pronta\": uma animação pronta do esqueleto (humanoide: parado, andar, correr, pular, cair, golpe, acenar; quadrupede: parado, andar, correr; simples: girar, balançar, abrir (uma tampa, em X), abrir_porta (em Y, na junta do osso)), com \"forca\" (1 = como é, 0.5 = metade do movimento, -1 = para o outro lado) e \"velocidade\" (2 = duas vezes mais rápida). Ou quadros-chave próprios: \"chaves\": [{\"osso\": \"Braço esquerdo\", \"t\": 0.5 (segundos), \"giro\": [x, y, z] (graus na junta; num personagem virado para +Z, giro negativo em X leva o braço ou a perna para a frente), \"andar\": [x, y, z] (metros que a junta anda, ex.: o quadril subindo)}], entre os quadros o movimento é suave; \"duracao\" (s) e \"repete\" (true: andar, parado; false: pular, golpe). Com o mesmo \"nome\", muda a animação (as chaves se somam; \"limpar\": true começa do zero). Os nomes que o Jogador 3D toca sozinho: parado, andar, correr, pular, cair.",
+        description: "Cria ou muda uma animação de um modelo 3D com ossos (.modelo; ponha os ossos com esqueleto) e devolve uma tira com o modelo em vários momentos dela. \"pronta\": uma animação pronta do esqueleto (humanoide: parado, andar, correr, pular, cair, golpe, acenar; quadrupede: parado, andar, correr; simples: girar, balançar, abrir (uma tampa, em X), abrir_porta (em Y, na junta do osso); num modelo com vários ossos, a pronta do simples vai para o osso do nome (\"Tampa\", \"Porta\") ou o escolhido em \"osso\"), com \"forca\" (1 = como é, 0.5 = metade do movimento, -1 = para o outro lado) e \"velocidade\" (2 = duas vezes mais rápida). Ou quadros-chave próprios: \"chaves\": [{\"osso\": \"Braço esquerdo\", \"t\": 0.5 (segundos), \"giro\": [x, y, z] (graus na junta; num personagem virado para +Z, giro negativo em X leva o braço ou a perna para a frente), \"andar\": [x, y, z] (metros que a junta anda, ex.: o quadril subindo)}], entre os quadros o movimento é suave; \"duracao\" (s) e \"repete\" (true: andar, parado; false: pular, golpe). Com o mesmo \"nome\", muda a animação (as chaves se somam; \"limpar\": true começa do zero). Os nomes que o Jogador 3D toca sozinho: parado, andar, correr, pular, cair.",
         params: || {
             vec![
                 ("caminho", s_str(MODELO), true),
@@ -519,6 +551,13 @@ pub static TOOLS: &[&Tool] = &[
                     true,
                 ),
                 ("pronta", s_str("Uma animação pronta do esqueleto"), false),
+                (
+                    "osso",
+                    s_str(
+                        "Nas prontas do esqueleto simples: o osso que ela move (padrão: o do nome, como \"Tampa\" ou \"Porta\"; senão, abrir vai para o último osso e girar para o primeiro)",
+                    ),
+                    false,
+                ),
                 ("forca", s_num("Quanto mexe (1 = como é)"), false),
                 (
                     "velocidade",
@@ -548,7 +587,12 @@ pub static TOOLS: &[&Tool] = &[
                 ),
                 (
                     "quadros",
-                    s_int("Quantos momentos na tira (padrão 6)"),
+                    s_int("Quantos momentos na tira (padrão 6; com menos, cada um sai maior)"),
+                    false,
+                ),
+                (
+                    "ossos",
+                    s_bool("Desenhar os ossos na tira (padrão true; false para ver só o modelo)"),
                     false,
                 ),
             ]

@@ -229,6 +229,24 @@ fn coletavel_soma_na_variavel_e_o_placar_mostra_no_hud() {
         .get("text")
         .unwrap();
     assert_eq!(texto, "Ana: 15");
+    // Um texto posto por fora (uma regra "mudar o texto") fica até a
+    // variável mudar.
+    let placar = |h: &Headless<Uma>| -> mlua::Table {
+        h.game
+            .0
+            .field::<mlua::Table>("objects")
+            .unwrap()
+            .get::<mlua::Table>("placar")
+            .unwrap()
+            .get::<mlua::Table>("text")
+            .unwrap()
+    };
+    placar(&h).set("text", "O baú abriu!").unwrap();
+    h.run_frames(3);
+    assert_eq!(placar(&h).get::<String>("text").unwrap(), "O baú abriu!");
+    rt.lua().load("nn.vars.moedas = 16").exec().unwrap();
+    h.run_frames(2);
+    assert_eq!(placar(&h).get::<String>("text").unwrap(), "Ana: 16");
 }
 
 #[test]

@@ -540,6 +540,35 @@ fn simple(name: &str) -> Option<Anim> {
     })
 }
 
+/// O osso que uma animação pronta do esqueleto simples move, num modelo sem
+/// o osso "Osso": o do nome que pede (uma "Tampa", uma "Porta", uma
+/// "Dobradiça", uma "Hélice"); senão, para abrir, o último osso sem filhos
+/// (a tampa presa na base) e, para girar e balançar, o primeiro sem pai.
+pub fn simple_bone<'a>(anim: &str, bones: &'a [Bone]) -> Option<&'a str> {
+    let opening = anim.starts_with("abrir");
+    let hints: &[&str] = if opening {
+        &[
+            "tampa", "porta", "dobradic", "portao", "janela", "lid", "door", "hinge",
+        ]
+    } else {
+        &["helice", "roda", "moinho", "lamina"]
+    };
+    if let Some(b) = bones
+        .iter()
+        .find(|b| hints.iter().any(|h| plain(&b.name).contains(h)))
+    {
+        return Some(&b.name);
+    }
+    let leaf = |i: usize| !bones.iter().any(|b| b.parent == Some(i));
+    let pick = if opening {
+        (0..bones.len()).rev().find(|&i| leaf(i))
+    } else {
+        bones.iter().position(|b| b.parent.is_none())
+    };
+    pick.or(if bones.is_empty() { None } else { Some(0) })
+        .map(|i| bones[i].name.as_str())
+}
+
 /// Os nomes das animações prontas de cada esqueleto (os que o Jogador 3D,
 /// o Inimigo 3D e o Chefe procuram vêm primeiro).
 pub fn ready_names(kind: RigKind) -> &'static [&'static str] {
@@ -560,14 +589,12 @@ pub fn ready(kind: RigKind, name: &str, bones: &[Bone]) -> Option<Anim> {
         RigKind::Quadruped => quadruped(name, l),
         RigKind::Simple => {
             let mut a = simple(name)?;
-            // Um osso com outro nome (uma porta com o osso "Dobradiça"):
-            // a animação vai para o primeiro osso sem pai.
             if !bones.iter().any(|b| b.name == OSSO)
-                && let Some(b) = bones.iter().find(|b| b.parent.is_none()).or(bones.first())
+                && let Some(b) = simple_bone(name, bones)
             {
                 for tr in &mut a.tracks {
                     if tr.bone == OSSO {
-                        tr.bone = b.name.clone();
+                        tr.bone = b.to_string();
                     }
                 }
             }
@@ -755,5 +782,19 @@ mod tests {
         assert_eq!(a.tracks[0].bone, "Dobradiça");
         assert!(!a.looping);
         assert!(ready_names(RigKind::Simple).contains(&"abrir_porta"));
+        // Um baú: a base e a tampa (filha dela). Abrir vai para a tampa.
+        let bau = vec![
+            bone("Base", None, Vec3::ZERO, Vec3::Y * 0.5),
+            bone(
+                "Cima",
+                Some(0),
+                Vec3::new(0.0, 0.5, -0.3),
+                Vec3::new(0.0, 0.5, 0.3),
+            ),
+        ];
+        assert_eq!(simple_bone("abrir", &bau), Some("Cima"));
+        assert_eq!(simple_bone("girar", &bau), Some("Base"));
+        let a = ready(RigKind::Simple, "abrir", &bau).unwrap();
+        assert_eq!(a.tracks[0].bone, "Cima");
     }
 }
