@@ -182,8 +182,8 @@ fn car_body() -> Part {
         p.faces[top].color = VERMELHO.into();
         // Os vidros: as paredes da cabine.
         let n = p.faces.len();
-        for f in n - 4..n {
-            p.faces[f].color = AZUL.into();
+        for f in &mut p.faces[n - 4..] {
+            f.color = AZUL.into();
         }
     }
     p

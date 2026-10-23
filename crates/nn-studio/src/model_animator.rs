@@ -644,11 +644,8 @@ impl ModelDoc {
             // Mover a junta: o osso e os filhos dele andam juntos.
             let b = drag.bone;
             let mut moving = vec![b];
-            for i in 0..self.data.bones.len() {
-                if self.data.bones[i]
-                    .parent
-                    .is_some_and(|p| moving.contains(&p))
-                {
+            for (i, bone) in self.data.bones.iter().enumerate() {
+                if bone.parent.is_some_and(|p| moving.contains(&p)) {
                     moving.push(i);
                 }
             }
