@@ -7,6 +7,7 @@ use crate::Server;
 mod aovivo;
 mod arquivos;
 mod cenas;
+mod dialogos;
 mod docs;
 mod editor;
 mod efeitos;
@@ -82,6 +83,7 @@ fn all() -> Vec<&'static Tool> {
     v.extend(mapas::TOOLS);
     v.extend(efeitos::TOOLS);
     v.extend(sons::TOOLS);
+    v.extend(dialogos::TOOLS);
     v.extend(jogar::TOOLS);
     v.extend(aovivo::TOOLS);
     v.extend(editor::TOOLS);

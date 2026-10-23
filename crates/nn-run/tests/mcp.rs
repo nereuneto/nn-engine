@@ -1257,3 +1257,76 @@ fn agente_cria_sons() {
     assert!(!dir.join(wav).exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Diálogos pelo agente: a conversa em JSON, lida de volta no mesmo formato,
+/// e o jogo abre a caixa de fala.
+#[test]
+fn agente_escreve_um_dialogo() {
+    let dir = temp("dialogo");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "vazio" }));
+    let rel = "dialogos/ana.dialogo";
+    let t = ok(
+        &mut s,
+        "escrever_dialogo",
+        json!({ "caminho": rel, "personagens": [{ "nome": "Ana", "voz": "assets/sons/nada.wav" }],
+            "falas": [
+                { "id": "oi", "quem": "Ana", "texto": "Oi! Viu minha chave?" },
+                { "id": "pergunta", "quem": "Ana", "texto": "Me ajuda?", "escolhas": [
+                    { "texto": "Claro", "vai": "valeu", "variavel": "ajudou", "valor": 1 },
+                    { "texto": "Agora não", "vai": "fim" },
+                ] },
+                { "id": "valeu", "quem": "Ana", "texto": "Valeu! Tome.", "item": "moeda", "depois": "fim" },
+                { "id": "perdida", "quem": "Beto", "texto": "Ninguém me chama." },
+            ] }),
+    );
+    assert!(
+        t.contains("Criei dialogos/ana.dialogo: 4 fala(s), 2 personagem(ns)"),
+        "{t}"
+    );
+    assert!(
+        t.contains("[1] Ana: Oi! Viu minha chave?\n      → [2]"),
+        "{t}"
+    );
+    assert!(t.contains("1) \"Claro\" (faz ajudou = 1) → [3]"), "{t}");
+    assert!(t.contains("nenhum caminho chega em [4]"), "{t}");
+    assert!(
+        t.contains("voz de Ana: assets/sons/nada.wav não existe"),
+        "{t}"
+    );
+    assert!(t.contains("personagem \"Beto\" criado"), "{t}");
+
+    // Lido de volta no mesmo formato; o que volta reescreve igual.
+    let t = ok(&mut s, "ver_dialogo", json!({ "caminho": rel }));
+    let start = t.find("{\n").unwrap();
+    let end = t.rfind("\n}").unwrap() + 2;
+    let mut back: Value = serde_json::from_str(&t[start..end]).unwrap();
+    let before = std::fs::read_to_string(dir.join(rel)).unwrap();
+    back["caminho"] = json!(rel);
+    ok(&mut s, "escrever_dialogo", back);
+    assert_eq!(std::fs::read_to_string(dir.join(rel)).unwrap(), before);
+    let d = nn_projeto::dialogue::read(&before, rel).unwrap();
+    assert_eq!(d.node(2).unwrap().choices.len(), 2);
+
+    let e = fails(
+        &mut s,
+        "escrever_dialogo",
+        json!({ "caminho": rel, "falas": [{ "texto": "a", "depois": "lugar" }] }),
+    );
+    assert!(e.contains("não há a fala \"lugar\""), "{e}");
+
+    // No jogo: a conversa abre quando a cena começa.
+    ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": { "name": "ana", "x": 0, "y": 0,
+            "components": [{ "type": "nn:dialogo", "arquivo": rel, "comecar": "cena" }] } }),
+    );
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 0.5, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
