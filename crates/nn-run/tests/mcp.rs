@@ -755,3 +755,190 @@ fn nn_testar_diz_o_que_falhou() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Pixel art pelo agente: cria a folha, desenha com texto e formas, mexe nos
+/// quadros e anima; o NN Studio e o jogo leem igual.
+#[test]
+fn agente_desenha_um_sprite_e_anima() {
+    let dir = temp("pixel");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "vazio" }));
+    let img = "assets/imagens/slime.png";
+    let t = ok(
+        &mut s,
+        "criar_imagem",
+        json!({ "caminho": img, "largura": 8, "altura": 6, "quadros": 2 }),
+    );
+    assert!(t.contains("2 quadros lado a lado (folha de 16x6)"), "{t}");
+    assert!(fails(&mut s, "criar_imagem", json!({ "caminho": img })).contains("já existe"));
+
+    // Quadro 1: o slime por texto, com contorno; quadro 2: a mesma coisa, achatada.
+    let (t, pngs) = images(
+        &mut s,
+        "desenhar",
+        json!({ "caminho": img, "operacoes": [
+            { "desenho": ["..GG..", ".GGGG.", "GGWGWG", "GGGGGG"], "cores": { "G": "#38b764", "W": "#f4f4f4" }, "em": [1, 1] },
+            { "contorno": true, "cor": "#1a1c2c" },
+        ] }),
+    );
+    assert!(t.contains("2 operação(ões)"), "{t}");
+    assert_eq!(pngs.len(), 1, "a prévia do quadro");
+    let prev = image::load_from_memory(&pngs[0]).unwrap();
+    assert!(prev.width() >= 8 * 16, "ampliada: {}", prev.width());
+    ok(
+        &mut s,
+        "desenhar",
+        json!({ "caminho": img, "quadro": 2, "previa": false, "operacoes": [
+            { "copiar_quadro": 1 },
+            { "deslocar": [0, 1] },
+            { "retangulo": [0, 4, 8, 1], "cor": 6, "cheio": true },
+        ] }),
+    );
+    let e = fails(
+        &mut s,
+        "desenhar",
+        json!({ "caminho": img, "operacoes": [{ "desenho": ["X"] }] }),
+    );
+    assert!(e.contains("o caractere 'X'"), "{e}");
+    let e = fails(
+        &mut s,
+        "desenhar",
+        json!({ "caminho": img, "quadro": 3, "operacoes": [{ "balde": [0, 0], "cor": "#ffffff" }] }),
+    );
+    assert!(e.contains("tem 2 quadro(s)"), "{e}");
+    let e = fails(
+        &mut s,
+        "desenhar",
+        json!({ "caminho": img, "operacoes": [{ "pintar": [0, 0] }] }),
+    );
+    assert!(e.contains("use uma de: pontos"), "{e}");
+
+    // Os pixels de verdade.
+    let png = image::open(dir.join(img)).unwrap().to_rgba8();
+    assert_eq!(png.dimensions(), (16, 6));
+    assert_eq!(png.get_pixel(3, 1).0, [0x38, 0xb7, 0x64, 255]);
+    assert_eq!(png.get_pixel(3, 3).0, [0xf4, 0xf4, 0xf4, 255]);
+    assert_eq!(png.get_pixel(2, 1).0, [0x1a, 0x1c, 0x2c, 255], "contorno");
+    assert_eq!(
+        png.get_pixel(8 + 3, 2).0,
+        [0x38, 0xb7, 0x64, 255],
+        "deslocado no 2º quadro"
+    );
+
+    // Ver como texto.
+    let t = ok(
+        &mut s,
+        "ver_imagem",
+        json!({ "caminho": img, "quadro": 1, "texto": true }),
+    );
+    assert!(t.contains("16x6 pixels, 2 quadros de 8x6"), "{t}");
+    assert!(t.contains("\n..ABBA..\n"), "{t}");
+    assert!(t.contains("A = #1a1c2c, B = #38b764"), "{t}");
+
+    // Um terceiro quadro e a animação.
+    ok(
+        &mut s,
+        "quadros",
+        json!({ "caminho": img, "operacoes": [{ "inserir": 3, "copiar": 1 }] }),
+    );
+    let (t, pngs) = images(
+        &mut s,
+        "animar",
+        json!({ "caminho": img, "nome": "parado", "quadros": [1, 2, 3, 2], "fps": 6, "modo": "repetir" }),
+    );
+    assert!(
+        t.contains("\"parado\": quadros [1, 2, 3, 2], 6 fps, repetir"),
+        "{t}"
+    );
+    assert_eq!(image::load_from_memory(&pngs[0]).unwrap().width() % 4, 0);
+    let e = fails(
+        &mut s,
+        "animar",
+        json!({ "caminho": img, "nome": "x", "quadros": [9] }),
+    );
+    assert!(e.contains("não há o 9"), "{e}");
+
+    // O .anim é o do NN Studio, e a engine lê.
+    let anim = nn_projeto::anim::AnimFile::load(&dir, img).unwrap();
+    assert_eq!((anim.frame_w, anim.frame_h), (8, 6));
+    assert_eq!(anim.anims[0].name, "parado");
+    assert_eq!(anim.anims[0].frames.len(), 4);
+    let t = ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": { "name": "slime", "x": 0, "y": 0,
+            "components": [{ "type": "sprite", "image": img, "frame_w": 8, "frame_h": 6, "w": 32, "h": 24, "animation": "parado" }] } }),
+    );
+    assert!(!t.contains("aviso"), "{t}");
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 0.5, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+
+    // Vários quadros numa chamada, com as cores da chamada; o texto com as
+    // mesmas letras.
+    let (t, pngs) = images(
+        &mut s,
+        "desenhar",
+        json!({ "caminho": img, "cores": { "G": "#38b764", "K": "#1a1c2c" }, "operacoes": [
+            { "quadro": 1, "apagar": true }, { "quadro": 1, "desenho": ["KGGK"], "em": [2, 2] },
+            { "quadro": 3, "apagar": true }, { "quadro": 3, "desenho": ["GKKG"], "em": [2, 2] },
+        ] }),
+    );
+    assert!(t.contains("Os 2 quadros mexidos"), "{t}");
+    assert_eq!(image::load_from_memory(&pngs[0]).unwrap().width() % 2, 0);
+    let t = ok(
+        &mut s,
+        "ver_imagem",
+        json!({ "caminho": img, "quadro": 3, "texto": true, "cores": { "G": "#38b764", "K": "#1a1c2c" } }),
+    );
+    assert!(t.contains("\n..GKKG..\n"), "{t}");
+    let (t, pngs) = images(
+        &mut s,
+        "ver_imagem",
+        json!({ "caminho": img, "quadro": 1, "repetir": [3, 2] }),
+    );
+    assert!(t.contains("repetido 3x2"), "{t}");
+    let tile = image::load_from_memory(&pngs[0]).unwrap();
+    assert_eq!(
+        tile.width() * 2,
+        tile.height() * 3 * 8 / 6,
+        "3 por 2 quadros de 8x6"
+    );
+
+    // Um chão repetido com o w da área toda: aviso.
+    let t = ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": { "name": "chao", "x": 0, "y": -100,
+            "components": [{ "type": "sprite", "image": img, "frame_w": 8, "frame_h": 6, "w": 320, "h": 6, "fill": "repeat" }] } }),
+    );
+    assert!(
+        t.contains("com fill = \"repeat\", w e h são o tamanho de CADA cópia"),
+        "{t}"
+    );
+    assert!(t.contains("scale_x 40"), "{t}");
+
+    // Pixel art numa tela pequena: as capturas vêm ampliadas.
+    ok(
+        &mut s,
+        "mudar_config",
+        json!({ "resolution": [320, 180], "scale": "pixel" }),
+    );
+    let (t, pngs) = images(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 0.1 }),
+    );
+    if !t.contains("GPU") {
+        assert!(t.contains("(ampliada 3x)"), "{t}");
+        assert_eq!(image::load_from_memory(&pngs[0]).unwrap().width(), 960);
+    }
+
+    // Tudo volta com desfazer.
+    ok(&mut s, "desfazer", json!({ "passos": 20 }));
+    assert!(!dir.join(img).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

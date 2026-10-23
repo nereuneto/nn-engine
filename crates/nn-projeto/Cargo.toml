@@ -10,6 +10,7 @@ license.workspace = true
 [dependencies]
 nn-script.workspace = true
 glam.workspace = true
+image.workspace = true
 log.workspace = true
 mlua.workspace = true
 serde_json.workspace = true

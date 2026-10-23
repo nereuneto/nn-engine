@@ -4,7 +4,7 @@
 
 use image::{Rgba, RgbaImage};
 
-use crate::anim_file::AnimFile;
+use crate::anim::AnimFile;
 
 pub type Color = [u8; 4];
 
@@ -373,6 +373,181 @@ pub fn used_colors(img: &RgbaImage, max: usize) -> Vec<Color> {
 }
 
 // ---------------------------------------------------------------------------
+// Mais operações (as do agente de IA, pelo servidor MCP)
+
+/// Espelha a área: na horizontal (esquerda ↔ direita) ou na vertical.
+pub fn flip(img: &mut RgbaImage, r: PixRect, horizontal: bool) {
+    let part = crop(img, r);
+    let flipped = if horizontal {
+        image::imageops::flip_horizontal(&part)
+    } else {
+        image::imageops::flip_vertical(&part)
+    };
+    image::imageops::replace(img, &flipped, r.x as i64, r.y as i64);
+}
+
+/// Gira a área (quadrada) `turns` vezes 90° no sentido do relógio.
+pub fn rotate(img: &mut RgbaImage, r: PixRect, turns: u32) -> bool {
+    if r.w != r.h {
+        return false;
+    }
+    let mut part = crop(img, r);
+    for _ in 0..turns % 4 {
+        part = image::imageops::rotate90(&part);
+    }
+    image::imageops::replace(img, &part, r.x as i64, r.y as i64);
+    true
+}
+
+/// Anda o desenho da área `dx`, `dy` pixels (y para baixo); o que sai some e
+/// o que fica para trás é transparente.
+pub fn shift(img: &mut RgbaImage, r: PixRect, dx: i32, dy: i32) {
+    let part = crop(img, r);
+    clear_rect(img, r);
+    paste(img, &part, r.x as i32 + dx, r.y as i32 + dy, r, true);
+}
+
+/// Troca uma cor por outra na área. Devolve quantos pixels mudaram.
+pub fn replace_color(img: &mut RgbaImage, r: PixRect, from: Color, to: Color) -> usize {
+    let mut n = 0;
+    for y in r.y..(r.y + r.h).min(img.height()) {
+        for x in r.x..(r.x + r.w).min(img.width()) {
+            let p = img.get_pixel_mut(x, y);
+            // Transparente é transparente, com qualquer cor por baixo.
+            if (p.0 == from || (from[3] == 0 && p.0[3] == 0)) && p.0 != to {
+                p.0 = to;
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// Contorno: pinta de `c` os pixels transparentes da área encostados (em
+/// cima, embaixo ou do lado) num pixel que não é. Devolve quantos.
+pub fn outline(img: &mut RgbaImage, r: PixRect, c: Color) -> usize {
+    let before = crop(img, r);
+    let solid = |x: i32, y: i32| {
+        x >= 0
+            && y >= 0
+            && (x as u32) < before.width()
+            && (y as u32) < before.height()
+            && before.get_pixel(x as u32, y as u32).0[3] > 0
+    };
+    let mut n = 0;
+    for y in 0..before.height() as i32 {
+        for x in 0..before.width() as i32 {
+            if solid(x, y) {
+                continue;
+            }
+            if solid(x + 1, y) || solid(x - 1, y) || solid(x, y + 1) || solid(x, y - 1) {
+                img.put_pixel(r.x + x as u32, r.y + y as u32, Rgba(c));
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
+/// Desenha `rows` (uma string por linha) com o canto em (x, y): cada
+/// caractere é a cor de `colors` com aquele caractere; `.` e espaço não
+/// pintam. Devolve quantos pixels pintou, ou o caractere sem cor.
+pub fn draw_text_art(
+    img: &mut RgbaImage,
+    rows: &[&str],
+    colors: &[(char, Color)],
+    x: i32,
+    y: i32,
+    clip: PixRect,
+) -> Result<usize, char> {
+    let mut n = 0;
+    for (dy, row) in rows.iter().enumerate() {
+        for (dx, ch) in row.chars().enumerate() {
+            if ch == '.' || ch == ' ' {
+                continue;
+            }
+            let c = colors
+                .iter()
+                .find(|(k, _)| *k == ch)
+                .map(|(_, c)| *c)
+                .ok_or(ch)?;
+            let (px, py) = (x + dx as i32, y + dy as i32);
+            if clip.contains(px, py) {
+                put(img, px, py, c, clip);
+                n += 1;
+            }
+        }
+    }
+    Ok(n)
+}
+
+/// O contrário de [`draw_text_art`]: a área como texto, um caractere por
+/// pixel (`.` = transparente), e que cor é cada caractere.
+pub fn as_text_art(img: &RgbaImage, r: PixRect) -> (Vec<String>, Vec<(char, Color)>) {
+    const KEYS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#@$%&*+=?!";
+    let mut legend: Vec<(char, Color)> = Vec::new();
+    let mut rows = Vec::new();
+    for y in r.y..(r.y + r.h).min(img.height()) {
+        let mut row = String::new();
+        for x in r.x..(r.x + r.w).min(img.width()) {
+            let p = img.get_pixel(x, y).0;
+            if p[3] == 0 {
+                row.push('.');
+                continue;
+            }
+            let ch = match legend.iter().find(|(_, c)| *c == p) {
+                Some((k, _)) => *k,
+                None => {
+                    let k = KEYS.chars().nth(legend.len()).unwrap_or('?');
+                    legend.push((k, p));
+                    k
+                }
+            };
+            row.push(ch);
+        }
+        rows.push(row);
+    }
+    (rows, legend)
+}
+
+/// A imagem ampliada para ver: cada pixel vira um quadrado de `scale`, o
+/// transparente vira xadrez, e (com quadros `fw`×`fh`) uma linha separa os
+/// quadros. Com `grid` e pixels grandes, uma grade fina mostra cada pixel.
+pub fn preview(img: &RgbaImage, scale: u32, fw: u32, fh: u32, grid: bool) -> RgbaImage {
+    let scale = scale.max(1);
+    let (w, h) = (img.width() * scale, img.height() * scale);
+    let mut out = RgbaImage::new(w, h);
+    // O xadrez com quadradinhos menores que o pixel: um pixel transparente
+    // não se confunde com um cinza.
+    let cell = if scale >= 4 { (scale / 2).max(2) } else { 4 };
+    let frames = fw > 0 && fh > 0 && (fw < img.width() || fh < img.height());
+    for (x, y, p) in out.enumerate_pixels_mut() {
+        let (sx, sy) = (x / scale, y / scale);
+        let checker: [u8; 3] = if ((x / cell) + (y / cell)) % 2 == 0 {
+            [0xcc, 0xcc, 0xcc]
+        } else {
+            [0x99, 0x99, 0x99]
+        };
+        let src = img.get_pixel(sx, sy).0;
+        let a = u32::from(src[3]);
+        let mut c = [0u8, 0, 0, 255];
+        for i in 0..3 {
+            c[i] = ((u32::from(src[i]) * a + u32::from(checker[i]) * (255 - a)) / 255) as u8;
+        }
+        if grid && scale >= 6 && (x % scale == 0 || y % scale == 0) {
+            for v in c.iter_mut().take(3) {
+                *v = (u32::from(*v) * 3 / 4) as u8;
+            }
+        }
+        if frames && ((sx % fw == 0 && x % scale == 0) || (sy % fh == 0 && y % scale == 0)) {
+            c = [0xff, 0x2e, 0x88, 255];
+        }
+        *p = Rgba(c);
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
 // Paletas
 
 /// Paletas prontas (cores de uso livre, de lospec.com).
@@ -418,7 +593,61 @@ pub fn to_hex(c: Color) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::anim_file::Anim;
+
+    #[test]
+    fn texto_vira_pixel_e_volta() {
+        let mut img = RgbaImage::new(4, 3);
+        let red = [255, 0, 0, 255];
+        let blue = [0, 0, 255, 255];
+        let r = PixRect::of(&img);
+        let n = draw_text_art(
+            &mut img,
+            &[".RR.", "RBBR", ".RR."],
+            &[('R', red), ('B', blue)],
+            0,
+            0,
+            r,
+        )
+        .unwrap();
+        assert_eq!(n, 8);
+        let (rows, legend) = as_text_art(&img, r);
+        assert_eq!(rows, [".AA.", "ABBA", ".AA."]);
+        assert_eq!(legend, vec![('A', red), ('B', blue)]);
+        assert_eq!(draw_text_art(&mut img, &["X"], &[], 0, 0, r), Err('X'));
+    }
+
+    #[test]
+    fn espelhar_andar_trocar_e_contorno() {
+        let red = [255, 0, 0, 255];
+        let black = [0, 0, 0, 255];
+        let mut img = RgbaImage::new(5, 5);
+        let all = PixRect::of(&img);
+        put(&mut img, 0, 2, red, all);
+        flip(&mut img, all, true);
+        assert_eq!(get(&img, 4, 2), Some(red));
+        shift(&mut img, all, -2, 0);
+        assert_eq!(get(&img, 2, 2), Some(red));
+        assert_eq!(get(&img, 4, 2), Some(CLEAR));
+        assert_eq!(outline(&mut img, all, black), 4);
+        assert_eq!(get(&img, 2, 1), Some(black));
+        assert_eq!(get(&img, 1, 1), Some(CLEAR));
+        assert_eq!(replace_color(&mut img, all, black, red), 4);
+        assert_eq!(replace_color(&mut img, all, CLEAR, black), 20);
+    }
+
+    #[test]
+    fn previa_ampliada_com_xadrez_e_quadros() {
+        let mut img = RgbaImage::new(4, 2);
+        img.put_pixel(1, 0, Rgba([10, 20, 30, 255]));
+        let p = preview(&img, 8, 2, 2, false);
+        assert_eq!(p.dimensions(), (32, 16));
+        assert_eq!(p.get_pixel(12, 4).0, [10, 20, 30, 255]);
+        // O transparente vira xadrez cinza; a borda do segundo quadro, rosa.
+        assert_eq!(p.get_pixel(25, 1).0[..3], [0xcc, 0xcc, 0xcc]);
+        assert_eq!(p.get_pixel(29, 1).0[..3], [0x99, 0x99, 0x99]);
+        assert_eq!(p.get_pixel(16, 4).0, [0xff, 0x2e, 0x88, 255]);
+    }
+    use crate::anim::Anim;
 
     fn img(w: u32, h: u32) -> RgbaImage {
         RgbaImage::new(w, h)

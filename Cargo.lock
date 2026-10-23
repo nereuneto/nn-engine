@@ -2840,6 +2840,7 @@ dependencies = [
 name = "nn-mcp"
 version = "0.7.0"
 dependencies = [
+ "image",
  "log",
  "mlua",
  "nn-projeto",
@@ -2876,6 +2877,7 @@ name = "nn-projeto"
 version = "0.7.0"
 dependencies = [
  "glam 0.34.1",
+ "image",
  "log",
  "mlua",
  "nn-script",
@@ -2904,6 +2906,7 @@ version = "0.7.0"
 dependencies = [
  "env_logger",
  "glam 0.34.1",
+ "image",
  "log",
  "mlua",
  "nn-app",

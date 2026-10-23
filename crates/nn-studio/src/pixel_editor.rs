@@ -632,6 +632,30 @@ impl PixelDoc {
         self.touch();
     }
 
+    /// Contorno com a cor principal em volta do desenho do quadro.
+    pub fn outline_frame(&mut self) {
+        self.commit_floating();
+        let r = self.cell(self.current);
+        let mut img = self.img.clone();
+        if ops::outline(&mut img, r, self.primary) > 0 {
+            self.checkpoint(None);
+            self.img = img;
+            self.touch();
+        }
+    }
+
+    /// Troca a cor secundária pela principal em todo o quadro.
+    pub fn replace_color_in_frame(&mut self) {
+        self.commit_floating();
+        let r = self.cell(self.current);
+        let mut img = self.img.clone();
+        if ops::replace_color(&mut img, r, self.secondary, self.primary) > 0 {
+            self.checkpoint(None);
+            self.img = img;
+            self.touch();
+        }
+    }
+
     pub fn resize_canvas(&mut self, w: u32, h: u32) {
         self.commit_floating();
         self.checkpoint(None);
@@ -1273,6 +1297,20 @@ impl PixelDoc {
             }
             if ui.button("Girar").on_hover_text("Gira 90° (a seleção, ou o quadro se ele for quadrado)").clicked() {
                 self.transform(Transform::Rotate);
+            }
+            if ui
+                .button("Contorno")
+                .on_hover_text("Uma borda com a cor principal em volta do desenho do quadro (nos pixels transparentes encostados nele)")
+                .clicked()
+            {
+                self.outline_frame();
+            }
+            if ui
+                .button("Trocar cor")
+                .on_hover_text("Troca a cor do botão direito pela do botão esquerdo em todo o quadro")
+                .clicked()
+            {
+                self.replace_color_in_frame();
             }
         });
         if !self.has_frames() {
@@ -2227,6 +2265,26 @@ mod tests {
         assert_eq!(back.img, d.img);
         assert_eq!(back.anim, d.anim);
         assert_eq!(back.anim.anims[0].frames.len(), 3);
+    }
+
+    #[test]
+    fn contorno_e_trocar_cor_no_quadro() {
+        let mut d = doc();
+        d.current = 1;
+        let r = d.cell(1);
+        ops::put(&mut d.img, r.x as i32 + 1, 1, [9, 9, 9, 255], r);
+        d.primary = [200, 0, 0, 255];
+        d.outline_frame();
+        assert!(d.is_dirty());
+        assert_eq!(ops::get(&d.img, r.x as i32 + 1, 0), Some(d.primary));
+        assert_eq!(ops::get(&d.img, 1, 0), Some(CLEAR), "o quadro 1 não muda");
+        d.secondary = [9, 9, 9, 255];
+        d.primary = [0, 0, 200, 255];
+        d.replace_color_in_frame();
+        assert_eq!(ops::get(&d.img, r.x as i32 + 1, 1), Some([0, 0, 200, 255]));
+        d.undo();
+        d.undo();
+        assert!(!d.is_dirty());
     }
 
     #[test]

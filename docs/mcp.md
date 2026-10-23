@@ -91,6 +91,8 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `criar_prefab` | Transforma um objeto num prefab. Mudar o prefab muda todas as cópias. |
 | `listar_componentes`, `listar_comportamentos` | Os componentes (com os campos e padrões) e os comportamentos prontos e do projeto (com as propriedades, opções e ajuda). |
 | `listar_eventos`, `por_regra`, `tirar_regra` | Os eventos "Quando... Então..." sem código. |
+| `criar_imagem`, `desenhar`, `ver_imagem` | **Pixel art:** cria uma imagem (com quadros para animar), desenha com várias operações numa chamada (o mais prático: o desenho como texto, um caractere por pixel) e mostra a imagem ampliada. Veja [Pixel art](#pixel-art). |
+| `quadros`, `animar` | Os quadros de uma folha de sprites e as animações com nome (o `.anim`, o mesmo do NN Studio), com a tira dos quadros na ordem em que tocam. |
 | `buscar_documentacao` | A API Lua `nn.*` e os guias (este, o de Lua, o de 3D e o do NN Studio): os trechos que citam as palavras, ou uma seção inteira (`secao`). |
 | `conferir_lua` | A sintaxe de um trecho de Lua, sem gravar. |
 | `rodar_jogo` | Roda o jogo **sem janela**, com teclas e cliques simulados, e mostra os erros (com arquivo e linha), avisos, prints, as regras que dispararam, as trocas de cena, o que mudou nos objetos e variáveis, e **capturas da tela** (com `ver_corpos`, os corpos da física desenhados por cima). Veja [Rodar e ver](#rodar-e-ver). |
@@ -100,7 +102,7 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `mexer_no_jogo` | Muda o jogo aberto **na hora, sem gravar**: campos de objetos e comportamentos, variáveis, Lua, teclas como se alguém jogasse; pausa, avança quadros e fecha. |
 | `ver_editor` | Olha o NN Studio aberto com o projeto: a aba da frente, os **objetos escolhidos** (de quem você fala quando diz "este"), o que ainda não foi gravado e a imagem da janela. Veja [Junto com o NN Studio](#junto-com-o-nn-studio). |
 
-São 30. Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
+São 35. Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
 
 ## Objetos no formato do arquivo
 
@@ -189,6 +191,31 @@ Variáveis que mudaram: moedas 0 → 1
 e traz as capturas (a do fim e as pedidas) como imagens. Se um script dá erro, o jogo para ali, e a resposta mostra o erro com o arquivo e a linha. Um laço sem fim (`while true do end`) vira erro depois de 5 segundos, em vez de travar o servidor.
 
 Para conferir o que importa de novo depois de cada mudança, o agente escreve **testes de jogo** em `testes/` e roda com `rodar_testes`. Os testes estão no [guia de Lua](lua.md#testes-de-jogo); `nn testar` roda os mesmos testes no terminal.
+
+## Pixel art
+
+O agente desenha as imagens do jogo com as mesmas operações do editor de pixel art do NN Studio, e vê cada passo ampliado (pixels grandes, xadrez no transparente, uma linha rosa entre os quadros):
+
+```json
+{
+  "caminho": "assets/imagens/slime.png",
+  "operacoes": [
+    {"desenho": ["..GG..", ".GGGG.", "GGWGWG", "GGGGGG"],
+     "cores": {"G": "#38b764", "W": "#f4f4f4"}, "em": [1, 1]},
+    {"contorno": true, "cor": "#1a1c2c"}
+  ]
+}
+```
+
+- `criar_imagem` cria a imagem com um tamanho (16x16 e 32x32 são comuns) e quantos **quadros** lado a lado, para animar.
+- `desenhar` desenha num quadro (x para a direita, y para baixo, (0, 0) no canto de cima à esquerda): `desenho` (texto, um caractere por pixel, e a cor de cada caractere), `pontos`, `linha`, `retangulo`, `elipse`, `balde`, `apagar`, `trocar_cor`, `espelhar`, `simetria` (copia uma metade espelhada na outra), `deslocar`, `contorno` e `copiar_quadro`. As cores são `"#rrggbb"`, `"transparente"` ou o número da cor numa paleta (a do projeto, `paleta.hex`, ou as prontas: Sweetie 16, PICO-8, Endesga 32). Uma operação pode ter o seu `quadro` (todos os quadros de uma animação numa chamada), e `cores` na chamada vale para todos os `desenho` dela.
+- `ver_imagem` mostra a imagem, o tamanho, os quadros, as animações e as cores usadas; com `texto`, o quadro como texto, para conferir pixel a pixel (com `cores`, nos mesmos caracteres do desenho); com `repetir`, o quadro lado a lado, para ver as emendas de um tile.
+- `quadros` põe, tira e troca quadros (as animações acompanham), e divide a imagem em quadros.
+- `animar` cria uma animação com nome (`parado`, `andar`...): os quadros na ordem, o fps e se repete. O comportamento `nn:animacao` toca `parado`, `andar`, `pular` e `cair` sozinho.
+
+Tudo vira o mesmo `.png` e `.anim` que o NN Studio grava, e o `desfazer` volta.
+
+Num jogo de 1280x720, um sprite de 16x16 fica pequeno. Para pixel art, o jogo costuma ter uma tela pequena com os pixels inteiros (`mudar_config` com `"resolution": [320, 180]` e `"scale": "pixel"`), e as capturas do `rodar_jogo` vêm ampliadas (`ampliar` escolhe quanto). Num sprite com `fill = "repeat"` (um chão de tiles), `w` e `h` são o tamanho de cada cópia, e a escala do objeto diz quantas cabem.
 
 ## O jogo aberto
 

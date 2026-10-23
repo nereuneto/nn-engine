@@ -1,14 +1,17 @@
 //! Os arquivos de um projeto da nn-engine, sem interface: ler, mudar e
 //! gravar cenas (`.cena`), prefabs (`.prefab`), regras de eventos, o
-//! `config.lua` e conferir scripts Lua.
+//! `config.lua`, imagens de pixel art e as animações delas (`.anim`), e
+//! conferir scripts Lua.
 //!
 //! O NN Studio e o servidor MCP (`nn mcp`) usam este mesmo código, então o
 //! que um grava o outro abre igual.
 
+pub mod anim;
 pub mod behaviors;
 pub mod config_lua;
 pub mod events;
 pub mod lua_syntax;
+pub mod pixel;
 pub mod scene_data;
 
 /// Um Lua para ler arquivos do projeto (cenas, `config.lua`, comportamentos)

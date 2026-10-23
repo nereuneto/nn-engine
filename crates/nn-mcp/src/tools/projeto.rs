@@ -9,7 +9,7 @@ use super::{Output, Tool, arg_str, opt_str, s_bool, s_enum, s_int, s_obj, s_str}
 use crate::Server;
 
 impl Server {
-    fn config(&self) -> Option<(String, ConfigValues)> {
+    pub(crate) fn config(&self) -> Option<(String, ConfigValues)> {
         let text = std::fs::read_to_string(self.root.join("config.lua")).ok()?;
         let folder = self
             .root

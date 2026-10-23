@@ -1448,6 +1448,9 @@ o desenho novo na hora.
 - **Seleção:** arraste para selecionar; arraste a seleção para mover.
   Ctrl+C, Ctrl+X, Ctrl+V (entre imagens também), Delete apaga, Enter ou Esc
   solta. **↔ / ↕ / Girar** espelham ou giram a seleção (ou o quadro todo).
+- **Contorno** põe uma borda com a cor principal em volta do desenho do
+  quadro; **Trocar cor** troca a cor secundária pela principal no quadro
+  todo.
 - **Vista:** role o mouse para aproximar (no ponto do mouse); arraste com o
   botão do meio ou com Espaço para mover. **Ajustar** cabe tudo na tela.
   **Grade** mostra os pixels de perto.
