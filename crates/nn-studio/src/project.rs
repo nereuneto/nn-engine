@@ -916,6 +916,14 @@ impl ProjectWorkspace {
     }
 
     /// Abre um arquivo na aba certa (ou no programa padrão).
+    /// Abre a janela "Novo som" (como Arquivos > ➕ Novo > Som), com os sons
+    /// na pasta `dir`.
+    pub fn new_sound_dialog(&mut self, dir: &str) {
+        self.dialog = Some(Dialog::NewSound(Box::new(
+            crate::new_sound::NewSoundForm::new(&self.files, dir),
+        )));
+    }
+
     pub fn open_file(&mut self, rel: &str, line: Option<usize>) {
         // As animações abrem na aba da imagem delas.
         if FileKind::of(Path::new(rel)) == FileKind::Anim
