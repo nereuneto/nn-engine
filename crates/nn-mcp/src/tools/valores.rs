@@ -303,7 +303,12 @@ pub fn find_component(o: &Object, target: &Target) -> Option<usize> {
 
 /// Põe no objeto o que o comportamento precisa (como o NN Studio faz) e
 /// devolve avisos do que falta.
-pub fn add_requirements(o: &mut Object, info: &BehaviorInfo, three_d: bool) -> Vec<String> {
+pub fn add_requirements(
+    root: &std::path::Path,
+    o: &mut Object,
+    info: &BehaviorInfo,
+    three_d: bool,
+) -> Vec<String> {
     let mut notes = Vec::new();
     for req in &info.requires {
         let req = if req == "text" && three_d {
@@ -334,10 +339,33 @@ pub fn add_requirements(o: &mut Object, info: &BehaviorInfo, three_d: bool) -> V
             }
             "body" => {
                 let mut body = Component::new("body");
-                if let Some(size) = o
-                    .component("sprite")
-                    .or_else(|| o.component("shape"))
-                    .map(|c| (c.num("w"), c.num("h")))
+                // Do tamanho do que o objeto mostra: o w e o h do sprite
+                // ou, com 0, o quadro (ou a imagem toda).
+                let sprite_size = o.component("sprite").and_then(|c| {
+                    let (w, h) = (c.num("w"), c.num("h"));
+                    if w > 0.0 && h > 0.0 {
+                        return Some((w, h));
+                    }
+                    let (fw, fh) = (c.num("frame_w"), c.num("frame_h"));
+                    if fw > 0.0 && fh > 0.0 {
+                        return Some((fw, fh));
+                    }
+                    let img = c.str("image");
+                    if img.is_empty() {
+                        return None;
+                    }
+                    if let Ok(a) = nn_projeto::anim::AnimFile::load(root, img)
+                        && a.frame_w > 0
+                        && a.frame_h > 0
+                    {
+                        return Some((f64::from(a.frame_w), f64::from(a.frame_h)));
+                    }
+                    image::image_dimensions(root.join(img))
+                        .ok()
+                        .map(|(w, h)| (f64::from(w), f64::from(h)))
+                });
+                if let Some(size) = sprite_size
+                    .or_else(|| o.component("shape").map(|c| (c.num("w"), c.num("h"))))
                     .filter(|(w, h)| *w > 0.0 && *h > 0.0)
                 {
                     body.set("w", Prop::Num(size.0.round()));
@@ -350,8 +378,11 @@ pub fn add_requirements(o: &mut Object, info: &BehaviorInfo, three_d: bool) -> V
                     .unwrap_or(o.components.len());
                 o.components.insert(at, body);
                 notes.push(format!(
-                    "\"{}\": ganhou um body, que {} precisa (confira o tamanho w e h)",
-                    o.name, info.script
+                    "\"{}\": ganhou um body de {}x{}, do tamanho do que ele mostra, que {} precisa (para a colisão ficar só nos pés ou no corpo, diminua w e h e desloque com ox e oy)",
+                    o.name,
+                    body_size(o).0,
+                    body_size(o).1,
+                    info.script
                 ));
             }
             other => notes.push(format!(
@@ -369,6 +400,87 @@ pub fn add_requirements(o: &mut Object, info: &BehaviorInfo, three_d: bool) -> V
         ));
     }
     notes
+}
+
+/// Numa tela pequena (pixel art), os números pensados para 720 de altura
+/// ficam grandes: velocidades, pulos e letras que não mudaram do padrão
+/// ganham uma sugestão na escala da tela.
+pub fn small_screen_notes(
+    o: &Object,
+    screen: (u32, u32),
+    lookup: &mut impl FnMut(&str) -> Option<BehaviorInfo>,
+) -> Vec<String> {
+    let (w, h) = screen;
+    let k = f64::from(h) / 720.0;
+    if k >= 0.75 {
+        return Vec::new();
+    }
+    // (comportamento ou componente, campo, como escala).
+    const FIELDS: &[(&str, &str, bool)] = &[
+        ("nn:plataforma", "velocidade", false),
+        ("nn:plataforma", "pulo", true),
+        ("nn:topdown", "velocidade", false),
+        ("nn:patrulha", "velocidade", false),
+        ("nn:perseguir", "velocidade", false),
+        ("nn:atirar", "velocidade", false),
+        ("nn:inventario", "tamanho", false),
+        ("nn:inventario", "margem", false),
+        ("text", "size", false),
+        ("button", "size", false),
+        ("button", "w", false),
+        ("button", "h", false),
+    ];
+    let mut out = Vec::new();
+    scene_data::visit(std::slice::from_ref(o), &mut |o| {
+        let mut found = Vec::new();
+        for c in &o.components {
+            let kind = if c.is_behavior() {
+                c.str("script").to_string()
+            } else {
+                c.kind.clone()
+            };
+            for (who, key, sqrt) in FIELDS {
+                if *who != kind {
+                    continue;
+                }
+                let default = if c.is_behavior() {
+                    lookup(&kind).and_then(|i| i.prop(key).map(|p| p.default.num()))
+                } else {
+                    scene_data::schema().default_of(&kind, key).map(Prop::num)
+                };
+                let Some(d) = default.filter(|d| *d > 0.0) else {
+                    continue;
+                };
+                let now = c.get(key).map(Prop::num).unwrap_or(d);
+                if (now - d).abs() > 1e-9 {
+                    continue;
+                }
+                let f = if *sqrt { k.sqrt() } else { k };
+                found.push(format!(
+                    "{who}.{key} {} → uns {}",
+                    scene_data::format_num(d),
+                    (d * f).round()
+                ));
+            }
+        }
+        if !found.is_empty() {
+            out.push(format!(
+                "aviso: \"{}\": a tela é de {w}x{h}, e estes números (padrão) são para uma tela de 720 de altura; nesta, algo como: {}",
+                o.name,
+                found.join(", ")
+            ));
+        }
+    });
+    out
+}
+
+fn body_size(o: &Object) -> (String, String) {
+    let b = o.component("body");
+    let f = |k: &str| {
+        b.map(|b| scene_data::format_num(b.num(k)))
+            .unwrap_or_default()
+    };
+    (f("w"), f("h"))
 }
 
 /// Muda um campo do próprio objeto.
@@ -483,7 +595,7 @@ impl Server {
                     new_component(&target, c, three_d).map_err(|e| format!("{name}: {e}"))?;
                 o.components.push(comp);
                 if let Target::Behavior(info) = &target {
-                    notes.extend(add_requirements(&mut o, info, three_d));
+                    notes.extend(add_requirements(&self.root, &mut o, info, three_d));
                 }
             }
         }

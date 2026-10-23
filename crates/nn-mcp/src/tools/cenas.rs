@@ -76,6 +76,19 @@ impl Server {
         }
     }
 
+    /// Os avisos de números grandes para uma tela pequena (veja
+    /// [`valores::small_screen_notes`]).
+    fn small_screen_notes(&mut self, doc: &Doc, ids: &[u32]) -> Vec<String> {
+        let Some(screen) = self.config().map(|(_, c)| c.game_size()) else {
+            return Vec::new();
+        };
+        let mut lookup = self.behavior_lookup();
+        ids.iter()
+            .filter_map(|id| doc.data.find(*id))
+            .flat_map(|o| valores::small_screen_notes(o, screen, &mut lookup))
+            .collect()
+    }
+
     pub(crate) fn behavior_lookup(&mut self) -> impl FnMut(&str) -> Option<BehaviorInfo> + '_ {
         let root = self.root.clone();
         move |script: &str| {
@@ -387,6 +400,7 @@ fn criar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
     let mut next = doc.data.next_id();
     let mut notes = Vec::new();
     let mut created = Vec::new();
+    let mut ids = Vec::new();
     let mut index = opt_num(a, "posicao")?.map(|p| p.max(0.0) as usize);
     for v in &objects {
         let obj = s.object_from_json(v, three_d, &mut next, &mut notes)?;
@@ -396,6 +410,7 @@ fn criar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
             notes.extend(valores::repeat_notes(&s.root, &obj));
         }
         created.push(format!("\"{}\" (id {})", obj.name, obj.id));
+        ids.push(obj.id);
         let len = match parent {
             Some(p) => doc.data.find(p).map(|o| o.children.len()).unwrap_or(0),
             None => doc.data.objects.len(),
@@ -405,6 +420,9 @@ fn criar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
         index = index.map(|i| i + 1);
     }
     s.save_doc(&doc)?;
+    if !three_d {
+        notes.extend(s.small_screen_notes(&doc, &ids));
+    }
     let mut msg = format!("Criei em {}: {}.", doc.rel, created.join(", "));
     for n in notes {
         msg.push_str(&format!("\n- {n}"));
@@ -448,6 +466,7 @@ fn mudar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
     let mut doc = s.open_doc(arg_str(a, "cena")?)?;
     let id = find_object(&doc.data, a.get("objeto").ok_or("falta \"objeto\"")?)?;
     let three_d = doc.three_d();
+    let root = s.root.clone();
     let mut notes = Vec::new();
     // Os alvos dos componentes primeiro (precisam do servidor).
     let mut comps = Vec::new();
@@ -507,7 +526,7 @@ fn mudar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
                     .map_err(|e| format!("{name}: {e}"))?;
                 o.components.push(comp);
                 if let Target::Behavior(info) = target {
-                    notes.extend(valores::add_requirements(o, info, three_d));
+                    notes.extend(valores::add_requirements(&root, o, info, three_d));
                 }
             }
         }
@@ -531,6 +550,7 @@ fn mudar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
         let o = doc.data.find(id).expect("objeto");
         notes.extend(valores::size_notes(o));
         notes.extend(valores::repeat_notes(&s.root, o));
+        notes.extend(s.small_screen_notes(&doc, &[id]));
     }
     let mut lookup = s.behavior_lookup();
     let now = valores::object_json(

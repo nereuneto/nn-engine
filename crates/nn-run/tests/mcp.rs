@@ -978,6 +978,9 @@ fn agente_cria_e_pinta_um_mapa() {
     assert!(t.contains("20x6 tiles de 8x8"), "{t}");
     assert!(t.contains("tiles 1 a 20"), "{t}");
     assert_eq!(pngs.len(), 1, "o tileset com a grade");
+    if std::env::var("NN_FX_OUT").is_ok() {
+        std::fs::write("/tmp/tileset.png", &pngs[0]).unwrap();
+    }
     assert!(dir.join("assets/imagens/tiles.tsj").is_file());
     assert!(
         fails(
@@ -996,9 +999,10 @@ fn agente_cria_e_pinta_um_mapa() {
             "tiles": { "#": 1, "=": 2 }, "em": [0, 4],
         }] }),
     );
-    assert!(t.contains("32 tile(s) mudaram"), "{t}");
+    assert!(t.contains("32 célula(s) mudaram"), "{t}");
     let prev = image::load_from_memory(&pngs[0]).unwrap();
     assert_eq!(prev.width() * 6, prev.height() * 20, "o mapa inteiro");
+    assert!(prev.width() >= 960, "ampliado: {}", prev.width());
     let t = ok(
         &mut s,
         "marcar_tiles",
@@ -1013,8 +1017,8 @@ fn agente_cria_e_pinta_um_mapa() {
         "{t}"
     );
     assert!(t.contains(": grama."), "{t}");
-    assert!(t.contains("\n####......====..####\n"), "{t}");
-    assert!(t.contains("# = tile 1, = = tile 2"), "{t}");
+    assert!(t.contains("\n1111......2222..1111\n"), "{t}");
+    assert!(t.contains("1 = tile 1, 2 = tile 2"), "{t}");
 
     // Terreno numa camada nova: as bordas se ajustam.
     let t = ok(
@@ -1258,6 +1262,10 @@ fn agente_cria_sons() {
         json!({ "cena": "cenas/fase.cena", "segundos": 0.3, "captura_final": false }),
     );
     assert!(t.contains("Erros: nenhum"), "{t}");
+    assert!(
+        t.contains("Sons que tocaram (sem som aqui; só a lista): assets/sons/salto.wav"),
+        "{t}"
+    );
     ok(&mut s, "desfazer", json!({ "passos": 30 }));
     assert!(!dir.join(wav).exists());
     let _ = std::fs::remove_dir_all(&dir);
@@ -1319,6 +1327,15 @@ fn agente_escreve_um_dialogo() {
         json!({ "caminho": rel, "falas": [{ "texto": "a", "depois": "lugar" }] }),
     );
     assert!(e.contains("não há a fala \"lugar\""), "{e}");
+
+    let t = ok(&mut s, "conferir_projeto", json!({}));
+    assert!(t.contains("diálogo(s)"), "{t}");
+    assert!(
+        t.contains("Ana usa assets/sons/nada.wav, que não existe"),
+        "{t}"
+    );
+    let t = ok(&mut s, "ver_dialogo", json!({ "caminho": rel }));
+    assert!(t.contains("\"valor\": 1"), "número, como no jogo: {t}");
 
     // No jogo: a conversa abre quando a cena começa.
     ok(

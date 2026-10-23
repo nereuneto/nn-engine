@@ -12,7 +12,7 @@ use crate::Server;
 
 const W: u32 = 720;
 const WAVE_H: u32 = 120;
-const PITCH_H: u32 = 60;
+const PITCH_H: u32 = 100;
 
 fn kinds() -> String {
     KINDS
@@ -22,8 +22,16 @@ fn kinds() -> String {
         .join("; ")
 }
 
-/// A forma da onda (em cima) e a altura (embaixo, de 30 Hz a 4 kHz, em
-/// escala de notas).
+/// A nota ao longo do som, em `n` pontos.
+fn pitch_track(s: &Sfx, n: usize) -> Vec<f32> {
+    let dur = s.duration();
+    (0..n)
+        .map(|i| s.freq_at(i as f32 / n as f32 * dur))
+        .collect()
+}
+
+/// A forma da onda (em cima, com uma marca a cada 0,1 s) e a nota (embaixo,
+/// na faixa de notas deste som).
 fn picture(s: &Sfx, samples: &[f32]) -> Result<Vec<u8>, String> {
     let h = WAVE_H + PITCH_H + 2;
     let mut img = RgbaImage::from_pixel(W, h, Rgba([0x1a, 0x1c, 0x2c, 255]));
@@ -31,6 +39,17 @@ fn picture(s: &Sfx, samples: &[f32]) -> Result<Vec<u8>, String> {
     for x in 0..W {
         img.put_pixel(x, mid, Rgba([0x33, 0x3c, 0x57, 255]));
         img.put_pixel(x, WAVE_H + 1, Rgba([0x56, 0x6c, 0x86, 255]));
+    }
+    let dur = s.duration();
+    let mut t = 0.1;
+    while t < dur {
+        let x = (t / dur * W as f32) as u32;
+        for y in (0..h).step_by(3) {
+            if x < W {
+                img.put_pixel(x, y, Rgba([0x33, 0x3c, 0x57, 255]));
+            }
+        }
+        t += 0.1;
     }
     for (x, (lo, hi)) in sfx::peaks(samples, W as usize).into_iter().enumerate() {
         let y0 = (mid as f32 - hi * (mid - 2) as f32).round() as u32;
@@ -41,17 +60,24 @@ fn picture(s: &Sfx, samples: &[f32]) -> Result<Vec<u8>, String> {
             }
         }
     }
-    let dur = s.duration();
-    let (lo, hi) = (30f32.ln(), 4000f32.ln());
+    // A faixa da nota: do menor ao maior deste som, com folga (pelo menos
+    // uma oitava), em escala de notas.
+    let track = pitch_track(s, W as usize);
+    let fmin = track.iter().copied().fold(f32::MAX, f32::min);
+    let fmax = track.iter().copied().fold(0.0f32, f32::max);
+    let center = (fmin * fmax).sqrt();
+    let span = (fmax / fmin).max(2.0).sqrt() * 1.15;
+    let (lo, hi) = ((center / span).ln(), (center * span).ln());
+    let room = (PITCH_H - 6) as f32;
     let mut last: Option<u32> = None;
-    for x in 0..W {
-        let t = x as f32 / W as f32 * dur;
-        let f = s.freq_at(t).clamp(30.0, 4000.0);
+    for (x, f) in track.iter().enumerate() {
         let k = (f.ln() - lo) / (hi - lo);
-        let y = WAVE_H + 2 + ((1.0 - k) * (PITCH_H - 1) as f32).round() as u32;
+        let y = WAVE_H + 4 + ((1.0 - k) * room).round().clamp(0.0, room) as u32;
         let from = last.unwrap_or(y);
-        for yy in from.min(y)..=from.max(y) {
-            img.put_pixel(x, yy, Rgba([0xff, 0xcd, 0x75, 255]));
+        for yy in from.min(y)..=from.max(y) + 1 {
+            if yy < h {
+                img.put_pixel(x as u32, yy, Rgba([0xff, 0xcd, 0x75, 255]));
+            }
         }
         last = Some(y);
     }
@@ -59,6 +85,28 @@ fn picture(s: &Sfx, samples: &[f32]) -> Result<Vec<u8>, String> {
     img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
         .map_err(|e| e.to_string())?;
     Ok(out)
+}
+
+/// A nota em palavras: de onde a onde vai.
+fn pitch_text(s: &Sfx) -> String {
+    let track = pitch_track(s, 200);
+    let first = track[0];
+    let last = *track.last().unwrap_or(&first);
+    let fmin = track.iter().copied().fold(f32::MAX, f32::min);
+    let fmax = track.iter().copied().fold(0.0f32, f32::max);
+    let hz = |f: f32| format!("{f:.0} Hz");
+    if fmax / fmin < 1.02 {
+        return format!("Nota parada em {}.", hz(first));
+    }
+    let mut t = format!("Nota: começa em {}, termina em {}", hz(first), hz(last));
+    if fmin < first.min(last) * 0.98 || fmax > first.max(last) * 1.02 {
+        t.push_str(&format!(" (vai de {} a {})", hz(fmin), hz(fmax)));
+    }
+    if s.repeat > 0.005 {
+        t.push_str(&format!(", recomeçando a cada {:.2} s", s.repeat));
+    }
+    t.push('.');
+    t
 }
 
 fn describe(s: &Sfx, kind: &str, variation: u32) -> String {
@@ -172,10 +220,12 @@ fn criar_som(s: &mut Server, a: &Value) -> Result<Output, String> {
             describe(&fx, &kind, var)
         )
     };
+    text.push(' ');
+    text.push_str(&pitch_text(&fx));
     text.push_str(&format!(
         "\nPara tocar: nos eventos, a ação \"Tocar som\"; no componente sound (\"sound\": \"{rel}\"); em Lua, nn.audio.play(\"{rel}\").\n\
          Outra versão do mesmo tipo: \"variacao\" com outro número. Ajuste fino: \"mudar\".\n\
-         A imagem: a onda (em cima, verde; a altura é o volume) e a nota ao longo do tempo (embaixo, amarelo; mais alto = mais agudo)."
+         A imagem: a onda (em cima, verde; a altura é o volume; uma linha a cada 0,1 s) e a nota ao longo do tempo (embaixo, amarelo; mais alto = mais agudo, na faixa de notas deste som)."
     ));
     Ok(Output::text(text).and_image(&picture(&fx, &samples)?, "image/png"))
 }

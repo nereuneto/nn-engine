@@ -171,7 +171,7 @@ fn render_map(s: &Server, l: &Loaded) -> RgbaImage {
 
 /// O tileset com uma grade (os tiles contam da esquerda para a direita, de
 /// cima para baixo).
-fn render_tileset(s: &Server, data: &TilesetData) -> Option<RgbaImage> {
+fn render_tileset(s: &Server, data: &TilesetData, first: u32) -> Option<RgbaImage> {
     let img = image::open(s.root.join(&data.image)).ok()?.to_rgba8();
     let k = (32 / data.tile_w.max(1)).clamp(1, 8);
     let mut big = image::imageops::resize(
@@ -197,8 +197,147 @@ fn render_tileset(s: &Server, data: &TilesetData) -> Option<RgbaImage> {
                 }
             }
         }
+        // O número do tile (o do mapa), no canto de cima.
+        let scale = if w >= 40 { 2 } else { 1 };
+        number(&mut big, x + 1, y + 1, first + id, scale);
     }
     Some(big)
+}
+
+/// Dígitos de 3x5 pixels (para os números dos tiles).
+const DIGITS: [[u8; 5]; 10] = [
+    [0b111, 0b101, 0b101, 0b101, 0b111],
+    [0b010, 0b110, 0b010, 0b010, 0b111],
+    [0b111, 0b001, 0b111, 0b100, 0b111],
+    [0b111, 0b001, 0b111, 0b001, 0b111],
+    [0b101, 0b101, 0b111, 0b001, 0b001],
+    [0b111, 0b100, 0b111, 0b001, 0b111],
+    [0b111, 0b100, 0b111, 0b101, 0b111],
+    [0b111, 0b001, 0b010, 0b010, 0b010],
+    [0b111, 0b101, 0b111, 0b101, 0b111],
+    [0b111, 0b101, 0b111, 0b001, 0b111],
+];
+
+/// Escreve `n` em (x, y), em branco sobre uma tarja escura.
+fn number(img: &mut RgbaImage, x: u32, y: u32, n: u32, scale: u32) {
+    let text = n.to_string();
+    let w = (text.len() as u32 * 4 + 1) * scale;
+    let h = 7 * scale;
+    for j in 0..h {
+        for i in 0..w {
+            if x + i < img.width() && y + j < img.height() {
+                img.put_pixel(x + i, y + j, image::Rgba([0x1a, 0x1c, 0x2c, 255]));
+            }
+        }
+    }
+    for (k, ch) in text.bytes().enumerate() {
+        let glyph = DIGITS[(ch - b'0') as usize];
+        for (row, bits) in glyph.iter().enumerate() {
+            for col in 0..3u32 {
+                if bits & (0b100 >> col) == 0 {
+                    continue;
+                }
+                for dy in 0..scale {
+                    for dx in 0..scale {
+                        let px = x + (1 + k as u32 * 4 + col) * scale + dx;
+                        let py = y + (1 + row as u32) * scale + dy;
+                        if px < img.width() && py < img.height() {
+                            img.put_pixel(px, py, image::Rgba([0xf4, 0xf4, 0xf4, 255]));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// O mapa ampliado, com a colisão por cima: a borda do que bloqueia em
+/// vermelho e o alto das plataformas de mão única em amarelo.
+fn map_preview(s: &Server, l: &Loaded) -> RgbaImage {
+    let base = render_map(s, l);
+    let mut img = fit(&base, 1000);
+    let (w, h) = (l.map.width as i64, l.map.height as i64);
+    let kx = img.width() as f64 / base.width().max(1) as f64;
+    let ky = img.height() as f64 / base.height().max(1) as f64;
+    let (cw, ch) = (l.map.tile_w as f64 * kx, l.map.tile_h as f64 * ky);
+    if cw < 4.0 {
+        return img;
+    }
+    // O que cada célula é: sólida, plataforma ou nada.
+    let mut solid = vec![false; (w * h) as usize];
+    let mut one_way = vec![false; (w * h) as usize];
+    for i in l.map.tile_layers() {
+        let Some(layer) = l.map.tile_layer(i) else {
+            continue;
+        };
+        for (n, gid) in layer.data.iter().enumerate() {
+            if *gid == 0 {
+                continue;
+            }
+            if layer.collision {
+                solid[n] = true;
+                continue;
+            }
+            if let Some((ts, local)) = l.map.tileset_of(*gid)
+                && let Some((_, d)) = l.tilesets.get(ts)
+            {
+                let info = d.info(local);
+                solid[n] |= info.solid;
+                one_way[n] |= info.one_way && !info.solid;
+            }
+        }
+    }
+    let at =
+        |c: i64, r: i64, v: &[bool]| c >= 0 && r >= 0 && c < w && r < h && v[(r * w + c) as usize];
+    let thick = (cw / 8.0).clamp(1.0, 3.0) as i64;
+    let red = image::Rgba([0xff, 0x3b, 0x3b, 255]);
+    let yellow = image::Rgba([0xff, 0xd1, 0x66, 255]);
+    let line = |img: &mut RgbaImage, x0: f64, y0: f64, x1: f64, y1: f64, c: image::Rgba<u8>| {
+        let (x0, y0, x1, y1) = (x0 as i64, y0 as i64, x1 as i64, y1 as i64);
+        for y in y0..=y1.max(y0 + thick - 1) {
+            for x in x0..=x1.max(x0 + thick - 1) {
+                if x >= 0 && y >= 0 && (x as u32) < img.width() && (y as u32) < img.height() {
+                    img.put_pixel(x as u32, y as u32, c);
+                }
+            }
+        }
+    };
+    for r in 0..h {
+        for c in 0..w {
+            let (x, y) = (c as f64 * cw, r as f64 * ch);
+            if at(c, r, &solid) {
+                if !at(c, r - 1, &solid) {
+                    line(&mut img, x, y, x + cw - 1.0, y, red);
+                }
+                if !at(c, r + 1, &solid) {
+                    line(
+                        &mut img,
+                        x,
+                        y + ch - thick as f64,
+                        x + cw - 1.0,
+                        y + ch - thick as f64,
+                        red,
+                    );
+                }
+                if !at(c - 1, r, &solid) {
+                    line(&mut img, x, y, x, y + ch - 1.0, red);
+                }
+                if !at(c + 1, r, &solid) {
+                    line(
+                        &mut img,
+                        x + cw - thick as f64,
+                        y,
+                        x + cw - thick as f64,
+                        y + ch - 1.0,
+                        red,
+                    );
+                }
+            } else if at(c, r, &one_way) {
+                line(&mut img, x, y, x + cw - 1.0, y, yellow);
+            }
+        }
+    }
+    img
 }
 
 /// A camada pelo nome (ou a primeira).
@@ -293,9 +432,13 @@ fn describe(l: &Loaded) -> String {
         }
         for set in &d.wangsets {
             let names: Vec<&str> = set.colors.iter().map(|c| c.name.as_str()).collect();
+            let from = if set.name == "terrenos" || set.name.is_empty() {
+                String::new()
+            } else {
+                format!(" (conjunto \"{}\")", set.name)
+            };
             out.push_str(&format!(
-                "  Terrenos de \"{}\" (pinte com {{\"terreno\": nome}}): {}.\n",
-                set.name,
+                "  Terrenos{from}, para pintar com {{\"terreno\": nome}}: {}.\n",
                 names.join(", ")
             ));
         }
@@ -378,7 +521,7 @@ fn criar_mapa(s: &mut Server, a: &Value) -> Result<Output, String> {
     );
     out.push_str("\nOs tiles do tileset (com a grade):");
     let mut o = Output::text(out);
-    if let Some(img) = render_tileset(s, &data) {
+    if let Some(img) = render_tileset(s, &data, 1) {
         o = o.and_image(&png(&img)?, "image/png");
     }
     Ok(o)
@@ -394,9 +537,12 @@ fn ver_mapa(s: &mut Server, a: &Value) -> Result<Output, String> {
         if l.map.width > MAX_TEXT_COLS {
             out.push_str(&format!("(Como texto, só até {MAX_TEXT_COLS} colunas.)\n"));
         } else if let Some(layer) = l.map.tile_layer(li) {
-            const KEYS: &str =
-                "#=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@$%&*+?!";
+            // O caractere de cada tile é sempre o mesmo: o número dele (1 a 9,
+            // depois A a Z e a a z); tiles girados ou maiores, os de EXTRA.
+            const KEYS: &str = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+            const EXTRA: &str = "#=@$%&*+?!~^";
             let mut legend: Vec<(u32, char)> = Vec::new();
+            let mut extra = 0;
             out.push_str(&format!(
                 "\nA camada \"{}\" como texto (um caractere por tile, \".\" vazio):\n",
                 layer.name
@@ -412,7 +558,13 @@ fn ver_mapa(s: &mut Server, a: &Value) -> Result<Output, String> {
                     let ch = match legend.iter().find(|(g, _)| *g == gid) {
                         Some((_, c)) => *c,
                         None => {
-                            let c = KEYS.chars().nth(legend.len()).unwrap_or('?');
+                            let c = match KEYS.chars().nth(gid as usize - 1) {
+                                Some(c) if gid & FLIP_BITS == 0 => c,
+                                _ => {
+                                    extra += 1;
+                                    EXTRA.chars().nth(extra - 1).unwrap_or('?')
+                                }
+                            };
                             legend.push((gid, c));
                             c
                         }
@@ -422,6 +574,7 @@ fn ver_mapa(s: &mut Server, a: &Value) -> Result<Output, String> {
                 out.push_str(&line);
                 out.push('\n');
             }
+            legend.sort_by_key(|(g, _)| (g & FLIP_BITS != 0, *g & !FLIP_BITS));
             let l: Vec<String> = legend
                 .iter()
                 .map(|(g, c)| {
@@ -434,14 +587,14 @@ fn ver_mapa(s: &mut Server, a: &Value) -> Result<Output, String> {
     }
     let img = render_map(s, &l);
     out.push_str(&format!(
-        "\nO mapa desenhado ({}x{} pixels; o fundo azul-escuro é o vazio):",
+        "\nO mapa desenhado ({}x{} pixels; o fundo azul-escuro é o vazio; em vermelho a borda do que bloqueia, em amarelo o alto das plataformas de mão única):",
         img.width(),
         img.height()
     ));
-    let mut o = Output::text(out).and_image(&png(&fit(&img, 800))?, "image/png");
+    let mut o = Output::text(out).and_image(&png(&map_preview(s, &l))?, "image/png");
     if opt_bool(a, "tiles")?.unwrap_or(false) {
-        for (_, d) in &l.tilesets {
-            if let Some(t) = render_tileset(s, d) {
+        for (k, (_, d)) in l.tilesets.iter().enumerate() {
+            if let Some(t) = render_tileset(s, d, l.map.tilesets[k].first_gid) {
                 o = o.and_image(&png(&t)?, "image/png");
             }
         }
@@ -712,16 +865,30 @@ fn pintar_mapa(s: &mut Server, a: &Value) -> Result<Output, String> {
             "a camada não é mais de colisão".into()
         });
     }
-    let mut changed = 0;
+    let mut terrain = false;
     if let Some(ops) = a.get("operacoes").and_then(Value::as_array) {
+        // Quantas células ficaram diferentes (uma célula pintada duas vezes
+        // conta uma).
+        let before = l
+            .map
+            .tile_layer(layer)
+            .map(|x| x.data.clone())
+            .unwrap_or_default();
         for (i, op) in ops.iter().enumerate() {
             let op = op
                 .as_object()
                 .ok_or_else(|| format!("operação {}: precisa ser um objeto", i + 1))?;
-            changed += paint_op(&mut l, layer, op, i + 1)?;
+            terrain |= op.contains_key("terreno");
+            paint_op(&mut l, layer, op, i + 1)?;
         }
+        let after = l
+            .map
+            .tile_layer(layer)
+            .map(|x| x.data.clone())
+            .unwrap_or_default();
+        let changed = before.iter().zip(&after).filter(|(a, b)| a != b).count();
         done.push(format!(
-            "{} operação(ões), {changed} tile(s) mudaram",
+            "{} operação(ões), {changed} célula(s) mudaram",
             ops.len()
         ));
     }
@@ -735,15 +902,19 @@ fn pintar_mapa(s: &mut Server, a: &Value) -> Result<Output, String> {
         .tile_layer(layer)
         .map(|x| x.name.clone())
         .unwrap_or_default();
-    let out = format!(
+    let mut out = format!(
         "{} (camada \"{layer_name}\"): {}.",
         l.map.rel,
         done.join("; ")
     );
+    if terrain {
+        out.push_str(" (O terreno pinta os cantos: as células em volta do que foi pintado também mudam, para as bordas se encaixarem.)");
+    }
     if opt_bool(a, "previa")?.unwrap_or(true) {
-        let img = render_map(s, &l);
-        return Ok(Output::text(format!("{out} O mapa agora:"))
-            .and_image(&png(&fit(&img, 800))?, "image/png"));
+        return Ok(Output::text(format!(
+            "{out} O mapa agora (em vermelho a borda do que bloqueia, em amarelo o alto das plataformas):"
+        ))
+        .and_image(&png(&map_preview(s, &l))?, "image/png"));
     }
     Ok(Output::text(out))
 }
@@ -919,7 +1090,7 @@ fn marcar_tiles(s: &mut Server, a: &Value) -> Result<Output, String> {
         }
         let have = set.coverage(0, c);
         terrain_note = format!(
-            " Terreno \"{name}\": {} peça(s), {have} das 15 combinações de cantos{}. Pinte com pintar_mapa {{\"terreno\": \"{name}\", \"retangulo\": [...]}} (\"nenhum\" apaga).",
+            " Terreno \"{name}\": {} peça(s), {have} das 15 combinações de cantos{}. Pinte com pintar_mapa {{\"terreno\": \"{name}\", \"retangulo\": [...]}} (\"nenhum\" apaga). A colisão é do tile inteiro: num terreno que é chão, desenhe as peças com o terreno enchendo o tile e a borda (a grama, o contorno) só nos lados de fora, senão o personagem fica flutuando sobre a parte vazia das peças da beirada.",
             pieces.len(),
             if have < 15 {
                 " (faltam peças: as bordas que não tiverem a sua ficam com a mais parecida)"
@@ -1084,7 +1255,7 @@ pub static TOOLS: &[&Tool] = &[
                 (
                     "terreno",
                     s_obj(
-                        "Um terreno para o pintar_mapa ajustar as bordas sozinho: {\"nome\": \"grama\", \"primeiro\": 5} (os 16 tiles a partir do 5: o tile 5+m tem terreno nos cantos dos bits de m, 8 = cima-esq, 4 = cima-dir, 2 = baixo-dir, 1 = baixo-esq; o 5 é o vazio e o 20 o cheio) ou {\"nome\": \"grama\", \"pecas\": {\"7\": \"0011\", ...}} (cantos cima-esq, cima-dir, baixo-dir, baixo-esq)",
+                        "Um terreno para o pintar_mapa ajustar as bordas sozinho: {\"nome\": \"grama\", \"primeiro\": 5} (os 16 tiles a partir do 5: o tile 5+m tem terreno nos cantos dos bits de m, 8 = cima-esq, 4 = cima-dir, 2 = baixo-dir, 1 = baixo-esq; o 5 é o vazio e o 20 o cheio) ou {\"nome\": \"grama\", \"pecas\": {\"7\": \"0011\", ...}} (cantos cima-esq, cima-dir, baixo-dir, baixo-esq). Como a colisão é do tile inteiro, num chão desenhe cada peça com o terreno enchendo o tile e a borda só nos lados dos cantos vazios",
                     ),
                     false,
                 ),

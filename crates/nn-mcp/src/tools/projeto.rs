@@ -454,7 +454,9 @@ fn conferir_projeto(s: &mut Server, _: &Value) -> Result<Output, String> {
                             }
                         }
                         let mut tmp = o.clone();
-                        for note in super::valores::add_requirements(&mut tmp, &info, three_d) {
+                        for note in
+                            super::valores::add_requirements(&s.root, &mut tmp, &info, three_d)
+                        {
                             warnings
                                 .push(format!("{at}: {}", note.replace("ganhou", "precisa de")));
                         }
@@ -503,7 +505,83 @@ fn conferir_projeto(s: &mut Server, _: &Value) -> Result<Output, String> {
             }
         }
     }
-    let mut out = format!("Conferi {scripts} script(s) Lua e {scenes} cena(s)/prefab(s). ");
+    // Mapas, tilesets, diálogos e sons sintetizados: abrem? Os arquivos que
+    // eles citam existem?
+    let mut others = 0;
+    for f in &files {
+        let lower = f.to_lowercase();
+        if lower.ends_with(".tmj") {
+            others += 1;
+            match nn_projeto::map::MapDoc::open(&s.root, f) {
+                Ok(m) => {
+                    for t in &m.tilesets {
+                        if let nn_projeto::map::TsKind::External(r) = &t.kind {
+                            match nn_projeto::tileset::TilesetData::load(&s.root, r) {
+                                Ok(d) if !s.root.join(&d.image).is_file() => {
+                                    problems.push(format!("{r}: a imagem {} não existe", d.image))
+                                }
+                                Ok(_) => {}
+                                Err(e) => problems.push(format!("{f}: o tileset {r}: {e}")),
+                            }
+                        }
+                    }
+                }
+                Err(e) => problems.push(format!("{f}: {e}")),
+            }
+        } else if lower.ends_with(".tsj") {
+            others += 1;
+            if let Err(e) = nn_projeto::tileset::TilesetData::load(&s.root, f) {
+                problems.push(format!("{f}: {e}"));
+            }
+        } else if lower.ends_with(".dialogo") {
+            others += 1;
+            match std::fs::read_to_string(s.root.join(f))
+                .map_err(|e| e.to_string())
+                .and_then(|t| nn_projeto::dialogue::read(&t, f))
+            {
+                Ok(d) => {
+                    for n in &d.nodes {
+                        let next = std::iter::once(n.next).chain(n.choices.iter().map(|c| c.next));
+                        for x in next {
+                            if x != 0 && d.node(x).is_none() {
+                                problems.push(format!(
+                                    "{f}: a fala {} vai para a {x}, que não existe",
+                                    n.id
+                                ));
+                            }
+                        }
+                    }
+                    for c in &d.characters {
+                        for file in [&c.image, &c.sound] {
+                            if !file.is_empty() && !s.root.join(file).is_file() {
+                                problems
+                                    .push(format!("{f}: {} usa {file}, que não existe", c.name));
+                            }
+                        }
+                    }
+                }
+                Err(e) => problems.push(format!("{f}: {e}")),
+            }
+        } else if lower.ends_with(".sfx") {
+            others += 1;
+            let ok = std::fs::read_to_string(s.root.join(f))
+                .ok()
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+                .map(|v| nn_projeto::sfx::Sfx::from_json(&v));
+            match ok {
+                Some(Ok(_)) => {}
+                Some(Err(e)) => problems.push(format!("{f}: {e}")),
+                None => problems.push(format!("{f}: não é um .sfx (JSON) válido")),
+            }
+        }
+    }
+    let mut out = format!("Conferi {scripts} script(s) Lua e {scenes} cena(s)/prefab(s)");
+    if others > 0 {
+        out.push_str(&format!(
+            ", e {others} mapa(s), tileset(s), diálogo(s) e som(ns) sintetizado(s)"
+        ));
+    }
+    out.push_str(". ");
     if problems.is_empty() && warnings.is_empty() {
         out.push_str("Tudo certo.");
     } else {

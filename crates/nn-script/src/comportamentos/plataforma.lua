@@ -13,13 +13,20 @@ local B = {
     { "coiote", 0.1, label = "Tempo de coiote", min = 0, max = 1, advanced = true,
       help = "Ainda dá para pular logo depois de sair da beirada (segundos)." },
     { "pulo_variavel", true, label = "Pulo mais alto segurando", advanced = true,
-      help = "Soltar o botão no meio do pulo deixa o pulo mais baixo." },
+      help = "Soltar o botão no meio do pulo deixa o pulo mais baixo (um toque rápido dá um pulinho; segure para o pulo inteiro)." },
+    { "som", "", type = "sound", label = "Som do pulo",
+      help = "Toca a cada pulo (também o do coiote, o guardado e os no ar)." },
   },
 }
 
 local function apertou()
   return nn.input.pressed("space") or nn.input.pressed("up") or nn.input.pressed("w")
     or nn.input.pad_pressed("a")
+end
+
+local function segurando()
+  return nn.input.down("space") or nn.input.down("up") or nn.input.down("w")
+    or nn.input.pad_down("a")
 end
 
 local function soltou()
@@ -70,6 +77,14 @@ function B:fixed_update(dt)
       corpo.vy = self.pulo
       self.fora_do_chao = math.huge
       self.pedido, self.cortar = 0, false
+      -- Um pulo guardado (apertado no ar, logo antes de cair) com o botão
+      -- já solto é baixo, como um toque no chão.
+      if self.pulo_variavel and not segurando() then self.cortar = true end
+      if self.som ~= "" then
+        local s = self.som
+        pcall(function() nn.audio.play(nn.assets.sound(s)) end)
+      end
+      if self.obj.send then self.obj:send("pulou") end
     end
   end
   self.pedido = math.max(0, self.pedido - dt)

@@ -374,11 +374,34 @@ fn write_report(out: &mut String, report: &Report) {
             report.dropped_lines
         ));
     }
+    if !report.sounds.is_empty() {
+        let list: Vec<String> = report
+            .sounds
+            .iter()
+            .map(|(p, n, t)| {
+                if *n > 1 {
+                    format!("{p} ({n} vezes, a primeira em {t:.2} s)")
+                } else {
+                    format!("{p} (em {t:.2} s)")
+                }
+            })
+            .collect();
+        out.push_str(&format!(
+            "\nSons que tocaram (sem som aqui; só a lista): {}\n",
+            list.join(", ")
+        ));
+    }
     if !report.fired.is_empty() {
         out.push_str("\nRegras dos eventos que dispararam:\n");
         for f in report.fired.iter().take(MAX_LINES) {
             let times = if f.count > 1 {
-                format!("  ({} vezes)", f.count)
+                let list: Vec<String> = f.times.iter().map(|t| format!("{t:.2}")).collect();
+                let more = if f.count as usize > f.times.len() {
+                    ", ..."
+                } else {
+                    ""
+                };
+                format!("  ({} vezes: {} s{more})", f.count, list.join(", "))
             } else {
                 String::new()
             };
@@ -712,7 +735,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "rodar_jogo",
         title: "Rodar o jogo",
-        description: "Roda o jogo sem janela (60 quadros por segundo de jogo, o mais rápido que der, sem som, salvo só na memória) e mostra o que aconteceu: erros (com arquivo e linha), avisos, prints, regras dos eventos que dispararam, trocas de cena, o que mudou nos objetos e nas variáveis, e capturas da tela (a do fim e as pedidas). Simule o jogador com \"acoes\", cada uma no seu tempo \"em\" (segundos): {\"em\": 0.5, \"apertar\": \"space\"}, {\"em\": 1, \"segurar\": \"right\", \"por\": 2}, {\"soltar\": \"right\"}, {\"clicar\": [x, y]} (pixels da tela, y para baixo) ou {\"clicar\": \"nome do objeto\"}, {\"mouse\": [x, y]}, {\"digitar\": \"texto\"}, {\"capturar\": true} ou {\"capturar\": \"nome\"}, {\"lua\": \"self.objects.heroi:move_to(0, 0)\"} (código com self = a cena da frente: para preparar a situação). Teclas: os nomes do nn.input (a-z, 0-9, space, enter, escape, left, right, up, down, shift, ctrl...). Com \"segundos\": 0, só mostra a primeira tela.",
+        description: "Roda o jogo sem janela (60 quadros por segundo de jogo, o mais rápido que der, sem som, salvo só na memória) e mostra o que aconteceu: erros (com arquivo e linha), avisos, prints, regras dos eventos que dispararam, trocas de cena, o que mudou nos objetos e nas variáveis, e capturas da tela (a do fim e as pedidas). Simule o jogador com \"acoes\", cada uma no seu tempo \"em\" (segundos): {\"em\": 0.5, \"apertar\": \"space\"} (um toque de um quadro: num pulo que fica mais alto segurando, dá um pulinho), {\"em\": 1, \"segurar\": \"right\", \"por\": 2}, {\"soltar\": \"right\"}, {\"clicar\": [x, y]} (pixels da tela, y para baixo) ou {\"clicar\": \"nome do objeto\"}, {\"mouse\": [x, y]}, {\"digitar\": \"texto\"}, {\"capturar\": true} ou {\"capturar\": \"nome\"}, {\"lua\": \"self.objects.heroi:move_to(0, 0)\"} (código com self = a cena da frente: para preparar a situação). Teclas: os nomes do nn.input (a-z, 0-9, space, enter, escape, left, right, up, down, shift, ctrl...). Com \"segundos\": 0, só mostra a primeira tela.",
         params: || {
             vec![
                 (

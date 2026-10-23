@@ -271,6 +271,20 @@ fn from_json(a: &Value, old: Option<&DialogueData>) -> Result<(DialogueData, Vec
     Ok((d, notes))
 }
 
+/// Um valor de variável: número quando é um número (como a engine lê).
+fn value_json(v: &str) -> Value {
+    match v.trim().parse::<f64>() {
+        Ok(n) if n.is_finite() && !v.trim().is_empty() => {
+            if n.fract() == 0.0 && n.abs() < 1e15 {
+                json!(n as i64)
+            } else {
+                json!(n)
+            }
+        }
+        _ => json!(v),
+    }
+}
+
 /// A conversa no formato que `escrever_dialogo` recebe.
 fn to_json(d: &DialogueData) -> Value {
     let chars: Vec<Value> = d
@@ -325,7 +339,7 @@ fn to_json(d: &DialogueData) -> Value {
                         );
                         if !c.var.is_empty() {
                             cm.insert("variavel".into(), json!(c.var));
-                            cm.insert("valor".into(), json!(c.value));
+                            cm.insert("valor".into(), value_json(&c.value));
                         }
                         if !c.need.is_empty() {
                             cm.insert("precisa".into(), json!(c.need));
@@ -337,7 +351,7 @@ fn to_json(d: &DialogueData) -> Value {
             }
             if !n.var.is_empty() {
                 m.insert("variavel".into(), json!(n.var));
-                m.insert("valor".into(), json!(n.value));
+                m.insert("valor".into(), value_json(&n.value));
             }
             if !n.item.is_empty() {
                 m.insert("item".into(), json!(n.item));
@@ -525,7 +539,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "ver_dialogo",
         title: "Ver diálogo",
-        description: "Mostra uma conversa (.dialogo): os caminhos a partir do começo (quem fala, o texto, as escolhas e para onde vão), falas que nunca aparecem e arquivos que faltam, e a conversa no formato de escrever_dialogo, para mudar e mandar de volta.",
+        description: "Mostra uma conversa (.dialogo) (os ids com nome viram números no arquivo): os caminhos a partir do começo (quem fala, o texto, as escolhas e para onde vão), falas que nunca aparecem e arquivos que faltam, e a conversa no formato de escrever_dialogo, para mudar e mandar de volta.",
         params: || vec![("caminho", s_str("O diálogo (.dialogo)"), true)],
         read_only: true,
         destructive: false,

@@ -672,6 +672,21 @@ E.CONDITIONS = {
     end,
   },
   {
+    id = "pulou", name = "Pular", category = "Mensagens", trigger = true,
+    text = "{quem} pular",
+    help = "O Jogador de plataforma pulou (do chão, no coiote, guardado ou no ar). Bom para um som ou poeira.",
+    props = { who("quem") },
+    lua = "-- pulou() no comportamento",
+    test = function(ctx, p, st, b)
+      local out = {}
+      local who_set = set_of(resolve(ctx.scene, p.quem, b, true))
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "pulou")) do
+        if who_set[s.obj] then table.insert(out, { este = s.obj }) end
+      end
+      return out
+    end,
+  },
+  {
     id = "particulas_terminaram", name = "Partículas terminarem", category = "Objetos", trigger = true,
     text = "as partículas de {quem} terminarem",
     help = "Uma explosão acabou (ou um emissor desligado ficou sem partículas).",

@@ -528,34 +528,39 @@ fn desenhar(s: &mut Server, a: &Value) -> Result<Output, String> {
     }
     let shared = text_colors(a.get("cores"), &pal)?;
     let before = sheet.img.clone();
-    let mut touched = vec![clip];
+    // Os quadros mexidos: (número, área), na ordem.
+    let mut touched: Vec<(u32, px::PixRect)> = Vec::new();
     for (i, op) in ops.iter().enumerate() {
         let op = op
             .as_object()
             .ok_or_else(|| format!("operação {}: precisa ser um objeto", i + 1))?;
         // Uma operação pode ir para outro quadro.
-        let clip = match op.get("quadro") {
+        let (n, clip) = match op.get("quadro") {
             Some(v) => {
                 let n = v
                     .as_u64()
                     .ok_or_else(|| format!("operação {}: \"quadro\" é um número", i + 1))?;
-                sheet
+                let r = sheet
                     .area(Some(n as u32))
-                    .map_err(|e| format!("operação {}: {e}", i + 1))?
+                    .map_err(|e| format!("operação {}: {e}", i + 1))?;
+                (n as u32, r)
             }
-            None => clip,
+            None => (frame.unwrap_or(1), clip),
         };
-        if !touched.contains(&clip) {
-            touched.push(clip);
+        if !touched.iter().any(|(_, r)| *r == clip) {
+            touched.push((n, clip));
         }
         draw_op(&mut sheet, clip, op, &pal, &shared, i + 1)?;
     }
     let changed = count_changes(&before, &sheet.img);
     s.save_sheet(&sheet)?;
-    let where_ = match frame {
-        Some(n) => format!(" (quadro {n})"),
-        None if sheet.frames() > 1 => " (quadro 1)".into(),
-        None => String::new(),
+    let where_ = if sheet.frames() <= 1 {
+        String::new()
+    } else if touched.len() == 1 {
+        format!(" (quadro {})", touched[0].0)
+    } else {
+        let list: Vec<String> = touched.iter().map(|(n, _)| n.to_string()).collect();
+        format!(" (quadros {})", list.join(", "))
     };
     let mut out = format!(
         "Desenhei em {}{where_}: {} operação(ões), {changed} pixel(s) mudaram.",
@@ -565,7 +570,7 @@ fn desenhar(s: &mut Server, a: &Value) -> Result<Output, String> {
     if opt_bool(a, "previa")?.unwrap_or(true) {
         let (fw, fh) = (clip.w, clip.h);
         let mut strip = RgbaImage::new(fw * touched.len() as u32, fh);
-        for (i, r) in touched.iter().enumerate() {
+        for (i, (_, r)) in touched.iter().enumerate() {
             let part = px::crop(&sheet.img, *r);
             image::imageops::replace(&mut strip, &part, (i as u32 * fw) as i64, 0);
         }
@@ -1163,7 +1168,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "animar",
         title: "Animar",
-        description: "Cria ou muda uma animação com nome de uma folha de sprites (o arquivo .anim ao lado da imagem, o mesmo do NN Studio): os quadros na ordem, a velocidade, como repete e o tempo de cada quadro. Devolve os quadros na ordem em que tocam e a casca de cebola (cada quadro sobre a sombra do anterior, para ver o movimento). Nomes que o comportamento nn:animacao usa sozinho: parado, andar, pular, cair.",
+        description: "Cria ou muda uma animação com nome de uma folha de sprites (o arquivo .anim ao lado da imagem, o mesmo do NN Studio): os quadros na ordem, a velocidade, como repete e o tempo de cada quadro. Devolve os quadros na ordem em que tocam e a casca de cebola (cada quadro sobre a sombra do anterior, para ver o movimento). Nomes que o comportamento nn:animacao usa sozinho (com os campos dele no padrão): parado, andar, pular, cair.",
         params: || {
             vec![
                 ("caminho", s_str(CAMINHO), true),

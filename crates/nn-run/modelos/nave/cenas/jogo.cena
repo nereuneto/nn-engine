@@ -41,7 +41,7 @@ return {
       visible = true, layer = 3,
       components = {
         { type = "sprite", image = "assets/imagens/nave.png", frame_w = 16, frame_h = 16, frame = 1, w = 80, h = 80, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
-        { type = "body", body = "dynamic", shape = "box", w = 64, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "body", body = "dynamic", shape = "box", w = 64, h = 40, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:topdown", velocidade = 380 },
         { type = "behavior", script = "nn:atirar", direcao = "direita", distancia = 44, intervalo = 0.22, prefab = "prefabs/tiro.prefab", som = "assets/sons/tiro.wav", tecla = "space", velocidade = 900 },
         { type = "behavior", script = "nn:vida", ao_acabar = "nada", invencivel = 1.2, variavel = "vidas", vidas = 3 },
@@ -53,7 +53,7 @@ return {
           x = -34, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 2,
           components = {
-            { type = "particles", mode = "continuo", rate = 70, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.35, lifetime_var = 0.4, speed_min = 140, speed_max = 220, direction = 180, spread = 18, gravity = 0, drag = 0, area = "retangulo", area_w = 4, area_h = 14, area_radius = 50, size_start = 16, size_end = 2, size_var = 0, color_start = "#FFFFFF", color_mid = "#4FC3F7", color_end = "#1E88E500", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1 },
+            { type = "particles", mode = "continuo", rate = 70, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.35, lifetime_var = 0.4, speed_min = 140, speed_max = 220, direction = 180, spread = 18, gravity = 0, drag = 0, area = "retangulo", area_w = 4, area_h = 14, area_radius = 50, size_start = 16, size_end = 2, size_var = 0, color_start = "#FFFFFF", color_mid = "#4FC3F7", color_end = "#1E88E500", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1, pixel = false },
           },
         },
       },
@@ -72,7 +72,7 @@ return {
       x = 0, y = 380, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "body", body = "static", shape = "box", w = 1400, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "body", body = "static", shape = "box", w = 1400, h = 40, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
     },
     {
@@ -80,7 +80,7 @@ return {
       x = 0, y = -380, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "body", body = "static", shape = "box", w = 1400, h = 40, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "body", body = "static", shape = "box", w = 1400, h = 40, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
     },
     {
@@ -88,7 +88,7 @@ return {
       x = -660, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "body", body = "static", shape = "box", w = 40, h = 800, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "body", body = "static", shape = "box", w = 40, h = 800, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
     },
     {
@@ -96,7 +96,7 @@ return {
       x = 200, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
       visible = true, layer = 0,
       components = {
-        { type = "body", body = "static", shape = "box", w = 40, h = 800, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "body", body = "static", shape = "box", w = 40, h = 800, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
     },
     {

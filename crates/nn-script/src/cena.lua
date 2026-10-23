@@ -1477,6 +1477,14 @@ function M.interact(scene, owner, who, dist, text, locked)
   return nil
 end
 
+--- A escala da interface pronta (caixa de fala, avisos) pelo tamanho da
+--- tela: 1 numa tela de 720 de altura; numa tela pequena de pixel art
+--- (320x180), um quarto.
+function M.ui_scale()
+  local _, h = nn.window.size()
+  return math.max(0.25, math.min(2, h / 720))
+end
+
 -- O aviso do escolhido: a tecla e o que ela faz, em cima do objeto.
 local function draw_prompt(scene)
   local ia = scene._ia
@@ -1484,14 +1492,17 @@ local function draw_prompt(scene)
   local o = ia.obj
   local key = M.interact_key()
   local font = M.font("")
-  local size = 20
+  local k = M.ui_scale()
+  local size = math.max(7, math.floor(20 * k + 0.5))
   local tw = nn.text_size(ia.text, { size = size, font = font })
-  local cap = 28
-  local pad = 10
+  local cap = math.floor(size * 1.4 + 0.5)
+  local pad = math.max(2, math.floor(size / 2))
+  local gap = math.max(2, math.floor(8 * k + 0.5))
   local showkey = not ia.locked
-  local w = pad * 2 + tw + (showkey and (cap + 8) or 0)
-  local h = 40
-  local panel = { color = M.theme("panel"), radius = 10, border = 1, border_color = M.theme("border") }
+  local w = pad * 2 + tw + (showkey and (cap + gap) or 0)
+  local h = cap + math.max(2, math.floor(12 * k + 0.5))
+  local radius = math.max(2, math.floor(10 * k + 0.5))
+  local panel = { color = M.theme("panel"), radius = radius, border = 1, border_color = M.theme("border") }
   local tcolor = ia.locked and "#FF9A9A" or M.theme("text")
   if scene._3d then
     local x0, _, z0, x1, y1, z1 = o:bounds3d()
@@ -1508,21 +1519,25 @@ local function draw_prompt(scene)
     nn.screen.panel(left, top, w, h, panel)
     local x = left + pad
     if showkey then
-      nn.screen.panel(x, top + (h - cap) / 2, cap, cap, { color = M.theme("accent"), radius = 6 })
+      nn.screen.panel(x, top + (h - cap) / 2, cap, cap, { color = M.theme("accent"), radius = math.max(2, radius * 0.6) })
       nn.screen.text(key, x + cap / 2, top + h / 2, { size = size, color = "#1E2A3A", anchor = "center", font = font })
-      x = x + cap + 8
+      x = x + cap + gap
     end
     nn.screen.text(ia.text, x, top + h / 2, { size = size, color = tcolor, anchor = "left", font = font })
   else
     local x, y = o:world_transform()
     local _, hh = o:bounds()
-    local cy = y + hh + 12 + h / 2
+    local cy = y + hh + gap + h / 2
+    -- Sempre inteiro na tela (um personagem na beirada).
+    local vx0, vy0, vx1, vy1 = nn.camera.view()
+    x = math.max(vx0 + w / 2 + 2, math.min(vx1 - w / 2 - 2, x))
+    cy = math.max(vy0 + h / 2 + 2, math.min(vy1 - h / 2 - 2, cy))
     nn.draw.panel(x, cy, w, h, panel)
     local left = x - w / 2 + pad
     if showkey then
-      nn.draw.panel(left + cap / 2, cy, cap, cap, { color = M.theme("accent"), radius = 6 })
+      nn.draw.panel(left + cap / 2, cy, cap, cap, { color = M.theme("accent"), radius = math.max(2, radius * 0.6) })
       nn.draw.text(key, left + cap / 2, cy, { size = size, color = "#1E2A3A", anchor = "center", font = font })
-      left = left + cap + 8
+      left = left + cap + gap
     end
     nn.draw.text(ia.text, left, cy, { size = size, color = tcolor, anchor = "left", font = font })
   end
@@ -3632,6 +3647,14 @@ function M.state(scene)
   local vars = {}
   for k, v in pairs(nn.vars or {}) do
     if type(k) == "string" and simple(v) then vars[k] = v end
+  end
+  -- O inventário, item por item (para aparecer no que mudou).
+  if type(nn.vars._itens) == "table" then
+    for _, e in ipairs(nn.vars._itens) do
+      if type(e) == "table" and type(e.item) == "string" then
+        vars["inventário: " .. e.item] = e.count or 1
+      end
+    end
   end
   return { scene = scene._path, objects = objects, vars = vars, fired = M.events.take_fired(scene) }
 end
