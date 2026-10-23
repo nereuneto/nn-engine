@@ -1580,6 +1580,8 @@ O campo de tile tem um **…** para escolher no tileset. No Lua:
 
 ## Efeitos sonoros
 
+![A janela Novo som, com os tipos, Variar, Tocar e a onda do som](imagens/nn-studio-som.png)
+
 **Arquivos > ➕ Novo > 🔊 Som** (ou **Arquivo > Novo som**) faz um efeito
 sonoro sintetizado, como o sfxr, sem precisar de um programa de áudio:
 

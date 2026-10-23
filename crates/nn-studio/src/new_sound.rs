@@ -419,7 +419,7 @@ impl NewSoundForm {
                 if r.changed() {
                     self.auto_name = false;
                 }
-                ui.weak(format!("→ {}", self.rel()));
+                ui.weak(format!("({})", self.rel()));
             });
         }
         if let Some(e) = &self.error {
