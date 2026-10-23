@@ -363,6 +363,15 @@ fn particulas(s: &mut Server, a: &Value) -> Result<Output, String> {
             .as_object()
             .ok_or("\"mudar\" é { campo: valor } (veja listar_componentes particles)")?;
         valores::apply_fields(comp, &target, m, three_d)?;
+        // No contínuo, quem liga e desliga é "emitting" ("on_start" é da
+        // explosão): começar desligado é emitting = false.
+        if comp.str("mode") == "continuo"
+            && m.get("on_start").and_then(Value::as_bool) == Some(false)
+            && !m.contains_key("emitting")
+        {
+            comp.set("emitting", Prop::Bool(false));
+            notes.push("Contínuo começando desligado: \"emitting\": false (\"on_start\" é da explosão). Liga com a ação \"Ligar ou desligar partículas\" (id emissor) dos eventos (ou, em Lua, objeto.particles.emitting = true).".into());
+        }
     }
     let comp = comp.clone();
     let obj = o.clone();
@@ -397,7 +406,7 @@ fn particulas(s: &mut Server, a: &Value) -> Result<Output, String> {
 pub static TOOLS: &[&Tool] = &[&Tool {
     name: "particulas",
     title: "Partículas",
-    description: "Põe um efeito de partículas pronto num objeto (cria o objeto se ele não existir), ajusta e mostra o efeito sozinho em 4 momentos. Efeitos 2D: fogo, fumaca, faiscas, explosao, poeira, brilho, bolhas, chuva, neve, confete (3D: fogo, fumaca, faiscas, explosao, poeira, brilho, chuva, neve). \"pixel\": quadradinhos de tamanho inteiro (pixel art; numa tela pequena o efeito já vem na escala dela). \"escala\" multiplica tamanhos, velocidades e áreas. \"mudar\" troca campos do componente (veja listar_componentes particles), ex.: {\"color_start\": \"#7ec4ff\", \"mode\": \"explosao\", \"on_start\": false}.",
+    description: "Põe um efeito de partículas pronto num objeto (cria o objeto se ele não existir), ajusta e mostra o efeito sozinho em 4 momentos. Efeitos 2D: fogo, fumaca, faiscas, explosao, poeira, brilho, bolhas, chuva, neve, confete (3D: fogo, fumaca, faiscas, explosao, poeira, brilho, chuva, neve). \"pixel\": quadradinhos de tamanho inteiro (pixel art; numa tela pequena o efeito já vem na escala dela). \"escala\" multiplica tamanhos, velocidades e áreas. \"mudar\" troca campos do componente (veja listar_componentes particles), ex.: {\"color_start\": \"#7ec4ff\", \"mode\": \"explosao\", \"on_start\": false} (uma explosão que só sai quando pedir); um contínuo começa desligado com \"emitting\": false.",
     params: || {
         vec![
             ("cena", s_str("A cena (.cena) ou o prefab"), true),

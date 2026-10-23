@@ -453,7 +453,7 @@ fn missing_files(s: &Server, d: &DialogueData) -> Vec<String> {
 
 fn usage(rel: &str) -> String {
     format!(
-        "Na cena: um personagem com o comportamento nn:dialogo, {{\"type\": \"nn:dialogo\", \"arquivo\": \"{rel}\"}} (com a tecla E perto dele; \"comecar\": \"chegar\", \"cena\" ou \"mensagem\" muda isso). O texto pode ter {{variavel}}."
+        "Na cena: um personagem com o comportamento nn:dialogo, {{\"type\": \"behavior\", \"script\": \"nn:dialogo\", \"arquivo\": \"{rel}\"}} (com a tecla E perto dele; \"comecar\": \"chegar\", \"cena\" ou \"mensagem\" muda isso). O texto pode ter {{variavel}}."
     )
 }
 

@@ -48,8 +48,17 @@ function B:draw()
     if img then
       nn.screen.sprite(img, x + pad, y + pad, { w = t - pad * 2, h = t - pad * 2 })
     else
-      nn.screen.text(it.item:sub(1, 1):upper(), x + t / 2, y + t / 2,
-        { size = t * 0.5, color = destaque, anchor = "center" })
+      -- Sem ícone (um item 3D, ou sem imagem): o nome, se couber num
+      -- tamanho legível; senão, a primeira letra.
+      local nome, size = it.item, t * 0.3
+      local w = nn.text_size(nome, { size = size })
+      if w > t - pad * 2 then size = size * (t - pad * 2) / w end
+      if size >= 10 then
+        nn.screen.text(nome, x + t / 2, y + t / 2, { size = size, color = destaque, anchor = "center" })
+      else
+        nn.screen.text(it.item:sub(1, 1):upper(), x + t / 2, y + t / 2,
+          { size = t * 0.5, color = destaque, anchor = "center" })
+      end
     end
     if it.count > 1 then
       nn.screen.text("x" .. it.count, x + t - 3, y + t - 2,

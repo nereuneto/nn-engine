@@ -18,6 +18,9 @@ local B = {
       } },
     { "distancia", 7, label = "Distância da câmera", min = 1, max = 50,
       show_if = { "camera", "atras" } },
+    { "inclinacao", 18, label = "Inclinação da câmera", min = -30, max = 80, advanced = true,
+      show_if = { "camera", "atras" },
+      help = "Graus olhando para baixo, no começo (o mouse muda depois). Mais alto vê por cima do personagem o que está à frente." },
     { "prender_mouse", true, label = "O mouse gira a câmera", show_if = { "camera", "atras" },
       help = "O cursor some e o mouse gira a câmera. Esc solta o mouse; um clique na janela prende de novo." },
     { "sensibilidade", 0.15, label = "Sensibilidade do mouse", min = 0.01, max = 1,
@@ -87,7 +90,7 @@ function B:start()
   self.pulos, self.no_ar, self.pedido = 0, 0, 0
   if self.camera == "atras" then
     self.cam = nn.d3.third_person({
-      distance = self.distancia, pitch = 18, height = h * 0.8,
+      distance = self.distancia, pitch = self.inclinacao, height = h * 0.8,
       yaw = (o.ry or 0) + 180, sensitivity = self.sensibilidade, invert_y = self.inverter_y,
       shoulder = self.ombro,
     })

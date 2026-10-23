@@ -1807,17 +1807,15 @@ quase não usa o processador.
 
 ## O que vem depois
 
-A **v0.7** trouxe o **desenvolvimento guiado por IA**: o
-[servidor MCP](mcp.md) (`nn mcp`) liga um agente de IA ao projeto para ele
-montar cenas, eventos e scripts, jogar sem janela, rodar os testes de jogo e
-acompanhar o jogo aberto, junto com você no NN Studio. Antes dela, a v0.6
-trouxe o modelador e o animador, a v0.5 deixou o NN Studio mais gostoso de
-usar, a v0.4 deixou os mundos 3D mais vivos, a v0.3 trouxe o combate e a
-v0.2, o 3D. Está tudo no [CHANGELOG](../CHANGELOG.md).
-
-A próxima etapa, a **v0.8**, leva **a arte, a modelagem e a animação para o
-agente**: pixel art e animações de sprite, mapas, partículas, sons, diálogos,
-modelos 3D, esqueletos e animações, tudo com prévias em imagem.
+A **v0.8** trouxe **a arte, a modelagem e a animação pelo agente**: pelo
+[servidor MCP](mcp.md), um agente de IA desenha a pixel art e as animações
+dos sprites, pinta os mapas, faz as partículas, os efeitos sonoros (também
+aqui, em **➕ Novo > 🔊 Som**) e os diálogos, e modela e anima os modelos 3D,
+com os mesmos arquivos dos editores do NN Studio. Antes dela, a v0.7 trouxe
+o desenvolvimento guiado por IA, a v0.6 trouxe o modelador e o animador, a
+v0.5 deixou o NN Studio mais gostoso de usar, a v0.4 deixou os mundos 3D
+mais vivos, a v0.3 trouxe o combate e a v0.2, o 3D. Está tudo no
+[CHANGELOG](../CHANGELOG.md).
 
 Ainda não tem, e são ideias para depois:
 

@@ -27,7 +27,8 @@ function U.add(scene, item)
   local s = ui(scene)
   item.obj._ui = true
   table.insert(s.items, item)
-  if item.start_focus then s.focus = item end
+  -- Vários pedindo o foco: fica o primeiro.
+  if item.start_focus and not s.focus then s.focus = item end
   return item
 end
 

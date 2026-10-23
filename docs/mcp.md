@@ -355,4 +355,10 @@ No jogo, o **Jogador 3D** toca sozinho parado, andar, correr, pular e cair (e o 
 
 ## O que vem depois
 
-Na v0.8, **arte, modelagem e animação pelo agente**: pixel art e animações de sprite, mapas, partículas, sons, diálogos, modelos 3D (as operações do modelador, kits) e esqueletos e animações, tudo com prévias em imagem. E o que faltou aos agentes que fizeram jogos do zero na revisão da v0.7: saber o tamanho, a origem e as animações de um `.glb`, tingir o brilho de um modelo, peças de cenário (cerca, muro) e uma câmera pronta para as telas de menu 3D.
+A v0.8 trouxe **a arte, a modelagem e a animação pelo agente**: pixel art e animações de sprite, mapas, partículas, sons, diálogos, modelos 3D, esqueletos e animações, tudo com prévias em imagem. Na revisão, dois agentes fizeram cada um um jogo do zero com toda a arte feita por eles, um de plataforma 2D em pixel art e uma aventura 3D.
+
+Ideias para depois, do que os agentes da revisão sentiram falta:
+
+- uma fonte de pixel art para os textos pequenos de uma tela pequena (hoje, a letra é lisa e fica borrada ampliada);
+- portas e janelas com paredes retas no `recuar` (hoje, a borda vira um chanfro);
+- no `rodar_jogo`, o mouse girando a câmera do Jogador 3D.

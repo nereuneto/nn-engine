@@ -76,6 +76,49 @@ impl Server {
         }
     }
 
+    /// Uma Vida que guarda numa variável que o config.lua já define com
+    /// outro valor: o jogo começa com o do config.lua.
+    fn vars_notes(&self, o: &Object) -> Vec<String> {
+        let Some((_, cfg)) = self.config() else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        scene_data::visit(std::slice::from_ref(o), &mut |o| {
+            for c in &o.components {
+                if !c.is_behavior() || c.str("script") != "nn:vida" {
+                    continue;
+                }
+                let var = c
+                    .get("variavel")
+                    .map(|v| v.str().to_string())
+                    .unwrap_or_else(|| "vidas".into());
+                // "vidas" só vale no jogador.
+                let player = o.components.iter().any(|b| {
+                    matches!(
+                        b.str("script"),
+                        "nn:plataforma" | "nn:topdown" | "nn:jogador3d"
+                    )
+                });
+                if var.is_empty() || (var == "vidas" && !player) {
+                    continue;
+                }
+                let mine = c.get("vidas").map(Prop::num).unwrap_or(3.0);
+                if let Some((_, v)) = cfg.vars.iter().find(|(k, _)| *k == var)
+                    && v.num() > 0.0
+                    && (v.num() - mine).abs() > 1e-9
+                {
+                    out.push(format!(
+                        "aviso: \"{}\": o config.lua começa com {var} = {}, e esse valor vale primeiro (a variável passa de uma cena para outra); para começar com {}, mude também o config.lua (mudar_config \"vars\")",
+                        o.name,
+                        scene_data::format_num(v.num()),
+                        scene_data::format_num(mine)
+                    ));
+                }
+            }
+        });
+        out
+    }
+
     /// Os avisos de números grandes para uma tela pequena (veja
     /// [`valores::small_screen_notes`]).
     fn small_screen_notes(&mut self, doc: &Doc, ids: &[u32]) -> Vec<String> {
@@ -405,6 +448,7 @@ fn criar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
     for v in &objects {
         let obj = s.object_from_json(v, three_d, &mut next, &mut notes)?;
         notes.extend(valores::missing_files(&s.root, &obj));
+        notes.extend(s.vars_notes(&obj));
         if !three_d {
             notes.extend(valores::size_notes(&obj));
             notes.extend(valores::repeat_notes(&s.root, &obj));
@@ -546,6 +590,7 @@ fn mudar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
         &s.root,
         doc.data.find(id).expect("objeto"),
     ));
+    notes.extend(s.vars_notes(doc.data.find(id).expect("objeto")));
     if !three_d {
         let o = doc.data.find(id).expect("objeto");
         notes.extend(valores::size_notes(o));
@@ -559,7 +604,19 @@ fn mudar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
         false,
         &mut lookup,
     );
-    let mut msg = format!("Pronto. \"{name}\" agora:\n{}", pretty(&now));
+    let now_name = doc
+        .data
+        .find(id)
+        .map(|o| o.name.clone())
+        .unwrap_or_default();
+    let mut msg = if now_name != name {
+        format!(
+            "Pronto. \"{name}\" agora é \"{now_name}\":\n{}",
+            pretty(&now)
+        )
+    } else {
+        format!("Pronto. \"{name}\" agora:\n{}", pretty(&now))
+    };
     for n in notes {
         msg.push_str(&format!("\n- {n}"));
     }
@@ -738,7 +795,10 @@ fn listar_componentes(_: &mut Server, a: &Value) -> Result<Output, String> {
             .fields(kind)
             .unwrap_or(&[])
             .iter()
-            .map(|(k, v)| format!("{k} = {}", v.to_lua()))
+            .map(|(k, v)| match scene_data::field_choices(kind, k) {
+                Some(c) => format!("{k} = {} ({})", v.to_lua(), c.join(" | ")),
+                None => format!("{k} = {}", v.to_lua()),
+            })
             .collect();
         out.push_str(&format!(
             "\n{kind}{mode} — {title}: {desc}\n  {}\n",

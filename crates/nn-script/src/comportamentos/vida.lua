@@ -7,7 +7,7 @@ local B = {
   props = {
     { "vidas", 3, label = "Vidas", min = 1, integer = true },
     { "variavel", "vidas", label = "Guardar na variável",
-      help = "Variável do jogo (nn.vars), para mostrar na tela e passar de uma cena para outra. Vazio = não guarda. \"vidas\" só vale no jogador (num inimigo, use outro nome)." },
+      help = "Variável do jogo (nn.vars), para mostrar na tela e passar de uma cena para outra. Se ela já tem valor (do config.lua ou de outra cena), ele vale no lugar de Vidas. Vazio = não guarda. \"vidas\" só vale no jogador (num inimigo, use outro nome)." },
     { "invencivel", 1, label = "Invencível depois do dano", min = 0, help = "Segundos." },
     { "ao_acabar", "reiniciar", label = "Quando acabar",
       options = {

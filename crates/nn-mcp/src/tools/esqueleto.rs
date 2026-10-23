@@ -235,7 +235,7 @@ fn esqueleto(s: &mut Server, a: &Value) -> Result<Output, String> {
                 md.parts[pi].bone = md.bones[bi].name.clone();
             }
         }
-        done.push(format!("{} peça(s) ligadas", map.len()));
+        done.push(format!("{} peça(s) ligadas pelo \"ligar\"", map.len()));
     }
     if opt_bool(a, "ligar_sozinho")?.unwrap_or(false) {
         if md.bones.is_empty() {

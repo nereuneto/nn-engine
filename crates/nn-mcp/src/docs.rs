@@ -147,6 +147,9 @@ pub fn instructions(server: &Server) -> String {
          - Comportamento sem código: comportamentos prontos (listar_comportamentos) e eventos \"Quando... Então...\" (listar_eventos, por_regra).\n\
          - Código: buscar_documentacao antes; escrever_arquivo confere a sintaxe antes de gravar.\n\
          - Pixel art: criar_imagem, desenhar (o desenho como texto, um caractere por pixel, é o mais prático), ver_imagem para conferir, quadros e animar para animar.\n\
+         - Mapas de tiles: criar_mapa (de uma imagem de tiles), pintar_mapa (também como texto e com terreno automático), marcar_tiles (o que é sólido) e ver_mapa.\n\
+         - Efeitos: particulas (um efeito pronto, com prévia), criar_som (efeitos sonoros sintetizados; volta a forma da onda, já que você não ouve) e escrever_dialogo / ver_dialogo (conversas com escolhas).\n\
+         - Modelos 3D: criar_modelo, modelar (peças e faces, em 4 vistas) e ver_modelo (também qualquer .glb); esqueleto e animar_modelo para ossos e animações, vistas numa tira de quadros.\n\
          - Depois de uma leva de mudanças, conferir_projeto. Errou? desfazer.\n\
          - Veja funcionando: rodar_jogo roda sem janela, com teclas e cliques simulados, e mostra erros, prints, regras que dispararam, o que mudou e capturas da tela.\n\
          - Testes de jogo: arquivos Lua em testes/ com test(\"nome\", function(t) ... end); rodar_testes roda todos. Rode antes e depois de mudar.\n\

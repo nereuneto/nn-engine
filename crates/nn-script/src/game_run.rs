@@ -122,6 +122,8 @@ pub struct Report {
     pub captures: Vec<Capture>,
     /// Os sons que tocaram: (arquivo, quantas vezes, a primeira vez).
     pub sounds: Vec<(String, u32, f64)>,
+    /// Quando a cena da frente reiniciou (a mesma cena começou de novo).
+    pub restarts: Vec<f64>,
     /// As animações 3D que começaram a tocar: (modelo, animação, quantas
     /// vezes, a primeira vez).
     pub animations: Vec<(String, String, u32, f64)>,
@@ -238,6 +240,8 @@ pub struct GameRun {
     frames: u64,
     report: Report,
     front: String,
+    /// A tabela da cena da frente (muda quando a cena reinicia).
+    front_ptr: usize,
     fired_index: HashMap<(String, String), usize>,
     ended: bool,
 }
@@ -342,6 +346,7 @@ impl GameRun {
             frames: 0,
             report: Report::default(),
             front: String::new(),
+            front_ptr: 0,
             fired_index: HashMap::new(),
             ended: false,
         };
@@ -442,12 +447,19 @@ impl GameRun {
             self.report.errors.push(RunError { time: t, error });
         }
         let (path, scene) = self.runtime.front();
+        let ptr = scene.as_ref().map_or(0, |s| s.to_pointer() as usize);
         if path != self.front {
             self.report.scenes.push(SceneChange {
                 time: t,
                 scene: path.clone(),
             });
             self.front = path.clone();
+        } else if ptr != self.front_ptr && self.front_ptr != 0 && ptr != 0 {
+            // A mesma cena, de novo: reiniciou.
+            self.report.restarts.push(t);
+        }
+        if ptr != 0 {
+            self.front_ptr = ptr;
         }
         if let Some(scene) = scene {
             self.collect_fired(&path, scene, t);

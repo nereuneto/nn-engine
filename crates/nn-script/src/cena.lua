@@ -1108,6 +1108,13 @@ local function start_behaviors(list)
       if o.alive and b.enabled and type(b.start) == "function" then b:start() end
     end
   end
+  -- Depois que todos começaram (um placar lê o que uma contagem escreveu
+  -- no start dela, antes do primeiro quadro).
+  for _, o in ipairs(list) do
+    for _, b in ipairs(o.behaviors) do
+      if o.alive and b.enabled and type(b.after_start) == "function" then b:after_start() end
+    end
+  end
 end
 
 local function each_behavior(scene, name, ...)
@@ -3204,7 +3211,11 @@ local function draw_ui(o, c, hud, at, sx, sy)
     local state = ui_state(o, c)
     local w, h = c.w * sx, c.h * sy
     local bc = state == "hover" and themed(c.border_color, "accent") or nil
-    panel_at(hud, x, y, hx, hy, w, h, panel_opts(c, button_color(c, state), bc))
+    local popts = panel_opts(c, button_color(c, state), bc)
+    -- Com o foco (teclado, controle ou mouse), uma borda na cor de destaque,
+    -- mesmo num botão sem borda: dá para ver qual está escolhido.
+    if state == "hover" then popts.border = math.max(c.border, 3) end
+    panel_at(hud, x, y, hx, hy, w, h, popts)
     local tc = themed(c.text_color, "text")
     if state == "disabled" then tc = "#FFFFFF80" end
     local size = c.size * sy
