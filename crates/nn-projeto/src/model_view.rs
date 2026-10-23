@@ -49,8 +49,8 @@ pub fn triangles(data: &nn_render::d3::ModelData, anim: Option<(usize, f32)>) ->
                 _ => p,
             }
         };
-        for tri in part.mesh.indices.chunks_exact(3) {
-            let k = [tri[0] as usize, tri[1] as usize, tri[2] as usize];
+        for tri in part.mesh.indices.as_chunks::<3>().0 {
+            let k = tri.map(|i| i as usize);
             if k.iter().any(|&i| i >= part.mesh.vertices.len()) {
                 continue;
             }
