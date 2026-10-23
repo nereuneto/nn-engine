@@ -435,6 +435,84 @@ fn campfire() -> ModelData {
     model(parts)
 }
 
+// Cenário: peças para montar fases (2 m de comprimento, para emendar).
+
+const PEDRA_ESCURA: &str = "#8A8A8A";
+
+fn wall_model() -> ModelData {
+    model(vec![
+        boxed("Muro", Vec3::new(2.0, 1.2, 0.3), PEDRA),
+        at(
+            boxed("Topo", Vec3::new(2.08, 0.12, 0.4), PEDRA_ESCURA),
+            Vec3::Y * 1.2,
+        ),
+    ])
+}
+
+fn curb() -> ModelData {
+    let mut parts = Vec::new();
+    for (i, x) in [-0.75, -0.25, 0.25, 0.75].into_iter().enumerate() {
+        let mut stone = boxed(
+            &format!("Pedra {}", i + 1),
+            Vec3::new(0.46, 0.22 + 0.03 * (i % 2) as f32, 0.3),
+            if i % 2 == 0 { PEDRA } else { PEDRA_ESCURA },
+        );
+        stone.pos = Vec3::new(x, 0.0, 0.0);
+        parts.push(stone);
+    }
+    model(parts)
+}
+
+fn stairs() -> ModelData {
+    // Sobe para trás (-Z): o primeiro degrau fica na frente.
+    let mut parts = Vec::new();
+    for i in 0..4 {
+        let h = 0.25 * (i + 1) as f32;
+        let mut step = boxed(&format!("Degrau {}", i + 1), Vec3::new(1.2, h, 0.35), PEDRA);
+        step.pos = Vec3::new(0.0, 0.0, 0.525 - 0.35 * i as f32);
+        parts.push(step);
+    }
+    model(parts)
+}
+
+fn bridge() -> ModelData {
+    let mut parts = vec![at(
+        boxed("Tábuas", Vec3::new(4.0, 0.12, 1.6), MADEIRA),
+        Vec3::Y * 0.3,
+    )];
+    for (i, z) in [-0.75f32, 0.75].into_iter().enumerate() {
+        for (j, x) in [-1.9f32, 0.0, 1.9].into_iter().enumerate() {
+            parts.push(at(
+                boxed(
+                    &format!("Poste {}", i * 3 + j + 1),
+                    Vec3::new(0.12, 1.2, 0.12),
+                    MADEIRA_ESCURA,
+                ),
+                Vec3::new(x, 0.0, z),
+            ));
+        }
+        parts.push(at(
+            boxed(
+                &format!("Corrimão {}", i + 1),
+                Vec3::new(4.0, 0.08, 0.1),
+                MADEIRA_ESCURA,
+            ),
+            Vec3::new(0.0, 1.1, z),
+        ));
+    }
+    model(parts)
+}
+
+fn sign() -> ModelData {
+    model(vec![
+        boxed("Poste", Vec3::new(0.12, 1.3, 0.12), MADEIRA_ESCURA),
+        at(
+            boxed("Placa", Vec3::new(1.0, 0.55, 0.08), MADEIRA),
+            Vec3::new(0.0, 1.0, 0.1),
+        ),
+    ])
+}
+
 /// Um modelo pronto da biblioteca.
 #[derive(Debug, Clone, Copy)]
 pub struct Ready {
@@ -444,7 +522,7 @@ pub struct Ready {
     pub make: fn() -> ModelData,
 }
 
-pub const READY: [Ready; 10] = [
+pub const READY: [Ready; 15] = [
     Ready {
         name: "Árvore",
         file: "arvore",
@@ -494,6 +572,31 @@ pub const READY: [Ready; 10] = [
         name: "Carrinho",
         file: "carrinho",
         make: car_model,
+    },
+    Ready {
+        name: "Muro",
+        file: "muro",
+        make: wall_model,
+    },
+    Ready {
+        name: "Borda",
+        file: "borda",
+        make: curb,
+    },
+    Ready {
+        name: "Escada",
+        file: "escada",
+        make: stairs,
+    },
+    Ready {
+        name: "Ponte",
+        file: "ponte",
+        make: bridge,
+    },
+    Ready {
+        name: "Placa",
+        file: "placa",
+        make: sign,
     },
 ];
 

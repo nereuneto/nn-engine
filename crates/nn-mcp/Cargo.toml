@@ -10,6 +10,8 @@ license.workspace = true
 [dependencies]
 nn-projeto.workspace = true
 nn-script.workspace = true
+nn-render.workspace = true
+glam.workspace = true
 image.workspace = true
 log.workspace = true
 mlua.workspace = true
