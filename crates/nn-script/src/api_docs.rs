@@ -462,6 +462,21 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Fração entre passos fixos (para suavizar posições no draw).",
     ),
     d("nn.time.frame", "()", "Número do quadro."),
+    d(
+        "nn.debug",
+        "",
+        "Desempenho do jogo (o mesmo da tela F3, que abre no jogo em desenvolvimento).",
+    ),
+    d(
+        "nn.debug.stats",
+        "()",
+        "Tabela com a média dos últimos quadros: fps, frame_ms, worst_ms, fixed_ms, physics_ms, update_ms, draw_ms, sprites, draw_calls, textures, texture_mb, lua_mb, objects.",
+    ),
+    d(
+        "nn.debug.overlay",
+        "(ligar?)",
+        "Abre (true) ou fecha (false) a tela de desempenho; sem argumento, diz se está aberta.",
+    ),
     d("nn.window", "", "A janela do jogo."),
     d("nn.window.size", "()", "Largura e altura da janela."),
     d("nn.window.set_clear_color", "(cor)", "Cor de fundo."),

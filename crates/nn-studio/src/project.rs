@@ -4561,6 +4561,26 @@ impl Viewer<'_> {
                     ui.label("Sincronia vertical:");
                     ui.checkbox(&mut v.vsync, "VSync (evita cortes na imagem)");
                     ui.end_row();
+                    ui.label("Limite de quadros:");
+                    ui.horizontal(|ui| {
+                        let mut on = v.fps_max.is_some();
+                        let auto = if v.vsync { "o do monitor" } else { "240 por segundo" };
+                        if ui
+                            .checkbox(&mut on, "Escolher")
+                            .on_hover_text(format!(
+                                "Sem marcar: {auto}. Um limite poupa a bateria e o processador; 0 tira o limite."
+                            ))
+                            .changed()
+                        {
+                            v.fps_max = on.then_some(if v.vsync { 60 } else { 240 });
+                        }
+                        if let Some(f) = v.fps_max.as_mut() {
+                            ui.add(egui::DragValue::new(f).range(0..=1000).suffix(" por segundo"));
+                        } else {
+                            ui.weak(auto);
+                        }
+                    });
+                    ui.end_row();
                     ui.label("Recarregar ao salvar:");
                     ui.checkbox(&mut v.hot_reload, "Atualiza o jogo aberto quando um .lua é salvo");
                     ui.end_row();

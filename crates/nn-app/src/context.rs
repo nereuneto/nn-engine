@@ -32,6 +32,8 @@ pub struct Context {
     pub ui: Ui,
     /// Dados salvos (recordes, opções, progresso).
     pub save: Storage,
+    /// Quanto cada parte do quadro levou (e a tela F3).
+    pub perf: crate::Perf,
     pub(crate) effects: crate::effects::Effects,
     pub(crate) fullscreen: bool,
     pub(crate) fullscreen_request: Option<bool>,
@@ -81,6 +83,7 @@ impl Context {
             clear_color: config.clear_color,
             ui: Ui::default(),
             save,
+            perf: crate::Perf::new(config.dev_tools),
             effects: Default::default(),
             fullscreen: config.fullscreen,
             fullscreen_request: None,
@@ -217,14 +220,20 @@ pub trait Game: 'static {
 
 /// Simulação de um frame: recarga de assets, passos fixos e `update`.
 pub(crate) fn simulate<G: Game>(ctx: &mut Context, game: &mut G, dt: Duration) {
+    ctx.perf.begin(dt);
+    ctx.perf_keys();
     ctx.poll_assets();
     ctx.time.tick(dt);
     ctx.effects.advance(dt.as_secs_f32());
     let steps = ctx.timestep.advance(dt);
+    let t = std::time::Instant::now();
     for _ in 0..steps {
         game.fixed_update(ctx);
     }
+    ctx.perf.fixed(t.elapsed(), steps);
+    let t = std::time::Instant::now();
     game.update(ctx);
+    ctx.perf.update(t.elapsed());
 }
 
 /// Desenho de um frame em `target` (`None`: só roda o `render` do jogo e
@@ -234,6 +243,7 @@ pub(crate) fn draw<G: Game>(
     game: &mut G,
     target: Option<&nn_render::wgpu::TextureView>,
 ) {
+    let t = std::time::Instant::now();
     game.render(ctx);
     // Quem ouve os sons 3D é a câmera 3D.
     let cam = ctx.renderer.camera3d();
@@ -245,12 +255,15 @@ pub(crate) fn draw<G: Game>(
     });
     ctx.finish_panel();
     ctx.draw_overlays();
+    ctx.draw_perf();
     let Some(target) = target else {
         ctx.renderer.discard_frame();
+        ctx.perf.draw(t.elapsed());
         return;
     };
     let clear = ctx.clear_color;
     let camera = ctx.render_camera();
     let window = ctx.window;
     ctx.renderer.render(target, window, &camera, Some(clear));
+    ctx.perf.draw(t.elapsed());
 }

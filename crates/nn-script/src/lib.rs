@@ -976,6 +976,14 @@ impl Scene for LuaScene {
         if run {
             self.call(ctx, "update", dt);
         }
+        // Para o medidor (F3): a memória do Lua e os objetos da cena visual.
+        ctx.perf.lua_kb = self.runtime.lua().used_memory() as f32 / 1024.0;
+        ctx.perf.objects = self
+            .instance
+            .as_ref()
+            .and_then(|i| i.get::<Table>("object_list").ok())
+            .map(|t| t.raw_len() as u32)
+            .unwrap_or(0);
 
         // Com erro na tela, Esc fecha o jogo (não há outra saída).
         if self.error.is_some() && ctx.input.key_pressed(nn_input::KeyCode::Escape) {
@@ -1073,6 +1081,7 @@ impl Project {
         // a não ser que o config.lua diga `hot_reload = false`.
         let mut project = Self::read(Arc::new(DiskSource::new(dir)), &title, true)?;
         project.config.assets_dir = dir.to_path_buf();
+        project.config.dev_tools = true;
         Ok(project)
     }
 
@@ -1127,6 +1136,9 @@ impl Project {
                 }
                 if let Some(b) = get("vsync")?.as_boolean() {
                     config.vsync = b;
+                }
+                if let Some(f) = num(&get("fps_max")?) {
+                    config.fps_max = Some(f);
                 }
                 if let Some(b) = get("resizable")?.as_boolean() {
                     config.resizable = b;

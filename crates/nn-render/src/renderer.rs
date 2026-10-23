@@ -1493,6 +1493,20 @@ impl Renderer {
         self.last_stats
     }
 
+    /// Memória das texturas na placa de vídeo, em bytes (as imagens e as
+    /// páginas de letras; 4 bytes por pixel).
+    pub fn texture_bytes(&self) -> u64 {
+        self.textures
+            .iter()
+            .map(|t| u64::from(t.size.x) * u64::from(t.size.y) * 4)
+            .sum()
+    }
+
+    /// Quantas texturas estão carregadas.
+    pub fn texture_count(&self) -> usize {
+        self.textures.len()
+    }
+
     /// Quantas páginas (texturas de 1024×1024) o atlas de glifos já usa.
     pub fn glyph_atlas_pages(&self) -> usize {
         self.text.page_count()

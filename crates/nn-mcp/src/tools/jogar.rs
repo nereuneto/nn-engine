@@ -406,6 +406,19 @@ fn write_report(out: &mut String, report: &Report) {
             list.join(", ")
         ));
     }
+    if report.perf.frames > 0 {
+        let p = &report.perf;
+        let n = p.frames as f32;
+        out.push_str(&format!(
+            "\nDesempenho (média por quadro, nesta máquina e sem placa de vídeo): passos fixos {:.2} ms (física {:.2} ms), update {:.2} ms, draw do jogo {:.2} ms; o quadro mais pesado: {:.1} ms em {:.2} s.\n",
+            p.total.fixed / n,
+            p.total.physics / n,
+            p.total.update / n,
+            p.total.draw / n,
+            p.worst.0,
+            p.worst.1
+        ));
+    }
     if !report.animations.is_empty() {
         // Por modelo: as animações na ordem em que começaram.
         let mut models: Vec<(&str, Vec<String>)> = Vec::new();

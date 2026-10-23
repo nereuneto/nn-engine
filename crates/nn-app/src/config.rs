@@ -23,6 +23,10 @@ pub struct AppConfig {
     pub resizable: bool,
     /// Sincroniza com a taxa de atualização do monitor.
     pub vsync: bool,
+    /// Limite de quadros por segundo: `None` = o automático (sem limite com
+    /// [`AppConfig::vsync`], que já segue o monitor; 240 sem ele), `Some(0)`
+    /// = sem limite (o laço roda o mais rápido que der e ocupa um núcleo).
+    pub fps_max: Option<u32>,
     /// Passos de [`crate::Game::fixed_update`] por segundo.
     pub fixed_hz: u32,
     /// Cor de fundo inicial.
@@ -30,6 +34,9 @@ pub struct AppConfig {
     /// Pasta de assets. Caminhos relativos são procurados primeiro a partir da
     /// pasta atual e depois ao lado do executável.
     pub assets_dir: PathBuf,
+    /// Ferramentas de desenvolvimento no jogo (F3: a tela de desempenho).
+    /// Ligado no jogo aberto da pasta do projeto; desligado no exportado.
+    pub dev_tools: bool,
     /// Recarrega imagens, sons e scripts quando o arquivo é salvo.
     /// Ligado por padrão em builds de desenvolvimento (debug).
     pub hot_reload: bool,
@@ -54,10 +61,12 @@ impl Default for AppConfig {
             size: (1280, 720),
             resizable: true,
             vsync: true,
+            fps_max: None,
             fixed_hz: 60,
             clear_color: Color::hex(0x1E1E28),
             assets_dir: PathBuf::from("assets"),
             hot_reload: cfg!(debug_assertions),
+            dev_tools: cfg!(debug_assertions),
             asset_source: None,
             resolution: None,
             scale_mode: nn_render::ScaleMode::Fit,
@@ -92,6 +101,24 @@ impl AppConfig {
     pub fn vsync(mut self, vsync: bool) -> Self {
         self.vsync = vsync;
         self
+    }
+
+    pub fn fps_max(mut self, fps: Option<u32>) -> Self {
+        self.fps_max = fps;
+        self
+    }
+
+    /// O intervalo mínimo entre dois quadros, se houver limite.
+    pub fn frame_period(&self) -> Option<std::time::Duration> {
+        let fps = match self.fps_max {
+            Some(0) => return None,
+            Some(f) => f,
+            None if self.vsync => return None,
+            None => 240,
+        };
+        Some(std::time::Duration::from_secs_f64(
+            1.0 / f64::from(fps.max(1)),
+        ))
     }
 
     pub fn fixed_hz(mut self, hz: u32) -> Self {
