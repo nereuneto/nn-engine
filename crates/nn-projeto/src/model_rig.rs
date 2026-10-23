@@ -12,7 +12,7 @@
 
 use glam::Vec3;
 
-use crate::model_data::{Anim, Bone, ModelData};
+use crate::model::{Anim, Bone, ModelData};
 
 pub const QUADRIL: &str = "Quadril";
 pub const TRONCO: &str = "Tronco";
