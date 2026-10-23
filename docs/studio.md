@@ -198,7 +198,8 @@ só arquivos. A busca ignora acentos e aceita letras soltas ("cfg" acha
 - **➕ Novo:** cena visual (montada com o mouse, veja abaixo), cena em código
   (já vem com um quadrado que anda), **imagem** (para desenhar no
   [editor de pixel art](#editor-de-pixel-art): escolha o tamanho e quantos
-  quadros), script (módulo para usar com `require`) ou pasta. Cenas novas vão
+  quadros), **som** (um [efeito sonoro](#efeitos-sonoros) sintetizado), script
+  (módulo para usar com `require`) ou pasta. Cenas novas vão
   para `cenas/`, imagens para `assets/imagens` e scripts para `lib/`, se
   essas pastas existirem.
 - **Arraste** uma imagem, um mapa, um som ou um prefab do painel para dentro
@@ -354,7 +355,7 @@ desenhada por cima) e os **componentes**:
 | Imagem (sprite) | Mostra uma imagem ou um quadro de uma spritesheet. Com **É uma tira de quadros**, escolha o quadro clicando na grade. **Animação** toca uma das [animações](#animações) da imagem (escolha no ☰), já na cena do editor. **Preencher: Repetir** repete a imagem lado a lado em vez de esticar: com escala 20, um bloco vira 20 blocos (chão, paredes, fundos). **🎨 Editar imagem** abre o [editor de pixel art](#editor-de-pixel-art); sem imagem, **🎨 Desenhar uma imagem nova** cria uma e já põe no objeto. |
 | Texto | Escreve um texto no mundo. |
 | Forma | Retângulo ou círculo de uma cor. |
-| Corpo físico | Cai, colide, para no chão (dinâmico, estático ou cinemático; caixa ou círculo; sensor; plataforma de mão única). |
+| Corpo físico | Cai, colide, para no chão (dinâmico, estático ou cinemático; caixa ou círculo; sensor; plataforma de mão única). Em **Deslocar x/y** (modo Completo), a colisão sai do centro do objeto: para a caixa ficar nos pés de um sprite com espaço vazio embaixo. |
 | Mapa de tiles | Desenha um mapa `.tmj`, com a colisão dos tiles. **✏ Pintar** pinta o mapa ali na cena ([mapas de tiles](#mapas-de-tiles)); **Abrir o mapa** abre a aba dele. |
 | Câmera | Onde a câmera começa, ou quem ela segue (com suavidade e limite no mapa). |
 | Som | Toca um som ou música quando a cena começa. |
@@ -600,7 +601,8 @@ O componente tem três grupos:
 - **Aparência.** Tamanho inicial e final (com variação), cores inicial,
   do meio (opcional) e final, **Luz** (soma as cores: fogo e faíscas mais
   fortes), uma **imagem** ou um quadro de spritesheet no lugar do círculo
-  suave, e giro.
+  suave, e giro. **Pixel art** troca o círculo por quadradinhos de tamanho
+  inteiro, sem girar, para jogos de tela pequena.
 
 **💥 Soltar**, no Inspetor, solta uma leva na prévia. Uma explosão no
 editor repete sozinha, para dar para ver.
@@ -1571,9 +1573,30 @@ O campo de tile tem um **…** para escolher no tileset. No Lua:
 
 - **Imagens:** abrem no [editor de pixel art](#editor-de-pixel-art). Imagens
   que não são PNG (a engine só lê PNG) mostram um aviso.
-- **Sons:** forma de onda, ▶ Tocar e o código `nn.assets.sound(...)`.
+- **Sons:** forma de onda, ▶ Tocar e o código `nn.assets.sound(...)`. Um
+  som feito em **Novo som** tem **🎛 Ajustar efeito**.
 - **Mapas do Tiled (.tmj):** abrem no [editor de mapas](#mapas-de-tiles).
   Ao salvar no Tiled, o editor e o jogo aberto atualizam.
+
+## Efeitos sonoros
+
+**Arquivos > ➕ Novo > 🔊 Som** (ou **Arquivo > Novo som**) faz um efeito
+sonoro sintetizado, como o sfxr, sem precisar de um programa de áudio:
+
+1. Escolha o tipo: moeda, pulo, tiro, laser, explosão, power-up, dano,
+   clique ou blip. O som toca a cada mudança.
+2. **🎲 Variar** faz outra versão do mesmo tipo. Aperte até gostar.
+3. Em **Ajustes**, mude a onda (quadrada, serra, triângulo, seno, ruído), a
+   nota do começo e do fim e o tempo do deslize, o vibrato, o arpejo (a nota
+   pula no meio, como na moeda), o volume ao longo do tempo (ataque,
+   sustentar, impacto, queda) e os filtros.
+4. **Criar** grava o `.wav` (em `assets/sons`) e os números num `.sfx` ao
+   lado.
+
+A imagem mostra a onda (o volume ao longo do tempo) e, em amarelo, a nota
+(mais alto = mais agudo). Para mudar depois, abra o som e use **🎛 Ajustar
+efeito**. O agente de IA faz o mesmo com `criar_som`, e um abre o que o
+outro fez.
 
 ## Jogar
 
