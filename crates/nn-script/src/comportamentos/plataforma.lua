@@ -39,7 +39,12 @@ function B:start()
   self.pulos = 0
   self.pedido = 0
   self.cortar = false
+  self.subindo = math.huge
 end
+
+-- Soltar o botão só corta o pulo depois deste tempo: um toque rápido (no
+-- chão, guardado ou num teste) dá sempre o mesmo pulo baixo.
+local PULO_MINIMO = 0.1
 
 function B:update(dt)
   -- O aperto fica guardado um pouquinho: apertar logo antes de tocar o chão
@@ -76,10 +81,10 @@ function B:fixed_update(dt)
     if pode then
       corpo.vy = self.pulo
       self.fora_do_chao = math.huge
-      self.pedido, self.cortar = 0, false
-      -- Um pulo guardado (apertado no ar, logo antes de cair) com o botão
-      -- já solto é baixo, como um toque no chão.
-      if self.pulo_variavel and not segurando() then self.cortar = true end
+      self.pedido, self.subindo = 0, 0
+      -- Com o botão já solto (um toque, ou um pulo guardado), o pulo é
+      -- baixo.
+      self.cortar = self.pulo_variavel and not segurando()
       if self.som ~= "" then
         local s = self.som
         pcall(function() nn.audio.play(nn.assets.sound(s)) end)
@@ -88,9 +93,14 @@ function B:fixed_update(dt)
     end
   end
   self.pedido = math.max(0, self.pedido - dt)
+  self.subindo = self.subindo + dt
   if self.cortar then
-    if corpo.vy > 0 then corpo.vy = corpo.vy * 0.45 end
-    self.cortar = false
+    if corpo.vy <= 0 then
+      self.cortar = false
+    elseif self.subindo >= PULO_MINIMO then
+      corpo.vy = corpo.vy * 0.45
+      self.cortar = false
+    end
   end
 end
 
