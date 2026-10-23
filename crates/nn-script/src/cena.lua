@@ -60,6 +60,7 @@ M.FIELDS = {
     { "color_start", "#FFFFFF" }, { "color_mid", "" }, { "color_end", "#FFFFFF00" },
     { "image", "" }, { "frame", 1 }, { "frame_w", 0 }, { "frame_h", 0 }, { "spin", 0 },
     { "blend", "alpha" }, { "follow", false }, { "max", 500 }, { "wind", 1 },
+    { "pixel", false },
   },
   -- Interface (menus e HUD). Cores vazias ("") usam o tema do projeto
   -- (config.lua, `theme`).
@@ -1537,9 +1538,15 @@ function M.burst(scene, x, y, color, count, z)
         size = { 0.25, 0 }, colors = colors, blend = "add",
       })
     else
+      -- Do tamanho da tela: numa tela pequena (pixel art), quadradinhos.
+      local _, y0, _, y1 = nn.camera.view()
+      local h = math.abs(y1 - y0)
+      local k = math.max(0.2, math.min(2, h / 720))
+      local pixel = h <= 360
       fx = nn.particles({
-        emitting = false, lifetime = { 0.25, 0.55 }, speed = { 90, 240 }, drag = 4,
-        size = { 12, 0 }, colors = colors, blend = "add",
+        emitting = false, lifetime = { 0.25, 0.55 }, speed = { 90 * k, 240 * k }, drag = 4,
+        size = { pixel and math.max(2, math.floor(12 * k + 0.5)) or 12 * k, 0 },
+        colors = colors, blend = pixel and "alpha" or "add", pixel = pixel,
       })
     end
     scene._fx[color] = fx
@@ -1758,7 +1765,7 @@ function M.particle_options(c)
     direction = c.direction * DEG, spread = c.spread * DEG,
     gravity = c.gravity, drag = c.drag,
     size = { c.size_start, c.size_end }, size_variation = c.size_var,
-    colors = colors, blend = c.blend, follow = c.follow,
+    colors = colors, blend = c.blend, follow = c.follow, pixel = c.pixel,
     spin = { -c.spin * DEG, c.spin * DEG }, max = math.max(1, math.floor(c.max)),
   }
   if c.area == "retangulo" then

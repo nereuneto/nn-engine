@@ -58,6 +58,9 @@ pub struct ParticleConfig {
     /// As partículas acompanham o emissor quando ele anda (o jato de uma
     /// nave). Sem isso, ficam no mundo onde nasceram (um rastro).
     pub follow: bool,
+    /// Pixel art: quadradinhos (sem a imagem, um quadrado cheio) de tamanho
+    /// inteiro e sem giro.
+    pub pixel: bool,
 }
 
 impl Default for ParticleConfig {
@@ -80,6 +83,7 @@ impl Default for ParticleConfig {
             blend: Blend::Alpha,
             max: 1000,
             follow: false,
+            pixel: false,
         }
     }
 }
@@ -260,10 +264,14 @@ impl ParticleEmitter {
     }
 
     fn sprites(&self, renderer: &Renderer) -> impl Iterator<Item = Sprite> + '_ {
-        let texture = self
-            .config
-            .texture
-            .unwrap_or_else(|| renderer.circle_texture());
+        let pixel = self.config.pixel;
+        let texture = self.config.texture.unwrap_or_else(|| {
+            if pixel {
+                renderer.white_texture()
+            } else {
+                renderer.circle_texture()
+            }
+        });
         let origin = if self.config.follow {
             self.position
         } else {
@@ -271,12 +279,18 @@ impl ParticleEmitter {
         };
         self.particles.iter().map(move |p| {
             let t = p.age / p.life;
-            let size =
+            let mut size =
                 (self.config.size.0 + (self.config.size.1 - self.config.size.0) * t) * p.scale;
+            let mut at = origin + p.position;
+            if pixel {
+                // Inteiro (some quando fica abaixo de meio pixel), no pixel.
+                size = size.round();
+                at = at.round() + Vec2::splat(if size as i32 % 2 == 1 { 0.5 } else { 0.0 });
+            }
             Sprite::new(texture)
-                .at(origin + p.position)
+                .at(at)
                 .size(Vec2::splat(size.max(0.0)))
-                .rotation(p.rotation)
+                .rotation(if pixel { 0.0 } else { p.rotation })
                 .color(self.color_at(t))
                 .region(self.config.region)
                 .blend(self.config.blend)

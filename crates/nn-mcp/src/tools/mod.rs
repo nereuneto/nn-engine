@@ -9,6 +9,7 @@ mod arquivos;
 mod cenas;
 mod docs;
 mod editor;
+mod efeitos;
 mod eventos;
 mod jogar;
 mod mapas;
@@ -78,6 +79,7 @@ fn all() -> Vec<&'static Tool> {
     v.extend(eventos::TOOLS);
     v.extend(pixel::TOOLS);
     v.extend(mapas::TOOLS);
+    v.extend(efeitos::TOOLS);
     v.extend(jogar::TOOLS);
     v.extend(aovivo::TOOLS);
     v.extend(editor::TOOLS);

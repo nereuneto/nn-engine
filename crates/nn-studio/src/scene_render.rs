@@ -732,6 +732,7 @@ pub fn particle_config(c: &Component, image: Option<(TextureId, UvRect)>) -> Par
         },
         max: (c.num("max").max(1.0) as usize).min(20_000),
         follow: c.bool("follow"),
+        pixel: c.bool("pixel"),
     }
 }
 

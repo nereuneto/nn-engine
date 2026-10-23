@@ -1084,3 +1084,86 @@ fn agente_cria_e_pinta_um_mapa() {
     assert!(!dir.join("assets/imagens/tiles.tsj").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Partículas pelo agente: um efeito pronto num objeto novo, a prévia do
+/// efeito sozinho, e o mesmo efeito em pixel art numa tela pequena.
+#[test]
+fn agente_poe_particulas() {
+    let dir = temp("particulas");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "vazio" }));
+    let cena = "cenas/fase.cena";
+    let e = fails(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha" }),
+    );
+    assert!(e.contains("Efeitos: fogo"), "{e}");
+    let e = fails(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha", "efeito": "lava" }),
+    );
+    assert!(e.contains("não há o efeito \"lava\""), "{e}");
+    let (t, pngs) = images(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha", "efeito": "fogo", "x": 100, "y": -50 }),
+    );
+    assert!(t.contains("Criei o objeto \"tocha\""), "{t}");
+    assert!(t.contains("contínuo: 45 por segundo"), "{t}");
+    let gpu = !t.contains("Sem prévia");
+    if gpu {
+        assert_eq!(pngs.len(), 1, "{t}");
+        if std::env::var("NN_FX_OUT").is_ok() {
+            std::fs::write("/tmp/fx-fogo.png", &pngs[0]).unwrap();
+        }
+    } else {
+        assert!(!gpu_required(), "{t}");
+    }
+    let doc = std::fs::read_to_string(dir.join(cena)).unwrap();
+    assert!(doc.contains("FFE066"), "{doc}");
+
+    // Mudanças de campos e um campo errado.
+    let t = ok(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha", "mudar": { "color_start": "#7ec4ff", "rate": 10 }, "previa": false }),
+    );
+    assert!(t.contains("10 por segundo") && t.contains("#7ec4ff"), "{t}");
+    let e = fails(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha", "mudar": { "cor": "#fff" } }),
+    );
+    assert!(e.contains("cor"), "{e}");
+
+    // Pixel art numa tela pequena: a escala vem da tela.
+    ok(
+        &mut s,
+        "mudar_config",
+        json!({ "resolution": [320, 180], "scale": "pixel" }),
+    );
+    let (t, pngs) = images(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "moeda_fx", "efeito": "faiscas", "pixel": true }),
+    );
+    assert!(t.contains("pixel art (quadradinhos)"), "{t}");
+    assert!(t.contains("× 0.25"), "{t}");
+    if gpu {
+        let strip = image::load_from_memory(&pngs[0]).unwrap();
+        assert!(strip.height() >= 180, "ampliada: {}", strip.height());
+        assert!(t.contains("um recorte de"), "{t}");
+        if std::env::var("NN_FX_OUT").is_ok() {
+            std::fs::write("/tmp/fx-pixel.png", &pngs[0]).unwrap();
+        }
+    }
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": cena, "segundos": 0.3, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -509,6 +509,10 @@ const PARTICLES_FIELDS: &[F] = &[
         "No 3D, com Vento (☀ Ambiente): quanto o vento leva as partículas (0 = nada, 1 = tudo).",
     ),
     section("Aparência"),
+    help(
+        f("pixel", "Pixel art", W::Bool),
+        "Quadradinhos de tamanho inteiro, sem girar (sem imagem, um quadrado cheio). Para jogos de resolução pequena.",
+    ),
     f("size_start", "Tamanho inicial", SIZE),
     f("size_end", "Tamanho final", SIZE),
     adv("size_var", "Variação do tamanho", FRACTION),
@@ -3480,7 +3484,7 @@ impl Inspector {
                     {
                         continue;
                     }
-                    if particles3d && spec.key == "direction" {
+                    if particles3d && matches!(spec.key, "direction" | "pixel") {
                         continue;
                     }
                     // O vento só existe no 3D.
