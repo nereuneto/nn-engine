@@ -942,3 +942,145 @@ fn agente_desenha_um_sprite_e_anima() {
     assert!(!dir.join(img).exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Mapas de tiles pelo agente: cria o mapa de uma imagem de tiles, pinta
+/// (com desenho e com terreno automático), marca os sólidos, e o jogo roda.
+#[test]
+fn agente_cria_e_pinta_um_mapa() {
+    let dir = temp("mapa");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "vazio" }));
+    let img = "assets/imagens/tiles.png";
+    ok(
+        &mut s,
+        "criar_imagem",
+        json!({ "caminho": img, "largura": 8, "altura": 8, "quadros": 20 }),
+    );
+    ok(
+        &mut s,
+        "desenhar",
+        json!({ "caminho": img, "previa": false, "operacoes": [
+            { "quadro": 1, "balde": [0, 0], "cor": "#5d275d" },
+            { "quadro": 2, "retangulo": [0, 0, 8, 2], "cor": "#ef7d57", "cheio": true },
+        ] }),
+    );
+    let map = "mapas/fase.tmj";
+    let (t, pngs) = images(
+        &mut s,
+        "criar_mapa",
+        json!({ "caminho": map, "tiles": img, "tile": [8, 8], "tamanho": [20, 6] }),
+    );
+    assert!(t.contains("20x6 tiles de 8x8"), "{t}");
+    assert!(t.contains("tiles 1 a 20"), "{t}");
+    assert_eq!(pngs.len(), 1, "o tileset com a grade");
+    assert!(dir.join("assets/imagens/tiles.tsj").is_file());
+    assert!(
+        fails(
+            &mut s,
+            "criar_mapa",
+            json!({ "caminho": map, "tiles": img })
+        )
+        .contains("já existe")
+    );
+
+    let (t, pngs) = images(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "operacoes": [{
+            "desenho": ["####......====..####", "####################"],
+            "tiles": { "#": 1, "=": 2 }, "em": [0, 4],
+        }] }),
+    );
+    assert!(t.contains("32 tile(s) mudaram"), "{t}");
+    let prev = image::load_from_memory(&pngs[0]).unwrap();
+    assert_eq!(prev.width() * 6, prev.height() * 20, "o mapa inteiro");
+    let t = ok(
+        &mut s,
+        "marcar_tiles",
+        json!({ "caminho": map, "solidos": [1], "plataformas": [2], "terreno": { "nome": "grama", "primeiro": 5 } }),
+    );
+    assert!(t.contains("1 sólido(s), 1 plataforma(s)"), "{t}");
+    assert!(t.contains("15 das 15"), "{t}");
+
+    let t = ok(&mut s, "ver_mapa", json!({ "caminho": map, "texto": true }));
+    assert!(
+        t.contains("Sólidos: 1. Plataformas (só por cima): 2."),
+        "{t}"
+    );
+    assert!(t.contains(": grama."), "{t}");
+    assert!(t.contains("\n####......====..####\n"), "{t}");
+    assert!(t.contains("# = tile 1, = = tile 2"), "{t}");
+
+    // Terreno numa camada nova: as bordas se ajustam.
+    let t = ok(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "camada": "grama", "criar_camada": true, "previa": false,
+            "operacoes": [{ "terreno": "grama", "retangulo": [2, 1, 3, 2] }] }),
+    );
+    assert!(t.contains("camada nova \"grama\""), "{t}");
+    let doc = nn_projeto::map::MapDoc::open(&dir, map).unwrap();
+    let layer = doc.tile_layers()[1];
+    assert_eq!(doc.get(layer, 3, 1), 20, "o meio é a peça cheia");
+    assert_eq!(
+        doc.get(layer, 1, 1),
+        5 + 6,
+        "a borda da esquerda (cantos da direita)"
+    );
+    assert_eq!(doc.get(layer, 1, 0), 5 + 2, "o canto de cima à esquerda");
+    assert_eq!(doc.get(layer, 0, 0), 0);
+    let data = nn_projeto::tileset::TilesetData::load(&dir, "assets/imagens/tiles.tsj").unwrap();
+    assert!(data.info(0).solid && data.info(1).one_way);
+
+    // Erros que dizem o que vale.
+    let e = fails(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "operacoes": [{ "tile": 1, "pontos": [[25, 0]] }] }),
+    );
+    assert!(e.contains("fora do mapa (20x6)"), "{e}");
+    let e = fails(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "operacoes": [{ "terreno": "areia", "pontos": [[0, 0]] }] }),
+    );
+    assert!(e.contains("tem: grama"), "{e}");
+    let e = fails(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "camada": "x", "operacoes": [] }),
+    );
+    assert!(e.contains("\"criar_camada\": true"), "{e}");
+    let e = fails(
+        &mut s,
+        "marcar_tiles",
+        json!({ "caminho": map, "solidos": [21] }),
+    );
+    assert!(e.contains("os tiles 1 a 20"), "{e}");
+
+    // Cresce, e o jogo roda com o mapa.
+    let t = ok(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "tamanho": [24, 6], "previa": false }),
+    );
+    assert!(t.contains("24x6 tiles"), "{t}");
+    let t = ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": { "name": "mapa", "x": -96, "y": -48,
+            "components": [{ "type": "map", "map": map }] } }),
+    );
+    assert!(!t.contains("aviso"), "{t}");
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 0.3, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+
+    ok(&mut s, "desfazer", json!({ "passos": 20 }));
+    assert!(!dir.join(map).exists());
+    assert!(!dir.join("assets/imagens/tiles.tsj").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

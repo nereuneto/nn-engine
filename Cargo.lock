@@ -2881,6 +2881,7 @@ dependencies = [
  "log",
  "mlua",
  "nn-script",
+ "nn-tilemap",
  "serde_json",
 ]
 

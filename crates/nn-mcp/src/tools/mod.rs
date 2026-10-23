@@ -11,6 +11,7 @@ mod docs;
 mod editor;
 mod eventos;
 mod jogar;
+mod mapas;
 mod pixel;
 mod projeto;
 mod valores;
@@ -76,6 +77,7 @@ fn all() -> Vec<&'static Tool> {
     v.extend(cenas::TOOLS);
     v.extend(eventos::TOOLS);
     v.extend(pixel::TOOLS);
+    v.extend(mapas::TOOLS);
     v.extend(jogar::TOOLS);
     v.extend(aovivo::TOOLS);
     v.extend(editor::TOOLS);
