@@ -12,10 +12,11 @@
 //! - Caminhos: [`World::nav_grid`] monta a grade por onde dá para andar
 //!   (para inimigos que contornam paredes num jogo visto de cima).
 
+mod broad;
 mod grid;
 mod shape;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 
 use glam::Vec2;
 
@@ -23,6 +24,7 @@ pub use grid::{Cell, CollisionGrid};
 pub use nn_nav::{NavGrid, Path as NavPath};
 pub use shape::{Aabb, Shape};
 
+use broad::Broad;
 use shape::{EPS, overlap, raycast_circle, separation};
 
 /// Identificador de um corpo no [`World`]. Continua válido (e único) mesmo
@@ -249,6 +251,39 @@ pub struct World {
     grids: Vec<Option<CollisionGrid>>,
     overlaps: HashSet<(BodyId, BodyId)>,
     events: Vec<Event>,
+    /// A grade espacial (refeita em cada fase do passo) e os vetores de
+    /// trabalho, guardados para não criar outros a cada passo.
+    broad: Broad,
+    scratch: Scratch,
+    stats: std::cell::Cell<StepStats>,
+}
+
+/// Quanto trabalho o último [`World::step`] deu (para medir e para testes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct StepStats {
+    /// Corpos no mundo.
+    pub bodies: u32,
+    /// Vezes que um corpo foi conferido contra outro (o resto a grade
+    /// espacial descartou).
+    pub checks: u64,
+}
+
+/// Os sólidos perto de um corpo dinâmico enquanto ele anda (veja
+/// [`World::near_solids`]).
+struct NearSolids<'a> {
+    id: BodyId,
+    broad: &'a mut Broad,
+    near: &'a mut Vec<u32>,
+    solids: &'a mut Vec<BodyId>,
+    region: Option<Aabb>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct Scratch {
+    ids: Vec<BodyId>,
+    near: Vec<u32>,
+    solids: Vec<BodyId>,
+    sizes: Vec<f32>,
 }
 
 impl Default for World {
@@ -272,6 +307,9 @@ impl World {
             grids: Vec::new(),
             overlaps: HashSet::new(),
             events: Vec::new(),
+            broad: Broad::default(),
+            scratch: Scratch::default(),
+            stats: std::cell::Cell::new(StepStats::default()),
         }
     }
 
@@ -375,8 +413,55 @@ impl World {
         self.grids.iter().flatten()
     }
 
-    fn ids(&self) -> Vec<BodyId> {
-        self.bodies().map(|(id, _)| id).collect()
+    /// O trabalho do último passo.
+    pub fn stats(&self) -> StepStats {
+        self.stats.get()
+    }
+
+    fn count(&self, n: u64) {
+        let mut s = self.stats.get();
+        s.checks += n;
+        self.stats.set(s);
+    }
+
+    fn id_at(&self, index: u32) -> BodyId {
+        BodyId {
+            index,
+            generation: self.slots[index as usize].generation,
+        }
+    }
+
+    /// O lado das células da grade espacial para os corpos de agora.
+    fn cell_size(&mut self) -> f32 {
+        let mut sizes = std::mem::take(&mut self.scratch.sizes);
+        sizes.clear();
+        sizes.extend(self.bodies().map(|(_, b)| {
+            let h = b.shape.half_extents();
+            h.x.max(h.y) * 2.0
+        }));
+        let c = broad::cell_size(&mut sizes);
+        self.scratch.sizes = sizes;
+        c
+    }
+
+    /// Refaz a grade espacial com os corpos que passam no filtro, cada caixa
+    /// crescida por `grow(corpo)`.
+    fn build_broad(
+        &mut self,
+        cell: f32,
+        keep: impl Fn(&Body) -> bool,
+        grow: impl Fn(&Body) -> f32,
+    ) {
+        let mut broad = std::mem::take(&mut self.broad);
+        broad.build(
+            cell,
+            self.bodies().filter(|(_, b)| keep(b)).map(|(id, b)| {
+                let a = b.aabb();
+                let g = grow(b);
+                (id.index, Aabb::new(a.min - g, a.max + g))
+            }),
+        );
+        self.broad = broad;
     }
 
     // ------------------------------------------------------------------
@@ -387,13 +472,17 @@ impl World {
     /// (`fixed_update`). Devolve os eventos de sensores deste passo.
     pub fn step(&mut self, dt: f32) -> &[Event] {
         self.events.clear();
+        self.stats.set(StepStats::default());
         if dt <= 0.0 {
             return &self.events;
         }
-        let ids = self.ids();
+        let mut ids = std::mem::take(&mut self.scratch.ids);
+        ids.clear();
+        ids.extend(self.bodies().map(|(id, _)| id));
+        let cell = self.cell_size();
 
         // 1. Cinemáticos andam e empurram quem estiver no caminho.
-        let mut moved: HashMap<BodyId, Vec2> = HashMap::new();
+        let mut moved: BTreeMap<BodyId, Vec2> = BTreeMap::new();
         for &id in &ids {
             let Some(body) = self.get_mut(id) else {
                 continue;
@@ -407,6 +496,12 @@ impl World {
         }
 
         // 2. Dinâmicos: carona em plataformas, gravidade, movimento e colisão.
+        // Os sólidos (parados e cinemáticos) não se mexem nesta fase: a grade
+        // deles vale para todos os dinâmicos.
+        self.build_broad(cell, Body::is_solid, |_| EPS * 4.0);
+        let mut near = std::mem::take(&mut self.scratch.near);
+        let mut solids = std::mem::take(&mut self.scratch.solids);
+        let mut broad = std::mem::take(&mut self.broad);
         for &id in &ids {
             let Some(mut body) = self.take(id) else {
                 continue;
@@ -424,17 +519,32 @@ impl World {
                     body.position += body.velocity * dt;
                 } else {
                     self.push_out_of_kinematics(&mut body, &moved);
-                    self.move_body(id, &mut body, dt);
+                    let mut near_solids = NearSolids {
+                        id,
+                        broad: &mut broad,
+                        near: &mut near,
+                        solids: &mut solids,
+                        region: None,
+                    };
+                    self.move_body(&mut body, dt, &mut near_solids);
                 }
             }
             self.put(id, body);
         }
+        self.broad = broad;
 
         // 3. Dinâmicos entre si.
-        self.separate_dynamics(&ids);
+        self.separate_dynamics(cell, &mut near);
 
         // 4. Sensores.
-        self.update_overlaps(&ids);
+        self.update_overlaps(cell, &ids, &mut near);
+        self.stats.set(StepStats {
+            bodies: ids.len() as u32,
+            ..self.stats.get()
+        });
+        self.scratch.ids = ids;
+        self.scratch.near = near;
+        self.scratch.solids = solids;
         &self.events
     }
 
@@ -451,7 +561,7 @@ impl World {
     }
 
     /// Um cinemático que andou para cima de um corpo o empurra para fora.
-    fn push_out_of_kinematics(&self, body: &mut Body, moved: &HashMap<BodyId, Vec2>) {
+    fn push_out_of_kinematics(&self, body: &mut Body, moved: &BTreeMap<BodyId, Vec2>) {
         for (&kid, &d) in moved {
             if d == Vec2::ZERO {
                 continue;
@@ -468,7 +578,7 @@ impl World {
     }
 
     /// Move o corpo dinâmico resolvendo colisões com sólidos e grades.
-    fn move_body(&self, id: BodyId, body: &mut Body, dt: f32) {
+    fn move_body(&self, body: &mut Body, dt: f32, near: &mut NearSolids) {
         let delta = body.velocity * dt;
         // Subpassos menores que o próprio corpo: assim ele não atravessa
         // paredes finas em alta velocidade.
@@ -476,24 +586,91 @@ impl World {
         let limit = (half.x.min(half.y) * 0.9).max(1.0);
         let steps = ((delta.abs().max_element() / limit).ceil() as u32).clamp(1, MAX_SUBSTEPS);
         let part = delta / steps as f32;
+        // `left`: o caminho que falta (os sólidos perto dele valem até lá).
+        let mut left = delta;
         for _ in 0..steps {
             match body.shape {
                 Shape::Rect { .. } => {
-                    self.move_axis(id, body, Vec2::new(part.x, 0.0));
-                    self.move_axis(id, body, Vec2::new(0.0, part.y));
-                    self.resolve_round_solids(id, body);
+                    self.near_solids(near, body, left);
+                    self.move_axis(body, Vec2::new(part.x, 0.0), near);
+                    self.near_solids(near, body, left);
+                    self.move_axis(body, Vec2::new(0.0, part.y), near);
+                    self.near_solids(near, body, left);
+                    self.resolve_round_solids(body, near);
                 }
                 Shape::Circle { .. } => {
+                    self.near_solids(near, body, left);
                     let before = body.position;
                     body.position += part;
-                    self.resolve_mtv(id, body, before);
+                    self.resolve_mtv(body, before, near);
                 }
+            }
+            left -= part;
+        }
+    }
+
+    /// Garante que `near.solids` tem todos os sólidos que o corpo pode tocar
+    /// andando `left` a mais (com uma folga do tamanho dele), na ordem dos
+    /// corpos.
+    fn near_solids(&self, near: &mut NearSolids, body: &Body, left: Vec2) {
+        let a = body.aabb();
+        let reach = left.abs() + body.shape.half_extents() * 0.5 + Vec2::splat(EPS * 8.0);
+        if near
+            .region
+            .is_some_and(|r| inside(&Aabb::new(a.min - reach, a.max + reach), &r))
+        {
+            return;
+        }
+        let margin = left.abs() + body.shape.half_extents() + Vec2::splat(1.0);
+        let region = Aabb::new(a.min - margin, a.max + margin);
+        near.broad.query(&region, near.near);
+        near.solids.clear();
+        for &i in near.near.iter() {
+            let oid = self.id_at(i);
+            if oid != near.id
+                && self
+                    .get(oid)
+                    .is_some_and(|o| o.is_solid() && o.interacts(body))
+            {
+                near.solids.push(oid);
+            }
+        }
+        near.region = Some(region);
+    }
+
+    /// Passa por cada sólido que o corpo pode tocar, na ordem dos corpos:
+    /// os da área de `near` e, se um empurrão tirar o corpo dela no meio, os
+    /// outros que vêm depois (como se não houvesse a grade).
+    fn each_solid(
+        &self,
+        body: &mut Body,
+        near: &NearSolids,
+        mut f: impl FnMut(&mut Body, BodyId, &Body),
+    ) {
+        let mut f = |body: &mut Body, oid: BodyId, other: &Body| {
+            self.count(1);
+            f(body, oid, other);
+        };
+        let region = near.region.unwrap_or_else(|| body.aabb());
+        let mut after = None;
+        for &oid in near.solids.iter() {
+            let Some(other) = self.get(oid) else { continue };
+            f(body, oid, other);
+            if !inside(&body.aabb(), &region) {
+                after = Some(oid.index);
+                break;
+            }
+        }
+        let Some(after) = after else { return };
+        for (oid, other) in self.bodies() {
+            if oid.index > after && oid != near.id && other.is_solid() && other.interacts(body) {
+                f(body, oid, other);
             }
         }
     }
 
     /// Movimento num eixo só (retângulos): empurra de volta ao bater.
-    fn move_axis(&self, id: BodyId, body: &mut Body, delta: Vec2) {
+    fn move_axis(&self, body: &mut Body, delta: Vec2, near: &NearSolids) {
         if delta == Vec2::ZERO {
             return;
         }
@@ -501,34 +678,13 @@ impl World {
         let prev_bottom = body.position.y - half.y;
         body.position += delta;
 
-        let mut hits: Vec<(Aabb, bool, Option<Ground>)> = Vec::new();
-        let aabb = body.aabb();
-        for grid in self.grids() {
-            for (c, r, cell) in grid.cells_in(&aabb) {
-                hits.push((
-                    grid.cell_aabb(c, r),
-                    cell == Cell::OneWay,
-                    Some(Ground::Grid),
-                ));
-            }
-        }
-        for (oid, other) in self.bodies() {
-            if oid == id || !other.is_solid() || !other.interacts(body) {
-                continue;
-            }
-            if let Shape::Rect { .. } = other.shape {
-                hits.push((other.aabb(), other.one_way, Some(Ground::Body(oid))));
-            }
-        }
-
-        for (solid, one_way, ground) in hits {
-            let aabb = body.aabb();
-            if !aabb.overlaps(&solid) {
-                continue;
+        let hit = |body: &mut Body, solid: Aabb, one_way: bool, ground: Option<Ground>| {
+            if !body.aabb().overlaps(&solid) {
+                return;
             }
             if delta.x != 0.0 {
                 if one_way {
-                    continue;
+                    return;
                 }
                 if delta.x > 0.0 {
                     body.position.x = solid.min.x - half.x;
@@ -540,7 +696,7 @@ impl World {
                 body.velocity.x = bounce(body.velocity.x, body.bounce);
             } else {
                 if one_way && (delta.y > 0.0 || prev_bottom < solid.max.y - EPS * 4.0) {
-                    continue;
+                    return;
                 }
                 if delta.y > 0.0 {
                     body.position.y = solid.min.y - half.y;
@@ -552,15 +708,29 @@ impl World {
                 }
                 body.velocity.y = bounce(body.velocity.y, body.bounce);
             }
+        };
+        // Primeiro os tiles que ele toca agora, depois os corpos retangulares.
+        let aabb = body.aabb();
+        for grid in self.grids() {
+            for (c, r, cell) in grid.cells_in(&aabb) {
+                hit(
+                    body,
+                    grid.cell_aabb(c, r),
+                    cell == Cell::OneWay,
+                    Some(Ground::Grid),
+                );
+            }
         }
+        self.each_solid(body, near, |body, oid, other| {
+            if let Shape::Rect { .. } = other.shape {
+                hit(body, other.aabb(), other.one_way, Some(Ground::Body(oid)));
+            }
+        });
     }
 
     /// Retângulo dinâmico contra sólidos redondos.
-    fn resolve_round_solids(&self, id: BodyId, body: &mut Body) {
-        for (oid, other) in self.bodies() {
-            if oid == id || !other.is_solid() || !other.interacts(body) {
-                continue;
-            }
+    fn resolve_round_solids(&self, body: &mut Body, near: &NearSolids) {
+        self.each_solid(body, near, |body, oid, other| {
             if let Shape::Circle { .. } = other.shape
                 && let Some((n, depth)) =
                     separation(body.position, &body.shape, other.position, &other.shape)
@@ -569,118 +739,188 @@ impl World {
                 record_touch(body, n, Some(Ground::Body(oid)));
                 cancel_velocity(body, n);
             }
-        }
+        });
     }
 
     /// Círculo dinâmico: resolve pelo vetor mínimo de separação.
-    fn resolve_mtv(&self, id: BodyId, body: &mut Body, before: Vec2) {
+    fn resolve_mtv(&self, body: &mut Body, before: Vec2, near: &NearSolids) {
         let radius = body.shape.half_extents().y;
         let prev_bottom = before.y - radius;
-        for _ in 0..4 {
-            let mut any = false;
-            let aabb = body.aabb();
-            let mut solids: Vec<(Vec2, Shape, bool, Option<Ground>)> = Vec::new();
-            for grid in self.grids() {
-                for (c, r, cell) in grid.cells_in(&aabb) {
-                    let cell_box = grid.cell_aabb(c, r);
-                    solids.push((
-                        cell_box.center(),
-                        Shape::Rect {
-                            half: cell_box.half(),
-                        },
-                        cell == Cell::OneWay,
-                        Some(Ground::Grid),
-                    ));
-                }
-            }
-            for (oid, other) in self.bodies() {
-                if oid != id && other.is_solid() && other.interacts(body) {
-                    solids.push((
-                        other.position,
-                        other.shape,
-                        other.one_way,
-                        Some(Ground::Body(oid)),
-                    ));
-                }
-            }
-            for (pos, shape, one_way, ground) in solids {
-                let Some((n, depth)) = separation(body.position, &body.shape, pos, &shape) else {
-                    continue;
+        let push =
+            |body: &mut Body, pos: Vec2, shape: &Shape, one_way: bool, ground: Option<Ground>| {
+                let Some((n, depth)) = separation(body.position, &body.shape, pos, shape) else {
+                    return false;
                 };
                 if one_way {
                     let top = shape.aabb(pos).max.y;
                     if n.y < 0.7 || body.velocity.y > 0.0 || prev_bottom < top - EPS * 4.0 {
-                        continue;
+                        return false;
                     }
                 }
                 body.position += n * depth;
                 record_touch(body, n, ground);
                 cancel_velocity(body, n);
-                any = true;
+                true
+            };
+        for _ in 0..4 {
+            let mut any = false;
+            let aabb = body.aabb();
+            for grid in self.grids() {
+                for (c, r, cell) in grid.cells_in(&aabb) {
+                    let b = grid.cell_aabb(c, r);
+                    let shape = Shape::Rect { half: b.half() };
+                    any |= push(
+                        body,
+                        b.center(),
+                        &shape,
+                        cell == Cell::OneWay,
+                        Some(Ground::Grid),
+                    );
+                }
             }
+            self.each_solid(body, near, |body, oid, other| {
+                any |= push(
+                    body,
+                    other.position,
+                    &other.shape,
+                    other.one_way,
+                    Some(Ground::Body(oid)),
+                );
+            });
             if !any {
                 break;
             }
         }
     }
 
-    fn separate_dynamics(&mut self, ids: &[BodyId]) {
-        let dynamics: Vec<BodyId> = ids
-            .iter()
-            .copied()
-            .filter(|id| {
-                self.get(*id)
-                    .is_some_and(|b| b.kind == BodyKind::Dynamic && !b.sensor)
-            })
-            .collect();
-        for (i, &a) in dynamics.iter().enumerate() {
-            for &b in &dynamics[i + 1..] {
+    fn separate_dynamics(&mut self, cell: f32, near: &mut Vec<u32>) {
+        // A grade dos dinâmicos, com as caixas crescidas: os empurrões deste
+        // laço mexem neles. Quem sai da caixa guardada entra na lista
+        // `escaped` e passa a ser conferido por todos (assim nenhum par fica
+        // de fora, como sem a grade).
+        let is_dyn = |b: &Body| b.kind == BodyKind::Dynamic && !b.sensor;
+        let grow = |b: &Body| b.shape.half_extents().max_element() * 0.5 + 1.0;
+        self.build_broad(cell, is_dyn, grow);
+        let n = self.slots.len();
+        let mut stored: Vec<Option<Aabb>> = vec![None; n];
+        for (id, b) in self.bodies() {
+            if is_dyn(b) {
+                let (a, g) = (b.aabb(), grow(b));
+                stored[id.index as usize] = Some(Aabb::new(a.min - g, a.max + g));
+            }
+        }
+        let mut escaped: Vec<u32> = Vec::new();
+        let mut is_escaped = vec![false; n];
+        let mut check = |world: &World, i: u32, escaped: &mut Vec<u32>| {
+            let i = i as usize;
+            if is_escaped[i] {
+                return;
+            }
+            if let (Some(b), Some(box_)) = (world.slots[i].body.as_ref(), stored[i])
+                && !inside(&b.aabb(), &box_)
+            {
+                is_escaped[i] = true;
+                escaped.push(i as u32);
+            }
+        };
+        for ai in 0..n as u32 {
+            let a = self.id_at(ai);
+            let Some(ba) = self.get(a).filter(|b| is_dyn(b)) else {
+                continue;
+            };
+            let (aa, g) = (ba.aabb(), grow(ba));
+            let region = Aabb::new(aa.min - g, aa.max + g);
+            let mut broad = std::mem::take(&mut self.broad);
+            broad.query(&region, near);
+            self.broad = broad;
+            if !escaped.is_empty() {
+                near.extend(escaped.iter().copied());
+                near.sort_unstable();
+                near.dedup();
+            }
+            // Os pares de `a` com quem vem depois: os da grade e, se os
+            // empurrões tirarem `a` da área, todos os que faltam.
+            let mut k = 0;
+            let mut brute_after: Option<u32> = None;
+            loop {
+                let bi = if let Some(after) = brute_after {
+                    let next = after + 1;
+                    if next as usize >= n {
+                        break;
+                    }
+                    brute_after = Some(next);
+                    next
+                } else {
+                    let Some(&bi) = near.get(k) else { break };
+                    k += 1;
+                    if bi <= ai {
+                        continue;
+                    }
+                    bi
+                };
+                let b = self.id_at(bi);
+                self.count(1);
                 let (Some(ba), Some(bb)) = (self.get(a), self.get(b)) else {
                     continue;
                 };
-                if !ba.interacts(bb) {
+                if !is_dyn(bb) || !ba.interacts(bb) {
                     continue;
                 }
-                let Some((n, depth)) = separation(ba.position, &ba.shape, bb.position, &bb.shape)
+                let Some((nrm, depth)) = separation(ba.position, &ba.shape, bb.position, &bb.shape)
                 else {
                     continue;
                 };
-                let push = n * depth / 2.0;
+                let push = nrm * depth / 2.0;
                 if let Some(ba) = self.get_mut(a) {
                     ba.position += push;
-                    record_touch(ba, n, Some(Ground::Body(b)));
-                    cancel_velocity(ba, n);
+                    record_touch(ba, nrm, Some(Ground::Body(b)));
+                    cancel_velocity(ba, nrm);
                 }
                 if let Some(bb) = self.get_mut(b) {
                     bb.position -= push;
-                    record_touch(bb, -n, Some(Ground::Body(a)));
-                    cancel_velocity(bb, -n);
+                    record_touch(bb, -nrm, Some(Ground::Body(a)));
+                    cancel_velocity(bb, -nrm);
+                }
+                check(self, ai, &mut escaped);
+                check(self, bi, &mut escaped);
+                if brute_after.is_none()
+                    && self.get(a).is_some_and(|ba| !inside(&ba.aabb(), &region))
+                {
+                    brute_after = Some(bi);
                 }
             }
         }
     }
 
-    fn update_overlaps(&mut self, ids: &[BodyId]) {
-        let sensors: Vec<BodyId> = ids
-            .iter()
-            .copied()
-            .filter(|id| self.get(*id).is_some_and(|b| b.sensor))
-            .collect();
+    fn update_overlaps(&mut self, cell: f32, ids: &[BodyId], near: &mut Vec<u32>) {
         let mut current = HashSet::new();
-        for &s in &sensors {
-            let Some(sb) = self.get(s) else { continue };
-            for (oid, other) in self.bodies() {
-                if oid == s || !sb.interacts(other) {
+        if ids.iter().any(|id| self.get(*id).is_some_and(|b| b.sensor)) {
+            self.build_broad(cell, |_| true, |_| EPS);
+            for &s in ids {
+                let Some(area) = self.get(s).filter(|b| b.sensor).map(Body::aabb) else {
                     continue;
-                }
-                if overlap(sb.position, &sb.shape, other.position, &other.shape) {
-                    // Par ordenado: o sensor primeiro; se os dois forem, o menor id.
-                    let pair = if other.sensor && oid < s {
-                        (oid, s)
-                    } else {
-                        (s, oid)
+                };
+                let mut broad = std::mem::take(&mut self.broad);
+                broad.query(&area, near);
+                self.broad = broad;
+                for &oi in near.iter() {
+                    let oid = self.id_at(oi);
+                    self.count(1);
+                    let (Some(sb), Some(other)) = (self.get(s), self.get(oid)) else {
+                        continue;
                     };
-                    current.insert(pair);
+                    if oid == s || !sb.interacts(other) {
+                        continue;
+                    }
+                    if overlap(sb.position, &sb.shape, other.position, &other.shape) {
+                        // Par ordenado: o sensor primeiro; se os dois forem, o menor id.
+                        let pair = if other.sensor && oid < s {
+                            (oid, s)
+                        } else {
+                            (s, oid)
+                        };
+                        current.insert(pair);
+                    }
                 }
             }
         }
@@ -844,6 +1084,11 @@ impl World {
         }
         best
     }
+}
+
+/// A caixa `a` está toda dentro de `b`?
+fn inside(a: &Aabb, b: &Aabb) -> bool {
+    a.min.x >= b.min.x && a.min.y >= b.min.y && a.max.x <= b.max.x && a.max.y <= b.max.y
 }
 
 fn bounce(v: f32, factor: f32) -> f32 {
