@@ -64,6 +64,8 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 fontdue = "0.9"
+# Hash rápido para as tabelas internas (glifos, layouts de texto).
+rustc-hash = "2"
 # Lua 5.4 compilada junto (vendored): não precisa instalar nada.
 mlua = { version = "0.12", features = ["lua54", "vendored", "serialize"] }
 kira = { version = "0.12", default-features = false, features = ["cpal", "wav", "pcm", "ogg", "vorbis", "mp3"] }

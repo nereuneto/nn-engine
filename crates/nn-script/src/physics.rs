@@ -352,6 +352,36 @@ impl UserData for LWorld {
             },
         );
 
+        // Para a cena visual: as posições de `n` corpos de uma vez (uma ida
+        // ao Rust por passo, em vez de três por corpo). Em `out`, o par
+        // x, y de cada corpo (2i-1, 2i), ou `false` no x se ele foi removido.
+        m.add_method(
+            "_positions",
+            |_, this, (bodies, n, out): (Table, usize, Table)| {
+                let world = this.0.borrow();
+                for i in 1..=n {
+                    let ud: AnyUserData = bodies.raw_get(i)?;
+                    let body = ud.borrow::<LBody>()?;
+                    let at = if Rc::ptr_eq(&body.world, &this.0) {
+                        world.get(body.id).map(|b| b.position)
+                    } else {
+                        body.with(|b| b.position).ok()
+                    };
+                    match at {
+                        Some(p) => {
+                            out.raw_set(2 * i - 1, p.x)?;
+                            out.raw_set(2 * i, p.y)?;
+                        }
+                        None => {
+                            out.raw_set(2 * i - 1, false)?;
+                            out.raw_set(2 * i, false)?;
+                        }
+                    }
+                }
+                Ok(())
+            },
+        );
+
         m.add_method("bodies", |_, this, tag: Option<String>| {
             let world = this.0.borrow();
             Ok(world

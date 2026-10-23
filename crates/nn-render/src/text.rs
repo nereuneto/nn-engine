@@ -4,7 +4,11 @@
 //! textura-atlas. Depois disso, desenhar texto é desenhar sprites comuns, que
 //! entram no mesmo lote dos demais.
 
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::hash::{Hash, Hasher};
+use std::rc::Rc;
+
+use rustc_hash::{FxHashMap, FxHasher};
 
 use glam::{UVec2, Vec2};
 use nn_core::Color;
@@ -170,12 +174,37 @@ struct AtlasPage {
     shelf_height: u32,
 }
 
+/// Layouts já feitos, pelo texto, fonte, tamanho e alinhamento. Guarda os do
+/// quadro atual e os do anterior: um texto que aparece em todo quadro não é
+/// refeito, e um que sumiu sai da memória dois quadros depois.
+#[derive(Debug, Default)]
+struct LayoutCache {
+    current: FxHashMap<u64, Vec<CachedLayout>>,
+    previous: FxHashMap<u64, Vec<CachedLayout>>,
+}
+
+#[derive(Debug)]
+struct CachedLayout {
+    content: Box<str>,
+    font: u32,
+    px: u32,
+    align: Align,
+    layout: Rc<TextLayout>,
+}
+
+impl CachedLayout {
+    fn is(&self, content: &str, font: u32, px: u32, align: Align) -> bool {
+        self.font == font && self.px == px && self.align == align && &*self.content == content
+    }
+}
+
 /// Fontes carregadas e cache de glifos rasterizados.
 #[derive(Debug)]
 pub(crate) struct TextSystem {
     fonts: Vec<fontdue::Font>,
-    glyphs: HashMap<GlyphKey, Option<AtlasGlyph>>,
+    glyphs: FxHashMap<GlyphKey, Option<AtlasGlyph>>,
     pages: Vec<AtlasPage>,
+    layouts: RefCell<LayoutCache>,
 }
 
 impl TextSystem {
@@ -185,8 +214,9 @@ impl TextSystem {
     pub fn new() -> Self {
         let mut system = Self {
             fonts: Vec::new(),
-            glyphs: HashMap::new(),
+            glyphs: FxHashMap::default(),
             pages: Vec::new(),
+            layouts: RefCell::default(),
         };
         system
             .load_font(DEFAULT_FONT)
@@ -203,6 +233,52 @@ impl TextSystem {
             .map_err(|e| RenderError::Font(e.to_string()))?;
         self.fonts.push(font);
         Ok(FontId(self.fonts.len() as u32 - 1))
+    }
+
+    /// Como [`TextSystem::layout`], mas reaproveita o layout de um texto igual
+    /// pedido neste quadro ou no anterior.
+    pub fn cached_layout(&self, text: &Text<'_>) -> Rc<TextLayout> {
+        let font = text.font.unwrap_or(self.default_font()).0;
+        let px = text.size.max(1.0).round() as u32;
+        let mut h = FxHasher::default();
+        text.content.hash(&mut h);
+        (font, px, text.align as u8).hash(&mut h);
+        let key = h.finish();
+        let mut cache = self.layouts.borrow_mut();
+        let found = |list: &Vec<CachedLayout>| {
+            list.iter()
+                .position(|c| c.is(text.content, font, px, text.align))
+        };
+        if let Some(list) = cache.current.get(&key)
+            && let Some(i) = found(list)
+        {
+            return list[i].layout.clone();
+        }
+        let entry = match cache
+            .previous
+            .get_mut(&key)
+            .and_then(|l| found(l).map(|i| (l, i)))
+        {
+            Some((list, i)) => list.swap_remove(i),
+            None => CachedLayout {
+                content: text.content.into(),
+                font,
+                px,
+                align: text.align,
+                layout: Rc::new(self.layout(text)),
+            },
+        };
+        let layout = entry.layout.clone();
+        cache.current.entry(key).or_default().push(entry);
+        layout
+    }
+
+    /// Fim do quadro: os layouts que não foram usados neste nem no anterior
+    /// saem da memória.
+    pub fn end_frame(&self) {
+        let mut cache = self.layouts.borrow_mut();
+        let current = std::mem::take(&mut cache.current);
+        cache.previous = current;
     }
 
     /// Posiciona os glifos do texto, sem tocar na GPU.

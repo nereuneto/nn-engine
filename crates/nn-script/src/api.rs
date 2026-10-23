@@ -8,8 +8,46 @@ use nn_render::{Sprite, Text, TextureOptions};
 use crate::convert::{align, anchor, channel, color, err, opt, opt_color};
 use crate::types::{LAnimation, LAnimator, LFont, LSheet, LSoundData, LTexture, expect, play};
 
-/// Chave do registro do Lua onde fica o contexto durante um callback.
-pub(crate) const CTX_KEY: &str = "nn.ctx";
+/// Onde fica o contexto da engine durante um callback da cena: guardado nos
+/// dados do estado Lua, para cada `nn.*` não precisar buscar o contexto no
+/// registro do Lua pelo nome.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct CtxSlot(std::rc::Rc<std::cell::RefCell<Option<AnyUserData>>>);
+
+impl CtxSlot {
+    fn of(lua: &Lua) -> Option<Self> {
+        lua.app_data_ref::<CtxSlot>().map(|s| s.clone())
+    }
+
+    /// Deixa `ctx` disponível para as funções `nn.*` enquanto `f` roda.
+    pub(crate) fn enter<R>(
+        lua: &Lua,
+        ctx: &mut Context,
+        f: impl FnOnce() -> Result<R>,
+    ) -> Result<R> {
+        let Some(slot) = Self::of(lua) else {
+            return f();
+        };
+        lua.scope(|scope| {
+            let ud = scope.create_any_userdata_ref_mut(ctx)?;
+            /// Volta ao contexto de antes (também se `f` entrar em pânico).
+            struct Restore(CtxSlot, Option<AnyUserData>);
+            impl Drop for Restore {
+                fn drop(&mut self) {
+                    *self.0.0.borrow_mut() = self.1.take();
+                }
+            }
+            let previous = slot.0.replace(Some(ud));
+            let _restore = Restore(slot.clone(), previous);
+            f()
+        })
+    }
+}
+
+/// Liga os dados do contexto ao estado Lua (uma vez, ao criar).
+pub(crate) fn install_ctx(lua: &Lua) {
+    lua.set_app_data(CtxSlot::default());
+}
 
 /// Pedido de troca de cena feito pelo script, aplicado depois do `update`.
 #[derive(Debug)]
@@ -30,7 +68,7 @@ pub(crate) struct Shared {
 
 /// Acessa o contexto da engine. Só funciona dentro dos callbacks da cena.
 pub(crate) fn with_ctx<R>(lua: &Lua, f: impl FnOnce(&mut Context) -> Result<R>) -> Result<R> {
-    let ud: Option<AnyUserData> = lua.named_registry_value(CTX_KEY)?;
+    let ud = CtxSlot::of(lua).and_then(|s| s.0.borrow().clone());
     let Some(ud) = ud else {
         return Err(err(
             "as funções nn.* só podem ser usadas durante a execução da cena (enter, update, draw...)",
@@ -193,6 +231,90 @@ pub(crate) fn build_text<'a>(
     Ok(text)
 }
 
+/// Argumentos de [`component_sprite`], na ordem.
+type ComponentSprite = (
+    bool,
+    Value,
+    f32,
+    f32,
+    f32,
+    f32,
+    f32,
+    f32,
+    f32,
+    Value,
+    Option<bool>,
+    Option<bool>,
+    Option<bool>,
+    Option<i64>,
+);
+
+/// O componente Imagem da cena visual, sem a tabela de opções (é o que mais
+/// se desenha): `nn._sprite(hud, img, x, y, sx, sy, w, h, rotação em graus,
+/// cor, flip_x, flip_y, repetir, quadro)`. `w`/`h` 0 é o tamanho natural; a
+/// escala do objeto multiplica; repetir põe uma cópia por unidade de escala.
+fn component_sprite(
+    lua: &Lua,
+    (hud, target, x, y, sx, sy, w, h, rot, col, flip_x, flip_y, repeat, frame): ComponentSprite,
+) -> Result<()> {
+    let tint = if col.is_nil() {
+        nn_core::Color::WHITE
+    } else {
+        color(&col)?
+    };
+    with_ctx(lua, |c| {
+        let (sprite, natural) = match &target {
+            Value::UserData(ud) if ud.is::<LTexture>() => {
+                let id = ud.borrow::<LTexture>()?.0;
+                (Sprite::new(id), c.renderer.texture_size(id).as_vec2())
+            }
+            Value::UserData(ud) if ud.is::<LSheet>() => {
+                let sheet = ud.borrow::<LSheet>()?.0;
+                let count = sheet.frame_count().max(1);
+                let f = frame.unwrap_or(1).clamp(1, count as i64) as u32;
+                (sheet.sprite(f - 1), sheet.frame_size().as_vec2())
+            }
+            other => {
+                return Err(err(format!(
+                    "esperava uma imagem ou spritesheet, recebeu {}",
+                    other.type_name()
+                )));
+            }
+        };
+        let base = Vec2::new(
+            if w > 0.0 { w } else { natural.x },
+            if h > 0.0 { h } else { natural.y },
+        );
+        let mut size = base * Vec2::new(sx, sy);
+        let repeat = if repeat.unwrap_or(false) {
+            Vec2::new(sx.abs(), sy.abs())
+        } else {
+            Vec2::ONE
+        };
+        if flip_x.unwrap_or(false) {
+            size.x = -size.x;
+        }
+        if flip_y.unwrap_or(false) {
+            size.y = -size.y;
+        }
+        // Na tela, y é para baixo: a rotação vira ao contrário.
+        let rotation = if hud { -rot } else { rot }.to_radians();
+        let sprite = sprite
+            .at(Vec2::new(x, y))
+            .size(size)
+            .origin(Vec2::splat(0.5))
+            .rotation(rotation)
+            .color(tint)
+            .repeat(repeat);
+        if hud {
+            c.renderer.screen().draw(&sprite);
+        } else {
+            c.renderer.draw(&sprite);
+        }
+        Ok(())
+    })
+}
+
 fn draw_table(lua: &Lua, space: Space) -> Result<Table> {
     let t = lua.create_table()?;
 
@@ -340,6 +462,7 @@ fn draw_table(lua: &Lua, space: Space) -> Result<Table> {
 
 pub(crate) fn install(lua: &Lua) -> Result<()> {
     lua.set_app_data(Shared::default());
+    install_ctx(lua);
     let nn = lua.create_table()?;
     nn.set("version", env!("CARGO_PKG_VERSION"))?;
 
@@ -403,6 +526,7 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         })?,
     )?;
     nn.set("screen", screen)?;
+    nn.set("_sprite", lua.create_function(component_sprite)?)?;
 
     nn.set(
         "text_size",
