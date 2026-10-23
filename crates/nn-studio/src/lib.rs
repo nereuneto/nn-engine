@@ -33,6 +33,7 @@ pub mod model_editor;
 pub mod model_kits;
 pub mod model_rig;
 pub mod new_map;
+pub mod new_sound;
 pub mod paint;
 pub mod pixel_editor;
 pub mod project;

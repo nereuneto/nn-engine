@@ -15,6 +15,7 @@ mod jogar;
 mod mapas;
 mod pixel;
 mod projeto;
+mod sons;
 mod valores;
 
 /// O que uma ferramenta devolve: blocos de texto e imagens.
@@ -80,6 +81,7 @@ fn all() -> Vec<&'static Tool> {
     v.extend(pixel::TOOLS);
     v.extend(mapas::TOOLS);
     v.extend(efeitos::TOOLS);
+    v.extend(sons::TOOLS);
     v.extend(jogar::TOOLS);
     v.extend(aovivo::TOOLS);
     v.extend(editor::TOOLS);

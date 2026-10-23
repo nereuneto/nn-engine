@@ -1167,3 +1167,93 @@ fn agente_poe_particulas() {
     assert!(t.contains("Erros: nenhum"), "{t}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Efeitos sonoros pelo agente: um tipo pronto, outra variação, um ajuste
+/// e o som tocando no jogo.
+#[test]
+fn agente_cria_sons() {
+    let dir = temp("sons");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "vazio" }));
+    let wav = "assets/sons/salto.wav";
+    let e = fails(&mut s, "criar_som", json!({ "caminho": wav }));
+    assert!(e.contains("Tipos: moeda"), "{e}");
+    let e = fails(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "tipo": "miau" }),
+    );
+    assert!(e.contains("não há o tipo \"miau\""), "{e}");
+    let (t, pngs) = images(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "tipo": "pulo" }),
+    );
+    assert!(t.contains("Gravei assets/sons/salto.wav"), "{t}");
+    assert!(t.contains("Tipo pulo, 0.26 s"), "{t}");
+    assert_eq!(pngs.len(), 1);
+    let bytes = std::fs::read(dir.join(wav)).unwrap();
+    assert_eq!(&bytes[..4], b"RIFF");
+    let side = std::fs::read_to_string(dir.join("assets/sons/salto.sfx")).unwrap();
+    assert!(side.contains("\"tipo\": \"pulo\""), "{side}");
+
+    // Outra variação, depois um ajuste em cima dela.
+    let t = ok(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "variacao": 5 }),
+    );
+    assert!(t.contains("Tipo pulo (variação 5)"), "{t}");
+    let t = ok(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "mudar": { "onda": "seno", "queda": 0.5 } }),
+    );
+    assert!(t.contains("onda: seno") && t.contains("queda: 0.5"), "{t}");
+    assert!(t.contains("(variação 5)"), "o tipo e a variação ficam: {t}");
+    let e = fails(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "mudar": { "cor": 1 } }),
+    );
+    assert!(e.contains("não há o campo \"cor\""), "{e}");
+    // Só olhar não grava.
+    let before = std::fs::read(dir.join(wav)).unwrap();
+    let t = ok(&mut s, "criar_som", json!({ "caminho": wav }));
+    assert!(t.starts_with("assets/sons/salto.wav: Tipo pulo"), "{t}");
+    assert_eq!(std::fs::read(dir.join(wav)).unwrap(), before);
+    // Um .wav que não foi feito aqui não é sobrescrito.
+    std::fs::write(dir.join("assets/sons/outro.wav"), b"RIFF").unwrap();
+    let e = fails(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": "assets/sons/outro.wav", "tipo": "moeda" }),
+    );
+    assert!(e.contains("não foi feito aqui"), "{e}");
+
+    if std::env::var("NN_FX_OUT").is_ok() {
+        for (k, _, _) in nn_projeto::sfx::KINDS {
+            let p = format!("assets/sons/fx_{k}.wav");
+            let (_, pngs) = images(&mut s, "criar_som", json!({ "caminho": p, "tipo": k }));
+            std::fs::write(format!("/tmp/som-{k}.png"), &pngs[0]).unwrap();
+            std::fs::copy(dir.join(&p), format!("/tmp/som-{k}.wav")).unwrap();
+        }
+    }
+
+    // O jogo toca.
+    ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": { "name": "som", "x": 0, "y": 0,
+            "components": [{ "type": "sound", "sound": wav }] } }),
+    );
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 0.3, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+    ok(&mut s, "desfazer", json!({ "passos": 30 }));
+    assert!(!dir.join(wav).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}

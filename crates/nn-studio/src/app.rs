@@ -464,6 +464,7 @@ impl StudioApp {
                     Command::NewScene,
                     Command::NewCodeScene,
                     Command::NewScript,
+                    Command::NewSound,
                     Command::NewFolder,
                     Command::ImportFiles,
                 ] {

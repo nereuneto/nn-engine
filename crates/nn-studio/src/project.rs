@@ -223,6 +223,12 @@ pub enum Action {
     FocusTab(Tab),
     /// Criar um mapa de tiles novo na cena ativa.
     NewMap,
+    /// Criar um efeito sonoro na pasta `parent`, ou ajustar o som `edit`
+    /// (um `.wav` com o `.sfx` ao lado).
+    NewSound {
+        parent: String,
+        edit: Option<String>,
+    },
     /// Gravar uma variação do modelo `rel` (uma cópia) e abrir.
     ModelVariation {
         rel: String,
@@ -262,6 +268,8 @@ enum Dialog {
     Export(ExportDialog),
     /// Mapa de tiles novo, para pôr na cena (se houver).
     NewMap(crate::new_map::NewMapForm, Option<String>),
+    /// Efeito sonoro novo (ou ajustar um).
+    NewSound(Box<crate::new_sound::NewSoundForm>),
 }
 
 struct ExportDialog {
@@ -1656,6 +1664,10 @@ impl ProjectWorkspace {
             Command::ShowTiles => self.show_tab(Tab::Tiles),
             Command::ClearConsole => self.console.clear(),
             Command::ConnectAgent => self.agent_dialog = Some(Default::default()),
+            Command::NewSound => self.actions.push(Action::NewSound {
+                parent: String::new(),
+                edit: None,
+            }),
             Command::ResetLayout => {
                 self.dock = default_layout();
                 env.settings.remove_layout(&self.root);
@@ -2085,6 +2097,19 @@ impl ProjectWorkspace {
                         self.toasts.push(short, crate::toast::Kind::Success);
                     }
                 }
+                Action::NewSound { parent, edit } => match edit {
+                    Some(rel) => match crate::new_sound::NewSoundForm::open(&self.root, &rel) {
+                        Ok(f) => self.dialog = Some(Dialog::NewSound(Box::new(f))),
+                        Err(e) => self
+                            .console
+                            .error(format!("Não deu para abrir os números do som: {e}")),
+                    },
+                    None => {
+                        self.dialog = Some(Dialog::NewSound(Box::new(
+                            crate::new_sound::NewSoundForm::new(&self.files, &parent),
+                        )));
+                    }
+                },
                 Action::NewMap => {
                     self.dialog = Some(Dialog::NewMap(
                         crate::new_map::NewMapForm::new(&self.files),
@@ -2490,7 +2515,7 @@ impl ProjectWorkspace {
         if hovering {
             drop_overlay(&ctx, self.file_panel.target_dir(&self.files));
         }
-        self.dialogs(&ctx);
+        self.dialogs(&ctx, env.audio);
         if let Some(d) = &mut self.agent_dialog {
             let connected = self.agent_link.as_ref().is_some_and(|l| l.listening());
             if !crate::agent::dialog_ui(&ctx, d, &self.root, env.exe, connected) {
@@ -2644,7 +2669,7 @@ impl ProjectWorkspace {
             });
     }
 
-    fn dialogs(&mut self, ctx: &egui::Context) {
+    fn dialogs(&mut self, ctx: &egui::Context, audio: &mut Option<nn_audio::Audio>) {
         let Some(dialog) = &mut self.dialog else {
             return;
         };
@@ -2907,6 +2932,33 @@ impl ProjectWorkspace {
                             line: None,
                         });
                     }
+                }
+            }
+            Dialog::NewSound(form) => {
+                let mut done = None;
+                let response =
+                    egui::Modal::new(egui::Id::new("dialogo-novo-som")).show(ctx, |ui| {
+                        let (c, cancel) = form.ui(ui, &self.files, audio);
+                        done = c;
+                        close |= cancel;
+                    });
+                close |= response.should_close();
+                if let Some(c) = done {
+                    close = true;
+                    if c.replaced {
+                        self.console.info(format!("Som ajustado: {}", c.wav));
+                        if let Some(v) = self.sounds.get_mut(&c.wav) {
+                            v.reload();
+                        }
+                    } else {
+                        self.console
+                            .info(format!("Criado: {} (os números em {})", c.wav, c.sfx));
+                        after = Some(Action::OpenFile {
+                            rel: c.wav.clone(),
+                            line: None,
+                        });
+                    }
+                    self.files.rescan();
                 }
             }
             Dialog::NewMap(form, scene) => {
@@ -4230,6 +4282,10 @@ impl Viewer<'_> {
         self.actions.push(match a {
             ViewerAction::CopyText(t) => Action::CopyText(t),
             ViewerAction::OpenExternal(r) => Action::OpenExternal(r),
+            ViewerAction::EditSound(r) => Action::NewSound {
+                parent: String::new(),
+                edit: Some(r),
+            },
         });
     }
 
