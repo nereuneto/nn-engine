@@ -1704,3 +1704,119 @@ fn agente_modela_em_3d() {
     assert!(!dir.join(rel).exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// O que os agentes da revisão da 0.8 acharam (os jogos "Musgo" e "A Torre
+/// do Vale").
+#[test]
+fn acertos_da_revisao_da_0_8() {
+    let dir = temp("revisao08");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "visual" }));
+    let fase = "cenas/fase.cena";
+
+    // Um valor de escolha que não existe é recusado, e a lista mostra as opções.
+    let e = fails(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": fase, "objeto": { "name": "b", "components": [{ "type": "button", "action": "xyz" }] } }),
+    );
+    assert!(e.contains("\"action\" = \"xyz\" não existe"), "{e}");
+    let t = ok(&mut s, "listar_componentes", json!({ "tipo": "button" }));
+    assert!(
+        t.contains("action = \"nada\" (nada | cena | por_cima | fechar | reiniciar | sair)"),
+        "{t}"
+    );
+
+    // Um texto preso num canto fica alinhado a ele.
+    let t = ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": fase, "objeto": { "name": "placar", "anchor": "top_left", "x": 20, "y": -20, "components": [{ "type": "text", "text": "Moedas", "hud": true }] } }),
+    );
+    assert!(t.contains("\"anchor\": \"topleft\""), "{t}");
+
+    // Copiar duas vezes não repete nomes.
+    ok(
+        &mut s,
+        "copiar_objeto",
+        json!({ "cena": fase, "objeto": "placar" }),
+    );
+    let t = ok(
+        &mut s,
+        "copiar_objeto",
+        json!({ "cena": fase, "objeto": "placar" }),
+    );
+    assert!(t.contains("\"placar 3\""), "{t}");
+
+    // Mudar o nome: a resposta diz o novo.
+    let t = ok(
+        &mut s,
+        "mudar_objeto",
+        json!({ "cena": fase, "objeto": "placar 3", "mudar": { "name": "aviso" } }),
+    );
+    assert!(t.contains("\"placar 3\" agora é \"aviso\""), "{t}");
+
+    // Partículas contínuas que começam desligadas.
+    let t = ok(
+        &mut s,
+        "particulas",
+        json!({ "cena": fase, "objeto": "fumaca", "efeito": "fumaca", "mudar": { "on_start": false }, "previa": false }),
+    );
+    assert!(t.contains("\"emitting\": false"), "{t}");
+
+    // Uma Vida com outro número que o do config.lua avisa.
+    let t = ok(
+        &mut s,
+        "mudar_objeto",
+        json!({ "cena": fase, "objeto": "heroi", "componentes": [{ "type": "behavior", "script": "nn:vida", "vidas": 5 }] }),
+    );
+    assert!(t.contains("o config.lua começa com vidas = 3"), "{t}");
+
+    // A tela pequena: os números das cenas que já existem.
+    let t = ok(&mut s, "mudar_config", json!({ "resolution": [320, 180] }));
+    assert!(t.contains("cenas/fase.cena: \"gravity\" -1800"), "{t}");
+    assert!(t.contains("nn:plataforma.pulo 860"), "{t}");
+
+    // Uma porta: a abertura desce até o chão, e os kits dizem o tamanho.
+    ok(
+        &mut s,
+        "criar_modelo",
+        json!({ "caminho": "modelos/muro.modelo" }),
+    );
+    ok(
+        &mut s,
+        "modelar",
+        json!({ "caminho": "modelos/muro.modelo", "operacoes": [
+            { "criar": "Muro", "forma": "cubo", "tamanho": [2, 2, 0.3] },
+            { "peca": "Muro", "recuar": "frente", "abertura": 0.4, "no_chao": true, "fundo": -0.1 },
+        ], "previa": false }),
+    );
+    let text = std::fs::read_to_string(dir.join("modelos/muro.modelo")).unwrap();
+    let md = nn_projeto::model::ModelData::from_lua(&text, "muro.modelo").unwrap();
+    let front: Vec<f32> = md.parts[0]
+        .verts
+        .iter()
+        // A face de dentro: o muro vai de z -0.15 a 0.15, e ela afundou 0.1.
+        .filter(|v| v.z > 0.0 && v.z < 0.1 && v.x.abs() < 0.5)
+        .map(|v| v.y)
+        .collect();
+    assert!(front.iter().any(|y| y.abs() < 1e-4), "{front:?}");
+    let e = fails(
+        &mut s,
+        "modelar",
+        json!({ "caminho": "modelos/muro.modelo", "operacoes": [{ "kit": "?" }] }),
+    );
+    assert!(e.contains("Parede (2 x 1.6 x 0.2 m)"), "{e}");
+
+    // A cena reiniciou: o relatório diz e não compara com o começo.
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": fase, "segundos": 1, "captura_final": false, "acoes": [{ "em": 0.2, "lua": "nn.scene.switch(\"cenas/fase.cena\")" }] }),
+    );
+    assert!(
+        t.contains("A cena reiniciou (começou de novo) em: 0.2"),
+        "{t}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

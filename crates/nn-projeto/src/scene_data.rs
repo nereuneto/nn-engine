@@ -1651,7 +1651,14 @@ impl SceneData {
         }
         let mut copy = obj;
         renumber(&mut copy, &mut next);
-        copy.name = copy_name(&copy.name);
+        // Um nome que ainda não existe na cena ("Árvore 2" já existe: "Árvore 3").
+        let mut used = Vec::new();
+        visit(&self.objects, &mut |o| used.push(o.name.clone()));
+        let mut name = copy_name(&copy.name);
+        while used.contains(&name) {
+            name = copy_name(&name);
+        }
+        copy.name = name;
         let new_id = copy.id;
         let index = self
             .list_mut(parent)
@@ -1930,6 +1937,7 @@ impl History {
 pub fn field_choices(kind: &str, key: &str) -> Option<&'static [&'static str]> {
     Some(match (kind, key) {
         ("sprite", "fill") => &["stretch", "repeat"],
+        ("button", "action") => &["nada", "cena", "por_cima", "fechar", "reiniciar", "sair"],
         ("text", "anchor") => &[
             "topleft",
             "top",

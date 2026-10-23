@@ -18,6 +18,9 @@ local B = {
       help = "A tela de fim de jogo, por exemplo." },
     { "pisar", false, label = "Morre se pisarem em cima",
       help = "Como num jogo de plataforma: quem cai em cima derrota o perigo." },
+    { "quique", 640, default3d = 8, label = "Pulo ao pisar", min = 0, advanced = true,
+      show_if = { "pisar", true },
+      help = "A velocidade para cima de quem pisou (como a força do pulo; no 3D, em m/s)." },
     { "some", false, label = "Some ao acertar", help = "Para tiros e projéteis." },
     { "empurrao", 520, default3d = 7, label = "Empurrão", min = 0, advanced = true,
       help = "Velocidade do empurrão (no 3D, em metros por segundo)." },
@@ -60,7 +63,7 @@ end
 function B:encostou(quem)
   local d3 = self.scene._3d
   if self.pisar and self:pisou(quem) then
-    quem.body.vy = d3 and 8 or 640
+    quem.body.vy = self.quique
     if self.obj:send("dano", 1, quem) == nil then
       if d3 then
         local x, y, z = self.obj:position3d()

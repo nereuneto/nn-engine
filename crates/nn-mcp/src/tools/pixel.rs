@@ -1072,7 +1072,7 @@ pub static TOOLS: &[&Tool] = &[
                 (
                     "cores",
                     s_obj(
-                        "As cores dos caracteres de todos os \"desenho\" desta chamada: {\"R\": \"#b13e53\", ...}",
+                        "As cores dos caracteres de todos os \"desenho\" desta chamada: {\"R\": \"#b13e53\", ...}. As \"cores\" de um \"desenho\" valem primeiro: para usar a mesma letra com outra cor num desenho (um tile diferente), ponha as cores nele",
                     ),
                     false,
                 ),

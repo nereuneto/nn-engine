@@ -443,6 +443,8 @@ pub fn small_screen_notes(
         ("nn:patrulha", "velocidade", false),
         ("nn:perseguir", "velocidade", false),
         ("nn:atirar", "velocidade", false),
+        ("nn:perigo", "empurrao", false),
+        ("nn:perigo", "quique", true),
         ("nn:inventario", "tamanho", false),
         ("nn:inventario", "margem", false),
         ("text", "size", false),
@@ -461,6 +463,10 @@ pub fn small_screen_notes(
             };
             for (who, key, sqrt) in FIELDS {
                 if *who != kind {
+                    continue;
+                }
+                // O pulo ao pisar só vale com "pisar".
+                if *key == "quique" && !c.get("pisar").is_some_and(Prop::bool) {
                     continue;
                 }
                 let default = if c.is_behavior() {

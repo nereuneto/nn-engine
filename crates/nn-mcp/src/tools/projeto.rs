@@ -363,10 +363,64 @@ fn mudar_config(s: &mut Server, a: &Value) -> Result<Output, String> {
     if changed.is_empty() {
         return Err("nada para mudar: passe title, start, width, height, vars...".into());
     }
-    Ok(Output::text(format!(
-        "Mudei no config.lua: {}.",
-        changed.join(", ")
-    )))
+    let mut text = format!("Mudei no config.lua: {}.", changed.join(", "));
+    if changed
+        .iter()
+        .any(|k| matches!(k.as_str(), "width" | "height" | "resolution"))
+    {
+        let notes = screen_notes(s);
+        if !notes.is_empty() {
+            text.push_str("\n\nA tela do jogo mudou de tamanho; o que já está nas cenas:\n");
+            let total = notes.len();
+            for n in notes.iter().take(12) {
+                text.push_str(&format!("  {n}\n"));
+            }
+            if total > 12 {
+                text.push_str(&format!("  ... e mais {}\n", total - 12));
+            }
+        }
+    }
+    Ok(Output::text(text))
+}
+
+/// Numa tela pequena, os números padrão (pensados para 720 de altura) que
+/// já estão nas cenas e prefabs: a gravidade e os dos objetos.
+fn screen_notes(s: &mut Server) -> Vec<String> {
+    let Some(screen) = s.config().map(|(_, c)| c.game_size()) else {
+        return Vec::new();
+    };
+    let k = f64::from(screen.1) / 720.0;
+    if k >= 0.75 {
+        return Vec::new();
+    }
+    let files: Vec<String> = crate::paths::list_files(&s.root, "")
+        .into_iter()
+        .filter(|f| f.ends_with(".cena") || f.ends_with(".prefab"))
+        .collect();
+    let mut out = Vec::new();
+    for f in files {
+        let Ok(doc) = s.open_doc(&f) else { continue };
+        if doc.three_d() {
+            continue;
+        }
+        let mut physics = false;
+        scene_data::visit(&doc.data.objects, &mut |o| {
+            physics |= o.component("body").is_some();
+        });
+        if physics && f.ends_with(".cena") && (doc.data.gravity + 1800.0).abs() < 1e-9 {
+            out.push(format!(
+                "{f}: \"gravity\" -1800 (o padrão, para 720 de altura) → uns {} (mude com mudar_cena)",
+                (-1800.0 * k).round()
+            ));
+        }
+        let mut lookup = s.behavior_lookup();
+        for o in &doc.data.objects {
+            for n in super::valores::small_screen_notes(o, screen, &mut lookup) {
+                out.push(format!("{f}: {}", n.trim_start_matches("aviso: ")));
+            }
+        }
+    }
+    out
 }
 
 // conferir_projeto ---------------------------------------------------------

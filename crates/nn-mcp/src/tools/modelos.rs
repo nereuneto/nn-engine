@@ -169,10 +169,33 @@ fn kit_parts(name: &str) -> Result<Vec<Part>, String> {
     ))
 }
 
+/// Os kits e as peças, com o tamanho de cada uma em metros (para encaixar).
 fn kit_list() -> String {
     KITS.iter()
         .map(|k| {
-            let items: Vec<&str> = k.items.iter().map(|i| i.label).collect();
+            let items: Vec<String> = k
+                .items
+                .iter()
+                .map(|i| {
+                    let mut lo = Vec3::splat(f32::MAX);
+                    let mut hi = Vec3::splat(f32::MIN);
+                    for p in (i.make)() {
+                        let mtx = p.matrix();
+                        for (pts, ..) in p.all_faces() {
+                            for q in pts {
+                                let q = mtx.transform_point3(q);
+                                lo = lo.min(q);
+                                hi = hi.max(q);
+                            }
+                        }
+                    }
+                    if lo.x > hi.x {
+                        return i.label.to_string();
+                    }
+                    let d = hi - lo;
+                    format!("{} ({} x {} x {} m)", i.label, m(d.x), m(d.y), m(d.z))
+                })
+                .collect();
             format!("{}: {}", k.name, items.join(", "))
         })
         .collect::<Vec<_>>()
@@ -698,7 +721,25 @@ fn model_op(md: &mut ModelData, op: &Map<String, Value>, n: usize) -> Result<Str
             (None, None) => 0.2,
         };
         let faces = faces_towards(p, dir);
+        // Para uma porta: a abertura desce até a borda de baixo da face.
+        let floor = faces
+            .iter()
+            .flat_map(|&f| p.faces[f].v.clone())
+            .map(|v| p.verts[v as usize].y)
+            .fold(f32::MAX, f32::min);
         let inner = p.inset(&faces, t);
+        if op.get("no_chao").and_then(Value::as_bool).unwrap_or(false) && floor < f32::MAX {
+            for f in &inner {
+                let vs = p.faces[*f].v.clone();
+                let mid =
+                    vs.iter().map(|&v| p.verts[v as usize].y).sum::<f32>() / vs.len().max(1) as f32;
+                for v in vs {
+                    if p.verts[v as usize].y < mid {
+                        p.verts[v as usize].y = floor;
+                    }
+                }
+            }
+        }
         if let Some(depth) = get_num(op, "fundo", n)? {
             for f in &inner {
                 let nrm = face_normal(&p.verts, &p.faces[*f].v);
@@ -832,7 +873,22 @@ fn ver_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
             std::fs::read(dir.join(uri)).ok()
         })
         .map_err(|e| format!("{rel}: {e}"))?;
-        (describe_glb(&rel, &data), data, None)
+        let mut t = describe_glb(&rel, &data);
+        // O .glb de um .modelo: os ossos de verdade são os do .modelo (os
+        // outros nós são as peças presas a eles).
+        let source = format!("{}.modelo", rel.trim_end_matches(".glb"));
+        if lower.ends_with(".glb")
+            && s.root.join(&source).is_file()
+            && let Ok((_, md)) = s.load_model(&source)
+            && !md.bones.is_empty()
+        {
+            let names: Vec<&str> = md.bones.iter().map(|b| b.name.as_str()).collect();
+            t.push_str(&format!(
+                "Este .glb é o de {source}: os ossos são {} (o componente bone e as animações usam esses nomes); os outros nós do esqueleto são as peças, presas a eles.\n",
+                names.join(", ")
+            ));
+        }
+        (t, data, None)
     } else {
         return Err(format!("{rel}: ver_modelo abre .modelo, .glb e .gltf"));
     };
@@ -1012,7 +1068,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "modelar",
         title: "Modelar",
-        description: "Muda um modelo 3D (.modelo) com várias operações numa chamada e devolve o modelo em 4 vistas (e grava o .glb). Medidas em metros, Y para cima, a frente é +Z, cores \"#rrggbb\". Os lados: cima (+y), baixo (-y), frente (+z), tras (-z), direita (+x) e esquerda (-x); direita e esquerda são as da vista de frente (num personagem virado para a frente, a direita da vista é o lado esquerdo dele). Operações: (1) {\"criar\": \"tronco\", \"forma\": \"cubo|cilindro|cone|piramide|esfera|plano|rampa\", \"tamanho\": [x, y, z] (o tamanho exato da peça), \"em\": [x, y, z] (o meio da base), \"giro\": [x, y, z] (graus), \"cor\", \"lados\": 8 (cilindro, cone, piramide, esfera; uma face fica virada para a frente), \"brilho\": 0 a 1 (a peça acende com a própria cor, mesmo no escuro)}; (2) {\"kit\": \"Casa/Parede\", \"em\": [...], \"nome\"} (Casa, Natureza, Personagem, Veículo); (3) {\"peca\": \"tronco\" e o que mudar: \"em\", \"andar\" (soma à posição), \"giro\", \"escala\", \"tamanho\", \"cor\" (com \"lado\", só as faces daquele lado), \"brilho\", \"extrudar\": lado (puxa as faces daquele lado; \"distancia\" em m; \"afinar\": o tamanho que a ponta fica, 0.5 = metade, 0 = uma ponta), \"recuar\": lado (portas e janelas: \"abertura\": quanto da face a abertura ocupa, 0.5 = metade; \"fundo\" em m, negativo afunda; \"cor_dentro\"), \"afinar\": lado (\"quanto\": o tamanho que aquelas faces ficam, 0.8 = 80%), \"simetria\": true (a peça fica simétrica em volta do meio dela: a metade -X da peça copia a +X; para duas peças, uma de cada lado, use copiar com espelhar), \"renomear\"}; (4) {\"copiar\": \"torre\", \"nome\": \"torre_2\", \"espelhar\": \"x\" (vai para o outro lado, de +X para -X) ou \"z\" (da frente para o fundo), \"em\"/\"andar\"}; (5) {\"apagar\": \"peca\"}; (6) {\"juntar\": [\"a\", \"b\"], \"nome\": \"c\"}. Se uma operação dá erro, nada é gravado.",
+        description: "Muda um modelo 3D (.modelo) com várias operações numa chamada e devolve o modelo em 4 vistas (e grava o .glb). Medidas em metros, Y para cima, a frente é +Z, cores \"#rrggbb\". Os lados: cima (+y), baixo (-y), frente (+z), tras (-z), direita (+x) e esquerda (-x); direita e esquerda são as da vista de frente (num personagem virado para a frente, a direita da vista é o lado esquerdo dele). Operações: (1) {\"criar\": \"tronco\", \"forma\": \"cubo|cilindro|cone|piramide|esfera|plano|rampa\", \"tamanho\": [x, y, z] (o tamanho exato da peça), \"em\": [x, y, z] (o meio da base), \"giro\": [x, y, z] (graus), \"cor\", \"lados\": 8 (cilindro, cone, piramide, esfera; uma face fica virada para a frente, e o \"tamanho\" vai de face a face, então a parede da frente fica a tamanho/2 do meio), \"brilho\": 0 a 1 (a peça acende com a própria cor, mesmo no escuro)}; (2) {\"kit\": \"Casa/Parede\", \"em\": [...], \"nome\"} (Casa, Natureza, Personagem, Veículo; {\"kit\": \"?\"} lista as peças com o tamanho de cada uma, para encaixar); (3) {\"peca\": \"tronco\" e o que mudar: \"em\", \"andar\" (soma à posição), \"giro\", \"escala\", \"tamanho\", \"cor\" (com \"lado\", só as faces daquele lado), \"brilho\", \"extrudar\": lado (puxa as faces daquele lado; \"distancia\" em m; \"afinar\": o tamanho que a ponta fica, 0.5 = metade, 0 = uma ponta), \"recuar\": lado (portas e janelas: \"abertura\": quanto da face a abertura ocupa, 0.5 = metade; \"fundo\" em m, negativo afunda; \"cor_dentro\"; \"no_chao\": true desce a abertura até a borda de baixo, para uma porta), \"afinar\": lado (\"quanto\": o tamanho que aquelas faces ficam, 0.8 = 80%), \"simetria\": true (a peça fica simétrica em volta do meio dela: a metade -X da peça copia a +X; para duas peças, uma de cada lado, use copiar com espelhar), \"renomear\"}; (4) {\"copiar\": \"torre\", \"nome\": \"torre_2\", \"espelhar\": \"x\" (vai para o outro lado, de +X para -X) ou \"z\" (da frente para o fundo), \"em\"/\"andar\"}; (5) {\"apagar\": \"peca\"}; (6) {\"juntar\": [\"a\", \"b\"], \"nome\": \"c\"}. Se uma operação dá erro, nada é gravado.",
         params: || {
             vec![
                 ("caminho", s_str(MODELO), true),
