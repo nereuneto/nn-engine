@@ -31,6 +31,7 @@ log.workspace = true
 
 [dev-dependencies]
 nn-projeto.workspace = true
+image.workspace = true
 glam.workspace = true
 mlua.workspace = true
 nn-input.workspace = true

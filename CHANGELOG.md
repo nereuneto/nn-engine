@@ -2,6 +2,22 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### Pixel art pelo agente (Sprint 55)
+
+- **O agente de IA desenha a arte do jogo.** Cinco ferramentas novas no servidor MCP, com as mesmas operações do editor de pixel art do NN Studio. Cada passo volta como **imagem ampliada**, com pixels grandes, xadrez no transparente e uma linha entre os quadros. Como usar: [Pixel art](docs/mcp.md#pixel-art).
+  - **`criar_imagem`:** uma imagem vazia (ou com fundo), com quadros lado a lado para animar.
+  - **`desenhar`:** várias operações numa chamada, num quadro.
+    - O jeito mais prático é o **desenho como texto**, um caractere por pixel, com a cor de cada caractere.
+    - Também: pontos, linha, retângulo, elipse, balde, apagar, trocar cor, espelhar, girar, **simetria** (uma metade copiada espelhada na outra), deslocar, **contorno** e copiar outro quadro.
+    - As cores vão em `#rrggbb`, `transparente` ou pelo número numa paleta: a do projeto (`paleta.hex`), Sweetie 16, PICO-8 ou Endesga 32.
+  - **`ver_imagem`:** a imagem, o tamanho, os quadros, as animações e as cores usadas. Com `texto`, o quadro como texto, para conferir pixel a pixel.
+  - **`quadros`:** põe, tira e troca quadros (as animações acompanham) e divide uma imagem em quadros.
+  - **`animar`:** as animações com nome do `.anim` (quadros, fps, repetir, uma vez ou ida e volta), com a tira dos quadros na ordem em que tocam.
+- **NN Studio:** o editor de pixel art ganhou **Contorno** (uma borda com a cor principal em volta do desenho) e **Trocar cor** (a secundária pela principal no quadro todo).
+- **Para quem usa as crates:** as operações de pixel art e o `.anim` saíram do NN Studio para o `nn-projeto` (`pixel`, `anim`), usado pelo editor e pelo servidor. O `pixel` ganhou `flip`, `rotate`, `shift`, `replace_color`, `outline`, `draw_text_art`, `as_text_art` e `preview`.
+
 ## 0.7.0
 
 A versão do **desenvolvimento guiado por IA**. O **servidor MCP** (`nn mcp`) liga um agente de IA (Claude Code, Claude Desktop, Cursor...) ao projeto, com **30 ferramentas em português**. O agente monta cenas, objetos, prefabs e eventos, escreve Lua e confere tudo antes de gravar. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela. Ele escreve e roda os **testes de jogo** (`testes/*.lua`, também com `nn testar` e no NN Studio) e acompanha o **jogo aberto** enquanto você joga, mudando valores na hora. Com o **NN Studio** aberto, ele vê os objetos que você escolheu, não grava por cima do que você não salvou e o que ele muda aparece no Console. Para ligar: **Jogo > Ligar um agente de IA…** no NN Studio. Na revisão, dois agentes fizeram cada um um jogo do zero só pelo servidor, um de plataforma 2D e um de coletar em 3D, com testes. Como usar: [O servidor MCP](docs/mcp.md) e [Testes de jogo](docs/lua.md#testes-de-jogo).
