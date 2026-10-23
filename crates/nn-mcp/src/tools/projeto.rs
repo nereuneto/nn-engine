@@ -441,6 +441,7 @@ fn conferir_projeto(s: &mut Server, _: &Value) -> Result<Output, String> {
                         if let Prop::Str(text) = v
                             && let Some(choices) = scene_data::field_choices(&c.kind, k)
                             && !choices.contains(&text.as_str())
+                            && scene_data::choice_like(&c.kind, k, text).is_none()
                         {
                             problems.push(format!(
                                 "{at}: {}.{k} = \"{text}\" não existe (use {})",

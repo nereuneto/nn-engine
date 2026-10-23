@@ -122,6 +122,9 @@ pub struct Report {
     pub captures: Vec<Capture>,
     /// Os sons que tocaram: (arquivo, quantas vezes, a primeira vez).
     pub sounds: Vec<(String, u32, f64)>,
+    /// As animações 3D que começaram a tocar: (modelo, animação, quantas
+    /// vezes, a primeira vez).
+    pub animations: Vec<(String, String, u32, f64)>,
     /// O jogo fechou (`nn.quit`) neste tempo.
     pub quit: Option<f64>,
 }
@@ -271,6 +274,7 @@ impl GameRun {
             .exec()
             .map_err(|e| e.to_string())?;
 
+        crate::anim3d::record_plays(true);
         // Os sons que tocam (sem placa de som não se ouve nada; assim o
         // relatório diz o que tocou).
         lua.load(
@@ -449,6 +453,17 @@ impl GameRun {
             self.collect_fired(&path, scene, t);
         }
         self.collect_sounds(t);
+        for (model, name) in crate::anim3d::take_plays() {
+            match self
+                .report
+                .animations
+                .iter_mut()
+                .find(|(m, n, ..)| *m == model && *n == name)
+            {
+                Some(e) => e.2 += 1,
+                None => self.report.animations.push((model, name, 1, t)),
+            }
+        }
         if self.headless.ctx.is_exiting() || self.headless.game.is_empty() {
             self.ended = true;
             self.report.quit.get_or_insert(t);

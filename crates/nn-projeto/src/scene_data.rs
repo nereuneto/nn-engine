@@ -1918,6 +1918,17 @@ impl History {
 pub fn field_choices(kind: &str, key: &str) -> Option<&'static [&'static str]> {
     Some(match (kind, key) {
         ("sprite", "fill") => &["stretch", "repeat"],
+        ("text", "anchor") => &[
+            "topleft",
+            "top",
+            "topright",
+            "left",
+            "center",
+            "right",
+            "bottomleft",
+            "bottom",
+            "bottomright",
+        ],
         ("shape", "shape") => &["rect", "circle"],
         ("body", "body") => &["dynamic", "static", "kinematic"],
         ("body", "shape") => &["box", "circle"],
@@ -1940,6 +1951,38 @@ pub fn field_choices(kind: &str, key: &str) -> Option<&'static [&'static str]> {
         ("body3d", "shape") => &["auto", "box", "sphere", "capsule", "cylinder", "mesh"],
         _ => return None,
     })
+}
+
+/// O valor certo de um campo de escolha escrito de outro jeito: sem ligar
+/// para maiúsculas, espaços, hífens e sublinhados (`"top_left"` vira o
+/// `"topleft"` do texto; `"Top Left"` também).
+pub fn choice_like(kind: &str, key: &str, text: &str) -> Option<&'static str> {
+    let squash = |s: &str| {
+        s.chars()
+            .filter(|c| !matches!(c, '_' | '-' | ' '))
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+    };
+    let want = squash(text);
+    field_choices(kind, key)?
+        .iter()
+        .copied()
+        .find(|c| squash(c) == want)
+}
+
+/// O nome certo de uma âncora do objeto (`"topleft"` vira `"top_left"`).
+pub fn screen_anchor_like(text: &str) -> Option<&'static str> {
+    let squash = |s: &str| {
+        s.chars()
+            .filter(|c| !matches!(c, '_' | '-' | ' '))
+            .flat_map(char::to_lowercase)
+            .collect::<String>()
+    };
+    let want = squash(text);
+    SCREEN_ANCHORS
+        .iter()
+        .map(|a| a.0)
+        .find(|a| squash(a) == want)
 }
 
 pub fn component_info(kind: &str) -> (&'static str, &'static str) {

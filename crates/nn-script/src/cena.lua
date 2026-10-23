@@ -891,7 +891,9 @@ end
 function M.screen_pos(o, x, y)
   local root = o
   while root.parent do root = root.parent end
-  local a = M.ANCHORS[root.anchor or ""] or M.ANCHORS.center
+  local a = M.ANCHORS[root.anchor or ""]
+    or M.ANCHORS[((root.anchor or ""):lower():gsub("^top(%a)", "top_%1"):gsub("^bottom(%a)", "bottom_%1"))]
+    or M.ANCHORS.center
   local W, H = nn.window.size()
   return W * a[1] + x, H * a[2] - y
 end

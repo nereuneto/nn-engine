@@ -12,7 +12,7 @@
 
 use glam::Vec3;
 
-use crate::model_data::{Anim, Bone, ModelData};
+use crate::model::{Anim, Bone, ModelData};
 
 pub const QUADRIL: &str = "Quadril";
 pub const TRONCO: &str = "Tronco";
@@ -137,20 +137,44 @@ fn bone_for_name(kind: RigKind, part: &str) -> Option<&'static str> {
     }
 }
 
-/// A posição (a origem) da peça cujo nome pede este osso, se houver.
-fn part_at(data: &ModelData, kind: RigKind, bone: &str) -> Option<Vec3> {
-    data.parts
+/// A caixa (no modelo) das peças cujo nome pede este osso, se houver.
+fn part_box(data: &ModelData, kind: RigKind, bone: &str) -> Option<(Vec3, Vec3)> {
+    let mut out: Option<(Vec3, Vec3)> = None;
+    for p in data
+        .parts
         .iter()
-        .find(|p| bone_for_name(kind, &p.name) == Some(bone))
-        .map(|p| p.pos)
+        .filter(|p| bone_for_name(kind, &p.name) == Some(bone))
+    {
+        let m = p.matrix();
+        for (pts, ..) in p.all_faces() {
+            for q in pts {
+                let q = m.transform_point3(q);
+                out = Some(match out {
+                    Some((a, b)) => (a.min(q), b.max(q)),
+                    None => (q, q),
+                });
+            }
+        }
+    }
+    out
+}
+
+/// O meio de cima (a junta de um braço ou de uma perna) e a altura da peça.
+fn limb_top(data: &ModelData, kind: RigKind, bone: &str) -> Option<(Vec3, f32)> {
+    part_box(data, kind, bone).map(|(a, b)| {
+        let c = (a + b) / 2.0;
+        (Vec3::new(c.x, b.y, c.z), (b.y - a.y).max(0.05))
+    })
 }
 
 fn bone(name: &str, parent: Option<usize>, head: Vec3, tail: Vec3) -> Bone {
+    // Em décimos de milímetro (o .modelo guarda assim).
+    let r = |v: Vec3| (v * 10000.0).round() / 10000.0;
     Bone {
         name: name.into(),
         parent,
-        head,
-        tail,
+        head: r(head),
+        tail: r(tail),
     }
 }
 
@@ -164,60 +188,84 @@ pub fn make_rig(kind: RigKind, data: &ModelData) -> Vec<Bone> {
     let at = |fy: f32| lo.y + size.y * fy;
     match kind {
         RigKind::Humanoid => {
-            let leg_l = part_at(data, kind, PERNA_E).unwrap_or(Vec3::new(
-                c.x + size.x * 0.12,
-                at(0.47),
-                c.z,
-            ));
-            let leg_r = part_at(data, kind, PERNA_D).unwrap_or(Vec3::new(
-                c.x - size.x * 0.12,
-                at(0.47),
-                c.z,
-            ));
+            let leg = |b: &str, sx: f32| {
+                limb_top(data, kind, b).map(|(p, _)| p).unwrap_or(Vec3::new(
+                    c.x + sx * size.x * 0.12,
+                    at(0.47),
+                    c.z,
+                ))
+            };
+            let leg_l = leg(PERNA_E, 1.0);
+            let leg_r = leg(PERNA_D, -1.0);
             let hip = Vec3::new(c.x, (leg_l.y + leg_r.y) / 2.0, c.z);
-            let neck = part_at(data, kind, CABECA).unwrap_or(Vec3::new(c.x, at(0.77), c.z));
-            let arm_l = part_at(data, kind, BRACO_E).unwrap_or(Vec3::new(
-                c.x + size.x * 0.3,
-                at(0.74),
-                c.z,
-            ));
-            let arm_r = part_at(data, kind, BRACO_D).unwrap_or(Vec3::new(
-                c.x - size.x * 0.3,
-                at(0.74),
-                c.z,
-            ));
-            let arm_len = size.y * 0.33;
+            let neck = part_box(data, kind, CABECA)
+                .map(|(a, b)| Vec3::new((a.x + b.x) / 2.0, a.y, (a.z + b.z) / 2.0))
+                .unwrap_or(Vec3::new(c.x, at(0.77), c.z));
+            let arm = |b: &str, sx: f32| {
+                limb_top(data, kind, b).unwrap_or((
+                    Vec3::new(c.x + sx * size.x * 0.3, at(0.74), c.z),
+                    size.y * 0.33,
+                ))
+            };
+            let (arm_l, len_l) = arm(BRACO_E, 1.0);
+            let (arm_r, len_r) = arm(BRACO_D, -1.0);
             vec![
                 bone(QUADRIL, None, hip, hip + Vec3::Y * size.y * 0.1),
                 bone(TRONCO, Some(0), hip, neck),
                 bone(CABECA, Some(1), neck, Vec3::new(neck.x, hi.y, neck.z)),
-                bone(BRACO_E, Some(1), arm_l, arm_l - Vec3::Y * arm_len),
-                bone(BRACO_D, Some(1), arm_r, arm_r - Vec3::Y * arm_len),
+                bone(BRACO_E, Some(1), arm_l, arm_l - Vec3::Y * len_l),
+                bone(BRACO_D, Some(1), arm_r, arm_r - Vec3::Y * len_r),
                 bone(PERNA_E, Some(0), leg_l, Vec3::new(leg_l.x, lo.y, leg_l.z)),
                 bone(PERNA_D, Some(0), leg_r, Vec3::new(leg_r.x, lo.y, leg_r.z)),
             ]
         }
         RigKind::Quadruped => {
-            let body = Vec3::new(c.x, at(0.55), c.z);
-            let leg = |sx: f32, sz: f32| {
-                Vec3::new(c.x + sx * size.x * 0.3, at(0.5), c.z + sz * size.z * 0.33)
+            // O corpo: do meio da peça "Corpo" para a frente.
+            let (body, body_tip) = part_box(data, kind, CORPO)
+                .map(|(a, b)| {
+                    let m = (a + b) / 2.0;
+                    (m, Vec3::new(m.x, m.y, b.z))
+                })
+                .unwrap_or((
+                    Vec3::new(c.x, at(0.55), c.z),
+                    Vec3::new(c.x, at(0.55), hi.z - size.z * 0.25),
+                ));
+            // As patas: do meio de cima da peça com o nome dela (ou de um
+            // lugar estimado pelo tamanho do modelo) até o chão.
+            let leg = |b: &str, sx: f32, sz: f32| {
+                limb_top(data, kind, b).map(|(p, _)| p).unwrap_or(Vec3::new(
+                    c.x + sx * size.x * 0.3,
+                    at(0.5),
+                    c.z + sz * size.z * 0.33,
+                ))
             };
-            let head = Vec3::new(c.x, at(0.7), hi.z - size.z * 0.2);
-            let tail = Vec3::new(c.x, at(0.6), lo.z + size.z * 0.1);
+            let (de, dd, te, td) = (
+                leg(PATA_DE, 1.0, 1.0),
+                leg(PATA_DD, -1.0, 1.0),
+                leg(PATA_TE, 1.0, -1.0),
+                leg(PATA_TD, -1.0, -1.0),
+            );
+            // O pescoço: o meio de trás da cabeça, embaixo.
+            let head = part_box(data, kind, CABECA)
+                .map(|(a, b)| Vec3::new((a.x + b.x) / 2.0, a.y, a.z))
+                .unwrap_or(Vec3::new(c.x, at(0.7), hi.z - size.z * 0.2));
+            let tail = part_box(data, kind, RABO)
+                .map(|(a, b)| Vec3::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0, b.z))
+                .unwrap_or(Vec3::new(c.x, at(0.6), lo.z + size.z * 0.1));
             let foot = |p: Vec3| Vec3::new(p.x, lo.y, p.z);
             vec![
+                bone(CORPO, None, body, body_tip),
+                bone(CABECA, Some(0), head, Vec3::new(head.x, hi.y, hi.z)),
                 bone(
-                    CORPO,
-                    None,
-                    body,
-                    Vec3::new(c.x, at(0.55), hi.z - size.z * 0.25),
+                    RABO,
+                    Some(0),
+                    tail,
+                    Vec3::new(tail.x, tail.y + size.y * 0.1, lo.z),
                 ),
-                bone(CABECA, Some(0), head, Vec3::new(c.x, hi.y, hi.z)),
-                bone(RABO, Some(0), tail, Vec3::new(c.x, at(0.7), lo.z)),
-                bone(PATA_DE, Some(0), leg(1.0, 1.0), foot(leg(1.0, 1.0))),
-                bone(PATA_DD, Some(0), leg(-1.0, 1.0), foot(leg(-1.0, 1.0))),
-                bone(PATA_TE, Some(0), leg(1.0, -1.0), foot(leg(1.0, -1.0))),
-                bone(PATA_TD, Some(0), leg(-1.0, -1.0), foot(leg(-1.0, -1.0))),
+                bone(PATA_DE, Some(0), de, foot(de)),
+                bone(PATA_DD, Some(0), dd, foot(dd)),
+                bone(PATA_TE, Some(0), te, foot(te)),
+                bone(PATA_TD, Some(0), td, foot(td)),
             ]
         }
         RigKind::Simple => vec![bone(
@@ -482,8 +530,43 @@ fn simple(name: &str) -> Option<Anim> {
             a.key(OSSO, 0.8, x(-100.0), O);
             a
         }
+        "abrir_porta" => {
+            let mut a = Anim::new("abrir_porta", 0.8, false);
+            a.key(OSSO, 0.0, O, O);
+            a.key(OSSO, 0.8, y(-90.0), O);
+            a
+        }
         _ => return None,
     })
+}
+
+/// O osso que uma animação pronta do esqueleto simples move, num modelo sem
+/// o osso "Osso": o do nome que pede (uma "Tampa", uma "Porta", uma
+/// "Dobradiça", uma "Hélice"); senão, para abrir, o último osso sem filhos
+/// (a tampa presa na base) e, para girar e balançar, o primeiro sem pai.
+pub fn simple_bone<'a>(anim: &str, bones: &'a [Bone]) -> Option<&'a str> {
+    let opening = anim.starts_with("abrir");
+    let hints: &[&str] = if opening {
+        &[
+            "tampa", "porta", "dobradic", "portao", "janela", "lid", "door", "hinge",
+        ]
+    } else {
+        &["helice", "roda", "moinho", "lamina"]
+    };
+    if let Some(b) = bones
+        .iter()
+        .find(|b| hints.iter().any(|h| plain(&b.name).contains(h)))
+    {
+        return Some(&b.name);
+    }
+    let leaf = |i: usize| !bones.iter().any(|b| b.parent == Some(i));
+    let pick = if opening {
+        (0..bones.len()).rev().find(|&i| leaf(i))
+    } else {
+        bones.iter().position(|b| b.parent.is_none())
+    };
+    pick.or(if bones.is_empty() { None } else { Some(0) })
+        .map(|i| bones[i].name.as_str())
 }
 
 /// Os nomes das animações prontas de cada esqueleto (os que o Jogador 3D,
@@ -494,7 +577,7 @@ pub fn ready_names(kind: RigKind) -> &'static [&'static str] {
             "parado", "andar", "correr", "pular", "cair", "golpe", "acenar",
         ],
         RigKind::Quadruped => &["parado", "andar", "correr"],
-        RigKind::Simple => &["girar", "balançar", "abrir"],
+        RigKind::Simple => &["girar", "balançar", "abrir", "abrir_porta"],
     }
 }
 
@@ -504,7 +587,19 @@ pub fn ready(kind: RigKind, name: &str, bones: &[Bone]) -> Option<Anim> {
     match kind {
         RigKind::Humanoid => humanoid(name, l),
         RigKind::Quadruped => quadruped(name, l),
-        RigKind::Simple => simple(name),
+        RigKind::Simple => {
+            let mut a = simple(name)?;
+            if !bones.iter().any(|b| b.name == OSSO)
+                && let Some(b) = simple_bone(name, bones)
+            {
+                for tr in &mut a.tracks {
+                    if tr.bone == OSSO {
+                        tr.bone = b.to_string();
+                    }
+                }
+            }
+            Some(a)
+        }
     }
 }
 
@@ -643,5 +738,63 @@ mod tests {
         scale_time(&mut a, 0.5);
         assert!((a.duration - 0.5).abs() < 1e-6);
         assert!((a.track(PERNA_E).unwrap().keys[1].t - 0.25).abs() < 1e-6);
+    }
+
+    #[test]
+    fn patas_de_cubos_giram_em_cima_delas() {
+        use crate::model::Part;
+        let mut m = ModelData::default();
+        let mut corpo = Part::cube("Corpo", "#a0522d");
+        corpo.pos = Vec3::new(0.0, 0.4, 0.0);
+        corpo.scale = Vec3::new(0.4, 0.35, 0.9);
+        m.parts.push(corpo);
+        for (nome, x, z) in [
+            ("Pata dianteira esquerda", 0.15, 0.35),
+            ("Pata dianteira direita", -0.15, 0.35),
+            ("Pata traseira esquerda", 0.15, -0.35),
+            ("Pata traseira direita", -0.15, -0.35),
+        ] {
+            let mut p = Part::cube(nome, "#888888");
+            p.pos = Vec3::new(x, 0.0, z);
+            p.scale = Vec3::new(0.1, 0.4, 0.1);
+            m.parts.push(p);
+        }
+        m.bones = make_rig(RigKind::Quadruped, &m);
+        let b = &m.bones[m.bone_index(PATA_TD).unwrap()];
+        assert!(
+            (b.head - Vec3::new(-0.15, 0.4, -0.35)).length() < 0.02,
+            "{}",
+            b.head
+        );
+        assert!(b.tail.y.abs() < 1e-4);
+    }
+
+    #[test]
+    fn abrir_porta_vai_para_o_osso_da_porta() {
+        let bones = vec![bone(
+            "Dobradiça",
+            None,
+            Vec3::new(-0.5, 0.0, 0.0),
+            Vec3::new(-0.5, 2.0, 0.0),
+        )];
+        let a = ready(RigKind::Simple, "abrir_porta", &bones).unwrap();
+        assert_eq!(a.tracks.len(), 1);
+        assert_eq!(a.tracks[0].bone, "Dobradiça");
+        assert!(!a.looping);
+        assert!(ready_names(RigKind::Simple).contains(&"abrir_porta"));
+        // Um baú: a base e a tampa (filha dela). Abrir vai para a tampa.
+        let bau = vec![
+            bone("Base", None, Vec3::ZERO, Vec3::Y * 0.5),
+            bone(
+                "Cima",
+                Some(0),
+                Vec3::new(0.0, 0.5, -0.3),
+                Vec3::new(0.0, 0.5, 0.3),
+            ),
+        ];
+        assert_eq!(simple_bone("abrir", &bau), Some("Cima"));
+        assert_eq!(simple_bone("girar", &bau), Some("Base"));
+        let a = ready(RigKind::Simple, "abrir", &bau).unwrap();
+        assert_eq!(a.tracks[0].bone, "Cima");
     }
 }

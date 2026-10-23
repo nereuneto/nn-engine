@@ -1356,6 +1356,233 @@ fn agente_escreve_um_dialogo() {
 /// Modelos 3D pelo agente: um pronto, mudado com operações, visto em quatro
 /// vistas; e um .glb de fora (com esqueleto e animações) descrito.
 #[test]
+fn agente_poe_ossos_e_anima_modelos_3d() {
+    let dir = temp("anima3d");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "3d" }));
+    let rel = "modelos/heroi2.modelo";
+    ok(
+        &mut s,
+        "criar_modelo",
+        json!({ "caminho": rel, "a_partir": "personagem" }),
+    );
+    let e = fails(
+        &mut s,
+        "animar_modelo",
+        json!({ "caminho": rel, "nome": "andar", "pronta": "andar" }),
+    );
+    assert!(e.contains("ainda não tem ossos"), "{e}");
+    let e = fails(
+        &mut s,
+        "esqueleto",
+        json!({ "caminho": rel, "tipo": "aranha" }),
+    );
+    assert!(e.contains("humanoide"), "{e}");
+
+    // O esqueleto pronto, ligado pelos nomes das peças.
+    let (t, pngs) = images(
+        &mut s,
+        "esqueleto",
+        json!({ "caminho": rel, "tipo": "humanoide" }),
+    );
+    assert!(t.contains("esqueleto humanoide com 7 osso(s)"), "{t}");
+    assert!(
+        t.contains("\"Perna esquerda\" (filho de \"Quadril\"): de [0.15, 0.75, 0] a [0.15, 0, 0]; peças: Perna esquerda"),
+        "{t}"
+    );
+    assert!(
+        t.contains("parado, andar, correr, pular, cair, golpe, acenar"),
+        "{t}"
+    );
+    assert_eq!(image::load_from_memory(&pngs[0]).unwrap().width(), 602);
+
+    // Uma pronta, mais lenta, e uma com quadros-chave próprios.
+    let (t, pngs) = images(
+        &mut s,
+        "animar_modelo",
+        json!({ "caminho": rel, "nome": "andar", "pronta": "andar", "velocidade": 0.5 }),
+    );
+    assert!(t.contains("animação \"andar\", 2 s, repete"), "{t}");
+    let strip = image::load_from_memory(&pngs[0]).unwrap();
+    assert_eq!((strip.width(), strip.height()), (6 * 243 - 2, 241));
+    if std::env::var("NN_FX_OUT").is_ok() {
+        strip.save("/tmp/andar.png").unwrap();
+    }
+    let (t, _) = images(
+        &mut s,
+        "animar_modelo",
+        json!({ "caminho": rel, "nome": "vitoria", "repete": false, "quadros": 4, "vista": "frente", "chaves": [
+            { "osso": "braço esquerdo", "t": 0 },
+            { "osso": "Braço esquerdo", "t": 0.5, "giro": [0, 0, 160] },
+            { "osso": "Quadril", "t": 0 },
+            { "osso": "Quadril", "t": 0.25, "andar": [0, 0.3, 0] },
+            { "osso": "Quadril", "t": 0.5 },
+        ] }),
+    );
+    assert!(
+        t.contains("animação \"vitoria\", 0.5 s, toca uma vez, 2 osso(s) (\"Braço esquerdo\", \"Quadril\"), 5 quadro(s)-chave"),
+        "{t}"
+    );
+    assert!(t.contains("4 momentos (em 0, 0.17, 0.33, 0.5 s)"), "{t}");
+    let e = fails(
+        &mut s,
+        "animar_modelo",
+        json!({ "caminho": rel, "nome": "x", "chaves": [{ "osso": "Asa", "t": 0 }] }),
+    );
+    assert!(
+        e.contains("não há o osso \"Asa\" (tem: Quadril, Tronco"),
+        "{e}"
+    );
+
+    // O .glb que o jogo usa tem o esqueleto e as animações, e mexe.
+    let glb = std::fs::read(dir.join("modelos/heroi2.glb")).unwrap();
+    let data = nn_render::d3::ModelData::from_gltf(&glb, &mut |_| None).unwrap();
+    let sk = data.skeleton.as_ref().unwrap();
+    assert!(
+        sk.nodes.len() >= 7 && sk.joints.len() >= 6,
+        "{} {}",
+        sk.nodes.len(),
+        sk.joints.len()
+    );
+    let gi = sk.animation("vitoria").unwrap();
+    assert!(sk.animation("andar").is_some());
+    let top = |t: f32| {
+        nn_projeto::model_view::triangles(&data, Some((gi, t)))
+            .iter()
+            .flat_map(|t| t.p)
+            .map(|p| p.y)
+            .fold(f32::MIN, f32::max)
+    };
+    // O corpo pula no meio, e no fim o braço levantado passa da cabeça.
+    assert!((top(0.0) - 1.95).abs() < 0.01, "{}", top(0.0));
+    assert!(top(0.25) > 2.2, "{}", top(0.25));
+    assert!(top(0.5) > 2.05, "{}", top(0.5));
+
+    // Uma porta: um osso só, na dobradiça, e a pronta "abrir_porta".
+    let porta = "modelos/porta.modelo";
+    ok(&mut s, "criar_modelo", json!({ "caminho": porta }));
+    ok(
+        &mut s,
+        "modelar",
+        json!({ "caminho": porta, "operacoes": [{ "criar": "Folha", "forma": "cubo", "tamanho": [1, 2, 0.1] }] }),
+    );
+    let t = ok(
+        &mut s,
+        "esqueleto",
+        json!({ "caminho": porta, "ossos": [{ "nome": "Dobradiça", "de": [-0.5, 0, 0], "ate": [-0.5, 2, 0] }], "ligar_sozinho": true }),
+    );
+    assert!(
+        t.contains("\"Dobradiça\": de [-0.5, 0, 0] a [-0.5, 2, 0]; peças: Folha"),
+        "{t}"
+    );
+    let t = ok(
+        &mut s,
+        "animar_modelo",
+        json!({ "caminho": porta, "nome": "abrir", "pronta": "abrir_porta", "vista": "cima" }),
+    );
+    assert!(
+        t.contains("animação \"abrir\", 0.8 s, toca uma vez, 1 osso(s)"),
+        "{t}"
+    );
+    let t = ok(
+        &mut s,
+        "animar_modelo",
+        json!({ "caminho": porta, "nome": "abrir", "apagar": true }),
+    );
+    assert!(t.contains("Sem animações"), "{t}");
+    let t = ok(
+        &mut s,
+        "esqueleto",
+        json!({ "caminho": porta, "apagar": true }),
+    );
+    assert!(t.contains("tirei os ossos"), "{t}");
+
+    // Um baú com dois ossos: abrir vai para a tampa, não para a base.
+    let bau = "modelos/bau2.modelo";
+    ok(
+        &mut s,
+        "criar_modelo",
+        json!({ "caminho": bau, "a_partir": "bau" }),
+    );
+    ok(
+        &mut s,
+        "esqueleto",
+        json!({ "caminho": bau, "ossos": [
+            { "nome": "Base", "de": [0, 0, 0], "ate": [0, 0.4, 0] },
+            { "nome": "Cima", "pai": "Base", "de": [0, 0.4, -0.3], "ate": [0, 0.4, 0.3] },
+        ], "ligar_sozinho": true }),
+    );
+    let t = ok(
+        &mut s,
+        "animar_modelo",
+        json!({ "caminho": bau, "nome": "abrir", "pronta": "abrir" }),
+    );
+    assert!(t.contains("1 osso(s) (\"Cima\")"), "{t}");
+    let t = ok(
+        &mut s,
+        "animar_modelo",
+        json!({ "caminho": bau, "nome": "abrir", "pronta": "abrir", "osso": "Base", "ossos": false }),
+    );
+    assert!(t.contains("1 osso(s) (\"Base\")"), "{t}");
+    assert!(!t.contains("os ossos em verde"), "{t}");
+    let e = fails(
+        &mut s,
+        "animar_modelo",
+        json!({ "caminho": rel, "nome": "andar", "pronta": "andar", "osso": "Tronco" }),
+    );
+    assert!(e.contains("esqueleto simples"), "{e}");
+
+    // No jogo, no lugar do herói do modelo 3D (que toca estas).
+    for p in ["parado", "correr", "pular", "cair", "acenar"] {
+        ok(
+            &mut s,
+            "animar_modelo",
+            json!({ "caminho": rel, "nome": p, "pronta": p, "quadros": 2 }),
+        );
+    }
+    let cena = std::fs::read_to_string(dir.join("cenas/jogo.lua")).unwrap();
+    assert!(cena.contains("modelos/heroi.glb"), "{cena}");
+    std::fs::write(
+        dir.join("cenas/jogo.lua"),
+        cena.replace("modelos/heroi.glb", "modelos/heroi2.glb"),
+    )
+    .unwrap();
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "segundos": 0.5, "cena": "cenas/jogo.lua", "acoes": [{ "em": 0, "segurar": "up", "por": 0.5 }], "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+    // O relatório diz que animações o herói tocou.
+    assert!(t.contains("Animações 3D que começaram a tocar:"), "{t}");
+    assert!(t.contains("modelos/heroi2.glb: parado (em 0"), "{t}");
+
+    // A âncora do texto e a do objeto aceitam os dois jeitos de escrever.
+    ok(
+        &mut s,
+        "criar_cena",
+        json!({ "caminho": "cenas/hud.cena", "tipo": "3d" }),
+    );
+    ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/hud.cena", "objeto": { "name": "aviso", "anchor": "topleft", "components": [{ "type": "text", "text": "oi", "anchor": "top_left", "hud": true }] } }),
+    );
+    let txt = std::fs::read_to_string(dir.join("cenas/hud.cena")).unwrap();
+    assert!(
+        txt.contains("anchor = \"top_left\"") && txt.contains("anchor = \"topleft\""),
+        "{txt}"
+    );
+    let e = fails(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/hud.cena", "objeto": { "name": "x", "components": [{ "type": "text", "anchor": "meio" }] } }),
+    );
+    assert!(e.contains("\"anchor\" = \"meio\" não existe"), "{e}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn agente_modela_em_3d() {
     let dir = temp("modelos3d");
     let mut s = server(&dir);

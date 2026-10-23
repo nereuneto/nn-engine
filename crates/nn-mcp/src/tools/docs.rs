@@ -118,6 +118,14 @@ fn buscar_documentacao(_: &mut Server, a: &Value) -> Result<Output, String> {
                 sections()
                     .into_iter()
                     .find(|(_, t, _)| fold(t).contains(&want))
+            })
+            .or_else(|| {
+                // Um parágrafo com o título em negrito ("**Preso na tela.**"):
+                // a seção onde ele está.
+                let bold = format!("**{want}");
+                sections()
+                    .into_iter()
+                    .find(|(_, _, b)| fold(b).contains(&bold))
             });
         return match found {
             Some((file, title, mut body)) => {

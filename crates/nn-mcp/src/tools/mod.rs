@@ -11,6 +11,7 @@ mod dialogos;
 mod docs;
 mod editor;
 mod efeitos;
+mod esqueleto;
 mod eventos;
 mod jogar;
 mod mapas;
@@ -86,6 +87,7 @@ fn all() -> Vec<&'static Tool> {
     v.extend(sons::TOOLS);
     v.extend(dialogos::TOOLS);
     v.extend(modelos::TOOLS);
+    v.extend(esqueleto::TOOLS);
     v.extend(jogar::TOOLS);
     v.extend(aovivo::TOOLS);
     v.extend(editor::TOOLS);

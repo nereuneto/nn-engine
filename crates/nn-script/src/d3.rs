@@ -109,7 +109,10 @@ impl UserData for LModel {
         });
         // Quem toca as animações de um objeto (cada objeto tem o seu).
         m.add_method("animator", |_, this, ()| {
-            Ok(crate::anim3d::LAnimator::new(this.skeleton.clone()))
+            Ok(crate::anim3d::LAnimator::new(
+                this.key.trim_end_matches("|flat"),
+                this.skeleton.clone(),
+            ))
         });
     }
 }

@@ -1369,7 +1369,8 @@ do modelo.
 - **🎬 Prontas** põe as animações do esqueleto:
   - **Humanoide:** parado, andar, correr, pular, cair, golpe e acenar;
   - **Quadrúpede:** parado, andar e correr;
-  - **Simples:** girar, balançar e abrir.
+  - **Simples:** girar, balançar, abrir (uma tampa) e abrir porta (vai
+    para o osso do modelo, mesmo com outro nome, como "Dobradiça").
   
   Os nomes são os que o **Jogador 3D**, o **Inimigo 3D** e o **Chefe**
   procuram, então o personagem já anda e pula sozinho no jogo.

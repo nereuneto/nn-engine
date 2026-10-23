@@ -97,6 +97,7 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `particulas` | Um efeito de partículas pronto (fogo, fumaça, faíscas, explosão, chuva...) num objeto, ajustes e uma prévia do efeito em quatro momentos. Com `pixel`, quadradinhos de pixel art. |
 | `criar_som` | Um **efeito sonoro** sintetizado (`.wav`): moeda, pulo, tiro, laser, explosão, power-up, dano, clique, blip, com variações e ajustes. Volta a forma da onda e a nota ao longo do tempo. |
 | `criar_modelo`, `modelar`, `ver_modelo` | **Modelos 3D** (`.modelo`, os do modelador do NN Studio, e o `.glb` que o jogo usa): cria do zero ou de um pronto, monta e muda com operações de peças e faces e mostra em quatro vistas. `ver_modelo` também abre qualquer `.glb` (Blender, Mixamo). Veja [Modelos 3D](#modelos-3d). |
+| `esqueleto`, `animar_modelo` | **Ossos e animações dos modelos 3D**: um esqueleto pronto (humanoide, quadrúpede ou simples) ou com ossos próprios, as peças ligadas aos ossos, e animações prontas ou com quadros-chave, vistas numa tira de quadros. Veja [Ossos e animações](#ossos-e-animações). |
 | `escrever_dialogo`, `ver_dialogo` | **Conversas** (`.dialogo`, as do editor de conversa): falas, escolhas, variáveis e itens, em JSON de ida e volta. |
 | `buscar_documentacao` | A API Lua `nn.*` e os guias (este, o de Lua, o de 3D e o do NN Studio): os trechos que citam as palavras, ou uma seção inteira (`secao`). |
 | `conferir_lua` | A sintaxe de um trecho de Lua, sem gravar. |
@@ -107,7 +108,7 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `mexer_no_jogo` | Muda o jogo aberto **na hora, sem gravar**: campos de objetos e comportamentos, variáveis, Lua, teclas como se alguém jogasse; pausa, avança quadros e fecha. |
 | `ver_editor` | Olha o NN Studio aberto com o projeto: a aba da frente, os **objetos escolhidos** (de quem você fala quando diz "este"), o que ainda não foi gravado e a imagem da janela. Veja [Junto com o NN Studio](#junto-com-o-nn-studio). |
 
-São 46. Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
+São 48. Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
 
 ## Objetos no formato do arquivo
 
@@ -330,6 +331,27 @@ O NN Studio atende numa porta do próprio computador, como o jogo aberto, com um
 - O servidor recusa caminhos fora da pasta do jogo (`..`, caminhos absolutos, links que saem dela) e não mexe em `.git`, `dist` e `target`.
 - Ele grava cada arquivo de uma vez (num temporário que troca de nome), então o jogo aberto e o NN Studio nunca veem um arquivo pela metade.
 - `desfazer` volta as mudanças do agente enquanto o servidor estiver aberto. Se você mudou o mesmo arquivo depois (no NN Studio, à mão), ele só desfaz com `forcar`, para não perder o seu trabalho. Para um histórico de verdade, use o git na pasta do jogo.
+
+## Ossos e animações
+
+Um modelo 3D (`.modelo`) ganha ossos com `esqueleto` e animações com `animar_modelo`, os mesmos do esqueleto e do animador do modelador do NN Studio. Cada peça segue um osso inteira, sem entortar (o jeito dos bonecos de peças). O `.glb` sai com o esqueleto e as animações, e o jogo toca pelo nome.
+
+```json
+{"caminho": "modelos/heroi.modelo", "tipo": "humanoide"}
+```
+
+- `esqueleto`:
+  - `tipo` põe um esqueleto pronto, do tamanho do modelo: **humanoide** (quadril, tronco, cabeça, braços e pernas), **quadrupede** (corpo, cabeça, rabo e as quatro patas) ou **simples** (um osso: uma porta, uma tampa, uma hélice). Cada peça vai para o osso do nome dela ("Braço esquerdo", "Pata traseira direita", "Rabo") ou para o mais perto, e as juntas ficam em cima das peças com esses nomes.
+  - `ossos` põe ossos próprios ou muda um pelo nome: `{"nome": "Asa", "pai": "Corpo", "de": [x, y, z], "ate": [x, y, z]}`, onde `de` é a junta (onde gira) e `ate` é a ponta. Numa porta, um osso só, com a junta na dobradiça.
+  - `ligar` (`{"Espada": "Braço direito"}`; `""` desliga), `ligar_sozinho` (as peças sem osso vão para o mais perto) e `apagar`.
+  - Volta os ossos, as peças de cada um, as que ficaram sem osso e as vistas com os ossos em verde. O `ver_modelo` também desenha os ossos (`"ossos": false` esconde).
+- `animar_modelo`:
+  - `pronta`: humanoide tem parado, andar, correr, pular, cair, golpe e acenar; quadrupede tem parado, andar e correr; simples tem girar, balançar, abrir (uma tampa) e abrir_porta. Num modelo com vários ossos, as do simples vão para o osso do nome ("Tampa", "Porta", "Dobradiça"); senão, abrir vai para o último osso (a tampa presa na base) e girar para o primeiro; `osso` escolhe outro. A resposta diz que ossos a animação move. `forca` muda quanto mexe (0.5 = metade; −1 = para o outro lado) e `velocidade` muda o ritmo (2 = duas vezes mais rápida).
+  - `chaves`: quadros-chave por osso, `{"osso": "Braço esquerdo", "t": 0.5, "giro": [x, y, z], "andar": [x, y, z]}`. O `giro` é em graus, na junta; num personagem virado para +Z, um giro negativo em X leva o braço ou a perna para a frente. O `andar` é quanto a junta anda, em metros (o quadril subindo num pulo). Entre os quadros o movimento é suave, e antes do primeiro quadro de um osso vale o primeiro.
+  - `duracao` e `repete` (true para andar e parado; false para pular e golpe). Numa animação nova, sem `duracao`, ela dura até a última chave. Com o mesmo `nome`, as chaves se somam à animação; `limpar` começa do zero e `apagar` apaga.
+  - Volta uma **tira** com o modelo em vários momentos (`quadros`, padrão 6; com menos, cada um sai maior), vistos de lado (`vista`: lado, frente, cima, diagonal ou tras), todos no mesmo enquadramento. `"ossos": false` tira os ossos da tira.
+
+No jogo, o **Jogador 3D** toca sozinho parado, andar, correr, pular e cair (e o Golpe, golpe), e o **Inimigo 3D**, parado e andar. Outra animação toca com a ação **Tocar animação** numa regra ou com o componente `anim3d`. O `rodar_jogo` diz que animações 3D começaram a tocar em cada modelo, e quando.
 
 ## O que vem depois
 

@@ -7,7 +7,7 @@ local B = {
   requires = { "text" },
   props = {
     { "texto", "Moedas: {moedas}", label = "Texto",
-      help = "{nome} é trocado pelo valor da variável do jogo (nn.vars.nome)." },
+      help = "{nome} é trocado pelo valor da variável do jogo (nn.vars.nome). Ele escreve quando um valor muda: um texto posto por uma regra fica até a variável mudar." },
   },
 }
 
@@ -18,9 +18,16 @@ local function valor(nome)
   return tostring(v)
 end
 
+-- Escreve só quando o valor muda: um texto posto por uma regra ("mudar o
+-- texto") fica até a variável mudar de novo.
 function B:update(dt)
   local texto = self.obj.text or self.obj.text3d
-  if texto then texto.text = (self.texto:gsub("{([%w_]+)}", valor)) end
+  if not texto then return end
+  local novo = (self.texto:gsub("{([%w_]+)}", valor))
+  if novo ~= self._escrito then
+    texto.text = novo
+    self._escrito = novo
+  end
 end
 
 -- Já certo no primeiro quadro (antes, mostrava o texto do arquivo).

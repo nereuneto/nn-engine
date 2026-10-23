@@ -73,6 +73,24 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - **No servidor MCP:** `rodar_jogo` lista os **sons que tocaram**, os tempos de cada regra e o inventário no que mudou; `conferir_projeto` também confere mapas, tilesets, diálogos e `.sfx`; os mapas vêm ampliados com a **colisão por cima** (a borda do que bloqueia em vermelho, as plataformas em amarelo) e o tileset com o número de cada tile.
 - **Para quem usa as crates:** os mapas, tilesets, efeitos de partículas e diálogos saíram do NN Studio para o `nn-projeto` (`map`, `tileset`, `particles`, `dialogue`), e o gerador de sons é o `nn_projeto::sfx`. O `ParticleConfig` da `nn-render` ganhou `pixel`.
 
+### Ossos e animações pelo agente (Sprint 58)
+
+- **O agente de IA anima os modelos 3D.** Duas ferramentas novas no servidor MCP, com o mesmo esqueleto e animador do modelador do NN Studio. Como usar: [Ossos e animações](docs/mcp.md#ossos-e-animações).
+  - **`esqueleto`:** um esqueleto pronto (humanoide, quadrúpede ou simples) do tamanho do modelo, com cada peça ligada ao osso do nome dela ou ao mais perto; ossos próprios (a junta e a ponta); ligar uma peça a um osso. Volta as vistas com os ossos desenhados.
+  - **`animar_modelo`:** as animações prontas, com força e velocidade, ou quadros-chave próprios por osso (giro e deslocamento). Volta uma **tira** com o modelo em vários momentos da animação, no mesmo enquadramento.
+  - **`ver_modelo`** desenha os ossos por cima num modelo com esqueleto.
+- **Esqueleto pronto mais certo:** as juntas das pernas, dos braços, das patas, da cabeça e do rabo ficam em cima das peças com esses nomes (antes, num quadrúpede feito de cubos, as patas giravam fora do lugar). Vale também para o NN Studio.
+- **Abrir porta:** uma animação pronta nova do esqueleto simples. As do esqueleto simples agora vão para o osso do modelo mesmo quando ele tem outro nome.
+- **A prova:** um agente fez **"A Chave do Lobo"** em cerca de 80 chamadas, com o herói, o lobo e o baú modelados e animados por ele (o "parado" respirando e o pulo de braços para cima com quadros-chave próprios). Do que ele achou, isto foi acertado:
+  - **Abrir num modelo com vários ossos:** a pronta girava o osso de baixo, e o baú inteiro tombava. Agora ela vai para o osso do nome ("Tampa", "Porta") ou para o último osso, e `osso` escolhe outro. A resposta diz que ossos a animação move.
+  - **Âncora:** a do objeto é `top_left` e a do texto era `topleft`, e uma valia onde a outra quebrava o jogo. Agora as duas valem nos dois lugares, e um valor que não existe na âncora do texto é recusado ao criar o objeto (antes só quebrava ao jogar).
+  - **Mostrar valor** apagava, no quadro seguinte, o texto que uma regra punha no mesmo objeto. Agora ele só escreve quando o valor muda.
+  - **`rodar_jogo`** diz que animações 3D começaram a tocar em cada modelo, e quando.
+  - **Tiras maiores** com menos quadros, e `"ossos": false` para ver só o modelo.
+  - **Descrições:** a câmera "atrás" do Jogador 3D (gira com o mouse, não quando o jogador vira); andar e correr no teclado; a distância do "estiver perto de" (das posições, não das bordas); o limite de 5 imagens do `rodar_jogo`.
+  - **`buscar_documentacao`** com `secao` também acha os parágrafos com título em negrito ("Preso na tela").
+- **Para quem usa as crates:** o esqueleto e as animações prontas saíram do NN Studio para o `nn-projeto` (`model_rig`), e o `model_view` ganhou `render_bones` e `render_strip`. `ModelData::bone_lines` dá a junta e a ponta de cada osso num instante da animação.
+
 ## 0.7.0
 
 A versão do **desenvolvimento guiado por IA**. O **servidor MCP** (`nn mcp`) liga um agente de IA (Claude Code, Claude Desktop, Cursor...) ao projeto, com **30 ferramentas em português**. O agente monta cenas, objetos, prefabs e eventos, escreve Lua e confere tudo antes de gravar. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela. Ele escreve e roda os **testes de jogo** (`testes/*.lua`, também com `nn testar` e no NN Studio) e acompanha o **jogo aberto** enquanto você joga, mudando valores na hora. Com o **NN Studio** aberto, ele vê os objetos que você escolheu, não grava por cima do que você não salvou e o que ele muda aparece no Console. Para ligar: **Jogo > Ligar um agente de IA…** no NN Studio. Na revisão, dois agentes fizeram cada um um jogo do zero só pelo servidor, um de plataforma 2D e um de coletar em 3D, com testes. Como usar: [O servidor MCP](docs/mcp.md) e [Testes de jogo](docs/lua.md#testes-de-jogo).

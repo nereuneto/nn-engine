@@ -11,7 +11,7 @@ local B = {
     { "pulos_no_ar", 0, label = "Pulos no ar", min = 0, max = 5, integer = true,
       help = "1 = pulo duplo." },
     { "camera", "atras", label = "Câmera",
-      help = "Atrás: a câmera segue o jogador, olhando para onde ele está virado (o ry dele); a Câmera 3D da cena não vale. Para usar a da cena, escolha \"a Câmera 3D da cena\".",
+      help = "Atrás: a câmera de 3ª pessoa começa atrás do jogador (do lado oposto ao ry dele) e só gira com o mouse ou o analógico direito; o jogador anda em relação a ela, e virar para o lado não gira a câmera. A Câmera 3D da cena não vale. Para usar a da cena, escolha \"a Câmera 3D da cena\".",
       options = {
         { "atras", "atrás do jogador (3ª pessoa)" },
         { "cena", "a Câmera 3D da cena" },
@@ -35,7 +35,7 @@ local B = {
     { "anim_andar", "andar", type = "anim", label = "Animação: andar", advanced = true,
       show_if = { "animar", true } },
     { "anim_correr", "correr", type = "anim", label = "Animação: correr", advanced = true,
-      show_if = { "animar", true }, help = "Com a velocidade a partir de 4,5 m/s (sem ela, andar)." },
+      show_if = { "animar", true }, help = "Com a velocidade a partir de 4,5 m/s (sem ela, andar). No teclado o jogador vai sempre na Velocidade: abaixo de 4,5 toca só andar, a partir de 4,5 só correr; no analógico, as duas." },
     { "anim_pular", "pular", type = "anim", label = "Animação: pular", advanced = true,
       show_if = { "animar", true } },
     { "anim_cair", "cair", type = "anim", label = "Animação: cair", advanced = true,

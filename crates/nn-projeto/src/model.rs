@@ -794,6 +794,22 @@ impl ModelData {
         out
     }
 
+    /// Cada osso, da junta à ponta, na pose de uma animação (`anim`, no
+    /// tempo `t`) ou de descanso.
+    pub fn bone_lines(&self, anim: Option<&Anim>, t: f32) -> Vec<(Vec3, Vec3)> {
+        let globals = self.bone_globals(anim, t);
+        self.bones
+            .iter()
+            .zip(&globals)
+            .map(|(b, g)| {
+                (
+                    g.transform_point3(Vec3::ZERO),
+                    g.transform_point3(b.tail - b.head),
+                )
+            })
+            .collect()
+    }
+
     /// A matriz de cada peça, com os ossos posados (as peças sem osso ficam
     /// onde estão).
     pub fn posed_matrices(&self, anim: Option<&Anim>, t: f32) -> Vec<Mat4> {

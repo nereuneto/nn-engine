@@ -391,6 +391,25 @@ fn write_report(out: &mut String, report: &Report) {
             list.join(", ")
         ));
     }
+    if !report.animations.is_empty() {
+        // Por modelo: as animações na ordem em que começaram.
+        let mut models: Vec<(&str, Vec<String>)> = Vec::new();
+        for (m, name, n, t) in &report.animations {
+            let item = if *n > 1 {
+                format!("{name} ({n} vezes, a primeira em {t:.2} s)")
+            } else {
+                format!("{name} (em {t:.2} s)")
+            };
+            match models.iter_mut().find(|(x, _)| x == m) {
+                Some((_, v)) => v.push(item),
+                None => models.push((m, vec![item])),
+            }
+        }
+        out.push_str("\nAnimações 3D que começaram a tocar:\n");
+        for (m, v) in models {
+            out.push_str(&format!("  {m}: {}\n", v.join(", ")));
+        }
+    }
     if !report.fired.is_empty() {
         out.push_str("\nRegras dos eventos que dispararam:\n");
         for f in report.fired.iter().take(MAX_LINES) {
@@ -776,7 +795,9 @@ pub static TOOLS: &[&Tool] = &[
                 ),
                 (
                     "captura_final",
-                    s_bool("Mandar a captura da tela do fim (padrão true)"),
+                    s_bool(
+                        "Mandar a captura da tela do fim (padrão true). Vão no máximo 5 imagens por chamada, contando esta: com 5 \"capturar\" no roteiro, use false",
+                    ),
                     false,
                 ),
                 (

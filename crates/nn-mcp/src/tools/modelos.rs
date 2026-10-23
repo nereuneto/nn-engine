@@ -16,7 +16,7 @@ use super::{
 use crate::Server;
 
 /// Um número de metros com até 2 casas.
-fn m(v: f32) -> String {
+pub(super) fn m(v: f32) -> String {
     let r = (v * 100.0).round() / 100.0 + 0.0;
     if r == r.trunc() {
         format!("{r:.0}")
@@ -25,7 +25,7 @@ fn m(v: f32) -> String {
     }
 }
 
-fn vec3(v: &Value, what: &str) -> Result<Vec3, String> {
+pub(super) fn vec3(v: &Value, what: &str) -> Result<Vec3, String> {
     match v {
         Value::Number(n) => {
             let f = n.as_f64().unwrap_or(0.0) as f32;
@@ -42,7 +42,7 @@ fn vec3(v: &Value, what: &str) -> Result<Vec3, String> {
     }
 }
 
-fn png(img: &image::RgbaImage) -> Result<Vec<u8>, String> {
+pub(super) fn png(img: &image::RgbaImage) -> Result<Vec<u8>, String> {
     let mut out = Vec::new();
     img.write_to(&mut std::io::Cursor::new(&mut out), image::ImageFormat::Png)
         .map_err(|e| e.to_string())?;
@@ -184,7 +184,7 @@ fn ready_list() -> String {
 }
 
 /// A peça pelo nome (sem ligar para acentos e maiúsculas).
-fn part_index(md: &ModelData, name: &str) -> Result<usize, String> {
+pub(super) fn part_index(md: &ModelData, name: &str) -> Result<usize, String> {
     if let Some(i) = md.parts.iter().position(|p| p.name == name) {
         return Ok(i);
     }
@@ -264,7 +264,7 @@ fn part_bounds(p: &Part) -> Option<(Vec3, Vec3)> {
 
 // O texto de um modelo -------------------------------------------------------
 
-fn describe(rel: &str, md: &ModelData) -> String {
+pub(super) fn describe(rel: &str, md: &ModelData) -> String {
     let mut out = String::new();
     match md.bounds() {
         Some((a, b)) => {
@@ -344,9 +344,9 @@ fn describe(rel: &str, md: &ModelData) -> String {
     out
 }
 
-const VIEWS_NOTE: &str = "A imagem tem 4 vistas: em cima, a frente (de +Z) e o lado (de +X: a frente fica à esquerda); embaixo, de cima (a frente para baixo) e na diagonal. As três retas têm a mesma escala, com uma grade de 1 m (o chão, y = 0, é a linha mais clara), a origem em vermelho e um traço amarelo da origem para a frente (+Z). As costas: ver_modelo com \"vista\": \"tras\".";
+pub(super) const VIEWS_NOTE: &str = "A imagem tem 4 vistas: em cima, a frente (de +Z) e o lado (de +X: a frente fica à esquerda); embaixo, de cima (a frente para baixo) e na diagonal. As três retas têm a mesma escala, com uma grade de 1 m (o chão, y = 0, é a linha mais clara), a origem em vermelho e um traço amarelo da origem para a frente (+Z). As costas: ver_modelo com \"vista\": \"tras\".";
 
-fn views(md: &ModelData) -> Result<Vec<u8>, String> {
+pub(super) fn views(md: &ModelData) -> Result<Vec<u8>, String> {
     let glb = md.to_glb();
     let data =
         nn_render::d3::ModelData::from_gltf(&glb, &mut |_| None).map_err(|e| e.to_string())?;
@@ -357,7 +357,7 @@ fn views(md: &ModelData) -> Result<Vec<u8>, String> {
 }
 
 impl Server {
-    fn load_model(&self, rel: &str) -> Result<(String, ModelData), String> {
+    pub(super) fn load_model(&self, rel: &str) -> Result<(String, ModelData), String> {
         let (rel, full) = crate::paths::resolve(&self.root, rel)?;
         if !rel.to_lowercase().ends_with(".modelo") {
             return Err(format!(
@@ -373,13 +373,13 @@ impl Server {
     }
 
     /// Grava o `.modelo` e o `.glb` (o que o jogo usa).
-    fn save_model(&mut self, rel: &str, md: &ModelData) -> Result<(), String> {
+    pub(super) fn save_model(&mut self, rel: &str, md: &ModelData) -> Result<(), String> {
         self.write_file(rel, md.to_lua().as_bytes())?;
         self.write_file(&glb_path(rel), &md.to_glb())
     }
 }
 
-fn usage(rel: &str) -> String {
+pub(super) fn usage(rel: &str) -> String {
     format!(
         "Na cena 3D: um objeto com {{\"type\": \"model\", \"file\": \"{}\"}} (o .glb que acompanha o .modelo).",
         glb_path(rel)
@@ -809,7 +809,7 @@ fn ver_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
     }
     let view = view_of(opt_str(a, "vista")?.unwrap_or("todas"))?;
     let lower = rel.to_lowercase();
-    let (mut text, data) = if lower.ends_with(".modelo") {
+    let (mut text, data, md) = if lower.ends_with(".modelo") {
         let (_, md) = s.load_model(&rel)?;
         let glb = md.to_glb();
         let data =
@@ -821,7 +821,7 @@ fn ver_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
                 glb_path(&rel)
             ));
         }
-        (t, data)
+        (t, data, Some(md))
     } else if lower.ends_with(".glb") || lower.ends_with(".gltf") {
         let bytes = std::fs::read(&full).map_err(|e| format!("{rel}: {e}"))?;
         let dir = full
@@ -832,13 +832,14 @@ fn ver_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
             std::fs::read(dir.join(uri)).ok()
         })
         .map_err(|e| format!("{rel}: {e}"))?;
-        (describe_glb(&rel, &data), data)
+        (describe_glb(&rel, &data), data, None)
     } else {
         return Err(format!("{rel}: ver_modelo abre .modelo, .glb e .gltf"));
     };
     // Uma animação, num tempo (modelos com esqueleto).
     let mut anim = None;
-    if let Some(name) = opt_str(a, "animacao")? {
+    let anim_name = opt_str(a, "animacao")?;
+    if let Some(name) = anim_name {
         let sk = data
             .skeleton
             .as_ref()
@@ -865,7 +866,20 @@ fn ver_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
         Some(_) => return Err("\"metros\" é quantos metros cabem na vista (maior que 0)".into()),
         None => None,
     };
+    // Os ossos do .modelo, por cima (na pose do quadro pedido).
+    let bones = match &md {
+        Some(md) if !md.bones.is_empty() && opt_bool(a, "ossos")?.unwrap_or(true) => {
+            let t = anim.map_or(0.0, |(_, t)| t);
+            md.bone_lines(anim_name.and_then(|n| md.anim(n)), t)
+        }
+        _ => Vec::new(),
+    };
     let img = match view {
+        None if !bones.is_empty() => {
+            text.push_str(VIEWS_NOTE);
+            text.push_str(" Os ossos: em verde, da junta (o ponto branco, onde gira) até a ponta.");
+            model_view::render_bones(&tris, 300, &bones)
+        }
         None => {
             text.push_str(VIEWS_NOTE);
             model_view::render_span(&tris, 300, span)
@@ -1044,6 +1058,11 @@ pub static TOOLS: &[&Tool] = &[
                     false,
                 ),
                 ("tempo", s_num("O tempo na animação (segundos)"), false),
+                (
+                    "ossos",
+                    s_bool("Num .modelo com esqueleto, desenhar os ossos por cima (padrão true)"),
+                    false,
+                ),
             ]
         },
         read_only: true,
