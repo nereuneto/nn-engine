@@ -54,6 +54,10 @@ pub struct Part {
     pub visible: bool,
     /// O osso que a peça segue inteira ("" = nenhum).
     pub bone: String,
+    /// Brilho próprio (0 a 1): a peça acende com a própria cor, mesmo no
+    /// escuro (o vidro da lanterna, os olhos, um cristal). Vai no `.glb` como
+    /// o *emissive* dos materiais dela.
+    pub glow: f32,
 }
 
 /// Um osso do esqueleto, em repouso: gira na junta (`head`) e aponta para a
@@ -245,6 +249,7 @@ impl Part {
             mirror: false,
             visible: true,
             bone: String::new(),
+            glow: 0.0,
         }
     }
 
@@ -885,6 +890,9 @@ impl ModelData {
                     crate::config_lua::lua_string(&p.bone)
                 ));
             }
+            if p.glow > 0.0 {
+                s.push_str(&format!("      glow = {},\n", n(p.glow)));
+            }
             s.push_str("      verts = {\n");
             for q in &p.verts {
                 s.push_str(&format!("        {},\n", v3(*q)));
@@ -1017,6 +1025,12 @@ impl ModelData {
                     .ok()
                     .flatten()
                     .unwrap_or_default();
+                p.glow = pt
+                    .get::<Option<f32>>("glow")
+                    .ok()
+                    .flatten()
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0);
                 if let Ok(Value::Table(vs)) = pt.get::<Value>("verts") {
                     for v in vs.sequence_values::<Table>().flatten() {
                         p.verts.push(Vec3::new(
@@ -1127,7 +1141,8 @@ impl ModelData {
         let mut views = Vec::new();
         let mut accessors = Vec::new();
         let mut materials: Vec<serde_json::Value> = Vec::new();
-        let mut material_of: HashMap<String, usize> = HashMap::new();
+        // Um material por cor e brilho.
+        let mut material_of: HashMap<(String, u32), usize> = HashMap::new();
         let mut meshes = Vec::new();
         let mut nodes: Vec<serde_json::Value> = Vec::new();
         // Os ossos vêm primeiro: o nó `i` é o osso `i`.
@@ -1185,7 +1200,9 @@ impl ModelData {
                 if pos.is_empty() {
                     continue;
                 }
-                let mat = *material_of.entry(color.clone()).or_insert_with(|| {
+                let glow = p.glow.clamp(0.0, 1.0);
+                let key = (color.clone(), (glow * 1000.0).round() as u32);
+                let mat = *material_of.entry(key).or_insert_with(|| {
                     let c = parse_color(&color);
                     let lin = |v: f32| {
                         if v <= 0.04045 {
@@ -1194,14 +1211,19 @@ impl ModelData {
                             ((v + 0.055) / 1.055).powf(2.4)
                         }
                     };
-                    materials.push(json!({
+                    let mut m = json!({
                         "name": color,
                         "pbrMetallicRoughness": {
                             "baseColorFactor": [lin(c.r), lin(c.g), lin(c.b), 1.0],
                             "metallicFactor": 0.0,
                             "roughnessFactor": 1.0
                         }
-                    }));
+                    });
+                    if glow > 0.0 {
+                        m["emissiveFactor"] =
+                            json!([lin(c.r) * glow, lin(c.g) * glow, lin(c.b) * glow]);
+                    }
+                    materials.push(m);
                     materials.len() - 1
                 });
                 let (mut lo, mut hi) = (pos[0], pos[0]);
@@ -1580,5 +1602,25 @@ mod tests {
     #[test]
     fn caminho_do_glb() {
         assert_eq!(glb_path("modelos/casa.modelo"), "modelos/casa.glb");
+    }
+}
+
+#[cfg(test)]
+mod brilho {
+    use super::*;
+
+    #[test]
+    fn brilho_da_peca_vai_e_volta_e_vira_emissive() {
+        let mut m = ModelData::new_default();
+        m.parts[0].glow = 0.8;
+        m.parts.push(Part::cube("apagado", "#FF8C42"));
+        let back = ModelData::from_lua(&m.to_lua(), "t").unwrap();
+        assert_eq!(back.parts[0].glow, 0.8);
+        assert_eq!(back.parts[1].glow, 0.0);
+        let data = nn_render::d3::ModelData::from_gltf(&m.to_glb(), &mut |_| None).unwrap();
+        // A mesma cor, com e sem brilho: duas partes.
+        let lit: Vec<_> = data.parts.iter().filter(|p| p.emissive.r > 0.1).collect();
+        assert_eq!(lit.len(), 1);
+        assert!(data.parts.len() >= 2);
     }
 }

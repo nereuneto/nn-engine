@@ -132,7 +132,7 @@ fn agente_monta_um_jogo_de_plataforma_do_zero() {
             "when": [ { "cond": "acabaram", "nome": "moeda" } ],
             "actions": [ { "act": "ir_para_cena", "cena": fase } ] } }),
     );
-    assert!(text.starts_with("Regra 1 de 1 em a cena: Quando"), "{text}");
+    assert!(text.starts_with("Regra 1 de 1 na cena: Quando"), "{text}");
     // O exemplo da documentação (docs/mcp.md e a descrição de por_regra).
     let text = ok(
         &mut s,
@@ -1449,6 +1449,22 @@ fn agente_modela_em_3d() {
         json!({ "caminho": "modelos/heroi.glb", "animacao": "voar" }),
     );
     assert!(e.contains("não tem a animação \"voar\""), "{e}");
+
+    // Um valor que não existe num campo de escolha.
+    ok(
+        &mut s,
+        "criar_cena",
+        json!({ "caminho": "cenas/teste.cena", "tipo": "3d" }),
+    );
+    let e = fails(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/teste.cena", "objeto": { "name": "x", "components": [{ "type": "body3d", "shape": "xyz" }] } }),
+    );
+    assert!(
+        e.contains("\"shape\" = \"xyz\" não existe; use \"auto\""),
+        "{e}"
+    );
 
     // No jogo.
     let t = ok(

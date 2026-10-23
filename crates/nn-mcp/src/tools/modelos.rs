@@ -17,7 +17,7 @@ use crate::Server;
 
 /// Um número de metros com até 2 casas.
 fn m(v: f32) -> String {
-    let r = (v * 100.0).round() / 100.0;
+    let r = (v * 100.0).round() / 100.0 + 0.0;
     if r == r.trunc() {
         format!("{r:.0}")
     } else {
@@ -52,15 +52,15 @@ fn png(img: &image::RgbaImage) -> Result<Vec<u8>, String> {
 /// As direções com nome.
 fn side(name: &str) -> Result<Vec3, String> {
     Ok(match crate::paths::fold(name).as_str() {
-        "cima" | "topo" => Vec3::Y,
-        "baixo" | "base" => Vec3::NEG_Y,
-        "frente" => Vec3::Z,
-        "tras" | "atras" | "costas" => Vec3::NEG_Z,
-        "direita" => Vec3::X,
-        "esquerda" => Vec3::NEG_X,
+        "cima" | "topo" | "+y" | "y" => Vec3::Y,
+        "baixo" | "base" | "-y" => Vec3::NEG_Y,
+        "frente" | "+z" | "z" => Vec3::Z,
+        "tras" | "atras" | "costas" | "fundo" | "-z" => Vec3::NEG_Z,
+        "direita" | "+x" | "x" => Vec3::X,
+        "esquerda" | "-x" => Vec3::NEG_X,
         _ => {
             return Err(format!(
-                "lado \"{name}\": use cima, baixo, frente (+Z), tras, direita (+X) ou esquerda"
+                "lado \"{name}\": use cima (+y), baixo (-y), frente (+z), tras (-z), direita (+x) ou esquerda (-x); direita e esquerda são as da vista de frente (num personagem virado para a frente, a direita da vista é o lado esquerdo dele)"
             ));
         }
     })
@@ -89,10 +89,22 @@ fn shape(
     sides: Option<u32>,
 ) -> Result<Part, String> {
     let n = sides.unwrap_or(8).clamp(3, 48);
-    let p = match crate::paths::fold(forma).as_str() {
+    let f = crate::paths::fold(forma);
+    if sides.is_some() && matches!(f.as_str(), "cubo" | "caixa" | "plano" | "rampa" | "cunha") {
+        return Err(format!(
+            "\"lados\" vale para cilindro, cone, piramide e esfera (não para {forma})"
+        ));
+    }
+    // Os de n lados giram meio lado: uma face (não uma quina) fica virada
+    // para a frente (+Z) e, com 4, 8, 12... lados, também para os lados.
+    let half_turn = |p: Part| p.baked(Mat4::from_rotation_y(std::f32::consts::PI / n as f32));
+    let p = match f.as_str() {
         "cubo" | "caixa" => Part::cube(name, color),
-        "cilindro" => Part::ring_solid(name, color, n, 1.0),
-        "cone" => Part::ring_solid(name, color, n, 0.0),
+        "cilindro" => half_turn(Part::ring_solid(name, color, n, 1.0)),
+        "cone" => half_turn(Part::ring_solid(name, color, n, 0.0)),
+        "piramide" if sides.is_some_and(|k| k != 4) => {
+            half_turn(Part::ring_solid(name, color, n, 0.0))
+        }
         "piramide" => Part::pyramid(name, color),
         "esfera" | "bola" => Part::sphere_n(name, color, n.max(6), (n / 2).max(3)),
         "plano" => Part::plane(name, color),
@@ -103,7 +115,32 @@ fn shape(
             ));
         }
     };
-    Ok(p.baked(Mat4::from_scale(size)))
+    Ok(fit_size(p, size))
+}
+
+/// Deixa a peça com exatamente este tamanho (largura, altura, fundo), em pé
+/// no chão (base em y = 0) e no meio em X e Z.
+fn fit_size(mut p: Part, size: Vec3) -> Part {
+    let Some((a, b)) = p.verts.iter().fold(None, |acc: Option<(Vec3, Vec3)>, v| {
+        Some(match acc {
+            Some((a, b)) => (a.min(*v), b.max(*v)),
+            None => (*v, *v),
+        })
+    }) else {
+        return p;
+    };
+    let span = (b - a).max(Vec3::splat(1e-6));
+    let mid = Vec3::new((a.x + b.x) / 2.0, a.y, (a.z + b.z) / 2.0);
+    // Um plano não tem altura: fica com a dele.
+    let k = Vec3::new(
+        size.x / span.x,
+        if span.y > 1e-5 { size.y / span.y } else { 1.0 },
+        size.z / span.z,
+    );
+    for v in &mut p.verts {
+        *v = (*v - mid) * k;
+    }
+    p
 }
 
 /// A peça de um kit ("Casa/Parede" ou só "Parede").
@@ -172,18 +209,29 @@ fn free_name(md: &ModelData, base: &str) -> String {
     name
 }
 
-/// A peça espelhada em X (pontos, posição e giro).
-fn mirrored(p: &Part) -> Part {
+/// A peça espelhada em X (a esquerda vira a direita) ou em Z (a frente vira
+/// o fundo): os pontos, a posição e o giro.
+fn mirrored(p: &Part, axis_z: bool) -> Part {
     let mut q = p.clone();
     for v in &mut q.verts {
-        v.x = -v.x;
+        if axis_z {
+            v.z = -v.z;
+        } else {
+            v.x = -v.x;
+        }
     }
     for f in &mut q.faces {
         f.v.reverse();
     }
-    q.pos.x = -q.pos.x;
-    q.rot.y = -q.rot.y;
-    q.rot.z = -q.rot.z;
+    if axis_z {
+        q.pos.z = -q.pos.z;
+        q.rot.x = -q.rot.x;
+        q.rot.y = -q.rot.y;
+    } else {
+        q.pos.x = -q.pos.x;
+        q.rot.y = -q.rot.y;
+        q.rot.z = -q.rot.z;
+    }
     q
 }
 
@@ -239,26 +287,34 @@ fn describe(rel: &str, md: &ModelData) -> String {
         }
         None => out.push_str(&format!("{rel}: vazio (sem peças).\n")),
     }
-    out.push_str("Peças (posição da base, giro em graus, tamanho):\n");
+    out.push_str("Peças (\"em\" é a origem da peça, onde ela gira: nas formas novas, o meio da base; nas do personagem, a junta; e de onde a onde ela vai no modelo):\n");
     for p in &md.parts {
-        let size = part_bounds(p).map(|(a, b)| b - a).unwrap_or(Vec3::ZERO);
+        let (lo, hi) = part_bounds(p).unwrap_or((Vec3::ZERO, Vec3::ZERO));
         let mut colors: Vec<&str> = p.faces.iter().map(|f| f.color.as_str()).collect();
         colors.sort_unstable();
         colors.dedup();
+        let v = |a: Vec3| format!("[{}, {}, {}]", m(a.x), m(a.y), m(a.z));
         out.push_str(&format!(
-            "  \"{}\": em [{}, {}, {}], giro [{}, {}, {}], {} x {} x {} m, cores {}{}{}\n",
+            "  \"{}\": em {}, giro {}, de {} a {} ({} x {} x {} m), cores {}{}{}{}\n",
             p.name,
-            m(p.pos.x),
-            m(p.pos.y),
-            m(p.pos.z),
-            m(p.rot.x),
-            m(p.rot.y),
-            m(p.rot.z),
-            m(size.x),
-            m(size.y),
-            m(size.z),
+            v(p.pos),
+            v(p.rot),
+            v(lo),
+            v(hi),
+            m(hi.x - lo.x),
+            m(hi.y - lo.y),
+            m(hi.z - lo.z),
             colors.join(" "),
-            if p.mirror { ", com simetria em X" } else { "" },
+            if p.mirror {
+                ", simétrica (a metade -X da peça copia a +X)"
+            } else {
+                ""
+            },
+            if p.glow > 0.0 {
+                format!(", brilho {}", m(p.glow))
+            } else {
+                String::new()
+            },
             if p.bone.is_empty() {
                 String::new()
             } else {
@@ -288,7 +344,7 @@ fn describe(rel: &str, md: &ModelData) -> String {
     out
 }
 
-const VIEWS_NOTE: &str = "A imagem tem 4 vistas: em cima, a frente (de +Z) e o lado (de +X); embaixo, de cima (a frente para baixo) e na diagonal. As três retas têm a mesma escala, com uma grade de 1 m (o chão, y = 0, é a linha mais clara) e a origem em vermelho.";
+const VIEWS_NOTE: &str = "A imagem tem 4 vistas: em cima, a frente (de +Z) e o lado (de +X: a frente fica à esquerda); embaixo, de cima (a frente para baixo) e na diagonal. As três retas têm a mesma escala, com uma grade de 1 m (o chão, y = 0, é a linha mais clara), a origem em vermelho e um traço amarelo da origem para a frente (+Z). As costas: ver_modelo com \"vista\": \"tras\".";
 
 fn views(md: &ModelData) -> Result<Vec<u8>, String> {
     let glb = md.to_glb();
@@ -445,6 +501,9 @@ fn model_op(md: &mut ModelData, op: &Map<String, Value>, n: usize) -> Result<Str
         if op.get("simetria").and_then(Value::as_bool) == Some(true) {
             p.mirror_on();
         }
+        if let Some(g) = get_num(op, "brilho", n)? {
+            p.glow = g.clamp(0.0, 1.0);
+        }
         md.parts.push(p);
         return Ok(format!("peça \"{name}\" ({forma})"));
     }
@@ -485,13 +544,17 @@ fn model_op(md: &mut ModelData, op: &Map<String, Value>, n: usize) -> Result<Str
         let mut p = md.parts[i].clone();
         let espelhar = get_str(op, "espelhar", n)?;
         if let Some(e) = espelhar {
-            if crate::paths::fold(e) != "x" {
-                return Err(op_err(
-                    n,
-                    "\"espelhar\" é \"x\" (o espelho do lado esquerdo e direito)",
-                ));
-            }
-            p = mirrored(&p);
+            let axis_z = match crate::paths::fold(e).as_str() {
+                "x" => false,
+                "z" => true,
+                _ => {
+                    return Err(op_err(
+                        n,
+                        "\"espelhar\" é \"x\" (o que está na direita, +X, vai para a esquerda, -X, e vice-versa) ou \"z\" (a frente vai para o fundo)",
+                    ));
+                }
+            };
+            p = mirrored(&p, axis_z);
         }
         let base = match get_str(op, "nome", n)? {
             Some(nm) => nm.to_string(),
@@ -627,7 +690,13 @@ fn model_op(md: &mut ModelData, op: &Map<String, Value>, n: usize) -> Result<Str
     }
     if let Some(l) = get_str(op, "recuar", n)? {
         let dir = side(l).map_err(|e| op_err(n, e))?;
-        let t = get_num(op, "quanto", n)?.unwrap_or(0.2);
+        // "abertura": quanto da face a abertura ocupa (0.5 = metade);
+        // "quanto": a borda que fica em volta (o contrário).
+        let t = match (get_num(op, "abertura", n)?, get_num(op, "quanto", n)?) {
+            (Some(a), _) => 1.0 - a.clamp(0.05, 1.0),
+            (None, Some(q)) => q,
+            (None, None) => 0.2,
+        };
         let faces = faces_towards(p, dir);
         let inner = p.inset(&faces, t);
         if let Some(depth) = get_num(op, "fundo", n)? {
@@ -670,6 +739,10 @@ fn model_op(md: &mut ModelData, op: &Map<String, Value>, n: usize) -> Result<Str
             p.mirror_apply();
         }
         done.push("simetria");
+    }
+    if let Some(g) = get_num(op, "brilho", n)? {
+        md.parts[i].glow = g.clamp(0.0, 1.0);
+        done.push("brilho");
     }
     if let Some(new) = get_str(op, "renomear", n)? {
         if md
@@ -724,7 +797,8 @@ fn view_of(name: &str) -> Result<Option<View>, String> {
         "lado" => View::Side,
         "cima" => View::Top,
         "diagonal" | "3/4" => View::ThreeQuarter,
-        _ => return Err("\"vista\": todas, frente, lado, cima ou diagonal".into()),
+        "tras" | "costas" | "atras" => View::Back,
+        _ => return Err("\"vista\": todas, frente, lado, cima, diagonal ou tras".into()),
     }))
 }
 
@@ -786,12 +860,17 @@ fn ver_modelo(s: &mut Server, a: &Value) -> Result<Output, String> {
             "{text}(Sem triângulos para desenhar.)"
         )));
     }
+    let span = match opt_num(a, "metros")? {
+        Some(v) if v > 0.0 => Some(v as f32),
+        Some(_) => return Err("\"metros\" é quantos metros cabem na vista (maior que 0)".into()),
+        None => None,
+    };
     let img = match view {
         None => {
             text.push_str(VIEWS_NOTE);
-            model_view::render(&tris, 300)
+            model_view::render_span(&tris, 300, span)
         }
-        Some(v) => model_view::render_one(&tris, v, 600),
+        Some(v) => model_view::render_one(&tris, v, 600, span),
     };
     Ok(Output::text(text).and_image(&png(&img)?, "image/png"))
 }
@@ -826,7 +905,7 @@ fn describe_glb(rel: &str, d: &nn_render::d3::ModelData) -> String {
                 out.push_str("  Aviso: o modelo é minúsculo (menos de 5 cm); aumente com \"scale\" no objeto.\n");
             }
             if a.y < -0.05 {
-                out.push_str("  Aviso: parte fica abaixo de y = 0: com o objeto no chão, ele afunda (suba o objeto, ou use um filho).\n");
+                out.push_str("  Aviso: parte fica abaixo de y = 0: com o objeto no chão, ele afunda (suba o objeto, ou use um filho). Se a origem dele é de propósito outro ponto (o alto de uma plataforma), tudo bem.\n");
             } else if a.y > 0.05 {
                 out.push_str(
                     "  Aviso: a base fica acima de y = 0: com o objeto no chão, ele flutua.\n",
@@ -919,7 +998,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "modelar",
         title: "Modelar",
-        description: "Muda um modelo 3D (.modelo) com várias operações numa chamada e devolve o modelo em 4 vistas. Medidas em metros, Y para cima, a frente é +Z, cores \"#rrggbb\". Operações: {\"criar\": \"tronco\", \"forma\": \"cubo|cilindro|cone|piramide|esfera|plano|rampa\", \"tamanho\": [x, y, z], \"em\": [x, y, z] (o meio da base da peça), \"giro\": [x, y, z] (graus), \"cor\": \"#9C6B43\", \"lados\": 8, \"simetria\": true}; {\"kit\": \"Casa/Parede\", \"em\": [...], \"nome\": ...} (peças prontas: Casa, Natureza, Personagem, Veículo); {\"peca\": \"tronco\", e: \"em\", \"andar\" (soma), \"giro\", \"escala\", \"tamanho\" (a escala para ficar desse tamanho), \"cor\" (com \"lado\": cima, baixo, frente, tras, direita ou esquerda, só as faces daquele lado), \"extrudar\": lado (+ \"distancia\" em m e \"afinar\": 0.5 deixa a ponta menor), \"recuar\": lado (+ \"quanto\" de 0 a 1, \"fundo\" em m, negativo afunda: janelas e portas, e \"cor_dentro\"), \"afinar\": lado (+ \"quanto\": encolhe aquelas faces), \"simetria\": true/false (o lado -X copia o +X), \"renomear\"}; {\"copiar\": \"braco\", \"nome\": \"braco_d\", \"espelhar\": \"x\", \"em\"/\"andar\"}; {\"apagar\": \"peca\"}; {\"juntar\": [\"a\", \"b\"], \"nome\": \"c\"}.",
+        description: "Muda um modelo 3D (.modelo) com várias operações numa chamada e devolve o modelo em 4 vistas (e grava o .glb). Medidas em metros, Y para cima, a frente é +Z, cores \"#rrggbb\". Os lados: cima (+y), baixo (-y), frente (+z), tras (-z), direita (+x) e esquerda (-x); direita e esquerda são as da vista de frente (num personagem virado para a frente, a direita da vista é o lado esquerdo dele). Operações: (1) {\"criar\": \"tronco\", \"forma\": \"cubo|cilindro|cone|piramide|esfera|plano|rampa\", \"tamanho\": [x, y, z] (o tamanho exato da peça), \"em\": [x, y, z] (o meio da base), \"giro\": [x, y, z] (graus), \"cor\", \"lados\": 8 (cilindro, cone, piramide, esfera; uma face fica virada para a frente), \"brilho\": 0 a 1 (a peça acende com a própria cor, mesmo no escuro)}; (2) {\"kit\": \"Casa/Parede\", \"em\": [...], \"nome\"} (Casa, Natureza, Personagem, Veículo); (3) {\"peca\": \"tronco\" e o que mudar: \"em\", \"andar\" (soma à posição), \"giro\", \"escala\", \"tamanho\", \"cor\" (com \"lado\", só as faces daquele lado), \"brilho\", \"extrudar\": lado (puxa as faces daquele lado; \"distancia\" em m; \"afinar\": o tamanho que a ponta fica, 0.5 = metade, 0 = uma ponta), \"recuar\": lado (portas e janelas: \"abertura\": quanto da face a abertura ocupa, 0.5 = metade; \"fundo\" em m, negativo afunda; \"cor_dentro\"), \"afinar\": lado (\"quanto\": o tamanho que aquelas faces ficam, 0.8 = 80%), \"simetria\": true (a peça fica simétrica em volta do meio dela: a metade -X da peça copia a +X; para duas peças, uma de cada lado, use copiar com espelhar), \"renomear\"}; (4) {\"copiar\": \"torre\", \"nome\": \"torre_2\", \"espelhar\": \"x\" (vai para o outro lado, de +X para -X) ou \"z\" (da frente para o fundo), \"em\"/\"andar\"}; (5) {\"apagar\": \"peca\"}; (6) {\"juntar\": [\"a\", \"b\"], \"nome\": \"c\"}. Se uma operação dá erro, nada é gravado.",
         params: || {
             vec![
                 ("caminho", s_str(MODELO), true),
@@ -947,7 +1026,16 @@ pub static TOOLS: &[&Tool] = &[
                 ("caminho", s_str("O modelo (.modelo, .glb ou .gltf)"), true),
                 (
                     "vista",
-                    s_str("todas (padrão), frente, lado, cima ou diagonal"),
+                    s_str(
+                        "todas (padrão), frente, lado, cima, diagonal ou tras (as costas, de -Z)",
+                    ),
+                    false,
+                ),
+                (
+                    "metros",
+                    s_num(
+                        "Quantos metros cabem em cada vista: o mesmo número para vários modelos deixa comparar os tamanhos (padrão: o modelo inteiro)",
+                    ),
                     false,
                 ),
                 (
@@ -1049,5 +1137,79 @@ mod tests {
         .unwrap();
         let (a, b) = part_bounds(&md.parts[0]).unwrap();
         assert!(((b - a) - Vec3::ONE).length() < 1e-3, "{a} {b}");
+    }
+
+    #[test]
+    fn acertos_da_prova() {
+        let mut md = ModelData::default();
+        // Cilindro de 8 lados: uma face na frente (recuar faz um buraco só).
+        model_op(
+            &mut md,
+            &op(json!({ "criar": "torre", "forma": "cilindro", "lados": 8, "tamanho": [2, 3, 2] })),
+            1,
+        )
+        .unwrap();
+        let (a, b) = part_bounds(&md.parts[0]).unwrap();
+        assert!(
+            ((b - a) - Vec3::new(2.0, 3.0, 2.0)).length() < 1e-3,
+            "o tamanho pedido: {a} {b}"
+        );
+        assert_eq!(
+            faces_towards(&md.parts[0], Vec3::Z).len(),
+            1,
+            "uma face de frente"
+        );
+        // Pirâmide com lados.
+        model_op(
+            &mut md,
+            &op(json!({ "criar": "teto", "forma": "piramide", "lados": 6 })),
+            2,
+        )
+        .unwrap();
+        assert_eq!(md.parts[1].faces.len(), 7, "6 lados e a base");
+        let e = model_op(
+            &mut md,
+            &op(json!({ "criar": "x", "forma": "cubo", "lados": 6 })),
+            3,
+        )
+        .unwrap_err();
+        assert!(e.contains("\"lados\" vale para cilindro"), "{e}");
+        // Espelho em Z, brilho, abertura e lados pelos eixos.
+        model_op(
+            &mut md,
+            &op(json!({ "criar": "ameia", "tamanho": [0.3, 0.3, 0.3], "em": [0, 3, 0.9] })),
+            4,
+        )
+        .unwrap();
+        model_op(
+            &mut md,
+            &op(json!({ "copiar": "ameia", "nome": "ameia_tras", "espelhar": "z" })),
+            5,
+        )
+        .unwrap();
+        assert!((md.parts[3].pos.z + 0.9).abs() < 1e-5);
+        model_op(
+            &mut md,
+            &op(json!({ "peca": "ameia", "brilho": 0.7, "cor": "#FFD166", "lado": "+y" })),
+            6,
+        )
+        .unwrap();
+        assert_eq!(md.parts[2].glow, 0.7);
+        model_op(
+            &mut md,
+            &op(json!({ "peca": "torre", "recuar": "frente", "abertura": 0.5, "fundo": -0.1 })),
+            7,
+        )
+        .unwrap();
+        let e = model_op(
+            &mut md,
+            &op(json!({ "copiar": "ameia", "espelhar": "y" })),
+            8,
+        )
+        .unwrap_err();
+        assert!(e.contains("\"z\" (a frente vai para o fundo)"), "{e}");
+        let d = describe("t.modelo", &md);
+        assert!(d.contains("brilho 0.7"), "{d}");
+        assert!(!d.contains("-0,") && !d.contains("-0]"), "sem -0: {d}");
     }
 }

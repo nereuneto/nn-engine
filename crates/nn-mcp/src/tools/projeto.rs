@@ -437,6 +437,18 @@ fn conferir_projeto(s: &mut Server, _: &Value) -> Result<Output, String> {
                     }
                 }
                 if !c.is_behavior() {
+                    for (k, v) in &c.props {
+                        if let Prop::Str(text) = v
+                            && let Some(choices) = scene_data::field_choices(&c.kind, k)
+                            && !choices.contains(&text.as_str())
+                        {
+                            problems.push(format!(
+                                "{at}: {}.{k} = \"{text}\" não existe (use {})",
+                                c.kind,
+                                choices.join(", ")
+                            ));
+                        }
+                    }
                     if valores_kind_3d(&c.kind) && !three_d && !doc.prefab {
                         warnings.push(format!("{at}: \"{}\" é de cenas 3D", c.kind));
                     }

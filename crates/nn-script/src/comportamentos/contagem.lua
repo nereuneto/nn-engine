@@ -8,7 +8,7 @@ local B = {
   mode = "both",
   props = {
     { "segundos", 60, label = "Segundos", min = 0, help = "De onde começa." },
-    { "variavel", "tempo", label = "Variável", help = "Variável do jogo com os segundos que faltam (um número inteiro)." },
+    { "variavel", "tempo", label = "Variável", help = "Variável do jogo com os segundos que faltam (um número inteiro). Mudar a variável (um evento que soma 10) muda o tempo." },
     { "comecar", true, label = "Começa sozinha",
       help = "Desligado, começa com a mensagem \"comecar\" (eventos: Mandar mensagem)." },
     { "ao_acabar", "nada", label = "Ao acabar",
@@ -29,7 +29,10 @@ function B:start()
 end
 
 function B:mostrar()
-  if self.variavel ~= "" then nn.vars[self.variavel] = math.max(0, math.ceil(self.resta)) end
+  if self.variavel ~= "" then
+    self.escrito = math.max(0, math.ceil(self.resta))
+    nn.vars[self.variavel] = self.escrito
+  end
 end
 
 --- Mensagens: "comecar", "parar", "reiniciar" e "somar" (com os segundos).
@@ -48,6 +51,9 @@ function B:update(dt)
   if not self.andando or self.acabou then return end
   -- Numa conversa, o tempo para.
   if self.scene._dlg then return end
+  -- Alguém mudou a variável (um evento que soma tempo, um bônus): vale.
+  local v = self.variavel ~= "" and nn.vars[self.variavel]
+  if type(v) == "number" and v ~= self.escrito then self.resta = v end
   self.resta = self.resta - dt
   self:mostrar()
   if self.resta <= 0 then

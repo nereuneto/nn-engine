@@ -959,7 +959,16 @@ fn contagem_regressiva_desce_e_avisa() {
     assert_eq!(lua::<f64>(&rt, "nn.vars.tempo"), 1.0);
     h.run_frames(40);
     assert_eq!(lua::<f64>(&rt, "nn.vars.fim"), 0.0, "ainda não acabou");
-    h.run_frames(30);
+    // Um bônus de tempo: mudar a variável muda a contagem.
+    rt.lua().load("nn.vars.tempo = 2").exec().unwrap();
+    h.run_frames(60);
+    assert_eq!(
+        lua::<f64>(&rt, "nn.vars.fim"),
+        0.0,
+        "o bônus deu mais tempo"
+    );
+    assert_eq!(lua::<f64>(&rt, "nn.vars.tempo"), 1.0);
+    h.run_frames(70);
     assert_eq!(lua::<f64>(&rt, "nn.vars.tempo"), 0.0);
     assert_eq!(
         lua::<f64>(&rt, "nn.vars.fim"),

@@ -29,6 +29,9 @@ fn def_text(d: &EventDef, detail: bool) -> String {
         .iter()
         .map(|p| {
             let mut t = format!("{} = {}", p.key, p.default.to_lua());
+            if let Some(d3) = &p.default3d {
+                t.push_str(&format!(" (no 3D: {})", d3.to_lua()));
+            }
             if !p.options.is_empty() {
                 let o: Vec<&str> = p.options.iter().map(|(k, _)| k.as_str()).collect();
                 t.push_str(&format!(" ({})", o.join("|")));
@@ -165,7 +168,12 @@ fn por_regra(s: &mut Server, a: &Value) -> Result<Output, String> {
     };
     let total = rules.len();
     s.save_doc(&doc)?;
-    let mut msg = format!("Regra {at} de {total} em {owner}: {summary}");
+    let place = if owner == "a cena" {
+        "na cena".to_string()
+    } else {
+        format!("em {owner}")
+    };
+    let mut msg = format!("Regra {at} de {total} {place}: {summary}");
     for n in notes {
         msg.push_str(&format!("\n- {n}"));
     }
@@ -183,7 +191,12 @@ fn tirar_regra(s: &mut Server, a: &Value) -> Result<Output, String> {
     let r = rules.remove(n - 1);
     s.save_doc(&doc)?;
     Ok(Output::text(format!(
-        "Tirei a regra {n} de {owner}: {}",
+        "Tirei a regra {n} {}: {}",
+        if owner == "a cena" {
+            "da cena".to_string()
+        } else {
+            format!("de {owner}")
+        },
         events::rule_summary(&r, in_object)
     )))
 }

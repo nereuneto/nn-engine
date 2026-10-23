@@ -104,6 +104,8 @@ pub enum View {
     Top,
     /// Na diagonal, de cima, da frente e da direita.
     ThreeQuarter,
+    /// De -Z (as costas), olhando para +Z.
+    Back,
 }
 
 impl View {
@@ -113,6 +115,7 @@ impl View {
             View::Front => (Vec3::X, Vec3::Y, Vec3::Z),
             View::Side => (Vec3::NEG_Z, Vec3::Y, Vec3::X),
             View::Top => (Vec3::X, Vec3::NEG_Z, Vec3::Y),
+            View::Back => (Vec3::NEG_X, Vec3::Y, Vec3::NEG_Z),
             View::ThreeQuarter => {
                 let d = Vec3::new(1.0, 0.75, 1.3).normalize();
                 let right = Vec3::Y.cross(d).normalize();
@@ -130,6 +133,7 @@ const BG: Rgba<u8> = Rgba([0x26, 0x2b, 0x3a, 255]);
 const GRID: Rgba<u8> = Rgba([0x33, 0x3a, 0x4d, 255]);
 const GROUND: Rgba<u8> = Rgba([0x6d, 0x7f, 0x9a, 255]);
 const ORIGIN: Rgba<u8> = Rgba([0xff, 0x6b, 0x6b, 255]);
+const FRONT: Rgba<u8> = Rgba([0xff, 0xd1, 0x66, 255]);
 
 /// Um quadro de `cell` x `cell` com o modelo visto de `view`. `span` é
 /// quantos metros cabem na largura (o mesmo nas vistas retas, para comparar).
@@ -276,6 +280,23 @@ fn draw_view(tris: &[Tri], view: View, cell: u32, span: f32) -> RgbaImage {
             }
         }
     }
+    // A frente (+Z): um traço amarelo saindo da origem, nas vistas em que
+    // ela não aponta para quem olha.
+    if !matches!(view, View::Front | View::Back) {
+        let (x0, y0, _) = to_screen(Vec3::ZERO);
+        let (x1, y1, _) = to_screen(Vec3::Z * (span * 0.12).max(0.3));
+        let steps = ((x1 - x0).abs().max((y1 - y0).abs()) as i32).max(1);
+        for i in 0..=steps {
+            let t = i as f32 / steps as f32;
+            let (x, y) = (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+            for (dx, dy) in [(0, 0), (1, 0), (0, 1)] {
+                let (px, py) = (x as i32 + dx, y as i32 + dy);
+                if px >= 0 && py >= 0 && (px as u32) < cell && (py as u32) < cell {
+                    img.put_pixel(px as u32, py as u32, FRONT);
+                }
+            }
+        }
+    }
     // A origem (o ponto que fica na posição do objeto na cena).
     let (ox, oy, _) = to_screen(Vec3::ZERO);
     for d in -4i32..=4 {
@@ -288,19 +309,30 @@ fn draw_view(tris: &[Tri], view: View, cell: u32, span: f32) -> RgbaImage {
     img
 }
 
+/// Quantos metros cabem numa vista: o modelo com uma folga.
+fn auto_span(tris: &[Tri]) -> f32 {
+    bounds(tris)
+        .map(|(a, b)| (b - a).max_element() * 1.2)
+        .unwrap_or(2.0)
+        .max(0.5)
+}
+
 /// As quatro vistas, 2 x 2: frente e lado em cima; de cima e 3/4 embaixo.
 /// As três retas têm a mesma escala (dá para comparar os tamanhos).
 pub fn render(tris: &[Tri], cell: u32) -> RgbaImage {
+    render_span(tris, cell, None)
+}
+
+/// Como [`render`], com quantos metros cabem em cada vista (o mesmo para
+/// vários modelos, para comparar).
+pub fn render_span(tris: &[Tri], cell: u32, span: Option<f32>) -> RgbaImage {
     let gap = 2;
     let mut out = RgbaImage::from_pixel(
         cell * 2 + gap,
         cell * 2 + gap,
         Rgba([0x10, 0x12, 0x18, 255]),
     );
-    let span = bounds(tris)
-        .map(|(a, b)| (b - a).max_element() * 1.2)
-        .unwrap_or(2.0)
-        .max(0.5);
+    let span = span.unwrap_or_else(|| auto_span(tris));
     for (i, view) in [View::Front, View::Side, View::Top, View::ThreeQuarter]
         .into_iter()
         .enumerate()
@@ -313,11 +345,8 @@ pub fn render(tris: &[Tri], cell: u32) -> RgbaImage {
 }
 
 /// Uma vista só, maior.
-pub fn render_one(tris: &[Tri], view: View, cell: u32) -> RgbaImage {
-    let span = bounds(tris)
-        .map(|(a, b)| (b - a).max_element() * 1.2)
-        .unwrap_or(2.0)
-        .max(0.5);
+pub fn render_one(tris: &[Tri], view: View, cell: u32, span: Option<f32>) -> RgbaImage {
+    let span = span.unwrap_or_else(|| auto_span(tris));
     draw_view(tris, view, cell, span)
 }
 
