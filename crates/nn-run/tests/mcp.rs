@@ -851,6 +851,11 @@ fn agente_desenha_um_sprite_e_anima() {
         "{t}"
     );
     assert_eq!(image::load_from_memory(&pngs[0]).unwrap().width() % 4, 0);
+    assert_eq!(pngs.len(), 2, "a tira e a casca de cebola");
+    assert!(t.contains("Casca de cebola"), "{t}");
+    if std::env::var("NN_FX_OUT").is_ok() {
+        std::fs::write("/tmp/cebola.png", &pngs[1]).unwrap();
+    }
     let e = fails(
         &mut s,
         "animar",
@@ -940,5 +945,410 @@ fn agente_desenha_um_sprite_e_anima() {
     // Tudo volta com desfazer.
     ok(&mut s, "desfazer", json!({ "passos": 20 }));
     assert!(!dir.join(img).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Mapas de tiles pelo agente: cria o mapa de uma imagem de tiles, pinta
+/// (com desenho e com terreno automático), marca os sólidos, e o jogo roda.
+#[test]
+fn agente_cria_e_pinta_um_mapa() {
+    let dir = temp("mapa");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "vazio" }));
+    let img = "assets/imagens/tiles.png";
+    ok(
+        &mut s,
+        "criar_imagem",
+        json!({ "caminho": img, "largura": 8, "altura": 8, "quadros": 20 }),
+    );
+    ok(
+        &mut s,
+        "desenhar",
+        json!({ "caminho": img, "previa": false, "operacoes": [
+            { "quadro": 1, "balde": [0, 0], "cor": "#5d275d" },
+            { "quadro": 2, "retangulo": [0, 0, 8, 2], "cor": "#ef7d57", "cheio": true },
+        ] }),
+    );
+    let map = "mapas/fase.tmj";
+    let (t, pngs) = images(
+        &mut s,
+        "criar_mapa",
+        json!({ "caminho": map, "tiles": img, "tile": [8, 8], "tamanho": [20, 6] }),
+    );
+    assert!(t.contains("20x6 tiles de 8x8"), "{t}");
+    assert!(t.contains("tiles 1 a 20"), "{t}");
+    assert_eq!(pngs.len(), 1, "o tileset com a grade");
+    if std::env::var("NN_FX_OUT").is_ok() {
+        std::fs::write("/tmp/tileset.png", &pngs[0]).unwrap();
+    }
+    assert!(dir.join("assets/imagens/tiles.tsj").is_file());
+    assert!(
+        fails(
+            &mut s,
+            "criar_mapa",
+            json!({ "caminho": map, "tiles": img })
+        )
+        .contains("já existe")
+    );
+
+    let (t, pngs) = images(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "operacoes": [{
+            "desenho": ["####......====..####", "####################"],
+            "tiles": { "#": 1, "=": 2 }, "em": [0, 4],
+        }] }),
+    );
+    assert!(t.contains("32 célula(s) mudaram"), "{t}");
+    let prev = image::load_from_memory(&pngs[0]).unwrap();
+    assert_eq!(prev.width() * 6, prev.height() * 20, "o mapa inteiro");
+    assert!(prev.width() >= 960, "ampliado: {}", prev.width());
+    let t = ok(
+        &mut s,
+        "marcar_tiles",
+        json!({ "caminho": map, "solidos": [1], "plataformas": [2], "terreno": { "nome": "grama", "primeiro": 5 } }),
+    );
+    assert!(t.contains("1 sólido(s), 1 plataforma(s)"), "{t}");
+    assert!(t.contains("15 das 15"), "{t}");
+
+    let t = ok(&mut s, "ver_mapa", json!({ "caminho": map, "texto": true }));
+    assert!(
+        t.contains("Sólidos: 1. Plataformas (só por cima): 2."),
+        "{t}"
+    );
+    assert!(t.contains(": grama."), "{t}");
+    assert!(t.contains("\n1111......2222..1111\n"), "{t}");
+    assert!(t.contains("1 = tile 1, 2 = tile 2"), "{t}");
+
+    // Terreno numa camada nova: as bordas se ajustam.
+    let t = ok(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "camada": "grama", "criar_camada": true, "previa": false,
+            "operacoes": [{ "terreno": "grama", "retangulo": [2, 1, 3, 2] }] }),
+    );
+    assert!(t.contains("camada nova \"grama\""), "{t}");
+    let doc = nn_projeto::map::MapDoc::open(&dir, map).unwrap();
+    let layer = doc.tile_layers()[1];
+    assert_eq!(doc.get(layer, 3, 1), 20, "o meio é a peça cheia");
+    assert_eq!(
+        doc.get(layer, 1, 1),
+        5 + 6,
+        "a borda da esquerda (cantos da direita)"
+    );
+    assert_eq!(doc.get(layer, 1, 0), 5 + 2, "o canto de cima à esquerda");
+    assert_eq!(doc.get(layer, 0, 0), 0);
+    let data = nn_projeto::tileset::TilesetData::load(&dir, "assets/imagens/tiles.tsj").unwrap();
+    assert!(data.info(0).solid && data.info(1).one_way);
+
+    // Erros que dizem o que vale.
+    let e = fails(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "operacoes": [{ "tile": 1, "pontos": [[25, 0]] }] }),
+    );
+    assert!(e.contains("fora do mapa (20x6)"), "{e}");
+    let e = fails(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "operacoes": [{ "terreno": "areia", "pontos": [[0, 0]] }] }),
+    );
+    assert!(e.contains("tem: grama"), "{e}");
+    let e = fails(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "camada": "x", "operacoes": [] }),
+    );
+    assert!(e.contains("\"criar_camada\": true"), "{e}");
+    let e = fails(
+        &mut s,
+        "marcar_tiles",
+        json!({ "caminho": map, "solidos": [21] }),
+    );
+    assert!(e.contains("os tiles 1 a 20"), "{e}");
+
+    // Cresce, e o jogo roda com o mapa.
+    let t = ok(
+        &mut s,
+        "pintar_mapa",
+        json!({ "caminho": map, "tamanho": [24, 6], "previa": false }),
+    );
+    assert!(t.contains("24x6 tiles"), "{t}");
+    let t = ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": { "name": "mapa", "x": -96, "y": -48,
+            "components": [{ "type": "map", "map": map }] } }),
+    );
+    assert!(!t.contains("aviso"), "{t}");
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 0.3, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+
+    ok(&mut s, "desfazer", json!({ "passos": 20 }));
+    assert!(!dir.join(map).exists());
+    assert!(!dir.join("assets/imagens/tiles.tsj").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Partículas pelo agente: um efeito pronto num objeto novo, a prévia do
+/// efeito sozinho, e o mesmo efeito em pixel art numa tela pequena.
+#[test]
+fn agente_poe_particulas() {
+    let dir = temp("particulas");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "vazio" }));
+    let cena = "cenas/fase.cena";
+    let e = fails(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha" }),
+    );
+    assert!(e.contains("Efeitos: fogo"), "{e}");
+    let e = fails(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha", "efeito": "lava" }),
+    );
+    assert!(e.contains("não há o efeito \"lava\""), "{e}");
+    let (t, pngs) = images(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha", "efeito": "fogo", "x": 100, "y": -50 }),
+    );
+    assert!(t.contains("Criei o objeto \"tocha\""), "{t}");
+    assert!(t.contains("contínuo: 45 por segundo"), "{t}");
+    let gpu = !t.contains("Sem prévia");
+    if gpu {
+        assert_eq!(pngs.len(), 1, "{t}");
+        if std::env::var("NN_FX_OUT").is_ok() {
+            std::fs::write("/tmp/fx-fogo.png", &pngs[0]).unwrap();
+        }
+    } else {
+        assert!(!gpu_required(), "{t}");
+    }
+    let doc = std::fs::read_to_string(dir.join(cena)).unwrap();
+    assert!(doc.contains("FFE066"), "{doc}");
+
+    // Mudanças de campos e um campo errado.
+    let t = ok(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha", "mudar": { "color_start": "#7ec4ff", "rate": 10 }, "previa": false }),
+    );
+    assert!(t.contains("10 por segundo") && t.contains("#7ec4ff"), "{t}");
+    let e = fails(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "tocha", "mudar": { "cor": "#fff" } }),
+    );
+    assert!(e.contains("cor"), "{e}");
+
+    // Pixel art numa tela pequena: a escala vem da tela.
+    ok(
+        &mut s,
+        "mudar_config",
+        json!({ "resolution": [320, 180], "scale": "pixel" }),
+    );
+    let (t, pngs) = images(
+        &mut s,
+        "particulas",
+        json!({ "cena": cena, "objeto": "moeda_fx", "efeito": "faiscas", "pixel": true }),
+    );
+    assert!(t.contains("pixel art (quadradinhos)"), "{t}");
+    assert!(t.contains("× 0.25"), "{t}");
+    if gpu {
+        let strip = image::load_from_memory(&pngs[0]).unwrap();
+        assert!(strip.height() >= 180, "ampliada: {}", strip.height());
+        assert!(t.contains("um recorte de"), "{t}");
+        if std::env::var("NN_FX_OUT").is_ok() {
+            std::fs::write("/tmp/fx-pixel.png", &pngs[0]).unwrap();
+        }
+    }
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": cena, "segundos": 0.3, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Efeitos sonoros pelo agente: um tipo pronto, outra variação, um ajuste
+/// e o som tocando no jogo.
+#[test]
+fn agente_cria_sons() {
+    let dir = temp("sons");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "vazio" }));
+    let wav = "assets/sons/salto.wav";
+    let e = fails(&mut s, "criar_som", json!({ "caminho": wav }));
+    assert!(e.contains("Tipos: moeda"), "{e}");
+    let e = fails(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "tipo": "miau" }),
+    );
+    assert!(e.contains("não há o tipo \"miau\""), "{e}");
+    let (t, pngs) = images(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "tipo": "pulo" }),
+    );
+    assert!(t.contains("Gravei assets/sons/salto.wav"), "{t}");
+    assert!(t.contains("Tipo pulo, 0.26 s"), "{t}");
+    assert_eq!(pngs.len(), 1);
+    let bytes = std::fs::read(dir.join(wav)).unwrap();
+    assert_eq!(&bytes[..4], b"RIFF");
+    let side = std::fs::read_to_string(dir.join("assets/sons/salto.sfx")).unwrap();
+    assert!(side.contains("\"tipo\": \"pulo\""), "{side}");
+
+    // Outra variação, depois um ajuste em cima dela.
+    let t = ok(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "variacao": 5 }),
+    );
+    assert!(t.contains("Tipo pulo (variação 5)"), "{t}");
+    let t = ok(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "mudar": { "onda": "seno", "queda": 0.5 } }),
+    );
+    assert!(t.contains("onda: seno") && t.contains("queda: 0.5"), "{t}");
+    assert!(t.contains("(variação 5)"), "o tipo e a variação ficam: {t}");
+    let e = fails(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": wav, "mudar": { "cor": 1 } }),
+    );
+    assert!(e.contains("não há o campo \"cor\""), "{e}");
+    // Só olhar não grava.
+    let before = std::fs::read(dir.join(wav)).unwrap();
+    let t = ok(&mut s, "criar_som", json!({ "caminho": wav }));
+    assert!(t.starts_with("assets/sons/salto.wav: Tipo pulo"), "{t}");
+    assert_eq!(std::fs::read(dir.join(wav)).unwrap(), before);
+    // Um .wav que não foi feito aqui não é sobrescrito.
+    std::fs::write(dir.join("assets/sons/outro.wav"), b"RIFF").unwrap();
+    let e = fails(
+        &mut s,
+        "criar_som",
+        json!({ "caminho": "assets/sons/outro.wav", "tipo": "moeda" }),
+    );
+    assert!(e.contains("não foi feito aqui"), "{e}");
+
+    if std::env::var("NN_FX_OUT").is_ok() {
+        for (k, _, _) in nn_projeto::sfx::KINDS {
+            let p = format!("assets/sons/fx_{k}.wav");
+            let (_, pngs) = images(&mut s, "criar_som", json!({ "caminho": p, "tipo": k }));
+            std::fs::write(format!("/tmp/som-{k}.png"), &pngs[0]).unwrap();
+            std::fs::copy(dir.join(&p), format!("/tmp/som-{k}.wav")).unwrap();
+        }
+    }
+
+    // O jogo toca.
+    ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": { "name": "som", "x": 0, "y": 0,
+            "components": [{ "type": "sound", "sound": wav }] } }),
+    );
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 0.3, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+    assert!(
+        t.contains("Sons que tocaram (sem som aqui; só a lista): assets/sons/salto.wav"),
+        "{t}"
+    );
+    ok(&mut s, "desfazer", json!({ "passos": 30 }));
+    assert!(!dir.join(wav).exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Diálogos pelo agente: a conversa em JSON, lida de volta no mesmo formato,
+/// e o jogo abre a caixa de fala.
+#[test]
+fn agente_escreve_um_dialogo() {
+    let dir = temp("dialogo");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "vazio" }));
+    let rel = "dialogos/ana.dialogo";
+    let t = ok(
+        &mut s,
+        "escrever_dialogo",
+        json!({ "caminho": rel, "personagens": [{ "nome": "Ana", "voz": "assets/sons/nada.wav" }],
+            "falas": [
+                { "id": "oi", "quem": "Ana", "texto": "Oi! Viu minha chave?" },
+                { "id": "pergunta", "quem": "Ana", "texto": "Me ajuda?", "escolhas": [
+                    { "texto": "Claro", "vai": "valeu", "variavel": "ajudou", "valor": 1 },
+                    { "texto": "Agora não", "vai": "fim" },
+                ] },
+                { "id": "valeu", "quem": "Ana", "texto": "Valeu! Tome.", "item": "moeda", "depois": "fim" },
+                { "id": "perdida", "quem": "Beto", "texto": "Ninguém me chama." },
+            ] }),
+    );
+    assert!(
+        t.contains("Criei dialogos/ana.dialogo: 4 fala(s), 2 personagem(ns)"),
+        "{t}"
+    );
+    assert!(
+        t.contains("[1] Ana: Oi! Viu minha chave?\n      → [2]"),
+        "{t}"
+    );
+    assert!(t.contains("1) \"Claro\" (faz ajudou = 1) → [3]"), "{t}");
+    assert!(t.contains("nenhum caminho chega em [4]"), "{t}");
+    assert!(
+        t.contains("voz de Ana: assets/sons/nada.wav não existe"),
+        "{t}"
+    );
+    assert!(t.contains("personagem \"Beto\" criado"), "{t}");
+
+    // Lido de volta no mesmo formato; o que volta reescreve igual.
+    let t = ok(&mut s, "ver_dialogo", json!({ "caminho": rel }));
+    let start = t.find("{\n").unwrap();
+    let end = t.rfind("\n}").unwrap() + 2;
+    let mut back: Value = serde_json::from_str(&t[start..end]).unwrap();
+    let before = std::fs::read_to_string(dir.join(rel)).unwrap();
+    back["caminho"] = json!(rel);
+    ok(&mut s, "escrever_dialogo", back);
+    assert_eq!(std::fs::read_to_string(dir.join(rel)).unwrap(), before);
+    let d = nn_projeto::dialogue::read(&before, rel).unwrap();
+    assert_eq!(d.node(2).unwrap().choices.len(), 2);
+
+    let e = fails(
+        &mut s,
+        "escrever_dialogo",
+        json!({ "caminho": rel, "falas": [{ "texto": "a", "depois": "lugar" }] }),
+    );
+    assert!(e.contains("não há a fala \"lugar\""), "{e}");
+
+    let t = ok(&mut s, "conferir_projeto", json!({}));
+    assert!(t.contains("diálogo(s)"), "{t}");
+    assert!(
+        t.contains("Ana usa assets/sons/nada.wav, que não existe"),
+        "{t}"
+    );
+    let t = ok(&mut s, "ver_dialogo", json!({ "caminho": rel }));
+    assert!(t.contains("\"valor\": 1"), "número, como no jogo: {t}");
+
+    // No jogo: a conversa abre quando a cena começa.
+    ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": { "name": "ana", "x": 0, "y": 0,
+            "components": [{ "type": "nn:dialogo", "arquivo": rel, "comecar": "cena" }] } }),
+    );
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 0.5, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
     let _ = std::fs::remove_dir_all(&dir);
 }

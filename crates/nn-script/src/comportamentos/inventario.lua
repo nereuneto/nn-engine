@@ -8,7 +8,7 @@ local B = {
     { "canto", "baixo_esquerda", label = "Canto",
       options = { { "cima_esquerda", "em cima, à esquerda" }, { "cima_direita", "em cima, à direita" },
         { "baixo_esquerda", "embaixo, à esquerda" }, { "baixo_direita", "embaixo, à direita" } } },
-    { "tamanho", 48, label = "Tamanho", min = 16, help = "Pixels de cada quadrinho." },
+    { "tamanho", 48, label = "Tamanho", min = 6, help = "Pixels de cada quadrinho (numa tela pequena de pixel art, uns 12)." },
     { "margem", 20, label = "Distância da borda", min = 0, advanced = true },
     { "fundo", true, label = "Quadrinho atrás de cada item" },
   },

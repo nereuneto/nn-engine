@@ -13,13 +13,20 @@ local B = {
     { "coiote", 0.1, label = "Tempo de coiote", min = 0, max = 1, advanced = true,
       help = "Ainda dá para pular logo depois de sair da beirada (segundos)." },
     { "pulo_variavel", true, label = "Pulo mais alto segurando", advanced = true,
-      help = "Soltar o botão no meio do pulo deixa o pulo mais baixo." },
+      help = "Soltar o botão no meio do pulo deixa o pulo mais baixo (um toque rápido dá um pulinho; segure para o pulo inteiro)." },
+    { "som", "", type = "sound", label = "Som do pulo",
+      help = "Toca a cada pulo (também o do coiote, o guardado e os no ar)." },
   },
 }
 
 local function apertou()
   return nn.input.pressed("space") or nn.input.pressed("up") or nn.input.pressed("w")
     or nn.input.pad_pressed("a")
+end
+
+local function segurando()
+  return nn.input.down("space") or nn.input.down("up") or nn.input.down("w")
+    or nn.input.pad_down("a")
 end
 
 local function soltou()
@@ -32,7 +39,12 @@ function B:start()
   self.pulos = 0
   self.pedido = 0
   self.cortar = false
+  self.subindo = math.huge
 end
+
+-- Soltar o botão só corta o pulo depois deste tempo: um toque rápido (no
+-- chão, guardado ou num teste) dá sempre o mesmo pulo baixo.
+local PULO_MINIMO = 0.1
 
 function B:update(dt)
   -- O aperto fica guardado um pouquinho: apertar logo antes de tocar o chão
@@ -69,13 +81,26 @@ function B:fixed_update(dt)
     if pode then
       corpo.vy = self.pulo
       self.fora_do_chao = math.huge
-      self.pedido, self.cortar = 0, false
+      self.pedido, self.subindo = 0, 0
+      -- Com o botão já solto (um toque, ou um pulo guardado), o pulo é
+      -- baixo.
+      self.cortar = self.pulo_variavel and not segurando()
+      if self.som ~= "" then
+        local s = self.som
+        pcall(function() nn.audio.play(nn.assets.sound(s)) end)
+      end
+      if self.obj.send then self.obj:send("pulou") end
     end
   end
   self.pedido = math.max(0, self.pedido - dt)
+  self.subindo = self.subindo + dt
   if self.cortar then
-    if corpo.vy > 0 then corpo.vy = corpo.vy * 0.45 end
-    self.cortar = false
+    if corpo.vy <= 0 then
+      self.cortar = false
+    elseif self.subindo >= PULO_MINIMO then
+      corpo.vy = corpo.vy * 0.45
+      self.cortar = false
+    end
   end
 end
 

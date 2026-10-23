@@ -89,6 +89,8 @@ pub struct FiredRule {
     pub first: f64,
     /// Quantas vezes disparou (somando as cópias do mesmo prefab).
     pub count: u32,
+    /// Quando disparou (as primeiras vezes).
+    pub times: Vec<f64>,
 }
 
 /// A cena da frente mudou.
@@ -118,6 +120,8 @@ pub struct Report {
     /// A cena inicial e as trocas.
     pub scenes: Vec<SceneChange>,
     pub captures: Vec<Capture>,
+    /// Os sons que tocaram: (arquivo, quantas vezes, a primeira vez).
+    pub sounds: Vec<(String, u32, f64)>,
     /// O jogo fechou (`nn.quit`) neste tempo.
     pub quit: Option<f64>,
 }
@@ -266,6 +270,29 @@ impl GameRun {
             .set_name("=semente")
             .exec()
             .map_err(|e| e.to_string())?;
+
+        // Os sons que tocam (sem placa de som não se ouve nada; assim o
+        // relatório diz o que tocou).
+        lua.load(
+            r#"
+            local names = setmetatable({}, { __mode = "k" })
+            local load = nn.assets.sound
+            nn.assets.sound = function(path, ...)
+              local s = load(path, ...)
+              if s ~= nil then names[s] = path end
+              return s
+            end
+            local play = nn.audio.play
+            _nn_tocados = {}
+            nn.audio.play = function(s, ...)
+              table.insert(_nn_tocados, names[s] or "(um som)")
+              return play(s, ...)
+            end
+            "#,
+        )
+        .set_name("=sons")
+        .exec()
+        .map_err(|e| e.to_string())?;
 
         // Um laço sem fim no Lua para o quadro com erro, em vez de travar.
         let deadline: Rc<Cell<Option<Instant>>> = Rc::new(Cell::new(None));
@@ -421,10 +448,28 @@ impl GameRun {
         if let Some(scene) = scene {
             self.collect_fired(&path, scene, t);
         }
+        self.collect_sounds(t);
         if self.headless.ctx.is_exiting() || self.headless.game.is_empty() {
             self.ended = true;
             self.report.quit.get_or_insert(t);
         }
+    }
+
+    fn collect_sounds(&mut self, t: f64) {
+        let lua = self.runtime.lua();
+        let Ok(list) = lua.globals().get::<Table>("_nn_tocados") else {
+            return;
+        };
+        if list.raw_len() == 0 {
+            return;
+        }
+        for path in list.sequence_values::<String>().flatten() {
+            match self.report.sounds.iter_mut().find(|(p, _, _)| *p == path) {
+                Some(e) => e.1 += 1,
+                None => self.report.sounds.push((path, 1, t)),
+            }
+        }
+        let _ = lua.globals().set("_nn_tocados", lua.create_table().ok());
     }
 
     fn collect_fired(&mut self, path: &str, scene: Table, t: f64) {
@@ -443,7 +488,13 @@ impl GameRun {
             let text: String = item.get("text").unwrap_or_default();
             let id = (path.to_string(), text.clone());
             match self.fired_index.get(&id) {
-                Some(&i) => self.report.fired[i].count += 1,
+                Some(&i) => {
+                    let f = &mut self.report.fired[i];
+                    f.count += 1;
+                    if f.times.len() < 8 {
+                        f.times.push(t);
+                    }
+                }
                 None => {
                     self.fired_index.insert(id, self.report.fired.len());
                     self.report.fired.push(FiredRule {
@@ -451,6 +502,7 @@ impl GameRun {
                         text,
                         first: t,
                         count: 1,
+                        times: vec![t],
                     });
                 }
             }

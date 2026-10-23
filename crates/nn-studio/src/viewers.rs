@@ -12,6 +12,8 @@ use eframe::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, TextureHa
 pub enum ViewerAction {
     CopyText(String),
     OpenExternal(String),
+    /// Ajustar um efeito sonoro (o `.wav` tem o `.sfx` ao lado).
+    EditSound(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -450,6 +452,16 @@ impl SoundView {
                 ui.weak("(sem saída de som neste computador)");
             }
             ui.separator();
+            if path.with_extension("sfx").is_file()
+                && ui
+                    .button("🎛 Ajustar efeito")
+                    .on_hover_text(
+                        "Este som foi sintetizado aqui: mude o tipo, varie ou ajuste os números",
+                    )
+                    .clicked()
+            {
+                action = Some(ViewerAction::EditSound(rel.to_string()));
+            }
             let code = format!("nn.assets.sound(\"{rel}\")");
             if ui
                 .button("📋 Copiar código")

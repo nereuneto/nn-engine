@@ -34,6 +34,9 @@ M.FIELDS = {
   },
   body = {
     { "body", "dynamic" }, { "shape", "box" }, { "w", 32 }, { "h", 32 }, { "radius", 16 },
+    -- Deslocamento da colisão em relação ao objeto (pés de um sprite com
+    -- espaço vazio embaixo, por exemplo).
+    { "ox", 0 }, { "oy", 0 },
     { "sensor", false }, { "one_way", false }, { "bounce", 0 }, { "gravity_scale", 1 },
     { "tag", "" },
   },
@@ -60,6 +63,7 @@ M.FIELDS = {
     { "color_start", "#FFFFFF" }, { "color_mid", "" }, { "color_end", "#FFFFFF00" },
     { "image", "" }, { "frame", 1 }, { "frame_w", 0 }, { "frame_h", 0 }, { "spin", 0 },
     { "blend", "alpha" }, { "follow", false }, { "max", 500 }, { "wind", 1 },
+    { "pixel", false },
   },
   -- Interface (menus e HUD). Cores vazias ("") usam o tema do projeto
   -- (config.lua, `theme`).
@@ -848,7 +852,7 @@ function Object:move_to(x, y, z)
   self.x, self.y = x, y
   if self.body and self.body.alive then
     local wx, wy = self:world_transform()
-    self.body:set_position(wx, wy)
+    self.body:set_position(wx + (self._box or 0), wy + (self._boy or 0))
     self.body:set_velocity(0, 0)
     self._sx, self._sy, self._px, self._py = x, y, x, y
   end
@@ -1473,6 +1477,14 @@ function M.interact(scene, owner, who, dist, text, locked)
   return nil
 end
 
+--- A escala da interface pronta (caixa de fala, avisos) pelo tamanho da
+--- tela: 1 numa tela de 720 de altura; numa tela pequena de pixel art
+--- (320x180), um quarto.
+function M.ui_scale()
+  local _, h = nn.window.size()
+  return math.max(0.25, math.min(2, h / 720))
+end
+
 -- O aviso do escolhido: a tecla e o que ela faz, em cima do objeto.
 local function draw_prompt(scene)
   local ia = scene._ia
@@ -1480,14 +1492,17 @@ local function draw_prompt(scene)
   local o = ia.obj
   local key = M.interact_key()
   local font = M.font("")
-  local size = 20
+  local k = M.ui_scale()
+  local size = math.max(7, math.floor(20 * k + 0.5))
   local tw = nn.text_size(ia.text, { size = size, font = font })
-  local cap = 28
-  local pad = 10
+  local cap = math.floor(size * 1.4 + 0.5)
+  local pad = math.max(2, math.floor(size / 2))
+  local gap = math.max(2, math.floor(8 * k + 0.5))
   local showkey = not ia.locked
-  local w = pad * 2 + tw + (showkey and (cap + 8) or 0)
-  local h = 40
-  local panel = { color = M.theme("panel"), radius = 10, border = 1, border_color = M.theme("border") }
+  local w = pad * 2 + tw + (showkey and (cap + gap) or 0)
+  local h = cap + math.max(2, math.floor(12 * k + 0.5))
+  local radius = math.max(2, math.floor(10 * k + 0.5))
+  local panel = { color = M.theme("panel"), radius = radius, border = 1, border_color = M.theme("border") }
   local tcolor = ia.locked and "#FF9A9A" or M.theme("text")
   if scene._3d then
     local x0, _, z0, x1, y1, z1 = o:bounds3d()
@@ -1504,21 +1519,25 @@ local function draw_prompt(scene)
     nn.screen.panel(left, top, w, h, panel)
     local x = left + pad
     if showkey then
-      nn.screen.panel(x, top + (h - cap) / 2, cap, cap, { color = M.theme("accent"), radius = 6 })
+      nn.screen.panel(x, top + (h - cap) / 2, cap, cap, { color = M.theme("accent"), radius = math.max(2, radius * 0.6) })
       nn.screen.text(key, x + cap / 2, top + h / 2, { size = size, color = "#1E2A3A", anchor = "center", font = font })
-      x = x + cap + 8
+      x = x + cap + gap
     end
     nn.screen.text(ia.text, x, top + h / 2, { size = size, color = tcolor, anchor = "left", font = font })
   else
     local x, y = o:world_transform()
     local _, hh = o:bounds()
-    local cy = y + hh + 12 + h / 2
+    local cy = y + hh + gap + h / 2
+    -- Sempre inteiro na tela (um personagem na beirada).
+    local vx0, vy0, vx1, vy1 = nn.camera.view()
+    x = math.max(vx0 + w / 2 + 2, math.min(vx1 - w / 2 - 2, x))
+    cy = math.max(vy0 + h / 2 + 2, math.min(vy1 - h / 2 - 2, cy))
     nn.draw.panel(x, cy, w, h, panel)
     local left = x - w / 2 + pad
     if showkey then
-      nn.draw.panel(left + cap / 2, cy, cap, cap, { color = M.theme("accent"), radius = 6 })
+      nn.draw.panel(left + cap / 2, cy, cap, cap, { color = M.theme("accent"), radius = math.max(2, radius * 0.6) })
       nn.draw.text(key, left + cap / 2, cy, { size = size, color = "#1E2A3A", anchor = "center", font = font })
-      left = left + cap + 8
+      left = left + cap + gap
     end
     nn.draw.text(ia.text, left, cy, { size = size, color = tcolor, anchor = "left", font = font })
   end
@@ -1537,9 +1556,15 @@ function M.burst(scene, x, y, color, count, z)
         size = { 0.25, 0 }, colors = colors, blend = "add",
       })
     else
+      -- Do tamanho da tela: numa tela pequena (pixel art), quadradinhos.
+      local _, y0, _, y1 = nn.camera.view()
+      local h = math.abs(y1 - y0)
+      local k = math.max(0.2, math.min(2, h / 720))
+      local pixel = h <= 360
       fx = nn.particles({
-        emitting = false, lifetime = { 0.25, 0.55 }, speed = { 90, 240 }, drag = 4,
-        size = { 12, 0 }, colors = colors, blend = "add",
+        emitting = false, lifetime = { 0.25, 0.55 }, speed = { 90 * k, 240 * k }, drag = 4,
+        size = { pixel and math.max(2, math.floor(12 * k + 0.5)) or 12 * k, 0 },
+        colors = colors, blend = pixel and "alpha" or "add", pixel = pixel,
       })
     end
     scene._fx[color] = fx
@@ -1556,8 +1581,10 @@ local function make_body(scene, o, c)
     o.body:remove()
   end
   local x, y, _, sx, sy = o:world_transform()
+  -- O corpo fica deslocado do objeto (ox, oy, na escala do objeto).
+  o._box, o._boy = (c.ox or 0) * sx, (c.oy or 0) * sy
   local opts = {
-    type = c.body, x = x, y = y, sensor = c.sensor, one_way = c.one_way,
+    type = c.body, x = x + o._box, y = y + o._boy, sensor = c.sensor, one_way = c.one_way,
     bounce = c.bounce, gravity_scale = c.gravity_scale,
     tag = (c.tag ~= "" and c.tag) or o.name,
   }
@@ -1758,7 +1785,7 @@ function M.particle_options(c)
     direction = c.direction * DEG, spread = c.spread * DEG,
     gravity = c.gravity, drag = c.drag,
     size = { c.size_start, c.size_end }, size_variation = c.size_var,
-    colors = colors, blend = c.blend, follow = c.follow,
+    colors = colors, blend = c.blend, follow = c.follow, pixel = c.pixel,
     spin = { -c.spin * DEG, c.spin * DEG }, max = math.max(1, math.floor(c.max)),
   }
   if c.area == "retangulo" then
@@ -2965,7 +2992,7 @@ local function sync_bodies_before(scene)
       -- O script mudou x/y à mão: leva o corpo junto.
       if o.x ~= o._sx or o.y ~= o._sy then
         local x, y = o:world_transform()
-        o.body:set_position(x, y)
+        o.body:set_position(x + (o._box or 0), y + (o._boy or 0))
         o._px, o._py = o.x, o.y
       end
     end
@@ -2976,7 +3003,7 @@ local function sync_bodies_after(scene)
   for _, o in ipairs(scene.object_list) do
     if o.alive and o.body and o.body.alive then
       o._px, o._py = o.x, o.y
-      local bx, by = o.body.x, o.body.y
+      local bx, by = o.body.x - (o._box or 0), o.body.y - (o._boy or 0)
       if o.parent then
         local px, py = o.parent:world_transform()
         bx, by = bx - px, by - py
@@ -3574,7 +3601,7 @@ function M.live(scene, msg)
     end
   elseif (field == "x" or field == "y") and o.body and o.body.alive then
     local x, y = o:world_transform()
-    o.body:set_position(x, y)
+    o.body:set_position(x + (o._box or 0), y + (o._boy or 0))
     o._sx, o._sy, o._px, o._py = o.x, o.y, o.x, o.y
   elseif (field == "scale_x" or field == "scale_y") then
     local b = o:component("body")
@@ -3620,6 +3647,14 @@ function M.state(scene)
   local vars = {}
   for k, v in pairs(nn.vars or {}) do
     if type(k) == "string" and simple(v) then vars[k] = v end
+  end
+  -- O inventário, item por item (para aparecer no que mudou).
+  if type(nn.vars._itens) == "table" then
+    for _, e in ipairs(nn.vars._itens) do
+      if type(e) == "table" and type(e.item) == "string" then
+        vars["inventário: " .. e.item] = e.count or 1
+      end
+    end
   end
   return { scene = scene._path, objects = objects, vars = vars, fired = M.events.take_fired(scene) }
 end

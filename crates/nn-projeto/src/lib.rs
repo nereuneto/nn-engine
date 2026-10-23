@@ -1,6 +1,8 @@
 //! Os arquivos de um projeto da nn-engine, sem interface: ler, mudar e
 //! gravar cenas (`.cena`), prefabs (`.prefab`), regras de eventos, o
-//! `config.lua`, imagens de pixel art e as animações delas (`.anim`), e
+//! `config.lua`, diálogos (`.dialogo`), imagens de pixel art e as animações
+//! delas (`.anim`), mapas de tiles do Tiled (`.tmj`, `.tsj`), efeitos de
+//! partículas prontos, efeitos sonoros sintetizados (`.sfx` → `.wav`) e
 //! conferir scripts Lua.
 //!
 //! O NN Studio e o servidor MCP (`nn mcp`) usam este mesmo código, então o
@@ -9,10 +11,15 @@
 pub mod anim;
 pub mod behaviors;
 pub mod config_lua;
+pub mod dialogue;
 pub mod events;
 pub mod lua_syntax;
+pub mod map;
+pub mod particles;
 pub mod pixel;
 pub mod scene_data;
+pub mod sfx;
+pub mod tileset;
 
 /// Um Lua para ler arquivos do projeto (cenas, `config.lua`, comportamentos)
 /// sem rodar o jogo: o `print` vai para o log e não há `io` nem `os.exit`.

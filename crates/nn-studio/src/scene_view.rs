@@ -2064,13 +2064,15 @@ impl SceneDoc {
                     GREEN
                 };
                 let stroke = Stroke::new(1.5, color);
+                // O corpo pode ficar deslocado do objeto (ox, oy).
+                let (bx, by) = (t.x + b.num("ox") * t.scale_x, t.y + b.num("oy") * t.scale_y);
                 if b.str("shape") == "circle" {
                     let r = b.num("radius") * t.scale_x.abs().max(t.scale_y.abs()) * cam.zoom;
-                    painter.circle_stroke(center, r as f32, stroke);
+                    painter.circle_stroke(cam.to_screen(rect, bx, by), r as f32, stroke);
                 } else {
                     let (w, h) = (b.num("w") * t.scale_x.abs(), b.num("h") * t.scale_y.abs());
-                    let a = cam.to_screen(rect, t.x - w / 2.0, t.y + h / 2.0);
-                    let bb = cam.to_screen(rect, t.x + w / 2.0, t.y - h / 2.0);
+                    let a = cam.to_screen(rect, bx - w / 2.0, by + h / 2.0);
+                    let bb = cam.to_screen(rect, bx + w / 2.0, by - h / 2.0);
                     painter.rect_stroke(
                         Rect::from_two_pos(a, bb),
                         0.0,

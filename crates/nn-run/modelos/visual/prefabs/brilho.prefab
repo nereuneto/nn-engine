@@ -7,7 +7,7 @@ return {
     x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
     visible = true, layer = 4,
     components = {
-      { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 24, on_start = true, interval = 0, when_done = "destruir", lifetime = 0.6, lifetime_var = 0.4, speed_min = 40, speed_max = 160, direction = 90, spread = 360, gravity = 0, drag = 2.5, area = "ponto", area_w = 100, area_h = 100, area_radius = 50, size_start = 12, size_end = 0, size_var = 0, color_start = "#FFFFFF", color_mid = "#FFE27A", color_end = "#FFD16600", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1 },
+      { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 24, on_start = true, interval = 0, when_done = "destruir", lifetime = 0.6, lifetime_var = 0.4, speed_min = 40, speed_max = 160, direction = 90, spread = 360, gravity = 0, drag = 2.5, area = "ponto", area_w = 100, area_h = 100, area_radius = 50, size_start = 12, size_end = 0, size_var = 0, color_start = "#FFFFFF", color_mid = "#FFE27A", color_end = "#FFD16600", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 1, pixel = false },
     },
   },
 }

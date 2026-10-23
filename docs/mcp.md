@@ -92,7 +92,11 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `listar_componentes`, `listar_comportamentos` | Os componentes (com os campos e padrões) e os comportamentos prontos e do projeto (com as propriedades, opções e ajuda). |
 | `listar_eventos`, `por_regra`, `tirar_regra` | Os eventos "Quando... Então..." sem código. |
 | `criar_imagem`, `desenhar`, `ver_imagem` | **Pixel art:** cria uma imagem (com quadros para animar), desenha com várias operações numa chamada (o mais prático: o desenho como texto, um caractere por pixel) e mostra a imagem ampliada. Veja [Pixel art](#pixel-art). |
-| `quadros`, `animar` | Os quadros de uma folha de sprites e as animações com nome (o `.anim`, o mesmo do NN Studio), com a tira dos quadros na ordem em que tocam. |
+| `quadros`, `animar` | Os quadros de uma folha de sprites e as animações com nome (o `.anim`, o mesmo do NN Studio), com a tira dos quadros na ordem em que tocam e a casca de cebola. |
+| `criar_mapa`, `pintar_mapa`, `ver_mapa`, `marcar_tiles` | **Mapas de tiles** (`.tmj`, o formato do Tiled que o NN Studio edita): cria de uma imagem de tiles, pinta (com desenho como texto e terreno automático), marca os tiles sólidos e mostra o mapa desenhado. Veja [Mapas, partículas, sons e diálogos](#mapas-partículas-sons-e-diálogos). |
+| `particulas` | Um efeito de partículas pronto (fogo, fumaça, faíscas, explosão, chuva...) num objeto, ajustes e uma prévia do efeito em quatro momentos. Com `pixel`, quadradinhos de pixel art. |
+| `criar_som` | Um **efeito sonoro** sintetizado (`.wav`): moeda, pulo, tiro, laser, explosão, power-up, dano, clique, blip, com variações e ajustes. Volta a forma da onda e a nota ao longo do tempo. |
+| `escrever_dialogo`, `ver_dialogo` | **Conversas** (`.dialogo`, as do editor de conversa): falas, escolhas, variáveis e itens, em JSON de ida e volta. |
 | `buscar_documentacao` | A API Lua `nn.*` e os guias (este, o de Lua, o de 3D e o do NN Studio): os trechos que citam as palavras, ou uma seção inteira (`secao`). |
 | `conferir_lua` | A sintaxe de um trecho de Lua, sem gravar. |
 | `rodar_jogo` | Roda o jogo **sem janela**, com teclas e cliques simulados, e mostra os erros (com arquivo e linha), avisos, prints, as regras que dispararam, as trocas de cena, o que mudou nos objetos e variáveis, e **capturas da tela** (com `ver_corpos`, os corpos da física desenhados por cima). Veja [Rodar e ver](#rodar-e-ver). |
@@ -102,7 +106,7 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `mexer_no_jogo` | Muda o jogo aberto **na hora, sem gravar**: campos de objetos e comportamentos, variáveis, Lua, teclas como se alguém jogasse; pausa, avança quadros e fecha. |
 | `ver_editor` | Olha o NN Studio aberto com o projeto: a aba da frente, os **objetos escolhidos** (de quem você fala quando diz "este"), o que ainda não foi gravado e a imagem da janela. Veja [Junto com o NN Studio](#junto-com-o-nn-studio). |
 
-São 35. Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
+São 43. Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
 
 ## Objetos no formato do arquivo
 
@@ -216,6 +220,47 @@ O agente desenha as imagens do jogo com as mesmas operações do editor de pixel
 Tudo vira o mesmo `.png` e `.anim` que o NN Studio grava, e o `desfazer` volta.
 
 Num jogo de 1280x720, um sprite de 16x16 fica pequeno. Para pixel art, o jogo costuma ter uma tela pequena com os pixels inteiros (`mudar_config` com `"resolution": [320, 180]` e `"scale": "pixel"`), e as capturas do `rodar_jogo` vêm ampliadas (`ampliar` escolhe quanto). Num sprite com `fill = "repeat"` (um chão de tiles), `w` e `h` são o tamanho de cada cópia, e a escala do objeto diz quantas cabem.
+
+## Mapas, partículas, sons e diálogos
+
+**Mapas de tiles.** `criar_mapa` cria o mapa (`.tmj`) de uma imagem de tiles (feita com `criar_imagem`, um quadro por tile) ou de um tileset (`.tsj`), e mostra os tiles numerados. Os números são os do mapa: o 1 é o tile do canto de cima à esquerda da imagem. No mapa, a coluna 0 fica à esquerda e a linha 0 em cima.
+
+```json
+{
+  "caminho": "mapas/fase.tmj",
+  "operacoes": [
+    {"desenho": ["....==....", "##########"], "tiles": {"#": 1, "=": 2}, "em": [0, 10]},
+    {"terreno": "grama", "retangulo": [12, 8, 6, 3]}
+  ]
+}
+```
+
+- `pintar_mapa` faz várias operações numa camada: `tile` com `retangulo`, `linha`, `pontos` ou `balde`, `apagar`, `desenho` (um caractere por tile) e `terreno`. Também cria camadas (`criar_camada`), liga a colisão da camada inteira (`colisao`) e aumenta o mapa (`tamanho`). Volta o mapa desenhado.
+- `marcar_tiles` diz quais tiles bloqueiam (`solidos`), quais são plataformas de mão única (`plataformas`) e o tipo livre de cada um (`"tipo": {"lava": [7]}`), que os eventos usam. Com `terreno`, ensina as 16 peças de um terreno (`"primeiro": 5`: o tile 5+m tem terreno nos cantos dos bits de m), e o `pintar_mapa` com `terreno` acerta as bordas e os cantos sozinho.
+- `ver_mapa` mostra o mapa, as camadas, os tilesets, os sólidos e os terrenos; com `texto`, uma camada como texto.
+- Na cena, um objeto com `{"type": "map", "map": "mapas/fase.tmj"}`: o objeto é o canto de **baixo** à esquerda do mapa.
+
+**Partículas.** `particulas` põe um efeito pronto num objeto (e cria o objeto, se não existir) e mostra o efeito sozinho em quatro momentos, recortado em volta dele. `mudar` troca campos do componente (`listar_componentes particles`), `escala` multiplica tamanhos e velocidades, e `pixel` desenha quadradinhos de tamanho inteiro, sem girar. Numa tela pequena, um efeito com `pixel` já vem na escala dela.
+
+**Sons.** `criar_som` sintetiza um efeito sonoro como o sfxr: escolha o `tipo`, troque a `variacao` (cada número é sempre o mesmo som) até gostar e ajuste com `mudar` (`freq`, `freq_fim`, `deslize`, `onda`, `queda`...). Como o agente não ouve, volta uma imagem com a forma da onda (o volume ao longo do tempo) e a nota (mais alto = mais agudo). Os números ficam num `.sfx` ao lado do `.wav`: chamar de novo com o mesmo caminho ajusta o som, e o NN Studio abre o mesmo `.sfx` em **🎛 Ajustar efeito**.
+
+**Diálogos.** `escrever_dialogo` grava a conversa inteira:
+
+```json
+{
+  "caminho": "dialogos/ana.dialogo",
+  "falas": [
+    {"id": "oi", "quem": "Ana", "texto": "Oi! Viu minha chave?"},
+    {"id": "pergunta", "quem": "Ana", "texto": "Me ajuda?", "escolhas": [
+      {"texto": "Claro", "vai": "valeu", "variavel": "ajudou", "valor": 1},
+      {"texto": "Agora não", "vai": "fim"}
+    ]},
+    {"id": "valeu", "quem": "Ana", "texto": "Valeu! Tome.", "item": "moeda"}
+  ]
+}
+```
+
+Sem `depois`, uma fala vai para a próxima da lista, e a última termina; o fim de um ramo de escolha precisa de `"depois": "fim"`. A resposta conta a conversa pelos caminhos e avisa de falas que nunca aparecem. `ver_dialogo` devolve a conversa no mesmo formato, para mudar e mandar de volta. Na cena, um personagem com o comportamento `nn:dialogo` e `"arquivo"`.
 
 ## O jogo aberto
 

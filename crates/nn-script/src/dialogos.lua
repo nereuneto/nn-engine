@@ -229,7 +229,8 @@ local function image(path)
   if path == nil or path == "" then return nil end
   local img = images[path]
   if img == nil then
-    local ok, t = pcall(nn.assets.texture, path)
+    -- Pixel art (como o sprite): o retrato fica nítido ampliado.
+    local ok, t = pcall(nn.assets.texture, path, { pixel_art = true })
     img = ok and t or false
     images[path] = img
   end
@@ -242,9 +243,13 @@ function D.draw(scene)
   if not d or not d.node then return end
   local W, H = nn.window.size()
   local font = cena.font("")
-  local size = math.max(18, math.floor(math.min(W, H * 1.6) / 34))
+  -- Tudo pelo tamanho da tela: numa tela de pixel art (320x180), a caixa
+  -- e as letras ficam pequenas como o resto do jogo.
+  local size = math.max(7, math.floor(math.min(W, H * 1.6) / 34))
   local opts = { size = size, font = font }
-  local margin = math.floor(math.min(W, H) * 0.04)
+  local margin = math.max(2, math.floor(math.min(W, H) * 0.04))
+  local radius = math.max(2, math.floor(size * 0.6))
+  local line = math.max(1, math.floor(size / 9))
   local bw = math.min(W - margin * 2, size * 42)
   local bh = math.floor(size * 5.2)
   local bx, by = math.floor((W - bw) / 2), H - margin - bh
@@ -252,7 +257,7 @@ function D.draw(scene)
   local border = cena.theme("border")
   local text_color = cena.theme("text")
   local accent = cena.theme("accent")
-  nn.screen.panel(bx, by, bw, bh, { color = panel, radius = 14, border = 2, border_color = border })
+  nn.screen.panel(bx, by, bw, bh, { color = panel, radius = radius, border = line * 2, border_color = border })
   local who = d.data.by_name[d.node.who or ""]
   local pad = math.floor(size * 0.9)
   local tx = bx + pad
@@ -260,7 +265,8 @@ function D.draw(scene)
   local img = who and image(who.image)
   if img then
     local ps = bh - pad * 2
-    nn.screen.panel(bx + pad - 4, by + pad - 4, ps + 8, ps + 8, { color = "#00000040", radius = 10 })
+    local f = math.max(1, math.floor(size / 5))
+    nn.screen.panel(bx + pad - f, by + pad - f, ps + f * 2, ps + f * 2, { color = "#00000040", radius = radius })
     nn.screen.sprite(img, bx + pad, by + pad, { w = ps, h = ps })
     tx = bx + pad * 2 + ps
   end
@@ -271,7 +277,7 @@ function D.draw(scene)
     local nw = nn.text_size(name, nopts) + pad * 1.4
     local nh = math.floor(size * 1.7)
     nn.screen.panel(tx - pad * 0.3, by - nh * 0.6, nw, nh,
-      { color = (who and who.color ~= "" and who.color) or accent, radius = 10 })
+      { color = (who and who.color ~= "" and who.color) or accent, radius = radius })
     nn.screen.text(name, tx - pad * 0.3 + nw / 2, by - nh * 0.6 + nh / 2,
       { size = nopts.size, color = "#1E2A3A", anchor = "center", font = font })
   end
@@ -298,7 +304,7 @@ function D.draw(scene)
     -- Pronto: um quadradinho piscando no canto (passa para a próxima).
     if (d.t * 2) % 2 < 1.3 then
       local s = math.floor(size * 0.5)
-      nn.screen.panel(bx + bw - pad - s, by + bh - pad * 0.8 - s, s, s, { color = accent, radius = 3 })
+      nn.screen.panel(bx + bw - pad - s, by + bh - pad * 0.8 - s, s, s, { color = accent, radius = math.max(1, s / 4) })
     end
     return
   end
@@ -314,11 +320,13 @@ function D.draw(scene)
   local cx = bx + bw - cw
   local cy = by - gap * 3 - #d.choices * (ch + gap) + gap
   if name ~= "" then cy = cy - math.floor(size * 0.6) end
+  -- Muitas escolhas: começam no alto da tela, sem sair dela.
+  cy = math.max(margin, cy)
   d.rects = {}
   for i, c in ipairs(d.choices) do
     local on = i == d.choice
     nn.screen.panel(cx, cy, cw, ch, {
-      color = panel, radius = 10, border = on and 3 or 1,
+      color = panel, radius = radius, border = on and line * 3 or line,
       border_color = on and accent or border,
     })
     nn.screen.text(i .. ".  " .. fill(c.text), cx + pad, cy + ch / 2,

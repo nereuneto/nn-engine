@@ -856,3 +856,80 @@ fn dialogo_abre_com_e_escolhe_e_termina() {
     assert!(lua::<f64>(&rt, "C.objects.heroi.x") < -10.0);
     assert_eq!(h.game.0.error(), None);
 }
+
+/// O pulo avisa os eventos ("Pular"), um toque dá um pulo baixo (mas um
+/// pulo), e a Animação automática no padrão usa as animações da imagem
+/// chamadas parado, andar e pular.
+#[test]
+fn pulo_avisa_os_eventos_e_animacao_pelos_nomes() {
+    let mut png = Vec::new();
+    image::RgbaImage::from_pixel(32, 8, image::Rgba([255, 255, 255, 255]))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    let dir = projeto(
+        "pulou",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            (
+                "heroi.anim",
+                r#"return { format = 1, frame_w = 8, frame_h = 8, animations = {
+  { name = "parado", frames = { 1 }, fps = 3 },
+  { name = "andar", frames = { 2, 3 }, fps = 10 },
+  { name = "pular", frames = { 4 }, fps = 10 },
+} }"#,
+            ),
+            (
+                "cenas/fase.cena",
+                &format!(
+                    r#"return {{ script = "cenas/obs.lua", gravity = -2000,
+  events = {{
+    {{ when = {{ {{ cond = "pulou", quem = "heroi" }} }}, actions = {{ {{ act = "variavel", var = "pulos", op = "somar", valor = 1 }} }} }},
+  }},
+  objects = {{
+  {CHAO},
+  {{ id = 2, name = "heroi", x = 0, y = 0, components = {{
+    {{ type = "sprite", image = "heroi.png" }},
+    {{ type = "body", w = 10, h = 10 }},
+    {{ type = "behavior", script = "nn:plataforma", velocidade = 200, pulo = 600 }},
+    {{ type = "behavior", script = "nn:animacao" }},
+  }} }},
+}} }}"#
+                ),
+            ),
+        ],
+    );
+    std::fs::write(dir.join("heroi.png"), &png).unwrap();
+    let Some((mut h, rt)) = cena(&dir, "cenas/fase.cena") else {
+        return;
+    };
+    rt.lua().load("nn.vars.pulos = 0").exec().unwrap();
+    let anim_of = rt
+        .lua()
+        .load("return function(scene) return scene.objects.heroi.sprite.animation end")
+        .eval::<mlua::Function>()
+        .unwrap();
+    let anim = |h: &Headless<Uma>| -> String { anim_of.call(h.game.0.table().unwrap()).unwrap() };
+    h.run_frames(60);
+    assert_eq!(h.game.0.error(), None);
+    let y0: f64 = lua(&rt, "hy");
+    assert_eq!(anim(&h), "parado");
+    h.ctx.input.press_key(KeyCode::KeyD);
+    h.run_frames(10);
+    assert_eq!(anim(&h), "andar");
+    h.ctx.input.release_key(KeyCode::KeyD);
+    h.run_frames(20);
+    // Um toque: aperta e solta no quadro seguinte.
+    h.ctx.input.press_key(KeyCode::Space);
+    h.run_frames(1);
+    h.ctx.input.release_key(KeyCode::Space);
+    h.run_frames(5);
+    assert_eq!(anim(&h), "pular");
+    h.run_frames(5);
+    let y: f64 = lua(&rt, "hy");
+    assert!(y > y0 + 15.0, "o toque pulou: {y}");
+    assert_eq!(
+        lua::<f64>(&rt, "nn.vars.pulos"),
+        1.0,
+        "a regra Pular disparou"
+    );
+}

@@ -22,7 +22,7 @@ return {
       visible = true, layer = 1,
       components = {
         { type = "sprite", image = "assets/imagens/porta.png", frame_w = 16, frame_h = 16, frame = 1, w = 96, h = 128, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
-        { type = "body", body = "static", shape = "box", w = 40, h = 144, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "body", body = "static", shape = "box", w = 40, h = 144, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
       },
       events = {
         { comment = "Com uma chave, a porta abre (e gasta a chave)." },
@@ -62,7 +62,7 @@ return {
       visible = true, layer = 2,
       components = {
         { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
-        { type = "body", body = "dynamic", shape = "box", w = 40, h = 56, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "body", body = "dynamic", shape = "box", w = 40, h = 56, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:topdown", velocidade = 280 },
         { type = "behavior", script = "nn:animacao", andando = "andar", fps = 8, parado = "parado" },
         { type = "behavior", script = "nn:vida", ao_acabar = "reiniciar", variavel = "vidas", vidas = 3 },
@@ -74,7 +74,7 @@ return {
       visible = true, layer = 2,
       components = {
         { type = "sprite", image = "assets/imagens/heroi.png", frame_w = 16, frame_h = 16, frame = 1, w = 64, h = 64, color = "#B8E0FF", flip_x = true, flip_y = false, pixel_art = true, fill = "stretch", animation = "parado", hud = false },
-        { type = "body", body = "static", shape = "box", w = 40, h = 56, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+        { type = "body", body = "static", shape = "box", w = 40, h = 56, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
         { type = "behavior", script = "nn:dialogo", arquivo = "dialogos/velho.dialogo", comecar = "tecla", distancia = 24, texto = "falar", uma_vez = false },
       },
     },
@@ -84,7 +84,7 @@ return {
       visible = true, layer = 1,
       components = {
         { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
-        { type = "body", body = "dynamic", shape = "box", w = 44, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "body", body = "dynamic", shape = "box", w = 44, h = 32, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:perseguir", velocidade = 90, visao = 260, voar = true },
         { type = "behavior", script = "nn:perigo", empurrao = 400 },
         { type = "behavior", script = "nn:animacao", andando = "1-2", fps = 4, parado = "1-2" },
@@ -96,7 +96,7 @@ return {
       visible = true, layer = 1,
       components = {
         { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 1, w = 56, h = 56, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
-        { type = "body", body = "dynamic", shape = "box", w = 44, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "body", body = "dynamic", shape = "box", w = 44, h = 32, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:perseguir", velocidade = 90, visao = 260, voar = true },
         { type = "behavior", script = "nn:perigo", empurrao = 400 },
         { type = "behavior", script = "nn:animacao", andando = "1-2", fps = 4, parado = "1-2" },
@@ -108,7 +108,7 @@ return {
       visible = true, layer = 1,
       components = {
         { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 5, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
-        { type = "body", body = "dynamic", shape = "box", w = 48, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "body", body = "dynamic", shape = "box", w = 48, h = 32, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:patrulha", beirada = false, velocidade = 160 },
         { type = "behavior", script = "nn:perigo", empurrao = 400 },
         { type = "behavior", script = "nn:animacao", andando = "5-7", fps = 8, parado = "5-7" },
@@ -120,7 +120,7 @@ return {
       visible = true, layer = 1,
       components = {
         { type = "sprite", image = "assets/imagens/inimigos.png", frame_w = 16, frame_h = 16, frame = 5, w = 64, h = 64, color = "#FFFFFF", flip_x = false, flip_y = false, pixel_art = true, fill = "stretch", animation = "", hud = false },
-        { type = "body", body = "dynamic", shape = "box", w = 48, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
+        { type = "body", body = "dynamic", shape = "box", w = 48, h = 32, radius = 16, ox = 0, oy = 0, sensor = false, one_way = false, bounce = 0, gravity_scale = 0, tag = "" },
         { type = "behavior", script = "nn:patrulha", beirada = false, direcao = "esquerda", velocidade = 160 },
         { type = "behavior", script = "nn:perigo", empurrao = 400 },
         { type = "behavior", script = "nn:animacao", andando = "5-7", fps = 8, parado = "5-7" },
@@ -160,7 +160,7 @@ return {
           x = 0, y = 16, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 3,
           components = {
-            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 20, speed_max = 60, direction = 90, spread = 25, gravity = 60, drag = 0, area = "circulo", area_w = 100, area_h = 100, area_radius = 4, size_start = 16, size_end = 3, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500, wind = 1 },
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 20, speed_max = 60, direction = 90, spread = 25, gravity = 60, drag = 0, area = "circulo", area_w = 100, area_h = 100, area_radius = 4, size_start = 16, size_end = 3, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500, wind = 1, pixel = false },
           },
         },
       },
@@ -178,7 +178,7 @@ return {
           x = 0, y = 16, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 3,
           components = {
-            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 20, speed_max = 60, direction = 90, spread = 25, gravity = 60, drag = 0, area = "circulo", area_w = 100, area_h = 100, area_radius = 4, size_start = 16, size_end = 3, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500, wind = 1 },
+            { type = "particles", mode = "continuo", rate = 30, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 20, speed_max = 60, direction = 90, spread = 25, gravity = 60, drag = 0, area = "circulo", area_w = 100, area_h = 100, area_radius = 4, size_start = 16, size_end = 3, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500, wind = 1, pixel = false },
           },
         },
       },

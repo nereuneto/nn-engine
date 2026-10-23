@@ -1923,7 +1923,7 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "shape" => ("Forma", "Retângulo ou círculo de uma cor."),
         "body" => (
             "Corpo físico",
-            "Cai, colide, para no chão. Mexa nele pelo script: objeto.body.vx.",
+            "Cai, colide, para no chão. Mexa nele pelo script: objeto.body.vx. A caixa (w, h) fica centrada no objeto; ox e oy a deslocam (na escala do objeto; oy positivo sobe), para a colisão ficar nos pés de um sprite com espaço vazio embaixo.",
         ),
         "map" => (
             "Mapa de tiles",

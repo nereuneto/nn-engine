@@ -129,7 +129,7 @@ return {
           x = 0, y = 0.05, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 14, on_start = false, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 0.8, speed_max = 2, direction = 90, spread = 200, gravity = 0.5, drag = 4, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.35, size_end = 0.6, size_var = 0, color_start = "#E8DCC4CC", color_mid = "", color_end = "#C8B89800", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500, wind = 1 },
+            { type = "particles", mode = "explosao", rate = 20, emitting = true, amount = 14, on_start = false, interval = 0, when_done = "nada", lifetime = 0.6, lifetime_var = 0.4, speed_min = 0.8, speed_max = 2, direction = 90, spread = 200, gravity = 0.5, drag = 4, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.35, size_end = 0.6, size_var = 0, color_start = "#E8DCC4CC", color_mid = "", color_end = "#C8B89800", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "alpha", follow = false, max = 500, wind = 1, pixel = false },
           },
         },
       },
@@ -150,7 +150,7 @@ return {
           x = 0, y = 6, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "continuo", rate = 40, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.8, lifetime_var = 0.4, speed_min = 0.6, speed_max = 1.6, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.4, size_end = 0.1, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 0.3 },
+            { type = "particles", mode = "continuo", rate = 40, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 0.8, lifetime_var = 0.4, speed_min = 0.6, speed_max = 1.6, direction = 90, spread = 25, gravity = 1.5, drag = 0, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.3, size_start = 0.4, size_end = 0.1, size_var = 0.3, color_start = "#FFE066", color_mid = "#FF7A1A", color_end = "#B0201000", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 0, blend = "add", follow = false, max = 500, wind = 0.3, pixel = false },
             { type = "light3d", kind = "point", color = "#FF9A3C", intensity = 1.6, range = 8, angle = 30, soft = 0.3, flicker = 0.6, on = true, night = false },
           },
         },
@@ -159,7 +159,7 @@ return {
           x = 0, y = 8, rotation = 0, scale_x = 1, scale_y = 1,
           visible = true, layer = 0,
           components = {
-            { type = "particles", mode = "continuo", rate = 8, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 3, lifetime_var = 0.3, speed_min = 0.5, speed_max = 1, direction = 90, spread = 30, gravity = 0.4, drag = 0.3, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.2, size_start = 0.4, size_end = 1.8, size_var = 0, color_start = "#9A9A9AAA", color_mid = "", color_end = "#5A5A5A00", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 30, blend = "alpha", follow = false, max = 500, wind = 1 },
+            { type = "particles", mode = "continuo", rate = 8, emitting = true, amount = 30, on_start = true, interval = 0, when_done = "nada", lifetime = 3, lifetime_var = 0.3, speed_min = 0.5, speed_max = 1, direction = 90, spread = 30, gravity = 0.4, drag = 0.3, area = "circulo", area_w = 2, area_h = 2, area_radius = 0.2, size_start = 0.4, size_end = 1.8, size_var = 0, color_start = "#9A9A9AAA", color_mid = "", color_end = "#5A5A5A00", image = "", frame = 1, frame_w = 0, frame_h = 0, spin = 30, blend = "alpha", follow = false, max = 500, wind = 1, pixel = false },
           },
         },
       },

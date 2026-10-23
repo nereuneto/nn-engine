@@ -8,7 +8,7 @@ local B = {
   requires = { "sprite" },
   props = {
     { "parado", "1", type = "anim", label = "Parado",
-      help = "Uma animação da imagem, ou quadros separados por vírgula (1-4 vai do 1 ao 4)." },
+      help = "Uma animação da imagem, ou quadros separados por vírgula (1-4 vai do 1 ao 4). Deixando como está (1 e vazios), usa sozinho as animações da imagem chamadas parado, andar, pular e cair." },
     { "andando", "", type = "anim", label = "Andando" },
     { "pulando", "", type = "anim", label = "Pulando" },
     { "caindo", "", type = "anim", label = "Caindo" },
@@ -36,7 +36,18 @@ end
 -- Se não houver quadros para um estado, usa os do próximo.
 local RESERVA = { caindo = "pulando", pulando = "andando", andando = "parado" }
 
+-- Com o campo no padrão, as animações da imagem com estes nomes.
+local NOMES = {
+  parado = { "parado", "parada", "idle" },
+  andando = { "andar", "andando", "correr", "walk", "run" },
+  pulando = { "pular", "pulando", "pulo", "jump" },
+  caindo = { "cair", "caindo", "queda", "fall" },
+}
+local PADRAO = { parado = "1", andando = "", pulando = "", caindo = "" }
+
 function B:start()
+  -- A animação que o sprite já tocava (o "parado", se não houver outro).
+  self.inicial = self.obj.sprite and self.obj.sprite.animation or ""
   self.cache = {}
   self.tempo = 0
   self.ultimo_x, self.ultimo_y = self.obj.x, self.obj.y
@@ -48,6 +59,14 @@ function B:quadros(estado, anims)
   while estado do
     local texto = tostring(self[estado] or "")
     if anims and anims.by_name[texto] then return nil, texto end
+    if anims and texto == PADRAO[estado] then
+      for _, n in ipairs(NOMES[estado]) do
+        if anims.by_name[n] then return nil, n end
+      end
+      if estado == "parado" and self.inicial ~= "" and anims.by_name[self.inicial] then
+        return nil, self.inicial
+      end
+    end
     local c = self.cache[estado]
     if not c or c.texto ~= texto then
       c = { texto = texto, lista = lista(texto) }

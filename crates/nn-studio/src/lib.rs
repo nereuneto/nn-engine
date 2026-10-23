@@ -7,7 +7,9 @@
 //! ▶ Jogar, que roda o jogo na própria janela dele.
 
 pub mod agent;
-pub use nn_projeto::{anim as anim_file, pixel as pixel_ops};
+pub use nn_projeto::{
+    anim as anim_file, map as map_doc, particles as particle_presets, pixel as pixel_ops, tileset,
+};
 pub use nn_projeto::{behaviors, config_lua, events, lua_syntax, scene_data};
 pub mod app;
 pub mod catalog;
@@ -25,15 +27,14 @@ pub mod game;
 pub mod hierarchy;
 pub mod inspector;
 pub mod launcher;
-pub mod map_doc;
 pub mod map_editor;
 pub mod model_data;
 pub mod model_editor;
 pub mod model_kits;
 pub mod model_rig;
 pub mod new_map;
+pub mod new_sound;
 pub mod paint;
-pub mod particle_presets;
 pub mod pixel_editor;
 pub mod project;
 pub mod repeat;
@@ -43,7 +44,6 @@ pub mod settings;
 pub mod terrain_tool;
 pub mod theme;
 pub mod tiles_view;
-pub mod tileset;
 pub mod tips;
 pub mod toast;
 pub mod tutorial;

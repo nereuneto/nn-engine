@@ -142,6 +142,12 @@ impl FilePanel {
                     actions.push(Action::NewItem { kind: NewKind::Dialogue, parent: dialogue_dir(&dir) });
                     ui.close();
                 }
+                let r = ui.button("🔊 Som (efeito sonoro)").on_hover_text("Um efeito sonoro sintetizado: moeda, pulo, tiro, explosão... Escolha, varie e ajuste ouvindo");
+                crate::tutorial::anchor_in(ui, "arquivos:novo-som", r.rect);
+                if r.clicked() {
+                    actions.push(Action::NewSound { parent: dir.clone(), edit: None });
+                    ui.close();
+                }
                 if ui.button("🔧 Script (módulo)").on_hover_text("Código usado por várias cenas, com require").clicked() {
                     actions.push(Action::NewItem { kind: NewKind::Module, parent: module_dir(tree, &dir) });
                     ui.close();
@@ -531,6 +537,13 @@ impl FilePanel {
             actions.push(Action::NewItem {
                 kind: NewKind::Image,
                 parent: dir.to_string(),
+            });
+            ui.close();
+        }
+        if ui.button("🔊 Novo som aqui").clicked() {
+            actions.push(Action::NewSound {
+                parent: dir.to_string(),
+                edit: None,
             });
             ui.close();
         }

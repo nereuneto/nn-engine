@@ -23,6 +23,29 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - **NN Studio:** o editor de pixel art ganhou **Contorno** (uma borda com a cor principal em volta do desenho) e **Trocar cor** (a secundária pela principal no quadro todo).
 - **Para quem usa as crates:** as operações de pixel art e o `.anim` saíram do NN Studio para o `nn-projeto` (`pixel`, `anim`), usado pelo editor e pelo servidor. O `pixel` ganhou `flip`, `rotate`, `shift`, `replace_color`, `outline`, `draw_text_art`, `as_text_art` e `preview`.
 
+### Mapas, partículas, sons e diálogos pelo agente (Sprint 56)
+
+- **Mapas de tiles pelo agente.** Quatro ferramentas novas no servidor MCP, com o mesmo `.tmj` e `.tsj` do editor de mapas do NN Studio. Como usar: [Mapas, partículas, sons e diálogos](docs/mcp.md#mapas-partículas-sons-e-diálogos).
+  - **`criar_mapa`:** o mapa a partir de uma imagem de tiles (o tileset é criado ao lado) e os tiles numerados com a grade.
+  - **`pintar_mapa`:** várias operações numa camada: tile em retângulo, linha, pontos ou balde, apagar, **desenho como texto** (um caractere por tile) e **terreno automático** (as bordas e os cantos se ajustam sozinhos). Também cria camadas, liga a colisão de uma camada e aumenta o mapa. Volta o mapa desenhado.
+  - **`marcar_tiles`:** os tiles sólidos, as plataformas de mão única, o tipo de cada um (`lava`, `agua`) e as 16 peças de um terreno.
+  - **`ver_mapa`:** o mapa desenhado, as camadas, os tilesets e os terrenos; uma camada como texto.
+- **`particulas`:** um efeito pronto num objeto (cria o objeto se precisar), ajustes e uma **prévia do efeito sozinho** em quatro momentos, recortada em volta dele.
+- **Efeitos sonoros sintetizados**, como o sfxr: moeda, pulo, tiro, laser, explosão, power-up, dano, clique e blip, com variações e ajustes (onda, nota, deslize, vibrato, arpejo, volume ao longo do tempo, filtros).
+  - No servidor, **`criar_som`** grava o `.wav` e volta a forma da onda e a nota ao longo do tempo, já que o agente não ouve.
+  - No NN Studio, **Arquivos > ➕ Novo > 🔊 Som** (e **Arquivo > Novo som**): escolha o tipo, aperte **🎲 Variar** até gostar e ajuste ouvindo. Os números ficam num `.sfx` ao lado do `.wav`, e o som abre de novo em **🎛 Ajustar efeito**.
+- **Diálogos pelo agente:** `escrever_dialogo` grava uma conversa inteira em JSON (falas com nomes, escolhas, variáveis, itens e personagens) e conta de volta os caminhos, avisando de falas que nunca aparecem; `ver_dialogo` devolve no mesmo formato, para mudar.
+- **Partículas de pixel art:** o componente Partículas ganhou **Pixel art** (`pixel`): quadradinhos de tamanho inteiro, sem girar. As faíscas de pegar uma moeda (`nn:coletavel`) seguem o tamanho da tela e, numa tela pequena, viram quadradinhos.
+- **Colisão deslocada:** o corpo 2D ganhou **Deslocar x** e **Deslocar y** (`ox`, `oy`), para a caixa de colisão ficar nos pés de um sprite com espaço vazio. O NN Studio desenha a caixa no lugar certo.
+- **`animar`** também volta a **casca de cebola**: cada quadro sobre a sombra do anterior, para ver o movimento.
+- **Jogos de tela pequena (pixel art):**
+  - a **caixa de fala** dos diálogos, as escolhas e o aviso **"E falar"** seguem o tamanho da tela (em 320x180 a caixa cobria dois terços dela e a primeira escolha saía por cima); o retrato é desenhado como pixel art e o aviso não sai da tela;
+  - o servidor MCP avisa quando velocidades, pulos e letras ficaram no padrão, que é pensado para uma tela de 720 de altura, e sugere os números na escala da tela; o corpo que vem junto com um comportamento tem o tamanho do quadro do sprite.
+- **`nn:plataforma`:** **Som do pulo** e a condição **Pular** nos eventos (para um som ou poeira a cada pulo). Um pulo guardado (apertado logo antes de cair) com o botão já solto fica baixo, como um toque.
+- **`nn:animacao`** com os campos no padrão usa sozinho as animações da imagem chamadas `parado`, `andar`, `pular` e `cair` (e a que o sprite já tocava).
+- **No servidor MCP:** `rodar_jogo` lista os **sons que tocaram**, os tempos de cada regra e o inventário no que mudou; `conferir_projeto` também confere mapas, tilesets, diálogos e `.sfx`; os mapas vêm ampliados com a **colisão por cima** (a borda do que bloqueia em vermelho, as plataformas em amarelo) e o tileset com o número de cada tile.
+- **Para quem usa as crates:** os mapas, tilesets, efeitos de partículas e diálogos saíram do NN Studio para o `nn-projeto` (`map`, `tileset`, `particles`, `dialogue`), e o gerador de sons é o `nn_projeto::sfx`. O `ParticleConfig` da `nn-render` ganhou `pixel`.
+
 ## 0.7.0
 
 A versão do **desenvolvimento guiado por IA**. O **servidor MCP** (`nn mcp`) liga um agente de IA (Claude Code, Claude Desktop, Cursor...) ao projeto, com **30 ferramentas em português**. O agente monta cenas, objetos, prefabs e eventos, escreve Lua e confere tudo antes de gravar. Ele também **joga o jogo sem janela**, com teclas e cliques simulados, e vê os erros, o que mudou e a tela. Ele escreve e roda os **testes de jogo** (`testes/*.lua`, também com `nn testar` e no NN Studio) e acompanha o **jogo aberto** enquanto você joga, mudando valores na hora. Com o **NN Studio** aberto, ele vê os objetos que você escolheu, não grava por cima do que você não salvou e o que ele muda aparece no Console. Para ligar: **Jogo > Ligar um agente de IA…** no NN Studio. Na revisão, dois agentes fizeram cada um um jogo do zero só pelo servidor, um de plataforma 2D e um de coletar em 3D, com testes. Como usar: [O servidor MCP](docs/mcp.md) e [Testes de jogo](docs/lua.md#testes-de-jogo).

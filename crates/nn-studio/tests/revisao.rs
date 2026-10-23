@@ -1297,3 +1297,36 @@ fn captura_do_agente_para_a_documentacao() {
     let img = h.render().expect("imagem");
     img.save(out.join("nn-studio-agente.png")).unwrap();
 }
+
+/// A janela "Novo som", para a documentação.
+#[test]
+fn captura_do_novo_som_para_a_documentacao() {
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/imagens");
+    let dir = temp("captura-som");
+    let proj = dir.join("meu-jogo");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Visual,
+    })
+    .unwrap();
+    let options = StudioOptions {
+        settings_path: Some(dir.join("preferencias.json")),
+        open: Some(proj),
+        exe: None,
+        check_updates: false,
+    };
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .wgpu()
+        .build_eframe(move |cc| {
+            let mut app = StudioApp::new(&cc.egui_ctx, options);
+            app.set_render_state(cc.wgpu_render_state.clone());
+            app
+        });
+    passos(&mut h);
+    h.state_mut().project_mut().unwrap().new_sound_dialog("");
+    passos(&mut h);
+    let img = h.render().expect("imagem");
+    img.save(out.join("nn-studio-som.png")).unwrap();
+}

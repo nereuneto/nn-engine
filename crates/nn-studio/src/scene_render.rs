@@ -428,12 +428,17 @@ pub fn local_bounds(o: &Object, root: &Path, sizes: &mut Sizes, icon: f64) -> (L
                 }
             }
             "body" => {
-                if c.str("shape") == "circle" {
+                let r = if c.str("shape") == "circle" {
                     let r = c.num("radius");
-                    add(LocalRect::centered(2.0 * r, 2.0 * r));
+                    LocalRect::centered(2.0 * r, 2.0 * r)
                 } else {
-                    add(LocalRect::centered(c.num("w"), c.num("h")));
-                }
+                    LocalRect::centered(c.num("w"), c.num("h"))
+                };
+                let (ox, oy) = (c.num("ox"), c.num("oy"));
+                add(LocalRect {
+                    min: (r.min.0 + ox, r.min.1 + oy),
+                    max: (r.max.0 + ox, r.max.1 + oy),
+                });
             }
             "text" => {
                 let size = c.num("size");
@@ -732,6 +737,7 @@ pub fn particle_config(c: &Component, image: Option<(TextureId, UvRect)>) -> Par
         },
         max: (c.num("max").max(1.0) as usize).min(20_000),
         follow: c.bool("follow"),
+        pixel: c.bool("pixel"),
     }
 }
 

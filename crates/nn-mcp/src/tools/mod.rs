@@ -7,12 +7,16 @@ use crate::Server;
 mod aovivo;
 mod arquivos;
 mod cenas;
+mod dialogos;
 mod docs;
 mod editor;
+mod efeitos;
 mod eventos;
 mod jogar;
+mod mapas;
 mod pixel;
 mod projeto;
+mod sons;
 mod valores;
 
 /// O que uma ferramenta devolve: blocos de texto e imagens.
@@ -76,6 +80,10 @@ fn all() -> Vec<&'static Tool> {
     v.extend(cenas::TOOLS);
     v.extend(eventos::TOOLS);
     v.extend(pixel::TOOLS);
+    v.extend(mapas::TOOLS);
+    v.extend(efeitos::TOOLS);
+    v.extend(sons::TOOLS);
+    v.extend(dialogos::TOOLS);
     v.extend(jogar::TOOLS);
     v.extend(aovivo::TOOLS);
     v.extend(editor::TOOLS);

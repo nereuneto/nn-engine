@@ -517,6 +517,8 @@ pub fn agents_md(template: Template, title: &str) -> String {
          `mudar_objeto`, `listar_componentes`, `listar_comportamentos`, `listar_eventos`, \
          `por_regra`, `buscar_documentacao`, `escrever_arquivo` (confere o Lua antes de gravar), \
          `criar_imagem`, `desenhar`, `ver_imagem` e `animar` (pixel art), \
+         `criar_mapa` e `pintar_mapa` (mapas de tiles), `particulas`, `criar_som` (efeitos \
+         sonoros), `escrever_dialogo` (conversas), \
          `conferir_projeto`, `rodar_jogo` (joga sem janela e mostra erros, prints, o que mudou \
          e a tela), `rodar_testes` e `desfazer`. Com o jogo aberto numa janela (`abrir_jogo`, \
          ou o ▶ Jogar do NN Studio): `ver_jogo_aberto` e `mexer_no_jogo` (muda valores na hora, \
