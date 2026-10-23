@@ -39,6 +39,15 @@ pub(crate) fn with_ctx<R>(lua: &Lua, f: impl FnOnce(&mut Context) -> Result<R>) 
     ud.borrow_mut_scoped::<Context, _>(f)?
 }
 
+/// Soma o tempo de um passo de física no medidor do quadro (se houver um
+/// jogo rodando; num teste sem jogo, nada).
+pub(crate) fn count_physics(lua: &Lua, d: std::time::Duration) {
+    let _ = with_ctx(lua, |ctx| {
+        ctx.perf.add_physics(d);
+        Ok(())
+    });
+}
+
 fn request(lua: &Lua, r: SceneRequest, opts: Option<&Table>) -> Result<()> {
     let fade = fade_options(opts)?;
     let mut shared = lua
@@ -429,6 +438,48 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         lua.create_function(|lua, ()| with_ctx(lua, |c| Ok(c.time.frame())))?,
     )?;
     nn.set("time", time)?;
+
+    // --- Desempenho (o mesmo da tela F3) ---
+    let debug = lua.create_table()?;
+    debug.set(
+        "stats",
+        lua.create_function(|lua, ()| {
+            with_ctx(lua, |c| {
+                let t = lua.create_table()?;
+                let a = c.perf.average;
+                let r = c.renderer.last_stats();
+                t.set("fps", c.perf.fps())?;
+                t.set("frame_ms", a.frame)?;
+                t.set("worst_ms", c.perf.worst_frame)?;
+                t.set("fixed_ms", a.fixed)?;
+                t.set("physics_ms", a.physics)?;
+                t.set("update_ms", a.update)?;
+                t.set("draw_ms", a.draw)?;
+                t.set("sprites", r.sprites)?;
+                t.set("draw_calls", r.draw_calls)?;
+                t.set("textures", c.renderer.texture_count())?;
+                t.set(
+                    "texture_mb",
+                    c.renderer.texture_bytes() as f64 / (1024.0 * 1024.0),
+                )?;
+                t.set("lua_mb", c.perf.lua_kb / 1024.0)?;
+                t.set("objects", c.perf.objects)?;
+                Ok(t)
+            })
+        })?,
+    )?;
+    debug.set(
+        "overlay",
+        lua.create_function(|lua, on: Option<bool>| {
+            with_ctx(lua, |c| {
+                if let Some(on) = on {
+                    c.perf.overlay = on;
+                }
+                Ok(c.perf.overlay)
+            })
+        })?,
+    )?;
+    nn.set("debug", debug)?;
 
     nn.set("input", crate::input::table(lua)?)?;
 

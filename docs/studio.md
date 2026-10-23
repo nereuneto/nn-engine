@@ -1672,7 +1672,11 @@ cheia, cor de fundo e a cena inicial (uma cena em código ou uma cena visual),
 além das
 [variáveis do jogo](#variáveis-do-jogo-e-hud): nome e valor inicial (número,
 texto ou sim/não), e o [tema da interface](#interface-menus-e-hud). No modo Completo também o identificador dos saves, VSync,
-janela redimensionável, recarregar ao salvar e passos fixos por segundo. Tudo
+o **limite de quadros** (sem marcar, segue o monitor com VSync e fica em até
+240 por segundo sem ele; um número poupa a bateria e o processador), janela
+redimensionável, recarregar ao salvar e passos fixos por segundo. No jogo
+aberto pelo ▶ Jogar, **F3** mostra a tela de desempenho: quadros por segundo,
+o tempo da física, do `update` e do desenho, e a memória. Tudo
 fica no `config.lua`: o NN Studio troca só os valores, sem mexer nos seus
 comentários.
 

@@ -286,6 +286,9 @@ pub(crate) fn set_config(s: &mut Server, a: &Value) -> Result<Vec<String>, Strin
             "fullscreen" => new.fullscreen = bool_of(v)?,
             "resizable" => new.resizable = bool_of(v)?,
             "vsync" => new.vsync = bool_of(v)?,
+            "fps_max" => {
+                new.fps_max = if v.is_null() { None } else { Some(int_of(v)?) };
+            }
             "scale" => {
                 let sc = str_of(v)?;
                 if !["fit", "stretch", "pixel"].contains(&sc.as_str()) {
@@ -346,7 +349,7 @@ pub(crate) fn set_config(s: &mut Server, a: &Value) -> Result<Vec<String>, Strin
             }
             other => {
                 return Err(format!(
-                    "o config.lua não tem \"{other}\" aqui. Use title, start, width, height, resolution, scale, clear_color, fullscreen, resizable, vsync, fixed_hz, vars, theme"
+                    "o config.lua não tem \"{other}\" aqui. Use title, start, width, height, resolution, scale, clear_color, fullscreen, resizable, vsync, fps_max, fixed_hz, vars, theme"
                 ));
             }
         }
@@ -713,7 +716,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "mudar_config",
         title: "Mudar configuração",
-        description: "Muda o config.lua sem perder os comentários: title, start (cena inicial), width/height (janela), resolution ([w, h] do jogo, ou null), scale (fit|stretch|pixel), clear_color, fullscreen, resizable, vsync, fixed_hz, vars (variáveis do jogo, { nome: valor }; null tira) e theme (cores e fonte da interface).",
+        description: "Muda o config.lua sem perder os comentários: title, start (cena inicial), width/height (janela), resolution ([w, h] do jogo, ou null), scale (fit|stretch|pixel), clear_color, fullscreen, resizable, vsync, fps_max (limite de quadros por segundo; 0 = sem limite, null = o automático: sem limite com vsync, 240 sem), fixed_hz, vars (variáveis do jogo, { nome: valor }; null tira) e theme (cores e fonte da interface).",
         params: || {
             vec![
                 ("title", s_str("Título do jogo"), false),
@@ -737,6 +740,11 @@ pub static TOOLS: &[&Tool] = &[
                 ("fullscreen", s_bool("Abrir em tela cheia"), false),
                 ("resizable", s_bool("Janela muda de tamanho"), false),
                 ("vsync", s_bool("Sincronia vertical"), false),
+                (
+                    "fps_max",
+                    s_int("Limite de quadros por segundo (0 = sem limite; null = automático)"),
+                    false,
+                ),
                 ("fixed_hz", s_int("Passos por segundo da física"), false),
                 (
                     "vars",

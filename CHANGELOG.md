@@ -4,6 +4,24 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Limite de quadros e o medidor F3 (Sprint 61)
+
+- **Limite de quadros** (`fps_max` no `config.lua`, ou **Limite de quadros** nas configurações do projeto no NN Studio):
+  - sem ele, o jogo segue o monitor com VSync e fica em até 240 quadros por segundo sem VSync; antes, sem VSync, o jogo rodava sem parar e ocupava um núcleo inteiro do processador;
+  - um número limita (60, 120...), e `0` tira o limite;
+  - o limite segue uma hora marcada para cada quadro, então um atraso do sistema num quadro é compensado no seguinte, e a média fica no número pedido.
+- **Janela minimizada:** o jogo para de simular e de desenhar (a música continua) e, ao voltar, segue de onde estava, sem um salto no tempo.
+- **F3: a tela de desempenho.** No jogo aberto da pasta do projeto, F3 mostra no canto:
+  - os quadros por segundo e o pior quadro;
+  - o tempo dos passos fixos, da física, do `update` e do desenho;
+  - os sprites e as chamadas de desenho (e as malhas, no 3D);
+  - a memória das texturas e do Lua, e os objetos da cena.
+
+  No jogo exportado, F3 não faz nada.
+- **`nn.debug.stats()`** devolve os mesmos números para o Lua, e `nn.debug.overlay(true)` abre a tela pelo código.
+- **`rodar_jogo`** (servidor MCP) diz quanto o jogo gastou por quadro, em média, e qual foi o quadro mais pesado.
+- **Para quem usa as crates:** `Context::perf` (o medidor, com `FrameTimes` e `add_physics`), `AppConfig::fps_max` e `dev_tools`, e `Renderer::texture_bytes` e `texture_count`.
+
 ### Física 2D com grade espacial (Sprint 60)
 
 - **A física 2D ficou muito mais rápida com muitos corpos.** Antes, cada corpo que se movia conferia todos os outros, em cada subpasso; agora uma grade espacial deixa conferir só quem está perto. Vale para o movimento, para os corpos que se empurram, para os sensores e para os raios e as consultas (`raycast`, `query_point`, `query_aabb`, `overlapping`).

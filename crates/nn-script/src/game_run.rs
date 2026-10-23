@@ -127,8 +127,21 @@ pub struct Report {
     /// As animações 3D que começaram a tocar: (modelo, animação, quantas
     /// vezes, a primeira vez).
     pub animations: Vec<(String, String, u32, f64)>,
+    /// O tempo gasto: a soma dos quadros e o pior (veja [`Perf`]).
+    pub perf: Perf,
     /// O jogo fechou (`nn.quit`) neste tempo.
     pub quit: Option<f64>,
+}
+
+/// Quanto o jogo gastou, somando os quadros rodados (sem desenhar na placa
+/// de vídeo: o desenho aqui é só o `draw` do jogo).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Perf {
+    pub frames: u32,
+    /// Somas, em ms.
+    pub total: nn_app::FrameTimes,
+    /// O quadro mais pesado (passos fixos + update + desenho), em ms, e quando.
+    pub worst: (f32, f64),
 }
 
 /// Uma ação do roteiro de [`GameRun::run_plan`].
@@ -443,6 +456,18 @@ impl GameRun {
     /// O que olhar depois de cada quadro: erros, a cena da frente, as
     /// regras que dispararam e se o jogo fechou.
     fn after_frame(&mut self, t: f64) {
+        let last = self.headless.ctx.perf.last;
+        let p = &mut self.report.perf;
+        p.frames += 1;
+        p.total.fixed += last.fixed;
+        p.total.physics += last.physics;
+        p.total.update += last.update;
+        p.total.draw += last.draw;
+        p.total.steps += last.steps;
+        let work = last.fixed + last.update + last.draw;
+        if work > p.worst.0 {
+            p.worst = (work, t);
+        }
         for error in self.runtime.take_errors() {
             self.report.errors.push(RunError { time: t, error });
         }

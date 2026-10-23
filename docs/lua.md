@@ -60,6 +60,7 @@ return {
   start = "main.lua",     -- cena inicial
   clear_color = "#1A1F1C",
   vsync = true,
+  fps_max = 120,          -- limite de quadros por segundo (veja abaixo)
   fixed_hz = 60,          -- passos de fixed_update por segundo
   resizable = true,
   hot_reload = true,      -- recarregar ao salvar
@@ -79,6 +80,10 @@ Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#vari�
 **Tema da interface** (`theme`): as cores que os [componentes de interface](#interface-menus-e-hud) usam quando a cor deles está vazia: `text` (#FFFFFF), `button` (#3FA7D6), `hover` (#5BC0EB, botão com foco), `press` (#2E86AB, apertado), `disabled` (#5B6472), `panel` (#1E2A3AE6), `border` (#FFFFFF40) e `accent` (#FFD166, barras e marcas), além de `font` (um `.ttf` ou `.otf`; vazio = a fonte da engine) e `sound` (som dos botões). Só o que você muda precisa estar no arquivo. No código, o tema completo fica em `nn.theme`.
 
 **Tamanho fixo do jogo** (`resolution`): sem ele, o jogo enxerga o tamanho da janela (janela maior mostra mais coisa). Com `resolution = { largura, altura }`, a câmera, `nn.screen`, `nn.window.size()`, `nn.camera.view()` e o mouse usam sempre esse tamanho, e a imagem se ajusta à janela conforme `scale`: `"fit"` (padrão) aumenta ou diminui mantendo a proporção, com faixas pretas quando a janela tem outra proporção; `"stretch"` ocupa a janela toda, mesmo distorcendo; `"pixel"` só aumenta em números inteiros (2×, 3×...), para pixel art nítida. O texto é desenhado no tamanho real da tela, então continua nítido. Os modelos visuais vêm com `resolution = { 1280, 720 }`. Rodando da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), o jogo recarrega ao salvar, a não ser que o `config.lua` diga `hot_reload = false`; o jogo exportado não recarrega. O NN Studio também edita estas opções num formulário (**Editar > Configurações do projeto**), sem mexer nos comentários do arquivo.
+
+**Limite de quadros** (`fps_max`): sem ele, o jogo segue o monitor com `vsync = true` e fica em até 240 quadros por segundo com `vsync = false`. Um número limita (60, 120...), o que poupa a bateria e o processador; `0` tira o limite (o jogo roda o mais rápido que der e ocupa um núcleo inteiro). Com a janela minimizada, o jogo para de simular e de desenhar (a música continua) e segue de onde estava quando ela volta.
+
+**Desempenho (F3).** No jogo aberto da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), F3 abre uma tela no canto com os quadros por segundo, o tempo dos passos fixos, da física, do `update` e do desenho, os sprites e as chamadas de desenho, a memória das texturas e do Lua e os objetos da cena. No jogo exportado, F3 não faz nada. Os mesmos números estão em [`nn.debug.stats()`](#desempenho-nndebug).
 
 As mensagens de erro do Lua aparecem em português ("tentou chamar um valor nil (vazio) (método 'pular')"), na tela de erro do jogo e no console do NN Studio.
 
@@ -1820,6 +1825,17 @@ Enquanto a tela escurece, a cena que está saindo continua desenhada mas fica pa
 `nn.window.capture_mouse(true)` prende o mouse na janela e esconde o cursor (para girar a câmera com `nn.input.mouse_delta()`); `nn.window.capture_mouse(false)` solta. Solte ao abrir a pausa e os menus, e prenda de novo ao voltar (o `resume` da cena é um bom lugar). Ao sair da janela (Alt+Tab) o mouse é solto sozinho e volta a ser preso quando ela recebe o foco. `nn.window.mouse_captured()` diz se está preso.
 
 `nn.window.title()` devolve o título do jogo (o `title` do config.lua).
+
+### Desempenho (nn.debug)
+
+`nn.debug.stats()` devolve a média dos últimos quadros, a mesma da tela F3: `fps`, `frame_ms` (o quadro inteiro), `worst_ms` (o pior dos últimos 2 segundos), `fixed_ms` (os passos fixos), `physics_ms` (a física, dentro dos passos fixos), `update_ms`, `draw_ms` (o `draw` e o envio para a placa de vídeo), `sprites` e `draw_calls` do último quadro, `textures` e `texture_mb` (a memória das texturas), `lua_mb` (a memória do Lua) e `objects` (os objetos de uma cena visual).
+
+`nn.debug.overlay(true)` abre a tela de desempenho e `nn.debug.overlay(false)` fecha; sem argumento, diz se está aberta. Também vale no jogo exportado, para quem quiser um "modo de diagnóstico" num menu de opções.
+
+```lua
+local s = nn.debug.stats()
+if s.frame_ms > 20 then print(("quadro lento: %.1f ms (física %.1f ms)"):format(s.frame_ms, s.physics_ms)) end
+```
 
 ### Outros
 

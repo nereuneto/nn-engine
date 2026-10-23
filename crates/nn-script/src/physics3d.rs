@@ -458,11 +458,13 @@ impl UserData for LWorld3 {
             Ok(crate::nav::LNav::new(grid, true))
         });
         m.add_method("step", |lua, this, dt: f32| {
+            let t = std::time::Instant::now();
             let events: Vec<Event3> = {
                 let mut s = this.0.borrow_mut();
                 s.world.step(dt);
                 s.world.events().to_vec()
             };
+            crate::api::count_physics(lua, t.elapsed());
             let out = lua.create_table()?;
             for (i, e) in events.into_iter().enumerate() {
                 let (kind, a, b) = match e {

@@ -15,6 +15,9 @@ pub struct ConfigValues {
     pub fullscreen: bool,
     pub resizable: bool,
     pub vsync: bool,
+    /// Limite de quadros por segundo (`fps_max`): `None` = o automático
+    /// (sem limite com VSync, 240 sem), `Some(0)` = sem limite.
+    pub fps_max: Option<u32>,
     pub hot_reload: bool,
     pub fixed_hz: u32,
     /// Cor de fundo, `#RRGGBB`.
@@ -66,6 +69,7 @@ impl Default for ConfigValues {
             fullscreen: false,
             resizable: true,
             vsync: true,
+            fps_max: None,
             hot_reload: true,
             fixed_hz: 60,
             clear_color: "#1E1E28".into(),
@@ -195,6 +199,11 @@ pub fn read(text: &str, default_title: &str) -> Result<ConfigValues, String> {
         }
         v.theme.sort_by(|a, b| a.0.cmp(&b.0));
     }
+    match get("fps_max") {
+        Value::Integer(i) => v.fps_max = Some(i.max(0) as u32),
+        Value::Number(n) => v.fps_max = Some(n.max(0.0) as u32),
+        _ => {}
+    }
     for (key, field) in [
         ("fullscreen", &mut v.fullscreen),
         ("resizable", &mut v.resizable),
@@ -232,6 +241,13 @@ pub fn changes(old: &ConfigValues, new: &ConfigValues) -> Vec<(&'static str, Lua
     n("width", old.width, new.width);
     n("height", old.height, new.height);
     n("fixed_hz", old.fixed_hz, new.fixed_hz);
+    if old.fps_max != new.fps_max {
+        out.push((
+            "fps_max",
+            new.fps_max
+                .map_or(LuaValue::Raw("nil".into()), |f| LuaValue::Int(f as i64)),
+        ));
+    }
     let mut b = |k, a: bool, b: bool| {
         if a != b {
             out.push((k, LuaValue::Bool(b)));
@@ -327,6 +343,7 @@ fn value_of(v: &ConfigValues, key: &str) -> Option<LuaValue> {
         "width" => LuaValue::Int(v.width as i64),
         "height" => LuaValue::Int(v.height as i64),
         "fixed_hz" => LuaValue::Int(v.fixed_hz as i64),
+        "fps_max" => LuaValue::Int(i64::from(v.fps_max?)),
         "fullscreen" => LuaValue::Bool(v.fullscreen),
         "resizable" => LuaValue::Bool(v.resizable),
         "vsync" => LuaValue::Bool(v.vsync),
@@ -373,6 +390,9 @@ pub fn generate(v: &ConfigValues) -> String {
     }
     if v.fixed_hz != d.fixed_hz {
         line("fixed_hz", LuaValue::Int(v.fixed_hz as i64));
+    }
+    if let Some(f) = v.fps_max {
+        line("fps_max", LuaValue::Int(i64::from(f)));
     }
     if !v.vars.is_empty() {
         line("vars", LuaValue::Raw(vars_lua(&v.vars)));

@@ -80,6 +80,16 @@ struct State {
     focused: bool,
     /// O mouse está preso de verdade (pela janela) agora.
     grabbed: bool,
+    /// A janela avisou que está minimizada (tamanho zero) ou toda coberta.
+    hidden: bool,
+    /// O jogo está parado por isso (o som segue).
+    paused: bool,
+    /// O intervalo entre quadros (o limite de quadros) e a hora marcada
+    /// para o próximo. A hora anda de intervalo em intervalo, não a partir
+    /// de quando o quadro começou de fato: um atraso do sistema num quadro é
+    /// compensado no seguinte, e a média fica no limite pedido.
+    frame_period: Option<std::time::Duration>,
+    next_frame: Instant,
     #[cfg(feature = "gamepad")]
     gamepads: crate::gamepad::Gamepads,
 }
@@ -152,6 +162,10 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> App<G, F> {
             last_frame: Instant::now(),
             focused: true,
             grabbed: false,
+            hidden: false,
+            paused: false,
+            frame_period: self.config.frame_period(),
+            next_frame: Instant::now(),
             #[cfg(feature = "gamepad")]
             gamepads,
         });
@@ -184,6 +198,23 @@ impl State {
         self.grabbed = want;
     }
 
+    fn set_hidden(&mut self, hidden: bool) {
+        self.hidden = hidden;
+    }
+
+    /// Para o jogo com a janela minimizada (ou coberta) e o solta quando ela
+    /// volta. Ao voltar, o tempo parado não conta: o jogo segue de onde
+    /// estava, sem um salto.
+    fn update_paused(&mut self) -> bool {
+        let paused = self.hidden || self.window.is_minimized() == Some(true);
+        if self.paused && !paused {
+            self.last_frame = Instant::now();
+            self.next_frame = self.last_frame;
+        }
+        self.paused = paused;
+        paused
+    }
+
     fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
             // Janela minimizada: mantém a última configuração.
@@ -202,6 +233,14 @@ impl State {
         let now = Instant::now();
         let dt = now - self.last_frame;
         self.last_frame = now;
+        if let Some(period) = self.frame_period {
+            // Muito atrasado (uma travada): recomeça a contar daqui.
+            self.next_frame = if now > self.next_frame + period {
+                now + period
+            } else {
+                self.next_frame + period
+            };
+        }
         #[cfg(feature = "gamepad")]
         self.gamepads.poll(&mut self.ctx.input, self.focused);
         simulate(&mut self.ctx, game, dt);
@@ -290,13 +329,22 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> ApplicationHandler for App<G, F> {
                 state.ctx.save.flush_logged();
                 event_loop.exit();
             }
-            WindowEvent::Resized(size) => state.resize(size.width, size.height),
+            WindowEvent::Resized(size) => {
+                state.set_hidden(size.width == 0 || size.height == 0);
+                state.resize(size.width, size.height);
+            }
+            WindowEvent::Occluded(occluded) => state.set_hidden(occluded),
             WindowEvent::Focused(focused) => {
                 state.focused = focused;
                 // Fora da janela o mouse fica solto; de volta, preso de novo.
                 state.apply_mouse_capture();
             }
             WindowEvent::RedrawRequested => {
+                // Minimizada, o sistema ainda pode pedir um desenho: o jogo
+                // continua parado.
+                if state.update_paused() {
+                    return;
+                }
                 state.frame(game);
                 if state.ctx.exit_requested {
                     state.ctx.save.flush_logged();
@@ -324,9 +372,24 @@ impl<G: Game, F: FnOnce(&mut Context) -> G> ApplicationHandler for App<G, F> {
         }
     }
 
-    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
-        if let Some(state) = &self.state {
-            state.window.request_redraw();
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(state) = &mut self.state else {
+            return;
+        };
+        // Minimizada: confere 10 vezes por segundo se voltou, sem gastar o
+        // processador simulando e desenhando o que ninguém vê.
+        if state.update_paused() {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(
+                Instant::now() + std::time::Duration::from_millis(100),
+            ));
+            return;
         }
+        // O limite de quadros: dorme até a hora do próximo.
+        if state.frame_period.is_some() && Instant::now() < state.next_frame {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(state.next_frame));
+            return;
+        }
+        event_loop.set_control_flow(ControlFlow::Poll);
+        state.window.request_redraw();
     }
 }

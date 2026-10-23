@@ -20,6 +20,7 @@ mod effects;
 #[cfg(feature = "gamepad")]
 mod gamepad;
 mod headless;
+mod perf;
 mod scene;
 mod source;
 mod storage;
@@ -30,6 +31,7 @@ pub use assets::{AssetError, Assets, model_key};
 pub use config::AppConfig;
 pub use context::{Context, Game, Screenshot};
 pub use headless::Headless;
+pub use perf::{FrameTimes, Perf};
 pub use scene::{Fade, Scene, SceneStack, Transition};
 pub use source::{AssetSource, DiskSource, Pack, PackError, list_dir, normalize};
 pub use storage::{SAVE_FILE, Storage, data_dir, slug};

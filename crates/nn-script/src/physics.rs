@@ -257,7 +257,9 @@ impl UserData for LWorld {
         });
 
         m.add_method("step", |lua, this, dt: f32| {
+            let t = std::time::Instant::now();
             let events: Vec<Event> = this.0.borrow_mut().step(dt).to_vec();
+            crate::api::count_physics(lua, t.elapsed());
             let list = lua.create_table()?;
             for e in events {
                 let (kind, a, b) = match e {
