@@ -479,9 +479,14 @@ end
 
 -- Avança as animações dos objetos; avisa quem termina ("animacao_terminou").
 local function update_animations(scene, dt)
-  for _, o in ipairs(scene.object_list) do
-    if o.alive then
-      for _, c in ipairs(o.components) do
+  local list = scene.object_list
+  local i, o = 1, list[1]
+  while o do
+    local cs = o.components
+    local alive = o.alive
+    local j, c = 1, cs[1]
+    while c and alive do
+      do
         local anims = c._anims
         if anims and c.animation ~= "" then
           local anim = anims.by_name[c.animation]
@@ -501,7 +506,11 @@ local function update_animations(scene, dt)
           end
         end
       end
+      j = j + 1
+      c = cs[j]
     end
+    i = i + 1
+    o = list[i]
   end
 end
 
@@ -888,14 +897,26 @@ end
 
 --- Onde fica na tela (pixels, y para baixo) o ponto x, y (do mundo do
 --- objeto) de um objeto de HUD: a âncora do objeto da raiz mais x, y.
-function M.screen_pos(o, x, y)
+-- A âncora de cada nome já escrito ("TopLeft", "topleft" e "top_left" dão
+-- a mesma), guardada para não refazer o texto a cada quadro.
+local anchor_of = setmetatable({}, { __index = function(t, name)
+  local a = M.ANCHORS[name]
+    or M.ANCHORS[(name:lower():gsub("^top(%a)", "top_%1"):gsub("^bottom(%a)", "bottom_%1"))]
+    or M.ANCHORS.center
+  t[name] = a
+  return a
+end })
+
+local function screen_pos_in(o, x, y, W, H)
   local root = o
   while root.parent do root = root.parent end
-  local a = M.ANCHORS[root.anchor or ""]
-    or M.ANCHORS[((root.anchor or ""):lower():gsub("^top(%a)", "top_%1"):gsub("^bottom(%a)", "bottom_%1"))]
-    or M.ANCHORS.center
-  local W, H = nn.window.size()
+  local a = anchor_of[root.anchor or ""]
   return W * a[1] + x, H * a[2] - y
+end
+
+function M.screen_pos(o, x, y)
+  local W, H = nn.window.size()
+  return screen_pos_in(o, x, y, W, H)
 end
 
 -- Prefabs -------------------------------------------------------------------
@@ -1117,15 +1138,26 @@ local function start_behaviors(list)
   end
 end
 
+-- Os laços que passam por todos os objetos a cada quadro usam `while` em vez
+-- de `ipairs`: o mesmo resultado (inclusive com objetos novos entrando na
+-- lista no meio do laço), sem uma chamada de função por item.
 local function each_behavior(scene, name, ...)
-  for _, o in ipairs(scene.object_list) do
-    if o.alive then
-      for _, b in ipairs(o.behaviors) do
+  local list = scene.object_list
+  local i, o = 1, list[1]
+  while o do
+    local bs = o.behaviors
+    if o.alive and bs[1] then
+      local j, b = 1, bs[1]
+      while b do
         local f = b[name]
         if b.enabled and type(f) == "function" then f(b, ...) end
         if not o.alive then break end
+        j = j + 1
+        b = bs[j]
       end
     end
+    i = i + 1
+    o = list[i]
   end
 end
 
@@ -1891,8 +1923,11 @@ end
 
 -- Um quadro de cada emissor: posição, repetir a explosão e o fim.
 local function update_particles(scene, dt)
-  for _, o in ipairs(scene.object_list) do
-    local k = o.alive and o:component("particles")
+  local list = scene.object_list
+  local i, o = 1, list[1]
+  while o do
+    -- Só quem tem partículas (o._kill_fx: terminou e some agora).
+    local k = o.alive and (o.particles or o._kill_fx) and o:component("particles")
     if k and k._kill then
       o:destroy()
     elseif o.alive and o.particles then
@@ -1924,10 +1959,15 @@ local function update_particles(scene, dt)
           c._active = false
           if M.events then M.events.signal(scene, { kind = "particulas", obj = o }) end
           -- Some no quadro seguinte, depois dos eventos verem o aviso.
-          if c.when_done == "destruir" then c._kill = true end
+          if c.when_done == "destruir" then
+            c._kill = true
+            o._kill_fx = true
+          end
         end
       end
     end
+    i = i + 1
+    o = list[i]
   end
 end
 
@@ -2226,8 +2266,12 @@ end
 
 --- Arruma os filhos dos objetos com Grupo.
 function M.arrange_all(scene)
-  for _, o in ipairs(scene.object_list) do
+  local list = scene.object_list
+  local i, o = 1, list[1]
+  while o do
     if o.alive and o.layout and o.layout.arrange ~= "none" then arrange(o, o.layout) end
+    i = i + 1
+    o = list[i]
   end
 end
 
@@ -2996,23 +3040,49 @@ function M.update_camera(scene, dt, snap)
 end
 
 local function sync_bodies_before(scene)
-  for _, o in ipairs(scene.object_list) do
-    if o.alive and o.body and o.body.alive then
-      -- O script mudou x/y à mão: leva o corpo junto.
-      if o.x ~= o._sx or o.y ~= o._sy then
-        local x, y = o:world_transform()
-        o.body:set_position(x + (o._box or 0), y + (o._boy or 0))
-        o._px, o._py = o.x, o.y
-      end
+  local list = scene.object_list
+  local i, o = 1, list[1]
+  while o do
+    -- O script mudou x/y à mão: leva o corpo junto.
+    if o.alive and o.body and (o.x ~= o._sx or o.y ~= o._sy) and o.body.alive then
+      local x, y = o:world_transform()
+      o.body:set_position(x + (o._box or 0), y + (o._boy or 0))
+      o._px, o._py = o.x, o.y
     end
+    i = i + 1
+    o = list[i]
   end
 end
-
+-- Depois do passo: as posições de todos os corpos numa ida só ao Rust.
 local function sync_bodies_after(scene)
-  for _, o in ipairs(scene.object_list) do
-    if o.alive and o.body and o.body.alive then
+  local bodies, owners, at = scene._sync_bodies, scene._sync_owners, scene._sync_at
+  if not bodies then
+    bodies, owners, at = {}, {}, {}
+    scene._sync_bodies, scene._sync_owners, scene._sync_at = bodies, owners, at
+  end
+  local n = 0
+  local list = scene.object_list
+  local i, o = 1, list[1]
+  while o do
+    if o.alive and o.body then
+      n = n + 1
+      bodies[n], owners[n] = o.body, o
+    end
+    i = i + 1
+    o = list[i]
+  end
+  for k = #bodies, n + 1, -1 do
+    bodies[k], owners[k] = nil, nil
+  end
+  if n == 0 then return end
+  scene.world:_positions(bodies, n, at)
+  for k = 1, n do
+    local bx = at[2 * k - 1]
+    if bx then
+      o = owners[k]
       o._px, o._py = o.x, o.y
-      local bx, by = o.body.x - (o._box or 0), o.body.y - (o._boy or 0)
+      local by = at[2 * k]
+      bx, by = bx - (o._box or 0), by - (o._boy or 0)
       if o.parent then
         local px, py = o.parent:world_transform()
         bx, by = bx - px, by - py
@@ -3032,7 +3102,9 @@ function M.fixed_update(scene, dt)
   end
   each_behavior(scene, "fixed_update", dt)
   -- Objetos sem corpo físico com velocidade (vx, vy) andam sozinhos.
-  for _, o in ipairs(scene.object_list) do
+  local list = scene.object_list
+  local i, o = 1, list[1]
+  while o do
     if o.alive and not o.body and (o.vx or o.vy or o.vz) then
       o.x = o.x + (o.vx or 0) * dt
       o.y = o.y + (o.vy or 0) * dt
@@ -3043,6 +3115,8 @@ function M.fixed_update(scene, dt)
       o._some_em = o._some_em - dt
       if o._some_em <= 0 then o:destroy() end
     end
+    i = i + 1
+    o = list[i]
   end
   if scene._3d then
     local events = step3(scene, dt)
@@ -3386,10 +3460,14 @@ end
 -- As oito direções do contorno de um texto.
 local OUTLINE = { { -1, -1 }, { 0, -1 }, { 1, -1 }, { -1, 0 }, { 1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 } }
 
-local function draw_object(o, alpha)
+local function draw_object(o, alpha, W, H)
   -- 3D: modelos e formas, com a posição, a rotação e a escala 3D.
   local m3
-  for _, c in ipairs(o.components) do
+  local more = false
+  local cs = o.components
+  for k = 1, #cs do
+    local c = cs[k]
+    if not ONLY_3D[c.type] then more = true end
     if c.type == "model" and c._missing then
       m3 = m3 or o:matrix3d(alpha)
       nn.d3.draw(c._missing, { matrix = m3, color = "#FF3EC8" })
@@ -3431,13 +3509,6 @@ local function draw_object(o, alpha)
     end
   end
   -- Só o que é 3D (a maioria dos objetos de uma cena 3D): acabou.
-  local more = false
-  for _, c in ipairs(o.components) do
-    if not ONLY_3D[c.type] then
-      more = true
-      break
-    end
-  end
   if not more then return end
   local x, y, rot, sx, sy = o:world_transform()
   if o.body and o._px and not o.parent then
@@ -3445,39 +3516,25 @@ local function draw_object(o, alpha)
     y = o._py + (o.y - o._py) * alpha
   end
   -- HUD: a âncora na tela mais a posição (y para cima); sem âncora, o
-  -- centro da tela, como estaria com a câmera no começo (0, 0).
-  local hx, hy = M.screen_pos(o, x, y)
+  -- centro da tela, como estaria com a câmera no começo (0, 0). Só para
+  -- quem tem algo na tela (a maioria dos objetos não tem).
+  local hx, hy
   local overlay = o.scene and o.scene.overlay
-  local function at(dx, dy)
-    return x + dx, y + dy, hx + dx, hy - dy
-  end
-  for _, c in ipairs(o.components) do
+  for k = 1, #cs do
+    local c = cs[k]
     local t = c.type
     local hud = c.hud or overlay
+    if hud and not hx then hx, hy = screen_pos_in(o, x, y, W, H) end
     if t == "sprite" and c._img then
-      local w, h = c.w, c.h
-      if w <= 0 then w = c._sheet and c.frame_w or c._img.width end
-      if h <= 0 then h = c._sheet and c.frame_h or c._img.height end
-      -- Repetir: cada cópia tem o tamanho do componente; a escala do objeto
-      -- diz quantas cópias cabem.
-      local tw, th
-      if c.fill == "repeat" then tw, th = w, h end
-      local frame = nil
-      if c._sheet then
-        frame = math.max(1, math.min(math.floor(c.frame), c._img.count))
-      end
+      -- Sem tabela de opções: um sprite por objeto, todo quadro. Repetir:
+      -- cada cópia tem o tamanho do componente; a escala do objeto diz
+      -- quantas cópias cabem.
       if hud then
-        nn.screen.sprite(c._img, hx, hy, {
-          frame = frame, origin_x = 0.5, origin_y = 0.5,
-          w = w * sx, h = h * sy, rotation = -rot * DEG,
-          color = o._tint or c.color, flip_x = c.flip_x, flip_y = c.flip_y, tile_w = tw, tile_h = th,
-        })
+        nn._sprite(true, c._img, hx, hy, sx, sy, c.w, c.h, rot, o._tint or c.color,
+          c.flip_x, c.flip_y, c.fill == "repeat", c._sheet and math.floor(c.frame) or nil)
       else
-        nn.draw.sprite(c._img, x, y, {
-          frame = frame,
-          w = w * sx, h = h * sy, rotation = rot * DEG,
-          color = o._tint or c.color, flip_x = c.flip_x, flip_y = c.flip_y, tile_w = tw, tile_h = th,
-        })
+        nn._sprite(false, c._img, x, y, sx, sy, c.w, c.h, rot, o._tint or c.color,
+          c.flip_x, c.flip_y, c.fill == "repeat", c._sheet and math.floor(c.frame) or nil)
       end
     elseif t == "shape" then
       local draw = hud and nn.screen or nn.draw
@@ -3494,7 +3551,13 @@ local function draw_object(o, alpha)
         end
       end
     elseif t == "text" then
-      local opts = { size = c.size * math.abs(sy), color = c.color, anchor = c.anchor, font = M.font(c.font) }
+      -- As opções ficam no componente (sem uma tabela nova a cada quadro).
+      local opts = c._topts
+      if not opts then
+        opts = {}
+        c._topts = opts
+      end
+      opts.size, opts.color, opts.anchor, opts.font = c.size * math.abs(sy), c.color, c.anchor, M.font(c.font)
       local draw, px, py = nn.draw, x, y
       if hud then draw, px, py = nn.screen, hx, hy end
       -- O contorno: o texto na cor dele, em volta (lê bem em cima do céu).
@@ -3513,6 +3576,11 @@ local function draw_object(o, alpha)
     elseif t == "particles" and o.particles then
       o.particles:draw()
     elseif M.UI_KINDS[t] then
+      if not hx then hx, hy = screen_pos_in(o, x, y, W, H) end
+      local px, py = hx, hy
+      local function at(dx, dy)
+        return x + dx, y + dy, px + dx, py - dy
+      end
       draw_ui(o, c, hud, at, math.abs(sx), math.abs(sy))
     end
   end
@@ -3529,8 +3597,13 @@ function M.draw(scene)
     M.update_camera3d(scene)
     shake3_apply(scene, scene._dt or 1 / 60)
   end
-  for _, o in ipairs(scene._draw_list or {}) do
-    if o.alive and o:shown() then draw_object(o, alpha) end
+  local W, H = nn.window.size()
+  local list = scene._draw_list or {}
+  local i, o = 1, list[1]
+  while o do
+    if o.alive and o:shown() then draw_object(o, alpha, W, H) end
+    i = i + 1
+    o = list[i]
   end
   for _, fx in pairs(scene._fx or {}) do fx:draw() end
   -- Os corpos da física por cima (rodar_jogo com ver_corpos).

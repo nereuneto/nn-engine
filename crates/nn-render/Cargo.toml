@@ -16,6 +16,7 @@ image.workspace = true
 log.workspace = true
 thiserror.workspace = true
 fontdue.workspace = true
+rustc-hash.workspace = true
 gltf.workspace = true
 
 [dev-dependencies]

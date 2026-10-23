@@ -95,6 +95,10 @@ impl DrawQueue {
     }
 }
 
+fn color_bits(c: Color) -> [u32; 4] {
+    [c.r.to_bits(), c.g.to_bits(), c.b.to_bits(), c.a.to_bits()]
+}
+
 /// Espaço de coordenadas em que algo é desenhado.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Space {
@@ -143,6 +147,10 @@ pub struct Renderer {
     texture_layout: wgpu::BindGroupLayout,
     textures: Vec<GpuTexture>,
     white: TextureId,
+    /// Para montar os sprites de um painel sem alocar a cada um.
+    panel_buf: Vec<Sprite>,
+    /// A última cor convertida para a GPU (veja `gpu_color`).
+    last_color: std::cell::Cell<([u32; 4], Color)>,
     circle: TextureId,
     /// Texturas dos painéis arredondados: (raio, borda) → (fundo, borda, margem).
     rounded: std::collections::HashMap<(u32, u32), (TextureId, TextureId, u32)>,
@@ -308,6 +316,8 @@ impl Renderer {
             texture_layout,
             textures: Vec::new(),
             white: TextureId(0),
+            panel_buf: Vec::new(),
+            last_color: std::cell::Cell::new((color_bits(Color::WHITE), Color::WHITE)),
             circle: TextureId(0),
             rounded: std::collections::HashMap::new(),
             text: TextSystem::new(),
@@ -498,11 +508,11 @@ impl Renderer {
     pub fn measure_text(&self, text: &Text<'_>) -> Vec2 {
         let k = self.text_scale();
         if k == 1.0 {
-            return self.text.layout(text).size;
+            return self.text.cached_layout(text).size;
         }
         let mut scaled = *text;
         scaled.size = text.size * k;
-        self.text.layout(&scaled).size / k
+        self.text.cached_layout(&scaled).size / k
     }
 
     /// Desenha o jogo num tamanho fixo ajustado ao alvo (veja
@@ -560,23 +570,34 @@ impl Renderer {
     /// Painel (retângulo arredondado com borda, ou imagem em 9 fatias) no
     /// espaço do mundo, com centro em `panel.center`.
     pub fn draw_panel(&mut self, panel: &crate::Panel) {
-        for sprite in self.panel_sprites(panel, true) {
-            self.push_sprite(Space::World, &sprite);
-        }
+        self.push_panel(Space::World, panel, true);
     }
 
-    fn panel_sprites(&mut self, panel: &crate::Panel, y_up: bool) -> Vec<Sprite> {
+    /// Os sprites de um painel, num vetor reaproveitado de quadro em quadro.
+    fn push_panel(&mut self, space: Space, panel: &crate::Panel, y_up: bool) {
         let rounded = match panel.image {
             None => self.rounded_textures(panel.radius.max(0.0), panel.border.max(0.0)),
             Some(_) => (self.white, self.white, 1),
         };
+        let mut sprites = std::mem::take(&mut self.panel_buf);
+        sprites.clear();
         let textures = &self.textures;
-        crate::panel::panel_sprites(panel, y_up, &mut |_, _| rounded, &|id| {
-            textures
-                .get(id.0 as usize)
-                .map(|t| t.size)
-                .unwrap_or(UVec2::ONE)
-        })
+        crate::panel::panel_sprites(
+            panel,
+            y_up,
+            &mut |_, _| rounded,
+            &|id| {
+                textures
+                    .get(id.0 as usize)
+                    .map(|t| t.size)
+                    .unwrap_or(UVec2::ONE)
+            },
+            &mut sprites,
+        );
+        for sprite in &sprites {
+            self.push_sprite(space, sprite);
+        }
+        self.panel_buf = sprites;
     }
 
     fn rounded_textures(&mut self, radius: f32, border: f32) -> (TextureId, TextureId, u32) {
@@ -641,7 +662,7 @@ impl Renderer {
         let k = self.text_scale();
         let mut scaled = *text;
         scaled.size = text.size * k;
-        let layout = self.text.layout(&scaled);
+        let layout = self.text.cached_layout(&scaled);
         let color = self.gpu_color(text.color).to_array();
         // Canto superior esquerdo da caixa, relativo a `position`, com Y para baixo.
         let box_offset = -text.anchor_fraction() * layout.size;
@@ -687,11 +708,19 @@ impl Renderer {
     }
 
     fn gpu_color(&self, color: Color) -> Color {
-        if self.format.is_srgb() {
-            color.to_linear()
-        } else {
-            color
+        if !self.format.is_srgb() {
+            return color;
         }
+        // A mesma cor seguida (o branco das imagens, a cor de um texto) não
+        // refaz a conta (três potências).
+        let bits = color_bits(color);
+        let (last, linear) = self.last_color.get();
+        if last == bits {
+            return linear;
+        }
+        let linear = color.to_linear();
+        self.last_color.set((bits, linear));
+        linear
     }
 
     /// Desenha tudo o que foi enfileirado em `target` e esvazia as filas.
@@ -869,6 +898,7 @@ impl Renderer {
                     self.queue.submit([encoder.finish()]);
                     self.world.clear();
                     self.screen.clear();
+                    self.text.end_frame();
                     return self.last_stats;
                 };
                 pass.set_scissor_rect(x, y, w, h);
@@ -913,6 +943,7 @@ impl Renderer {
         };
         self.world.clear();
         self.screen.clear();
+        self.text.end_frame();
         self.last_stats
     }
 
@@ -921,6 +952,7 @@ impl Renderer {
     pub fn discard_frame(&mut self) {
         self.world.clear();
         self.screen.clear();
+        self.text.end_frame();
         self.d3.discard();
     }
 
@@ -1229,7 +1261,7 @@ impl Renderer {
         const PX: f32 = 64.0;
         let mut raster = *text;
         raster.size = PX;
-        let layout = self.text.layout(&raster);
+        let layout = self.text.cached_layout(&raster);
         if opts.size <= 0.0 || (layout.glyphs.is_empty() && opts.background.is_none()) {
             return;
         }
@@ -1583,9 +1615,7 @@ impl ScreenPainter<'_> {
 
     /// Painel com centro em `panel.center` (pixels da tela, Y para baixo).
     pub fn draw_panel(&mut self, panel: &crate::Panel) -> &mut Self {
-        for sprite in self.renderer.panel_sprites(panel, false) {
-            self.renderer.push_sprite(Space::Screen, &sprite);
-        }
+        self.renderer.push_panel(Space::Screen, panel, false);
         self
     }
 }

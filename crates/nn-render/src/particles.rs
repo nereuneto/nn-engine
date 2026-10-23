@@ -263,7 +263,9 @@ impl ParticleEmitter {
         }
     }
 
-    fn sprites(&self, renderer: &Renderer) -> impl Iterator<Item = Sprite> + '_ {
+    // Só olha o renderer para escolher a textura: o iterador não o prende
+    // (desenhar enquanto anda, sem juntar os sprites num vetor antes).
+    fn sprites<'a>(&'a self, renderer: &Renderer) -> impl Iterator<Item = Sprite> + use<'a> {
         let pixel = self.config.pixel;
         let texture = self.config.texture.unwrap_or_else(|| {
             if pixel {
@@ -299,18 +301,17 @@ impl ParticleEmitter {
 
     /// Desenha no espaço do mundo.
     pub fn draw(&self, renderer: &mut Renderer) {
-        let sprites: Vec<Sprite> = self.sprites(renderer).collect();
-        for s in &sprites {
-            renderer.draw(s);
+        for s in self.sprites(renderer) {
+            renderer.draw(&s);
         }
     }
 
     /// Desenha no espaço da tela.
     pub fn draw_screen(&self, renderer: &mut Renderer) {
-        let sprites: Vec<Sprite> = self.sprites(renderer).collect();
+        let sprites = self.sprites(renderer);
         let mut screen = renderer.screen();
-        for s in &sprites {
-            screen.draw(s);
+        for s in sprites {
+            screen.draw(&s);
         }
     }
 

@@ -17,6 +17,12 @@ pub(crate) fn color(value: &Value) -> Result<Color> {
         Value::Integer(n) => Ok(Color::hex(*n as u32)),
         Value::Number(n) => Ok(Color::hex(*n as u32)),
         Value::String(s) => {
+            // O caminho comum ("#RRGGBB" toda vez que algo é desenhado) direto
+            // nos bytes, sem conferir o texto inteiro antes.
+            let bytes = s.as_bytes();
+            if let Some(c) = hex_color(&bytes) {
+                return Ok(c);
+            }
             let s = s.to_str()?;
             let hex = s.trim_start_matches('#');
             let parsed =
@@ -45,6 +51,24 @@ pub(crate) fn color(value: &Value) -> Result<Color> {
         Value::Nil => Ok(Color::WHITE),
         other => Err(err(format!("cor inválida: {}", other.type_name()))),
     }
+}
+
+/// `#RRGGBB` ou `#RRGGBBAA` (com um `#` só), ou `None` para o caminho geral.
+fn hex_color(bytes: &[u8]) -> Option<Color> {
+    let hex = bytes.strip_prefix(b"#")?;
+    if hex.len() != 6 && hex.len() != 8 {
+        return None;
+    }
+    let mut n: u32 = 0;
+    for &b in hex {
+        let d = (b as char).to_digit(16)?;
+        n = n << 4 | d;
+    }
+    Some(if hex.len() == 6 {
+        Color::hex(n)
+    } else {
+        Color::hex(n >> 8).with_alpha((n & 0xFF) as f32 / 255.0)
+    })
 }
 
 /// Lê um campo opcional de uma tabela de opções.

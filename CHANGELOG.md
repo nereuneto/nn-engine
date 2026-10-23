@@ -4,6 +4,25 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Cenas visuais mais leves (Sprint 62)
+
+- **As cenas visuais gastam bem menos tempo por quadro**, com o mesmo resultado na tela. Com 2.000 objetos, medido sem janela:
+
+  | Cena | Antes | Agora |
+  |---|---|---|
+  | 2.000 imagens paradas | 16,4 ms | 3,6 ms |
+  | 2.000 formas paradas | 7,2 ms | 3,0 ms |
+  | 2.000 formas com **Movimento automático** | 10,1 ms | 5,0 ms |
+
+- **Por quê:**
+  - cada imagem pedia ao Rust o tamanho dela e o da janela, e montava uma tabela de opções nova a cada quadro: agora é uma chamada só, sem tabela;
+  - a posição na tela só é calculada para o que é HUD;
+  - os laços que passam por todos os objetos (comportamentos, animações, partículas, desenho) não chamam mais uma função por item;
+  - os corpos da física são lidos todos de uma vez depois de cada passo, não campo a campo.
+- **O Lua quase não aloca memória por quadro:** numa cena de teste com 500 objetos, de uns 200 KB para menos de 1 KB, o que deixa o coletor de lixo bem mais quieto. As chamadas do Lua ao Rust caíram de umas 1.600 para umas 500 por quadro (uma por coisa desenhada).
+- **Texto e painéis:** o layout de um texto que não mudou é reaproveitado de um quadro para o outro, e os painéis e as partículas não montam mais listas a cada quadro. 500 textos e 100 painéis: de 1,8 ms para 0,9 ms.
+- **Testes:** dois testes novos falham se a cena visual voltar a chamar o Rust mais de uma vez por coisa desenhada ou a alocar memória a cada quadro (números que não dependem da máquina, ao contrário do tempo).
+
 ### Limite de quadros e o medidor F3 (Sprint 61)
 
 - **Limite de quadros** (`fps_max` no `config.lua`, ou **Limite de quadros** nas configurações do projeto no NN Studio):

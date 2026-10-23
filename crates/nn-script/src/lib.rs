@@ -62,7 +62,7 @@ use nn_app::{AssetSource, Context, DiskSource, Scene, Transition};
 use nn_core::Color;
 use nn_render::Text;
 
-use crate::api::{CTX_KEY, SceneRequest, Shared};
+use crate::api::{SceneRequest, Shared};
 
 pub use errors::translate_error;
 
@@ -479,13 +479,7 @@ impl ScriptRuntime {
         f: impl FnOnce(&Lua) -> mlua::Result<R>,
     ) -> mlua::Result<R> {
         let lua = &self.inner.lua;
-        lua.scope(|scope| {
-            let ud = scope.create_any_userdata_ref_mut(ctx)?;
-            lua.set_named_registry_value(CTX_KEY, ud)?;
-            let result = f(lua);
-            lua.unset_named_registry_value(CTX_KEY)?;
-            result
-        })
+        crate::api::CtxSlot::enter(lua, ctx, || f(lua))
     }
 
     fn take_request(&self) -> Option<(SceneRequest, Option<nn_app::Fade>)> {

@@ -136,7 +136,7 @@ pub(crate) fn nine_slice(
     margin: Vec2,
     dest: Vec2,
     y_up: bool,
-) -> Vec<(Vec2, Vec2, Rect)> {
+) -> NineSlice {
     let size = size.abs();
     // Painel menor que as duas margens: elas encolhem.
     let dest = dest.min(size * 0.5).max(Vec2::ZERO);
@@ -167,33 +167,51 @@ pub(crate) fn nine_slice(
             margin.y,
         ),
     ];
-    let mut out = Vec::with_capacity(9);
+    let mut out = NineSlice {
+        pieces: [(Vec2::ZERO, Vec2::ZERO, Rect::FULL); 9],
+        len: 0,
+    };
     for (oy, h, v, vh) in rows {
         for (ox, w, u, uw) in cols {
             if w <= 0.0 || h <= 0.0 {
                 continue;
             }
-            out.push((
+            out.pieces[out.len] = (
                 center + Vec2::new(ox, oy),
                 Vec2::new(w, h),
                 Rect::new(u, v, uw, vh),
-            ));
+            );
+            out.len += 1;
         }
     }
     out
 }
 
-/// Os sprites que desenham o painel. `rounded` dá as texturas (fundo,
-/// borda) para um raio e uma borda; `image_size` o tamanho de uma textura.
+/// Os pedaços de [`nine_slice`] (até 9, sem alocar).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct NineSlice {
+    pieces: [(Vec2, Vec2, Rect); 9],
+    len: usize,
+}
+
+impl NineSlice {
+    pub fn as_slice(&self) -> &[(Vec2, Vec2, Rect)] {
+        &self.pieces[..self.len]
+    }
+}
+
+/// Os sprites que desenham o painel, postos em `out`. `rounded` dá as
+/// texturas (fundo, borda) para um raio e uma borda; `image_size` o tamanho
+/// de uma textura.
 pub(crate) fn panel_sprites(
     panel: &Panel,
     y_up: bool,
     rounded: &mut dyn FnMut(f32, f32) -> (TextureId, TextureId, u32),
     image_size: &dyn Fn(TextureId) -> UVec2,
-) -> Vec<Sprite> {
-    let mut out = Vec::new();
+    out: &mut Vec<Sprite>,
+) {
     if panel.size.x.abs() < 0.01 || panel.size.y.abs() < 0.01 {
-        return out;
+        return;
     }
     let sprite = |tex: TextureId, (c, s, r): (Vec2, Vec2, Rect), color: Color| {
         Sprite::new(tex).at(c).size(s).region(r).color(color)
@@ -202,10 +220,12 @@ pub(crate) fn panel_sprites(
         let ts = image_size(img.texture).as_vec2().max(Vec2::ONE);
         let margin = (Vec2::splat(img.slice) / ts).min(Vec2::new(img.region.w, img.region.h) * 0.5);
         let dest = Vec2::splat(img.slice * img.scale.max(0.0));
-        for piece in nine_slice(panel.center, panel.size, img.region, margin, dest, y_up) {
+        for &piece in
+            nine_slice(panel.center, panel.size, img.region, margin, dest, y_up).as_slice()
+        {
             out.push(sprite(img.texture, piece, panel.color));
         }
-        return out;
+        return;
     }
     let radius = panel.radius.max(0.0);
     let border = panel.border.max(0.0);
@@ -214,15 +234,15 @@ pub(crate) fn panel_sprites(
     let margin = Vec2::splat(m as f32 / side);
     // A margem da textura (m pixels) vale o raio (ou a borda) no desenho.
     let dest = Vec2::splat(radius.max(border).max(1.0));
-    for piece in nine_slice(panel.center, panel.size, Rect::FULL, margin, dest, y_up) {
+    let pieces = nine_slice(panel.center, panel.size, Rect::FULL, margin, dest, y_up);
+    for &piece in pieces.as_slice() {
         out.push(sprite(fill, piece, panel.color));
     }
     if border > 0.0 && panel.border_color.a > 0.0 {
-        for piece in nine_slice(panel.center, panel.size, Rect::FULL, margin, dest, y_up) {
+        for &piece in pieces.as_slice() {
             out.push(sprite(ring, piece, panel.border_color));
         }
     }
-    out
 }
 
 #[cfg(test)]
@@ -253,6 +273,7 @@ mod tests {
             Vec2::splat(10.0),
             true,
         );
+        let pieces = pieces.as_slice();
         assert_eq!(pieces.len(), 9);
         let area: f32 = pieces.iter().map(|(_, s, _)| s.x * s.y).sum();
         assert!((area - 4000.0).abs() < 0.01);
@@ -269,6 +290,6 @@ mod tests {
             Vec2::splat(10.0),
             false,
         );
-        assert_eq!(small.len(), 4);
+        assert_eq!(small.as_slice().len(), 4);
     }
 }
