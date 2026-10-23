@@ -398,7 +398,7 @@ com explicação ao passar o mouse.
 
 | Categoria | Comportamento | O que faz |
 |---|---|---|
-| Jogador | Jogador de plataforma | Anda para os lados e pula (setas, WASD, espaço ou controle), com tolerância na beirada e pulo mais alto segurando. Pede um corpo físico. |
+| Jogador | Jogador de plataforma | Anda para os lados e pula (setas, WASD, espaço ou controle), com tolerância na beirada e pulo mais alto segurando. **Som do pulo** toca a cada pulo, e a condição **Pular** dos eventos avisa. Pede um corpo físico. |
 | Jogador | Jogador top-down | Anda em todas as direções (jogo visto de cima). |
 | Jogador | Vida | Pontos de vida. Quando acabam: reinicia a cena, volta ao checkpoint, vai para outra cena ou o objeto some. |
 | Inimigos | Patrulha | Anda até bater numa parede (ou chegar na beirada) e volta. |
@@ -408,7 +408,7 @@ com explicação ao passar o mouse.
 | Fases | Checkpoint | Ao passar, o jogador volta para cá quando perder. |
 | Fases | Ir para cena | Porta, saída, bandeira: leva para outra cena (ao encostar ou apertando uma tecla). |
 | Movimento | Movimento automático | Gira, flutua ou vai e volta sozinho (plataformas móveis, enfeites). |
-| Aparência | Animação automática | Troca a animação quando o objeto está parado, andando, pulando ou caindo. Em cada estado, escolha uma das [animações](#animações) da imagem no ☰ (ou escreva quadros: `1-4`, `5,6`...). |
+| Aparência | Animação automática | Troca a animação quando o objeto está parado, andando, pulando ou caindo. Em cada estado, escolha uma das [animações](#animações) da imagem no ☰ (ou escreva quadros: `1-4`, `5,6`...). Deixando como vem, usa sozinha as animações chamadas `parado`, `andar`, `pular` e `cair`. |
 | Aparência | Mostrar valor | Mostra variáveis do jogo num texto: `Moedas: {moedas}`. |
 | Ações | Atirar | Cria um tiro (um prefab) ao apertar uma tecla ou sozinho, de tempos em tempos. |
 | Ações | Gerador | Cria objetos (um prefab) de tempos em tempos. |

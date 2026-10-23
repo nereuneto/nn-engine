@@ -38,6 +38,12 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - **Partículas de pixel art:** o componente Partículas ganhou **Pixel art** (`pixel`): quadradinhos de tamanho inteiro, sem girar. As faíscas de pegar uma moeda (`nn:coletavel`) seguem o tamanho da tela e, numa tela pequena, viram quadradinhos.
 - **Colisão deslocada:** o corpo 2D ganhou **Deslocar x** e **Deslocar y** (`ox`, `oy`), para a caixa de colisão ficar nos pés de um sprite com espaço vazio. O NN Studio desenha a caixa no lugar certo.
 - **`animar`** também volta a **casca de cebola**: cada quadro sobre a sombra do anterior, para ver o movimento.
+- **Jogos de tela pequena (pixel art):**
+  - a **caixa de fala** dos diálogos, as escolhas e o aviso **"E falar"** seguem o tamanho da tela (em 320x180 a caixa cobria dois terços dela e a primeira escolha saía por cima); o retrato é desenhado como pixel art e o aviso não sai da tela;
+  - o servidor MCP avisa quando velocidades, pulos e letras ficaram no padrão, que é pensado para uma tela de 720 de altura, e sugere os números na escala da tela; o corpo que vem junto com um comportamento tem o tamanho do quadro do sprite.
+- **`nn:plataforma`:** **Som do pulo** e a condição **Pular** nos eventos (para um som ou poeira a cada pulo). Um pulo guardado (apertado logo antes de cair) com o botão já solto fica baixo, como um toque.
+- **`nn:animacao`** com os campos no padrão usa sozinho as animações da imagem chamadas `parado`, `andar`, `pular` e `cair` (e a que o sprite já tocava).
+- **No servidor MCP:** `rodar_jogo` lista os **sons que tocaram**, os tempos de cada regra e o inventário no que mudou; `conferir_projeto` também confere mapas, tilesets, diálogos e `.sfx`; os mapas vêm ampliados com a **colisão por cima** (a borda do que bloqueia em vermelho, as plataformas em amarelo) e o tileset com o número de cada tile.
 - **Para quem usa as crates:** os mapas, tilesets, efeitos de partículas e diálogos saíram do NN Studio para o `nn-projeto` (`map`, `tileset`, `particles`, `dialogue`), e o gerador de sons é o `nn_projeto::sfx`. O `ParticleConfig` da `nn-render` ganhou `pixel`.
 
 ## 0.7.0
