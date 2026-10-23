@@ -2840,10 +2840,12 @@ dependencies = [
 name = "nn-mcp"
 version = "0.7.0"
 dependencies = [
+ "glam 0.34.1",
  "image",
  "log",
  "mlua",
  "nn-projeto",
+ "nn-render",
  "nn-script",
  "serde_json",
 ]
@@ -2880,6 +2882,8 @@ dependencies = [
  "image",
  "log",
  "mlua",
+ "nn-core",
+ "nn-render",
  "nn-script",
  "nn-tilemap",
  "serde_json",
@@ -2914,6 +2918,7 @@ dependencies = [
  "nn-input",
  "nn-mcp",
  "nn-projeto",
+ "nn-render",
  "nn-script",
  "serde_json",
 ]

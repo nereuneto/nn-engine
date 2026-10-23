@@ -2855,7 +2855,7 @@ fn cena_3d_oferece_so_componentes_e_comportamentos_do_3d() {
         "o corpo 2D não vale no 3D"
     );
     assert!(h.query_by_label("Imagem (sprite)").is_none());
-    h.get_by_label_contains("Jogador").click();
+    h.get_by_label("Jogador ⏵").click();
     h.run();
     h.get_by_label("Jogador 3D");
     assert!(h.query_by_label("Jogador de plataforma").is_none());

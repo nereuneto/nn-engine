@@ -132,7 +132,7 @@ fn agente_monta_um_jogo_de_plataforma_do_zero() {
             "when": [ { "cond": "acabaram", "nome": "moeda" } ],
             "actions": [ { "act": "ir_para_cena", "cena": fase } ] } }),
     );
-    assert!(text.starts_with("Regra 1 de 1 em a cena: Quando"), "{text}");
+    assert!(text.starts_with("Regra 1 de 1 na cena: Quando"), "{text}");
     // O exemplo da documentação (docs/mcp.md e a descrição de por_regra).
     let text = ok(
         &mut s,
@@ -1350,5 +1350,130 @@ fn agente_escreve_um_dialogo() {
         json!({ "cena": "cenas/fase.cena", "segundos": 0.5, "captura_final": false }),
     );
     assert!(t.contains("Erros: nenhum"), "{t}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Modelos 3D pelo agente: um pronto, mudado com operações, visto em quatro
+/// vistas; e um .glb de fora (com esqueleto e animações) descrito.
+#[test]
+fn agente_modela_em_3d() {
+    let dir = temp("modelos3d");
+    let mut s = server(&dir);
+    ok(&mut s, "criar_projeto", json!({ "modelo": "3d" }));
+    let rel = "modelos/torre.modelo";
+    let e = fails(
+        &mut s,
+        "criar_modelo",
+        json!({ "caminho": rel, "a_partir": "castelo" }),
+    );
+    assert!(e.contains("muro, borda, escada, ponte, placa"), "{e}");
+    let (t, pngs) = images(
+        &mut s,
+        "criar_modelo",
+        json!({ "caminho": rel, "a_partir": "muro" }),
+    );
+    assert!(
+        t.contains("Criei modelos/torre.modelo (e modelos/torre.glb)"),
+        "{t}"
+    );
+    assert!(t.contains("Tamanho 2.08 x 1.32 x 0.4 m"), "{t}");
+    assert_eq!(pngs.len(), 1);
+    assert!(dir.join("modelos/torre.glb").is_file());
+
+    let (t, pngs) = images(
+        &mut s,
+        "modelar",
+        json!({ "caminho": rel, "operacoes": [
+            { "criar": "torre", "forma": "cilindro", "lados": 8, "tamanho": [1.2, 3, 1.2], "em": [-1.4, 0, 0], "cor": "#B8B8B8" },
+            { "peca": "torre", "extrudar": "cima", "distancia": 1, "afinar": 0 },
+            { "peca": "torre", "cor": "#E84A4A", "lado": "cima" },
+            { "copiar": "torre", "nome": "torre_d", "espelhar": "x" },
+            { "peca": "Muro", "recuar": "frente", "quanto": 0.5, "fundo": -0.1, "cor_dentro": "#1E1E1E" },
+        ] }),
+    );
+    assert!(t.contains("peça \"torre\" (cilindro)"), "{t}");
+    assert!(
+        t.contains("copiei \"torre\" em \"torre_d\" (espelhada)"),
+        "{t}"
+    );
+    assert!(t.contains("\"torre_d\": em [1.4, 0, 0]"), "{t}");
+    assert!(t.contains("vai de y = 0 a 4"), "{t}");
+    let img = image::load_from_memory(&pngs[0]).unwrap();
+    assert_eq!(img.width(), 602);
+    if std::env::var("NN_FX_OUT").is_ok() {
+        img.save("/tmp/torre.png").unwrap();
+    }
+    let e = fails(
+        &mut s,
+        "modelar",
+        json!({ "caminho": rel, "operacoes": [{ "peca": "telhado", "cor": "#fff" }] }),
+    );
+    assert!(
+        e.contains("não há a peça \"telhado\" (tem: Muro, Topo, torre, torre_d)"),
+        "{e}"
+    );
+
+    // O .glb que o jogo usa é o do modelo.
+    let glb = std::fs::read(dir.join("modelos/torre.glb")).unwrap();
+    let data = nn_render::d3::ModelData::from_gltf(&glb, &mut |_| None).unwrap();
+    let (a, b) = data.bounds();
+    assert!((b.y - 4.0).abs() < 0.01 && a.y.abs() < 0.01, "{a} {b}");
+
+    // Um .glb de fora: o herói do modelo 3D, com animações.
+    let t = ok(
+        &mut s,
+        "ver_modelo",
+        json!({ "caminho": "modelos/heroi.glb" }),
+    );
+    assert!(t.contains("Esqueleto:"), "{t}");
+    assert!(t.contains("Animações:"), "{t}");
+    let anim = t
+        .split("Animações: ")
+        .nth(1)
+        .and_then(|r| r.split(" (").next())
+        .unwrap()
+        .to_string();
+    let (t, pngs) = images(
+        &mut s,
+        "ver_modelo",
+        json!({ "caminho": "modelos/heroi.glb", "animacao": anim, "tempo": 0.3, "vista": "frente" }),
+    );
+    assert!(t.contains("Na animação"), "{t}");
+    assert_eq!(image::load_from_memory(&pngs[0]).unwrap().width(), 600);
+    if std::env::var("NN_FX_OUT").is_ok() {
+        std::fs::write("/tmp/heroi.png", &pngs[0]).unwrap();
+    }
+    let e = fails(
+        &mut s,
+        "ver_modelo",
+        json!({ "caminho": "modelos/heroi.glb", "animacao": "voar" }),
+    );
+    assert!(e.contains("não tem a animação \"voar\""), "{e}");
+
+    // Um valor que não existe num campo de escolha.
+    ok(
+        &mut s,
+        "criar_cena",
+        json!({ "caminho": "cenas/teste.cena", "tipo": "3d" }),
+    );
+    let e = fails(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/teste.cena", "objeto": { "name": "x", "components": [{ "type": "body3d", "shape": "xyz" }] } }),
+    );
+    assert!(
+        e.contains("\"shape\" = \"xyz\" não existe; use \"auto\""),
+        "{e}"
+    );
+
+    // No jogo.
+    let t = ok(
+        &mut s,
+        "rodar_jogo",
+        json!({ "segundos": 0.3, "captura_final": false }),
+    );
+    assert!(t.contains("Erros: nenhum"), "{t}");
+    ok(&mut s, "desfazer", json!({ "passos": 10 }));
+    assert!(!dir.join(rel).exists());
     let _ = std::fs::remove_dir_all(&dir);
 }

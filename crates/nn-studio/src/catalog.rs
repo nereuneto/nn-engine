@@ -346,6 +346,18 @@ pub fn catalog3() -> Vec<Entry> {
             .into(),
     );
     out.push(
+        item("Câmera de menu (girando)", || {
+            let mut o = with("Câmera", "camera3d");
+            o.y = 5.0;
+            o.z = 12.0;
+            o.components.push(behavior("nn:camera_orbita", true, &[]));
+            o
+        })
+        .tip("Uma câmera que dá voltas devagar em volta da cena (ou de um objeto): telas de título e de menu em 3D.")
+        .words("titulo menu orbita girar vitrine")
+        .into(),
+    );
+    out.push(
         item("Vazio", || Object::new(0, "Grupo"))
             .tip("Um objeto sem nada, para agrupar outros")
             .words("grupo pasta")

@@ -23,6 +23,33 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - **NN Studio:** o editor de pixel art ganhou **Contorno** (uma borda com a cor principal em volta do desenho) e **Trocar cor** (a secundária pela principal no quadro todo).
 - **Para quem usa as crates:** as operações de pixel art e o `.anim` saíram do NN Studio para o `nn-projeto` (`pixel`, `anim`), usado pelo editor e pelo servidor. O `pixel` ganhou `flip`, `rotate`, `shift`, `replace_color`, `outline`, `draw_text_art`, `as_text_art` e `preview`.
 
+### Modelagem 3D pelo agente (Sprint 57)
+
+- **O agente de IA faz os modelos 3D do jogo.** Três ferramentas novas no servidor MCP, com o mesmo `.modelo` do modelador do NN Studio. Cada passo volta desenhado em **quatro vistas** (frente, lado, de cima e na diagonal), com uma grade de 1 m, o chão e a origem, sem precisar de placa de vídeo. Como usar: [Modelos 3D](docs/mcp.md#modelos-3d).
+  - **`criar_modelo`:** um modelo vazio, de um modelo pronto ou da cópia de outro. Grava junto o `.glb` que o jogo usa.
+  - **`modelar`:** várias operações numa chamada:
+    - peças de uma forma (cubo, cilindro, cone, pirâmide, esfera, plano, rampa) com tamanho, posição, giro e cor, e as peças dos kits;
+    - mover, girar, escalar ou dar um tamanho;
+    - pintar a peça ou só as faces de um lado;
+    - extrudar (com a ponta afinando), recuar (portas e janelas) e afinar;
+    - simetria, copiar espelhado, juntar, apagar e renomear.
+  - **`ver_modelo`:** um `.modelo` ou **qualquer `.glb`** (Blender, Mixamo):
+    - o tamanho em metros e onde ficam a base e a origem, com um aviso quando o modelo está em centímetros, afunda ou flutua;
+    - as peças, as cores, o brilho, os ossos e as animações;
+    - o desenho em quatro vistas ou numa só, também num quadro de uma animação.
+- **Brilho por peça:** uma peça do modelo pode acender com a própria cor (no modelador, **Brilho**; no `modelar`, `brilho`), e o `.glb` leva isso.
+- **Peças de cenário prontas** (no modelador e no `criar_modelo`): **muro**, **borda**, **escada**, **ponte** e **placa**, de 2 m para emendar.
+- **A cor de um modelo tinge o brilho dele:** o brilho que vem do arquivo (*emissive*) também pega a `color` do objeto.
+- **Câmera girando em volta** (`nn:camera_orbita`): numa Câmera 3D, dá voltas devagar em volta de um objeto ou do meio da cena, olhando para ele, para telas de título e de menu. No NN Studio: **➕ Objeto > Câmera de menu (girando)**.
+- **Contagem regressiva** (`nn:contagem`, 2D e 3D): conta os segundos para trás numa variável do jogo (para o HUD mostrar) e, no zero, avisa a condição nova **Contagem acabar**, reinicia a cena ou vai para outra. Recebe `comecar`, `parar`, `reiniciar` e `somar`.
+- **A prova:** um agente fez um jogo 3D só pelo servidor, com os modelos dele (um cavaleiro, uma gema que brilha, uma torre e um portal), um menu com a câmera girando e uma contagem regressiva. Saíram estes acertos:
+  - `modelar`: espelhar também em Z, cilindros e cones com uma face para a frente e no tamanho exato, pirâmide com `lados`, `abertura` no recuar, lados pelos eixos e a direita e a esquerda explicadas;
+  - `ver_modelo`: as costas, um traço para a frente, `metros` para comparar e de onde a onde cada peça vai;
+  - `ver_corpos` no 3D desenha também o cenário de malha exata (o chão, as paredes, a escada);
+  - os campos de escolha dos componentes (a forma de um corpo, o tipo de uma luz) são conferidos, também no `conferir_projeto`;
+  - a contagem regressiva segue a variável (um bônus de tempo funciona), e as cópias com **Girar e flutuar** não sobem e descem todas juntas.
+- **Para quem usa as crates:** o modelo do modelador, as peças e os modelos prontos saíram do NN Studio para o `nn-projeto` (`model`, `model_kits`). O desenho sem placa de vídeo é o `nn_projeto::model_view`.
+
 ### Mapas, partículas, sons e diálogos pelo agente (Sprint 56)
 
 - **Mapas de tiles pelo agente.** Quatro ferramentas novas no servidor MCP, com o mesmo `.tmj` e `.tsj` do editor de mapas do NN Studio. Como usar: [Mapas, partículas, sons e diálogos](docs/mcp.md#mapas-partículas-sons-e-diálogos).

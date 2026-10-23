@@ -251,6 +251,18 @@ pub fn apply_fields(
                     convert(key, v, default, key.contains("color"))
                         .map_err(|e| format!("{kind}: {e}"))?
                 };
+                if let (Prop::Str(text), Some(choices)) = (&p, scene_data::field_choices(kind, key))
+                    && !choices.contains(&text.as_str())
+                {
+                    return Err(format!(
+                        "{kind}: \"{key}\" = \"{text}\" não existe; use {}",
+                        choices
+                            .iter()
+                            .map(|c| format!("\"{c}\""))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
                 comp.set(key, p);
             }
             Target::Behavior(info) => {

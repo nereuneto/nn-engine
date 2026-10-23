@@ -1913,6 +1913,35 @@ impl History {
 }
 
 /// Nome e descrição de cada componente.
+/// Os valores que um campo de texto de um componente aceita (os que o
+/// Inspetor oferece), ou `None` se ele é livre.
+pub fn field_choices(kind: &str, key: &str) -> Option<&'static [&'static str]> {
+    Some(match (kind, key) {
+        ("sprite", "fill") => &["stretch", "repeat"],
+        ("shape", "shape") => &["rect", "circle"],
+        ("body", "body") => &["dynamic", "static", "kinematic"],
+        ("body", "shape") => &["box", "circle"],
+        ("sound", "channel") => &["effects", "music"],
+        ("particles", "mode") => &["continuo", "explosao"],
+        ("particles", "when_done") => &["nada", "destruir"],
+        ("particles", "area") => &["ponto", "retangulo", "circulo"],
+        ("particles", "blend") => &["alpha", "add"],
+        ("bar", "direction") => &["right", "left", "up", "down"],
+        ("icons", "align") => &["left", "center", "right"],
+        ("slider", "target") => &["variavel", "musica", "efeitos", "geral"],
+        ("checkbox", "target") => &["variavel", "tela_cheia"],
+        ("layout", "arrange") => &["vertical", "horizontal", "grid", "none"],
+        ("layout", "align") => &["start", "center", "end"],
+        ("shape3d", "shape") => &["cube", "sphere", "cylinder", "cone", "capsule", "plane"],
+        ("shape3d", "material") => &["normal", "agua"],
+        ("light3d", "kind") => &["point", "spot"],
+        ("text3d", "facing") => &["camera", "placa"],
+        ("body3d", "body") => &["static", "dynamic", "kinematic"],
+        ("body3d", "shape") => &["auto", "box", "sphere", "capsule", "cylinder", "mesh"],
+        _ => return None,
+    })
+}
+
 pub fn component_info(kind: &str) -> (&'static str, &'static str) {
     match kind {
         "sprite" => (

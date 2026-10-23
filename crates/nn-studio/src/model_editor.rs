@@ -2054,6 +2054,20 @@ impl ModelDoc {
                         ui.end_row();
                     }
                 });
+            ui.horizontal(|ui| {
+                ui.label("Brilho");
+                let r = ui
+                    .add(
+                        egui::DragValue::new(&mut p.glow)
+                            .speed(0.01)
+                            .range(0.0..=1.0)
+                            .max_decimals(2),
+                    )
+                    .on_hover_text(
+                        "A peça acende com a própria cor, mesmo no escuro: o vidro da lanterna, os olhos, um cristal. Aparece na cena e no jogo (0 = não brilha).",
+                    );
+                record |= r.drag_started() || (r.changed() && !r.dragged());
+            });
             if record {
                 self.undo.push(before);
                 self.redo.clear();

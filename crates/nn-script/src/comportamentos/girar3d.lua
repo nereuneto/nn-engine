@@ -14,8 +14,11 @@ local B = {
 }
 
 function B:start()
-  self.t = 0
-  self.y0 = self.obj.y
+  -- Cada cópia começa num ponto do sobe e desce (pelo lugar dela): várias
+  -- moedas não flutuam todas juntas.
+  local o = self.obj
+  self.t = ((o.x or 0) * 0.37 + (o.z or 0) * 0.61) % math.max(self.duracao, 0.1)
+  self.y0 = o.y
 end
 
 function B:fixed_update(dt)

@@ -1265,3 +1265,37 @@ fn halo_so_em_volta_do_que_brilha() {
         assert_eq!(h.renderer.last_stats3().halo, visto, "sol {sol}");
     }
 }
+
+/// O brilho do arquivo (emissive) pega a cor do objeto: um modelo branco que
+/// brilha, tingido de vermelho, brilha vermelho (no escuro).
+#[test]
+fn cor_do_objeto_tinge_o_brilho_do_modelo() {
+    let Some(mut h) = Harness::new() else { return };
+    h.renderer.set_light3d(Light3D {
+        sun_color: Color::BLACK,
+        sky: Color::BLACK,
+        ground: Color::BLACK,
+        ..Light3D::default()
+    });
+    let data = ModelData {
+        parts: vec![nn_render::d3::ModelPart {
+            mesh: shapes::cube(),
+            image: None,
+            skin: Vec::new(),
+            emissive: Color::WHITE,
+        }],
+        images: Vec::new(),
+        skeleton: None,
+    };
+    let model = h.renderer.create_model(&data);
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.0, 3.0), Vec3::ZERO));
+    h.renderer
+        .draw_model(&model, Mat4::IDENTITY, Color::RED, false);
+    let img = h.render(Color::BLACK);
+    let p = pixel(&img, 32, 32);
+    assert!(
+        p[0] > 200 && p[1] < 40 && p[2] < 40,
+        "brilho vermelho: {p:?}"
+    );
+}

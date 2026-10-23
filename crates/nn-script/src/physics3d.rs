@@ -579,6 +579,10 @@ pub(crate) fn ray_distance(
 }
 
 /// Mostra as formas de colisão por cima do mundo (meio transparentes).
+/// As malhas dos corpos de malha exata, para o `debug_draw`.
+#[derive(Default)]
+struct DebugMeshes(HashMap<(u64, usize, usize), nn_render::d3::MeshId>);
+
 fn debug_draw(lua: &Lua, world: &SharedWorld3) -> Result<()> {
     use crate::d3::shape;
     use nn_render::d3::shapes;
@@ -616,7 +620,38 @@ fn debug_draw(lua: &Lua, world: &SharedWorld3) -> Result<()> {
             Shape3::Capsule { radius, height } => {
                 (capsule, Vec3::new(radius * 4.0, *height, radius * 4.0))
             }
-            Shape3::Mesh { .. } => continue,
+            Shape3::Mesh {
+                vertices,
+                triangles,
+            } => {
+                // O cenário de malha exata (chão, paredes, a escada): os
+                // triângulos, um pouco para fora (para não brigar com o
+                // modelo). Guardado por corpo.
+                let key = (id.to_bits(), vertices.len(), triangles.len());
+                let cached = lua
+                    .app_data_ref::<DebugMeshes>()
+                    .and_then(|c| c.0.get(&key).copied());
+                let mesh = match cached {
+                    Some(m) => m,
+                    None => {
+                        let mut mesh = nn_render::d3::Mesh::new();
+                        for t in triangles {
+                            let [a, b, c] = t.map(|i| vertices[i as usize]);
+                            let n = (b - a).cross(c - a).normalize_or_zero() * 0.02;
+                            mesh.flat_triangle(a + n, b + n, c + n, Color::WHITE);
+                        }
+                        let m = crate::d3::upload(lua, &mesh)?.id;
+                        if lua.app_data_ref::<DebugMeshes>().is_none() {
+                            lua.set_app_data(DebugMeshes::default());
+                        }
+                        if let Some(mut c) = lua.app_data_mut::<DebugMeshes>() {
+                            c.0.insert(key, m);
+                        }
+                        m
+                    }
+                };
+                (mesh, Vec3::splat(1.0 / 1.01))
+            }
         };
         // As mesmas cores do 2D.
         let color = if s.world.is_sensor(id) {
