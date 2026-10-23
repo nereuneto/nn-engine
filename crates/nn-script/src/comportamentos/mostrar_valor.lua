@@ -30,8 +30,13 @@ function B:update(dt)
   end
 end
 
--- Já certo no primeiro quadro (antes, mostrava o texto do arquivo).
+-- Já certo no primeiro quadro (antes, mostrava o texto do arquivo), com o
+-- que os outros comportamentos escreveram ao começar (uma contagem).
 function B:start()
+  self:update(0)
+end
+
+function B:after_start()
   self:update(0)
 end
 

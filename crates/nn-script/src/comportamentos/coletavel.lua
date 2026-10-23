@@ -12,7 +12,7 @@ local B = {
     { "item", "", label = "Guardar no inventário",
       help = "Nome do item (\"chave\", \"poção\"). Vazio = não guarda. Portas e o Interagir pedem itens pelo nome." },
     { "icone", "", type = "image", label = "Ícone do item",
-      help = "Como ele aparece no Mostrar inventário. Vazio = a imagem do objeto (no 2D)." },
+      help = "Como ele aparece no Mostrar inventário. Vazio = a imagem do objeto (no 2D); no 3D, o nome do item. Um ícone de pixel art pequeno (16x16) serve nos dois." },
     { "som", "", type = "sound", label = "Som" },
     { "brilho", true, label = "Brilho ao pegar" },
     { "cor_brilho", "#FFD166", type = "color", label = "Cor do brilho", advanced = true },

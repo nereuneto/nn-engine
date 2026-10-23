@@ -1260,6 +1260,15 @@ pub fn write(scene: &SceneData) -> String {
     s
 }
 
+/// Campos que vieram depois da 0.7: no valor padrão, não vão para o
+/// arquivo. Assim um projeto da 0.7 aberto e gravado sai igual, e o arquivo
+/// continua abrindo no `nn` da 0.7.
+const LATE_FIELDS: &[(&str, &str)] = &[("body", "ox"), ("body", "oy"), ("particles", "pixel")];
+
+fn late_default(kind: &str, key: &str, v: &Prop) -> bool {
+    LATE_FIELDS.contains(&(kind, key)) && schema().default_of(kind, key) == Some(v)
+}
+
 fn write_objects(s: &mut String, list: &[Object], depth: usize) {
     let pad = "  ".repeat(depth);
     for o in list {
@@ -1324,6 +1333,9 @@ fn write_objects(s: &mut String, list: &[Object], depth: usize) {
             for c in &o.components {
                 let mut line = format!("type = {}", crate::config_lua::lua_string(&c.kind));
                 for (k, v) in &c.props {
+                    if late_default(&c.kind, k, v) {
+                        continue;
+                    }
                     line.push_str(&format!(", {k} = {}", v.to_lua()));
                 }
                 s.push_str(&format!("{inner}  {{ {line} }},\n"));
@@ -2192,6 +2204,42 @@ mod tests {
         assert_eq!(write(&lido), text);
         assert!(text.contains("x = 10.5, y = -3, rotation = 45"), "{text}");
         assert!(text.contains("locked = true"), "{text}");
+    }
+
+    #[test]
+    fn uma_cena_da_0_7_regravada_sai_igual() {
+        // Como o NN Studio 0.7.0 gravava um corpo e partículas (sem os
+        // campos que vieram depois: ox, oy, pixel).
+        let text = r#"return {
+  objects = {
+    {
+      id = 1, name = "chao",
+      x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,
+      visible = true, layer = 0,
+      components = {
+        { type = "body", body = "static", shape = "box", w = 32, h = 32, radius = 16, sensor = false, one_way = false, bounce = 0, gravity_scale = 1, tag = "" },
+      },
+    },
+  },
+}
+"#;
+        let s = read(text, "a.cena").unwrap();
+        let back = write(&s);
+        assert!(!back.contains("ox ="), "{back}");
+        let body = s.objects[0].components[0].clone();
+        assert_eq!(body.num("ox"), 0.0);
+        // Mudado, vai para o arquivo.
+        let mut s2 = s.clone();
+        s2.objects[0].components[0].set("oy", Prop::Num(4.0));
+        assert!(write(&s2).contains("oy = 4"));
+        let line = |t: &str| {
+            t.lines()
+                .find(|l| l.contains("type = \"body\""))
+                .unwrap()
+                .trim()
+                .to_string()
+        };
+        assert_eq!(line(&back), line(text));
     }
 
     #[test]

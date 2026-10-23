@@ -243,10 +243,25 @@ fn rodar_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
             out.push_str(&format!("  {:.2} s  {}\n", c.time, c.scene));
         }
     }
+    if !report.restarts.is_empty() {
+        let list: Vec<String> = report
+            .restarts
+            .iter()
+            .map(|t| format!("{t:.2} s"))
+            .collect();
+        out.push_str(&format!(
+            "\nA cena reiniciou (começou de novo) em: {}. Por isso, abaixo vai o estado no fim, não a diferença desde o começo.\n",
+            list.join(", ")
+        ));
+    }
     write_state(
         &mut out,
         &start_scene,
-        before.as_ref(),
+        if report.restarts.is_empty() {
+            before.as_ref()
+        } else {
+            None
+        },
         &end_scene,
         after.as_ref(),
     );

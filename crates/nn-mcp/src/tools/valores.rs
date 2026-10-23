@@ -557,6 +557,22 @@ pub fn set_object_field(o: &mut Object, key: &str, v: &Value) -> Result<(), Stri
     Ok(())
 }
 
+/// A âncora do texto que combina com a do objeto preso num canto ou lado da
+/// tela (`top_left` → `topleft`); `None` no meio ou sem âncora.
+fn text_anchor_for(screen: &str) -> Option<&'static str> {
+    Some(match screen {
+        "top_left" => "topleft",
+        "top" => "top",
+        "top_right" => "topright",
+        "left" => "left",
+        "right" => "right",
+        "bottom_left" => "bottomleft",
+        "bottom" => "bottom",
+        "bottom_right" => "bottomright",
+        _ => return None,
+    })
+}
+
 impl Server {
     /// Objeto (com filhos) a partir do JSON. Os ids vêm de `next_id`.
     pub(crate) fn object_from_json(
@@ -616,8 +632,21 @@ impl Server {
                     apply_fields(&mut o.components[i], &target, c, three_d)?;
                     continue;
                 }
-                let comp =
+                let mut comp =
                     new_component(&target, c, three_d).map_err(|e| format!("{name}: {e}"))?;
+                // Um texto preso num canto da tela sem "anchor" próprio fica
+                // alinhado a esse canto (senão o meio dele fica no ponto, e
+                // um texto comprido sai da tela).
+                if comp.kind == "text"
+                    && !c.contains_key("anchor")
+                    && let Some(a) = text_anchor_for(&o.anchor)
+                {
+                    comp.set("anchor", Prop::Str(a.to_string()));
+                    notes.push(format!(
+                        "{name}: o texto ficou com \"anchor\": \"{a}\", alinhado ao canto \"{}\" da tela",
+                        o.anchor
+                    ));
+                }
                 o.components.push(comp);
                 if let Target::Behavior(info) = &target {
                     notes.extend(add_requirements(&self.root, &mut o, info, three_d));
