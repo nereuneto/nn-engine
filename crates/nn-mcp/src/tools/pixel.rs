@@ -206,12 +206,19 @@ fn ints(v: &Value, n: usize, what: &str) -> Result<Vec<i32>, String> {
         .collect()
 }
 
-/// A imagem ampliada para mandar ao agente.
+/// A imagem ampliada para mandar ao agente: o quadro (`fw`×`fh`, ou a
+/// imagem) com uns 512 pixels, sem a folha passar de uns 1600 de largura.
 fn preview_png(img: &RgbaImage, fw: u32, fh: u32, scale: Option<u32>) -> Result<Vec<u8>, String> {
-    let side = img.width().max(img.height()).max(1);
-    let scale = scale
-        .unwrap_or((PREVIEW_SIDE / side).clamp(1, 16))
-        .clamp(1, 32);
+    let side = if fw > 0 && fh > 0 {
+        fw.max(fh)
+    } else {
+        img.width().max(img.height())
+    }
+    .max(1);
+    let fit = (PREVIEW_SIDE / side)
+        .min(1600 / img.width().max(1))
+        .min(1200 / img.height().max(1));
+    let scale = scale.unwrap_or(fit.clamp(1, 16)).clamp(1, 32);
     let p = px::preview(img, scale, fw, fh, true);
     let mut png = Vec::new();
     p.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
@@ -276,6 +283,14 @@ fn criar_imagem(s: &mut Server, a: &Value) -> Result<Output, String> {
         },
         if frames > 1 { ", em cada quadro" } else { "" }
     );
+    if w <= 32 && h <= 32 {
+        let res = s.config().and_then(|(_, c)| c.resolution);
+        if res.is_none_or(|(rw, _)| rw > 640) {
+            msg.push_str(
+                "\nNum jogo de 1280x720, um sprite de 16x16 fica pequeno. Para pixel art, use uma tela pequena com os pixels inteiros (mudar_config com \"resolution\": [320, 180] e \"scale\": \"pixel\"), ou aumente w e h do sprite (64x64 = 4 vezes). Numa tela pequena, diminua também a gravidade da cena, o pulo e a velocidade (os padrões são para 1280x720).",
+            );
+        }
+    }
     msg.push_str(&format!(
         "\nNa cena: {{\"type\": \"sprite\", \"image\": \"{rel}\"{}}} (o sprite fica do tamanho da imagem; w e h mudam).",
         if frames > 1 {
@@ -295,8 +310,9 @@ fn draw_op(
     clip: PixRect,
     op: &Map<String, Value>,
     pal: &[Color],
+    shared: &[(char, Color)],
     n: usize,
-) -> Result<usize, String> {
+) -> Result<(), String> {
     let err = |e: String| format!("operação {n}: {e}");
     let c = || -> Result<Color, String> { color(op.get("cor").ok_or("falta \"cor\"")?, pal) };
     // Pontos relativos ao quadro.
@@ -430,6 +446,12 @@ fn draw_op(
                 colors.push((ch, color(v, pal).map_err(err)?));
             }
         }
+        // As cores da chamada (as da operação valem primeiro).
+        for (ch, c) in shared {
+            if !colors.iter().any(|(k, _)| k == ch) {
+                colors.push((*ch, *c));
+            }
+        }
         // Sem cores: os dígitos 1 a 9 são as cores da paleta.
         for (i, c) in pal.iter().enumerate().take(9) {
             let ch = char::from_digit(i as u32 + 1, 10).unwrap_or('?');
@@ -461,7 +483,26 @@ fn draw_op(
             "não sei fazer {keys:?}; use uma de: pontos, linha, retangulo, elipse, balde, apagar, trocar_cor, espelhar, girar, simetria, deslocar, contorno, desenho, copiar_quadro"
         )));
     }
-    Ok(count_changes(&before, &sheet.img))
+    Ok(())
+}
+
+/// As cores dos caracteres de um desenho: {"R": "#b13e53", ...}.
+fn text_colors(v: Option<&Value>, pal: &[Color]) -> Result<Vec<(char, Color)>, String> {
+    let mut out = Vec::new();
+    let Some(v) = v.filter(|v| !v.is_null()) else {
+        return Ok(out);
+    };
+    let m = v
+        .as_object()
+        .ok_or("\"cores\" é um objeto {\"R\": \"#ff0044\", ...}")?;
+    for (k, v) in m {
+        let mut it = k.chars();
+        let (Some(ch), None) = (it.next(), it.next()) else {
+            return Err(format!("\"{k}\" em cores: use um caractere só"));
+        };
+        out.push((ch, color(v, pal)?));
+    }
+    Ok(out)
 }
 
 fn sheet_cell(img: &RgbaImage, fw: u32, fh: u32, n: u32) -> Option<PixRect> {
@@ -485,13 +526,31 @@ fn desenhar(s: &mut Server, a: &Value) -> Result<Output, String> {
     if ops.is_empty() {
         return Err("\"operacoes\" está vazia".into());
     }
-    let mut changed = 0;
+    let shared = text_colors(a.get("cores"), &pal)?;
+    let before = sheet.img.clone();
+    let mut touched = vec![clip];
     for (i, op) in ops.iter().enumerate() {
         let op = op
             .as_object()
             .ok_or_else(|| format!("operação {}: precisa ser um objeto", i + 1))?;
-        changed += draw_op(&mut sheet, clip, op, &pal, i + 1)?;
+        // Uma operação pode ir para outro quadro.
+        let clip = match op.get("quadro") {
+            Some(v) => {
+                let n = v
+                    .as_u64()
+                    .ok_or_else(|| format!("operação {}: \"quadro\" é um número", i + 1))?;
+                sheet
+                    .area(Some(n as u32))
+                    .map_err(|e| format!("operação {}: {e}", i + 1))?
+            }
+            None => clip,
+        };
+        if !touched.contains(&clip) {
+            touched.push(clip);
+        }
+        draw_op(&mut sheet, clip, op, &pal, &shared, i + 1)?;
     }
+    let changed = count_changes(&before, &sheet.img);
     s.save_sheet(&sheet)?;
     let where_ = match frame {
         Some(n) => format!(" (quadro {n})"),
@@ -504,9 +563,18 @@ fn desenhar(s: &mut Server, a: &Value) -> Result<Output, String> {
         ops.len()
     );
     if opt_bool(a, "previa")?.unwrap_or(true) {
-        let part = px::crop(&sheet.img, clip);
-        out.push_str(&format!(" O quadro agora ({}x{}):", clip.w, clip.h));
-        let png = preview_png(&part, 0, 0, None)?;
+        let (fw, fh) = (clip.w, clip.h);
+        let mut strip = RgbaImage::new(fw * touched.len() as u32, fh);
+        for (i, r) in touched.iter().enumerate() {
+            let part = px::crop(&sheet.img, *r);
+            image::imageops::replace(&mut strip, &part, (i as u32 * fw) as i64, 0);
+        }
+        if touched.len() > 1 {
+            out.push_str(&format!(" Os {} quadros mexidos, na ordem:", touched.len()));
+        } else {
+            out.push_str(&format!(" O quadro agora ({fw}x{fh}):"));
+        }
+        let png = preview_png(&strip, fw, fh, None)?;
         return Ok(Output::text(out).and_image(&png, "image/png"));
     }
     Ok(Output::text(out))
@@ -571,6 +639,13 @@ fn ver_imagem(s: &mut Server, a: &Value) -> Result<Output, String> {
             ));
         } else {
             let (rows, legend) = px::as_text_art(&part, PixRect::of(&part));
+            // Com "cores", os mesmos caracteres de quem desenhou.
+            let given = text_colors(a.get("cores"), &palette(s, opt_str(a, "paleta")?)?)?;
+            let (rows, legend) = if given.is_empty() {
+                (rows, legend)
+            } else {
+                rename_keys(rows, legend, &given)
+            };
             out.push_str("\nComo texto (um caractere por pixel; \".\" é transparente):\n");
             for r in rows {
                 out.push_str(&r);
@@ -584,6 +659,28 @@ fn ver_imagem(s: &mut Server, a: &Value) -> Result<Output, String> {
         }
     }
     let scale = opt_num(a, "escala")?.map(|n| n as u32);
+    if let Some(v) = a.get("repetir").filter(|v| !v.is_null()) {
+        // Lado a lado, para ver as emendas de um tile.
+        let p = ints(v, 2, "\"repetir\" ([colunas, linhas])")?;
+        let (nx, ny) = (p[0].clamp(1, 8) as u32, p[1].clamp(1, 8) as u32);
+        let tile = if frame.is_some() || total <= 1 {
+            part.clone()
+        } else {
+            px::crop(&sheet.img, sheet.area(Some(1))?)
+        };
+        let (tw, th) = tile.dimensions();
+        let mut big = RgbaImage::new(tw * nx, th * ny);
+        for j in 0..ny {
+            for i in 0..nx {
+                image::imageops::replace(&mut big, &tile, (i * tw) as i64, (j * th) as i64);
+            }
+        }
+        let png = preview_png(&big, 0, 0, scale)?;
+        out.push_str(&format!(
+            "\nO quadro repetido {nx}x{ny} (para ver as emendas):"
+        ));
+        return Ok(Output::text(out).and_image(&png, "image/png"));
+    }
     let png = match frame {
         Some(_) => preview_png(&part, 0, 0, scale)?,
         None => preview_png(&sheet.img, fw, fh, scale)?,
@@ -592,6 +689,44 @@ fn ver_imagem(s: &mut Server, a: &Value) -> Result<Output, String> {
         "\nA imagem ampliada (o xadrez é o transparente; a linha rosa separa os quadros):",
     );
     Ok(Output::text(out).and_image(&png, "image/png"))
+}
+
+/// Troca os caracteres automáticos pelos de `given` (mesma cor), sem repetir.
+fn rename_keys(
+    rows: Vec<String>,
+    legend: Vec<(char, Color)>,
+    given: &[(char, Color)],
+) -> (Vec<String>, Vec<(char, Color)>) {
+    let mut map: Vec<(char, char)> = Vec::new();
+    let mut used: Vec<char> = given.iter().map(|(k, _)| *k).collect();
+    let spare = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#@$%&*+=?!";
+    let mut new_legend = Vec::new();
+    for (k, c) in &legend {
+        let to = match given.iter().find(|(_, g)| g == c) {
+            Some((g, _)) => *g,
+            None => {
+                let ch = spare.chars().find(|x| !used.contains(x)).unwrap_or('?');
+                used.push(ch);
+                ch
+            }
+        };
+        map.push((*k, to));
+        new_legend.push((to, *c));
+    }
+    let rows = rows
+        .into_iter()
+        .map(|r| {
+            r.chars()
+                .map(|ch| {
+                    map.iter()
+                        .find(|(k, _)| *k == ch)
+                        .map(|(_, t)| *t)
+                        .unwrap_or(ch)
+                })
+                .collect()
+        })
+        .collect();
+    (rows, new_legend)
 }
 
 fn color_counts(img: &RgbaImage) -> Vec<(Color, usize)> {
@@ -887,7 +1022,14 @@ pub static TOOLS: &[&Tool] = &[
                 (
                     "quadro",
                     s_int(
-                        "Em que quadro (a partir de 1; padrão o 1º, ou a imagem toda se não tiver quadros)",
+                        "Em que quadro (a partir de 1; padrão o 1º, ou a imagem toda se não tiver quadros). Uma operação também pode ter o seu \"quadro\"",
+                    ),
+                    false,
+                ),
+                (
+                    "cores",
+                    s_obj(
+                        "As cores dos caracteres de todos os \"desenho\" desta chamada: {\"R\": \"#b13e53\", ...}",
                     ),
                     false,
                 ),
@@ -918,6 +1060,21 @@ pub static TOOLS: &[&Tool] = &[
                 ("caminho", s_str(CAMINHO), true),
                 ("quadro", s_int("Só este quadro (a partir de 1)"), false),
                 ("texto", s_bool("Também como texto (até 64x64)"), false),
+                (
+                    "cores",
+                    s_obj(
+                        "Com texto: o caractere de cada cor ({\"R\": \"#b13e53\"}), como no desenhar",
+                    ),
+                    false,
+                ),
+                (
+                    "repetir",
+                    s_list(
+                        "[colunas, linhas]: o quadro repetido lado a lado, para ver as emendas de um tile",
+                        json!({ "type": "integer" }),
+                    ),
+                    false,
+                ),
                 (
                     "escala",
                     s_int("Quantos pixels da tela por pixel (padrão: o que couber em 512)"),

@@ -108,7 +108,7 @@ fn ler_arquivo(s: &mut Server, a: &Value) -> Result<Output, String> {
 }
 
 /// Largura e altura de um PNG (do cabeçalho).
-fn image_size(data: &[u8]) -> Option<(u32, u32)> {
+pub(super) fn image_size(data: &[u8]) -> Option<(u32, u32)> {
     if data.len() > 24 && &data[..8] == b"\x89PNG\r\n\x1a\n" {
         let w = u32::from_be_bytes(data[16..20].try_into().ok()?);
         let h = u32::from_be_bytes(data[20..24].try_into().ok()?);

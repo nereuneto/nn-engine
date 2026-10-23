@@ -12,9 +12,14 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
     - O jeito mais prático é o **desenho como texto**, um caractere por pixel, com a cor de cada caractere.
     - Também: pontos, linha, retângulo, elipse, balde, apagar, trocar cor, espelhar, girar, **simetria** (uma metade copiada espelhada na outra), deslocar, **contorno** e copiar outro quadro.
     - As cores vão em `#rrggbb`, `transparente` ou pelo número numa paleta: a do projeto (`paleta.hex`), Sweetie 16, PICO-8 ou Endesga 32.
-  - **`ver_imagem`:** a imagem, o tamanho, os quadros, as animações e as cores usadas. Com `texto`, o quadro como texto, para conferir pixel a pixel.
+    - Uma chamada mexe em vários quadros (cada operação com o seu `quadro`), e as `cores` da chamada valem para todos os desenhos dela.
+  - **`ver_imagem`:** a imagem, o tamanho, os quadros, as animações e as cores usadas. Com `texto`, o quadro como texto, para conferir pixel a pixel (nos mesmos caracteres do desenho). Com `repetir`, o tile lado a lado, para ver as emendas.
   - **`quadros`:** põe, tira e troca quadros (as animações acompanham) e divide uma imagem em quadros.
   - **`animar`:** as animações com nome do `.anim` (quadros, fps, repetir, uma vez ou ida e volta), com a tira dos quadros na ordem em que tocam.
+- **Pixel art no jogo:**
+  - num jogo de tela pequena (320x180 com pixels inteiros), as capturas do `rodar_jogo` e dos testes vêm ampliadas, e `ampliar` escolhe quanto;
+  - um sprite com `fill = "repeat"` e o `w` da área toda ganha um aviso, e a ajuda do sprite explica que `w` e `h` são o tamanho de cada cópia;
+  - `criar_imagem` sugere a tela pequena quando o jogo é de 1280x720.
 - **NN Studio:** o editor de pixel art ganhou **Contorno** (uma borda com a cor principal em volta do desenho) e **Trocar cor** (a secundária pela principal no quadro todo).
 - **Para quem usa as crates:** as operações de pixel art e o `.anim` saíram do NN Studio para o `nn-projeto` (`pixel`, `anim`), usado pelo editor e pelo servidor. O `pixel` ganhou `flip`, `rotate`, `shift`, `replace_color`, `outline`, `draw_text_art`, `as_text_art` e `preview`.
 

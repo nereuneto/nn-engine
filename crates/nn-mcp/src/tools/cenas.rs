@@ -393,6 +393,7 @@ fn criar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
         notes.extend(valores::missing_files(&s.root, &obj));
         if !three_d {
             notes.extend(valores::size_notes(&obj));
+            notes.extend(valores::repeat_notes(&s.root, &obj));
         }
         created.push(format!("\"{}\" (id {})", obj.name, obj.id));
         let len = match parent {
@@ -527,7 +528,9 @@ fn mudar_objeto(s: &mut Server, a: &Value) -> Result<Output, String> {
         doc.data.find(id).expect("objeto"),
     ));
     if !three_d {
-        notes.extend(valores::size_notes(doc.data.find(id).expect("objeto")));
+        let o = doc.data.find(id).expect("objeto");
+        notes.extend(valores::size_notes(o));
+        notes.extend(valores::repeat_notes(&s.root, o));
     }
     let mut lookup = s.behavior_lookup();
     let now = valores::object_json(

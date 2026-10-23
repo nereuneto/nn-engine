@@ -834,6 +834,44 @@ pub fn size_notes(o: &Object) -> Vec<String> {
     out
 }
 
+/// Um sprite com `fill = "repeat"` e w/h bem maiores que a imagem: quase
+/// sempre era para ser a escala (w e h são o tamanho de cada cópia).
+pub fn repeat_notes(root: &std::path::Path, o: &Object) -> Vec<String> {
+    let mut out = Vec::new();
+    scene_data::visit(std::slice::from_ref(o), &mut |o| {
+        let Some(sprite) = o.component("sprite") else {
+            return;
+        };
+        if sprite.str("fill") != "repeat" {
+            return;
+        }
+        let Some((iw, ih)) = std::fs::read(root.join(sprite.str("image")))
+            .ok()
+            .and_then(|d| super::arquivos::image_size(&d))
+        else {
+            return;
+        };
+        let fw = match sprite.num("frame_w") {
+            w if w > 0.0 => w,
+            _ => f64::from(iw),
+        };
+        let fh = match sprite.num("frame_h") {
+            h if h > 0.0 => h,
+            _ => f64::from(ih),
+        };
+        let (w, h) = (sprite.num("w"), sprite.num("h"));
+        if w > fw * 2.0 || h > fh * 2.0 {
+            out.push(format!(
+                "aviso: \"{}\": com fill = \"repeat\", w e h são o tamanho de CADA cópia; {w}x{h} estica o tile de {fw}x{fh}. Para repetir, use w {fw}, h {fh} e a escala do objeto para quantas cópias (scale_x {:.0} = {:.0} cópias na largura); o corpo (body) segue a mesma conta.",
+                o.name,
+                (w / fw).round(),
+                (w / fw).round(),
+            ));
+        }
+    });
+    out
+}
+
 /// Ordem das chaves ao mostrar: a do arquivo `.cena`.
 fn key_order(m: &Map<String, Value>) -> Vec<&String> {
     const FIRST: [&str; 31] = [

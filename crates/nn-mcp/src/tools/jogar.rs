@@ -10,7 +10,7 @@ use nn_script::game_run::{
 };
 use nn_script::testing::{self, TestOptions};
 
-use super::{Output, Tool, opt_bool, opt_num, opt_str, s_bool, s_list, s_num, s_obj, s_str};
+use super::{Output, Tool, opt_bool, opt_num, opt_str, s_bool, s_int, s_list, s_num, s_obj, s_str};
 use crate::Server;
 
 /// Quanto tempo de jogo uma chamada pode rodar.
@@ -194,6 +194,7 @@ fn rodar_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
     let objects = string_list(a, "objetos")?;
     let final_capture = opt_bool(a, "captura_final")?.unwrap_or(true);
     let show_bodies = opt_bool(a, "ver_corpos")?.unwrap_or(false);
+    let zoom = opt_num(a, "ampliar")?.map(|n| n.clamp(1.0, 8.0) as u32);
 
     let mut run = open_run(s, opt_str(a, "cena")?)?;
     if show_bodies {
@@ -263,10 +264,46 @@ fn rodar_jogo(s: &mut Server, a: &Value) -> Result<Output, String> {
     }
     let mut captures = report.captures;
     captures.extend(last);
+    enlarge(&mut captures, zoom);
     Ok(with_images(out, captures))
 }
 
 /// Junta o texto e as capturas (as primeiras e a última, até o limite).
+/// Amplia as capturas de um jogo de tela pequena (pixel art em 320x180, por
+/// exemplo), com pixels inteiros: `scale` vezes, ou o que der uns 960 de
+/// largura.
+pub(super) fn enlarge(captures: &mut [Capture], scale: Option<u32>) {
+    for c in captures.iter_mut() {
+        let k = scale
+            .unwrap_or(if c.width < 640 {
+                960 / c.width.max(1)
+            } else {
+                1
+            })
+            .clamp(1, 8);
+        if k <= 1 {
+            continue;
+        }
+        let Ok(img) = image::load_from_memory(&c.png) else {
+            continue;
+        };
+        let big = image::imageops::resize(
+            &img.to_rgba8(),
+            c.width * k,
+            c.height * k,
+            image::imageops::FilterType::Nearest,
+        );
+        let mut png = Vec::new();
+        if big
+            .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .is_ok()
+        {
+            c.png = png;
+            c.label = format!("{} (ampliada {k}x)", c.label);
+        }
+    }
+}
+
 pub(super) fn with_images(mut text: String, mut captures: Vec<Capture>) -> Output {
     if captures.len() > MAX_IMAGES {
         let extra = captures.len() - MAX_IMAGES;
@@ -667,6 +704,7 @@ fn rodar_testes(s: &mut Server, a: &Value) -> Result<Output, String> {
             images.push(c);
         }
     }
+    enlarge(&mut images, None);
     Ok(with_images(out, images))
 }
 
@@ -716,6 +754,13 @@ pub static TOOLS: &[&Tool] = &[
                 (
                     "captura_final",
                     s_bool("Mandar a captura da tela do fim (padrão true)"),
+                    false,
+                ),
+                (
+                    "ampliar",
+                    s_int(
+                        "Ampliar as capturas N vezes, com pixels inteiros (padrão: num jogo de tela pequena, como 320x180 de pixel art, o que der uns 960 de largura; 1 = sem ampliar)",
+                    ),
                     false,
                 ),
                 (

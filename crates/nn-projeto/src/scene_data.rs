@@ -1917,7 +1917,7 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
     match kind {
         "sprite" => (
             "Imagem (sprite)",
-            "Mostra uma imagem ou um quadro de spritesheet.",
+            "Mostra uma imagem ou um quadro de spritesheet. w e h (0 = o tamanho da imagem) são multiplicados pela escala do objeto. Com fill = \"repeat\", a imagem se repete lado a lado: w e h são o tamanho de CADA cópia (o tile) e a escala do objeto diz quantas cabem (um chão de 20 blocos de 16x16: w 16, h 16, scale_x 20).",
         ),
         "text" => ("Texto", "Escreve um texto no mundo."),
         "shape" => ("Forma", "Retângulo ou círculo de uma cor."),

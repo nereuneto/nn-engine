@@ -208,12 +208,14 @@ O agente desenha as imagens do jogo com as mesmas operações do editor de pixel
 ```
 
 - `criar_imagem` cria a imagem com um tamanho (16x16 e 32x32 são comuns) e quantos **quadros** lado a lado, para animar.
-- `desenhar` desenha num quadro (x para a direita, y para baixo, (0, 0) no canto de cima à esquerda): `desenho` (texto, um caractere por pixel, e a cor de cada caractere), `pontos`, `linha`, `retangulo`, `elipse`, `balde`, `apagar`, `trocar_cor`, `espelhar`, `simetria` (copia uma metade espelhada na outra), `deslocar`, `contorno` e `copiar_quadro`. As cores são `"#rrggbb"`, `"transparente"` ou o número da cor numa paleta (a do projeto, `paleta.hex`, ou as prontas: Sweetie 16, PICO-8, Endesga 32).
-- `ver_imagem` mostra a imagem, o tamanho, os quadros, as animações e as cores usadas; com `texto`, o quadro como texto, para conferir pixel a pixel.
+- `desenhar` desenha num quadro (x para a direita, y para baixo, (0, 0) no canto de cima à esquerda): `desenho` (texto, um caractere por pixel, e a cor de cada caractere), `pontos`, `linha`, `retangulo`, `elipse`, `balde`, `apagar`, `trocar_cor`, `espelhar`, `simetria` (copia uma metade espelhada na outra), `deslocar`, `contorno` e `copiar_quadro`. As cores são `"#rrggbb"`, `"transparente"` ou o número da cor numa paleta (a do projeto, `paleta.hex`, ou as prontas: Sweetie 16, PICO-8, Endesga 32). Uma operação pode ter o seu `quadro` (todos os quadros de uma animação numa chamada), e `cores` na chamada vale para todos os `desenho` dela.
+- `ver_imagem` mostra a imagem, o tamanho, os quadros, as animações e as cores usadas; com `texto`, o quadro como texto, para conferir pixel a pixel (com `cores`, nos mesmos caracteres do desenho); com `repetir`, o quadro lado a lado, para ver as emendas de um tile.
 - `quadros` põe, tira e troca quadros (as animações acompanham), e divide a imagem em quadros.
 - `animar` cria uma animação com nome (`parado`, `andar`...): os quadros na ordem, o fps e se repete. O comportamento `nn:animacao` toca `parado`, `andar`, `pular` e `cair` sozinho.
 
 Tudo vira o mesmo `.png` e `.anim` que o NN Studio grava, e o `desfazer` volta.
+
+Num jogo de 1280x720, um sprite de 16x16 fica pequeno. Para pixel art, o jogo costuma ter uma tela pequena com os pixels inteiros (`mudar_config` com `"resolution": [320, 180]` e `"scale": "pixel"`), e as capturas do `rodar_jogo` vêm ampliadas (`ampliar` escolhe quanto). Num sprite com `fill = "repeat"` (um chão de tiles), `w` e `h` são o tamanho de cada cópia, e a escala do objeto diz quantas cabem.
 
 ## O jogo aberto
 

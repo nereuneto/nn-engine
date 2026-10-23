@@ -877,8 +877,68 @@ fn agente_desenha_um_sprite_e_anima() {
     );
     assert!(t.contains("Erros: nenhum"), "{t}");
 
+    // Vários quadros numa chamada, com as cores da chamada; o texto com as
+    // mesmas letras.
+    let (t, pngs) = images(
+        &mut s,
+        "desenhar",
+        json!({ "caminho": img, "cores": { "G": "#38b764", "K": "#1a1c2c" }, "operacoes": [
+            { "quadro": 1, "apagar": true }, { "quadro": 1, "desenho": ["KGGK"], "em": [2, 2] },
+            { "quadro": 3, "apagar": true }, { "quadro": 3, "desenho": ["GKKG"], "em": [2, 2] },
+        ] }),
+    );
+    assert!(t.contains("Os 2 quadros mexidos"), "{t}");
+    assert_eq!(image::load_from_memory(&pngs[0]).unwrap().width() % 2, 0);
+    let t = ok(
+        &mut s,
+        "ver_imagem",
+        json!({ "caminho": img, "quadro": 3, "texto": true, "cores": { "G": "#38b764", "K": "#1a1c2c" } }),
+    );
+    assert!(t.contains("\n..GKKG..\n"), "{t}");
+    let (t, pngs) = images(
+        &mut s,
+        "ver_imagem",
+        json!({ "caminho": img, "quadro": 1, "repetir": [3, 2] }),
+    );
+    assert!(t.contains("repetido 3x2"), "{t}");
+    let tile = image::load_from_memory(&pngs[0]).unwrap();
+    assert_eq!(
+        tile.width() * 2,
+        tile.height() * 3 * 8 / 6,
+        "3 por 2 quadros de 8x6"
+    );
+
+    // Um chão repetido com o w da área toda: aviso.
+    let t = ok(
+        &mut s,
+        "criar_objeto",
+        json!({ "cena": "cenas/fase.cena", "objeto": { "name": "chao", "x": 0, "y": -100,
+            "components": [{ "type": "sprite", "image": img, "frame_w": 8, "frame_h": 6, "w": 320, "h": 6, "fill": "repeat" }] } }),
+    );
+    assert!(
+        t.contains("com fill = \"repeat\", w e h são o tamanho de CADA cópia"),
+        "{t}"
+    );
+    assert!(t.contains("scale_x 40"), "{t}");
+
+    // Pixel art numa tela pequena: as capturas vêm ampliadas.
+    ok(
+        &mut s,
+        "mudar_config",
+        json!({ "resolution": [320, 180], "scale": "pixel" }),
+    );
+    let (t, pngs) = images(
+        &mut s,
+        "rodar_jogo",
+        json!({ "cena": "cenas/fase.cena", "segundos": 0.1 }),
+    );
+    if !t.contains("GPU") {
+        assert!(t.contains("(ampliada 3x)"), "{t}");
+        assert_eq!(image::load_from_memory(&pngs[0]).unwrap().width(), 960);
+    }
+
     // Tudo volta com desfazer.
-    ok(&mut s, "desfazer", json!({ "passos": 10 }));
+    ok(&mut s, "desfazer", json!({ "passos": 20 }));
     assert!(!dir.join(img).exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
