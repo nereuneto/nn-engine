@@ -282,10 +282,11 @@ O agente faz os modelos 3D do jogo com as peças do modelador do NN Studio (low-
 
 - `criar_modelo` começa um modelo vazio, de um modelo pronto (árvore, pinheiro, pedra, cerca, casinha, baú, lampião, fogueira, personagem, carrinho, e as peças de cenário muro, borda, escada, ponte e placa) ou da cópia de outro.
 - `modelar` faz várias operações numa chamada:
-  - `criar` uma peça de uma forma (cubo, cilindro, cone, pirâmide, esfera, plano, rampa), com `tamanho`, `em` (o meio da base), `giro` e `cor`; ou uma peça dos kits (`"kit": "Casa/Parede"`);
-  - com `peca`: `em`, `andar`, `giro`, `escala`, `tamanho`, `cor` (com `lado`, só as faces daquele lado), `extrudar` (puxa as faces de um lado; `afinar` deixa a ponta menor), `recuar` (janelas e portas: uma face menor, afundada com `fundo` e pintada com `cor_dentro`), `afinar`, `simetria` e `renomear`;
-  - `copiar` (com `espelhar`: `"x"`), `apagar` e `juntar`.
-- `ver_modelo` mostra o tamanho, onde ficam a base e a origem, as peças, os triângulos, as cores, os ossos e as animações, em quatro vistas ou numa só (`vista`). Também abre qualquer `.glb`, e avisa quando ele está em centímetros (use `scale` 0.01 no objeto), afunda ou flutua. Num modelo com animações, `animacao` e `tempo` mostram um quadro dela.
+  - `criar` uma peça de uma forma (cubo, cilindro, cone, pirâmide, esfera, plano, rampa), com `tamanho` (exato), `em` (o meio da base), `giro`, `cor`, `lados` (nos redondos, com uma face virada para a frente) e `brilho` (a peça acende com a própria cor, mesmo no escuro); ou uma peça dos kits (`"kit": "Casa/Parede"`);
+  - com `peca`: `em`, `andar`, `giro`, `escala`, `tamanho`, `cor` (com `lado`, só as faces daquele lado), `brilho`, `extrudar` (puxa as faces de um lado; `afinar` é o tamanho que a ponta fica: 0 = uma ponta), `recuar` (janelas e portas: `abertura` é quanto da face ela ocupa, afundada com `fundo` e pintada com `cor_dentro`), `afinar` (`quanto`: o tamanho que as faces ficam), `simetria` (a peça fica simétrica em volta do meio dela) e `renomear`;
+  - `copiar` (com `espelhar`: `"x"`, para o outro lado, ou `"z"`, da frente para o fundo), `apagar` e `juntar`.
+- Os lados são cima, baixo, frente (+Z), tras, direita (+X) e esquerda (−X), ou os eixos (`"+x"`, `"-z"`...). Direita e esquerda são as da vista de frente: num personagem virado para a frente, a direita da vista é o lado esquerdo dele (como no kit do personagem).
+- `ver_modelo` mostra o tamanho, onde ficam a base e a origem, de onde a onde cada peça vai, os triângulos, as cores, o brilho, os ossos e as animações, em quatro vistas ou numa só (`vista`, também `"tras"`, as costas). Um traço amarelo sai da origem para a frente. `metros` fixa a escala, para comparar modelos. Também abre qualquer `.glb`, e avisa quando ele está em centímetros (use `scale` 0.01 no objeto), afunda ou flutua. Num modelo com animações, `animacao` e `tempo` mostram um quadro dela.
 
 Cada mudança grava o `.modelo` e o `.glb` (o que vai na cena: `{"type": "model", "file": "modelos/castelo.glb"}`). O modelador do NN Studio aberto mostra a mudança, e o `desfazer` volta.
 

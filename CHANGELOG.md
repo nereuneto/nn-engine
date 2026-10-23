@@ -37,10 +37,17 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
     - o tamanho em metros e onde ficam a base e a origem, com um aviso quando o modelo está em centímetros, afunda ou flutua;
     - as peças, as cores, o brilho, os ossos e as animações;
     - o desenho em quatro vistas ou numa só, também num quadro de uma animação.
+- **Brilho por peça:** uma peça do modelo pode acender com a própria cor (no modelador, **Brilho**; no `modelar`, `brilho`), e o `.glb` leva isso.
 - **Peças de cenário prontas** (no modelador e no `criar_modelo`): **muro**, **borda**, **escada**, **ponte** e **placa**, de 2 m para emendar.
 - **A cor de um modelo tinge o brilho dele:** o brilho que vem do arquivo (*emissive*) também pega a `color` do objeto.
 - **Câmera girando em volta** (`nn:camera_orbita`): numa Câmera 3D, dá voltas devagar em volta de um objeto ou do meio da cena, olhando para ele, para telas de título e de menu. No NN Studio: **➕ Objeto > Câmera de menu (girando)**.
 - **Contagem regressiva** (`nn:contagem`, 2D e 3D): conta os segundos para trás numa variável do jogo (para o HUD mostrar) e, no zero, avisa a condição nova **Contagem acabar**, reinicia a cena ou vai para outra. Recebe `comecar`, `parar`, `reiniciar` e `somar`.
+- **A prova:** um agente fez um jogo 3D só pelo servidor, com os modelos dele (um cavaleiro, uma gema que brilha, uma torre e um portal), um menu com a câmera girando e uma contagem regressiva. Saíram estes acertos:
+  - `modelar`: espelhar também em Z, cilindros e cones com uma face para a frente e no tamanho exato, pirâmide com `lados`, `abertura` no recuar, lados pelos eixos e a direita e a esquerda explicadas;
+  - `ver_modelo`: as costas, um traço para a frente, `metros` para comparar e de onde a onde cada peça vai;
+  - `ver_corpos` no 3D desenha também o cenário de malha exata (o chão, as paredes, a escada);
+  - os campos de escolha dos componentes (a forma de um corpo, o tipo de uma luz) são conferidos, também no `conferir_projeto`;
+  - a contagem regressiva segue a variável (um bônus de tempo funciona), e as cópias com **Girar e flutuar** não sobem e descem todas juntas.
 - **Para quem usa as crates:** o modelo do modelador, as peças e os modelos prontos saíram do NN Studio para o `nn-projeto` (`model`, `model_kits`). O desenho sem placa de vídeo é o `nn_projeto::model_view`.
 
 ### Mapas, partículas, sons e diálogos pelo agente (Sprint 56)

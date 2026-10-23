@@ -1308,6 +1308,10 @@ vazio, ela vai para o chão. Os **kits** do **➕ Peça** têm peças prontas:
 Os braços e as pernas do personagem giram no ombro e no quadril: estão
 prontos para o animador.
 
+**Brilho:** com uma peça escolhida, o **Brilho** (0 a 1) faz ela acender com
+a própria cor, mesmo no escuro (o vidro da lanterna, os olhos, um cristal). O
+brilho vai no `.glb` e aparece na cena e no jogo.
+
 **📚 Biblioteca.** Modelos prontos para começar ou para pôr no seu modelo:
 árvore, pinheiro, pedra, cerca, casinha, baú, lampião, fogueira, personagem
 e carrinho, e peças de cenário para montar fases (de 2 m, para emendar):
