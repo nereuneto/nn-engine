@@ -6876,9 +6876,17 @@ fn rodar_os_testes_mostra_no_console_e_leva_a_linha() {
         text.contains("🔬 5 testes: 4 passaram, 1 falhou."),
         "{text}"
     );
-    h.get_by_label("testes/quebra.lua:3").click();
-    h.run_steps(4);
-    assert!(tabs(&h).contains(&Tab::Code("testes/quebra.lua".into())));
+    // O console ainda pode estar se acomodando: clica de novo até abrir
+    // (no CI, uma vez o primeiro clique caiu antes do texto parar).
+    let tab = Tab::Code("testes/quebra.lua".into());
+    for _ in 0..10 {
+        h.get_by_label("testes/quebra.lua:3").click();
+        h.run_steps(4);
+        if tabs(&h).contains(&tab) {
+            break;
+        }
+    }
+    assert!(tabs(&h).contains(&tab));
 }
 
 /// Uma ferramenta do servidor MCP (como um agente chamaria).
