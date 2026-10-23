@@ -851,6 +851,11 @@ fn agente_desenha_um_sprite_e_anima() {
         "{t}"
     );
     assert_eq!(image::load_from_memory(&pngs[0]).unwrap().width() % 4, 0);
+    assert_eq!(pngs.len(), 2, "a tira e a casca de cebola");
+    assert!(t.contains("Casca de cebola"), "{t}");
+    if std::env::var("NN_FX_OUT").is_ok() {
+        std::fs::write("/tmp/cebola.png", &pngs[1]).unwrap();
+    }
     let e = fails(
         &mut s,
         "animar",

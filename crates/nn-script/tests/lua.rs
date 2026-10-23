@@ -1899,6 +1899,9 @@ fn cena_visual_com_script_fisica_e_eventos() {
                       } },
                     { id = 4, name = "moeda", x = 0, y = -10,
                       components = { { type = "body", body = "static", shape = "circle", radius = 3, sensor = true } } },
+                    -- A colisão 4 abaixo do objeto (os pés de um sprite).
+                    { id = 5, name = "deslocado", x = 20, y = 20,
+                      components = { { type = "body", w = 8, h = 8, oy = -4 } } },
                   },
                 }
                 "##,
@@ -1921,6 +1924,8 @@ fn cena_visual_com_script_fisica_e_eventos() {
                   local cx, cy = self.objects.chapeu:world_transform()
                   self.chapeu_y = cy
                   self.vivos = #self:find_all("moeda")
+                  local d = self:find("deslocado")
+                  self.dy, self.dby = d.y, d.body.y
                 end
                 return cena
                 "##,
@@ -1944,6 +1949,11 @@ fn cena_visual_com_script_fisica_e_eventos() {
     // Passou pela moeda (sensor): evento com os objetos, e ela sumiu.
     assert_eq!(h.game.0.field::<i64>("toques"), Some(1));
     assert_eq!(h.game.0.field::<i64>("vivos"), Some(0));
+    // Com oy = -4, o corpo para no chão e o objeto fica 4 acima dele.
+    let dy: f64 = h.game.0.field("dy").unwrap();
+    let dby: f64 = h.game.0.field("dby").unwrap();
+    assert!((dby - -12.0).abs() < 1.5, "corpo {dby}");
+    assert!((dy - (dby + 4.0)).abs() < 0.01, "objeto {dy}");
 }
 
 #[test]

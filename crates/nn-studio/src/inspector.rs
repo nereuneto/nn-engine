@@ -216,6 +216,11 @@ const BODY_FIELDS: &[F] = &[
     f("h", "Altura", SIZE),
     f("radius", "Raio", SIZE),
     help(
+        adv("ox", "Deslocar x", ANY),
+        "Move a colisão em relação ao objeto (na escala dele): para a caixa ficar nos pés de um sprite com espaço vazio.",
+    ),
+    help(adv("oy", "Deslocar y", ANY), "Para cima é positivo."),
+    help(
         f("sensor", "Sensor", W::Bool),
         "Não bloqueia: só avisa quando algo entra (moedas, portas, espinhos).",
     ),

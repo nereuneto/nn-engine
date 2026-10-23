@@ -950,6 +950,38 @@ fn animar(s: &mut Server, a: &Value) -> Result<Output, String> {
         }
     }
     let png = preview_png(&strip, fw, fh, None)?;
+    // Casca de cebola: cada quadro por cima do anterior (em vermelho-claro),
+    // para ver o quanto mexe de um para o outro.
+    let onion = if an.frames.len() > 1 && opt_bool(a, "cebola")?.unwrap_or(true) {
+        let cells: Vec<Option<RgbaImage>> = an
+            .frames
+            .iter()
+            .map(|f| {
+                sheet_cell(&sheet.img, sheet.anim.frame_w, sheet.anim.frame_h, f.index)
+                    .map(|r| px::crop(&sheet.img, r))
+            })
+            .collect();
+        let mut img = RgbaImage::new(fw * cells.len() as u32, fh);
+        let n = cells.len();
+        for i in 0..n {
+            let prev = &cells[(i + n - 1) % n];
+            if let Some(p) = prev {
+                let mut ghost = p.clone();
+                for px in ghost.pixels_mut() {
+                    if px[3] > 0 {
+                        *px = image::Rgba([0xff, 0x6b, 0x6b, 110]);
+                    }
+                }
+                image::imageops::overlay(&mut img, &ghost, (i as u32 * fw) as i64, 0);
+            }
+            if let Some(c) = &cells[i] {
+                image::imageops::overlay(&mut img, c, (i as u32 * fw) as i64, 0);
+            }
+        }
+        Some(preview_png(&img, fw, fh, None)?)
+    } else {
+        None
+    };
     let out = format!(
         "{} \"{name}\" em {}: {}.\nNum objeto: {{\"type\": \"sprite\", \"image\": \"{}\", \"animation\": \"{name}\"}} toca desde o começo; com o comportamento nn:animacao, ela troca sozinha (parado, andar, pular); em Lua, obj.sprite:play(\"{name}\"). A tira abaixo mostra os quadros na ordem em que tocam:",
         if existing.is_some() {
@@ -961,7 +993,13 @@ fn animar(s: &mut Server, a: &Value) -> Result<Output, String> {
         anim_line(&an),
         sheet.rel
     );
-    Ok(Output::text(out).and_image(&png, "image/png"))
+    let mut o = Output::text(out).and_image(&png, "image/png");
+    if let Some(onion) = onion {
+        o = o.and_text(
+            "Casca de cebola: cada quadro por cima do anterior (a sombra vermelha é o quadro de antes; o primeiro mostra o último). Onde a sombra quase não aparece, aquilo não mexeu; um pulo grande entre dois quadros fica com a sombra longe.",
+        ).and_image(&onion, "image/png");
+    }
+    Ok(o)
 }
 
 const CAMINHO: &str = "A imagem (.png), ex.: \"assets/imagens/heroi.png\"";
@@ -1125,7 +1163,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "animar",
         title: "Animar",
-        description: "Cria ou muda uma animação com nome de uma folha de sprites (o arquivo .anim ao lado da imagem, o mesmo do NN Studio): os quadros na ordem, a velocidade, como repete e o tempo de cada quadro. Devolve os quadros na ordem em que tocam. Nomes que o comportamento nn:animacao usa sozinho: parado, andar, pular, cair.",
+        description: "Cria ou muda uma animação com nome de uma folha de sprites (o arquivo .anim ao lado da imagem, o mesmo do NN Studio): os quadros na ordem, a velocidade, como repete e o tempo de cada quadro. Devolve os quadros na ordem em que tocam e a casca de cebola (cada quadro sobre a sombra do anterior, para ver o movimento). Nomes que o comportamento nn:animacao usa sozinho: parado, andar, pular, cair.",
         params: || {
             vec![
                 ("caminho", s_str(CAMINHO), true),
@@ -1157,6 +1195,11 @@ pub static TOOLS: &[&Tool] = &[
                         "Segundos de cada quadro (em vez do fps)",
                         json!({ "type": "number" }),
                     ),
+                    false,
+                ),
+                (
+                    "cebola",
+                    s_bool("Mostrar a casca de cebola (padrão true)"),
                     false,
                 ),
                 ("apagar", s_bool("Apagar a animação"), false),

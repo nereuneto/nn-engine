@@ -34,6 +34,9 @@ M.FIELDS = {
   },
   body = {
     { "body", "dynamic" }, { "shape", "box" }, { "w", 32 }, { "h", 32 }, { "radius", 16 },
+    -- Deslocamento da colisão em relação ao objeto (pés de um sprite com
+    -- espaço vazio embaixo, por exemplo).
+    { "ox", 0 }, { "oy", 0 },
     { "sensor", false }, { "one_way", false }, { "bounce", 0 }, { "gravity_scale", 1 },
     { "tag", "" },
   },
@@ -849,7 +852,7 @@ function Object:move_to(x, y, z)
   self.x, self.y = x, y
   if self.body and self.body.alive then
     local wx, wy = self:world_transform()
-    self.body:set_position(wx, wy)
+    self.body:set_position(wx + (self._box or 0), wy + (self._boy or 0))
     self.body:set_velocity(0, 0)
     self._sx, self._sy, self._px, self._py = x, y, x, y
   end
@@ -1563,8 +1566,10 @@ local function make_body(scene, o, c)
     o.body:remove()
   end
   local x, y, _, sx, sy = o:world_transform()
+  -- O corpo fica deslocado do objeto (ox, oy, na escala do objeto).
+  o._box, o._boy = (c.ox or 0) * sx, (c.oy or 0) * sy
   local opts = {
-    type = c.body, x = x, y = y, sensor = c.sensor, one_way = c.one_way,
+    type = c.body, x = x + o._box, y = y + o._boy, sensor = c.sensor, one_way = c.one_way,
     bounce = c.bounce, gravity_scale = c.gravity_scale,
     tag = (c.tag ~= "" and c.tag) or o.name,
   }
@@ -2972,7 +2977,7 @@ local function sync_bodies_before(scene)
       -- O script mudou x/y à mão: leva o corpo junto.
       if o.x ~= o._sx or o.y ~= o._sy then
         local x, y = o:world_transform()
-        o.body:set_position(x, y)
+        o.body:set_position(x + (o._box or 0), y + (o._boy or 0))
         o._px, o._py = o.x, o.y
       end
     end
@@ -2983,7 +2988,7 @@ local function sync_bodies_after(scene)
   for _, o in ipairs(scene.object_list) do
     if o.alive and o.body and o.body.alive then
       o._px, o._py = o.x, o.y
-      local bx, by = o.body.x, o.body.y
+      local bx, by = o.body.x - (o._box or 0), o.body.y - (o._boy or 0)
       if o.parent then
         local px, py = o.parent:world_transform()
         bx, by = bx - px, by - py
@@ -3581,7 +3586,7 @@ function M.live(scene, msg)
     end
   elseif (field == "x" or field == "y") and o.body and o.body.alive then
     local x, y = o:world_transform()
-    o.body:set_position(x, y)
+    o.body:set_position(x + (o._box or 0), y + (o._boy or 0))
     o._sx, o._sy, o._px, o._py = o.x, o.y, o.x, o.y
   elseif (field == "scale_x" or field == "scale_y") then
     local b = o:component("body")
