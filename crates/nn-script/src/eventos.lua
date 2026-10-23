@@ -13,7 +13,8 @@
 -- Campos opcionais da regra: `mode = "enquanto"` (roda a cada quadro enquanto
 -- as condições valem; o padrão, "quando", roda uma vez quando elas passam a
 -- valer, ou a cada vez que um gatilho acontece), `off = true` (desligada) e
--- `comment = "..."` (uma linha de comentário, sem condições nem ações).
+-- `comment = "..."` (sozinho, uma linha de comentário; numa regra com
+-- condições e ações, o nome dela, que não muda nada).
 --
 -- Quem é quem: "@este" é o objeto dono da regra (numa regra da cena, o
 -- jogador), "@outro" é o outro objeto da condição (em quem encostou, o item
@@ -1363,7 +1364,7 @@ E.ACTIONS = {
   {
     id = "som", name = "Tocar som", category = "Som",
     text = "tocar o som {som}",
-    text3d = "tocar o som {som} saindo de {onde}",
+    text3d = "tocar o som {som} (sai de: {onde})",
     help3d = "O som sai do objeto: mais baixo longe dele e do lado em que ele está.",
     props = { { "som", "", type = "sound", label = "Som" },
       { "volume", 1, min = 0, max = 2, advanced = true },
@@ -1701,7 +1702,9 @@ function E.step(scene, dt)
     if ctx.owner == nil or ctx.owner.alive or not ctx.dead_seen then
       if ctx.owner and not ctx.owner.alive then ctx.dead_seen = true end
       for _, rule in ipairs(ctx.rules) do
-        if not rule.off and not rule.comment and #rule.when > 0 then
+        -- Um comentário sozinho não tem condições; uma regra com comentário
+        -- (o nome dela) roda como as outras.
+        if not rule.off and #rule.when > 0 then
           ctx.state[rule.index] = ctx.state[rule.index] or {}
           local fire = eval_rule(ctx, rule, ctx.state[rule.index], dt)
           for _, b in ipairs(fire) do

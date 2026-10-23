@@ -11,6 +11,7 @@ local B = {
     { "pulos_no_ar", 0, label = "Pulos no ar", min = 0, max = 5, integer = true,
       help = "1 = pulo duplo." },
     { "camera", "atras", label = "Câmera",
+      help = "Atrás: a câmera segue o jogador, olhando para onde ele está virado (o ry dele); a Câmera 3D da cena não vale. Para usar a da cena, escolha \"a Câmera 3D da cena\".",
       options = {
         { "atras", "atrás do jogador (3ª pessoa)" },
         { "cena", "a Câmera 3D da cena" },

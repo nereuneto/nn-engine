@@ -496,8 +496,9 @@ pub fn agents_md(template: Template, title: &str) -> String {
          - `cenas/`: as cenas (`.cena` visuais, ou `.lua` em código).\n\
          - `prefabs/`: objetos prontos para pôr em várias cenas (`.prefab`).\n\
          - `scripts/`: comportamentos e scripts em Lua.\n\
-         - `assets/`: imagens, sons, fontes e modelos 3D. Mapas de tiles em `mapas/` \
-         (`.tmj`), diálogos em `dialogos/` (`.dialogo`).\n\
+         - `assets/`: imagens, sons e fontes. Modelos 3D (`.glb`) em `modelos/`, mapas de \
+         tiles em `mapas/` (`.tmj`), diálogos em `dialogos/` (`.dialogo`). `listar_arquivos` \
+         mostra o que o projeto tem.\n\
          \n\
          As cenas e prefabs são tabelas Lua legíveis, no formato que o editor NN Studio grava. \
          Mude-as pelas ferramentas do servidor MCP (abaixo), que conferem cada campo; à mão, \
@@ -518,7 +519,8 @@ pub fn agents_md(template: Template, title: &str) -> String {
          `conferir_projeto`, `rodar_jogo` (joga sem janela e mostra erros, prints, o que mudou \
          e a tela), `rodar_testes` e `desfazer`. Com o jogo aberto numa janela (`abrir_jogo`, \
          ou o ▶ Jogar do NN Studio): `ver_jogo_aberto` e `mexer_no_jogo` (muda valores na hora, \
-         pausa e avança quadros, sem gravar).\n\
+         aperta teclas, pausa e avança quadros, sem gravar). Com o NN Studio aberto: `ver_editor` \
+         (a aba e os objetos escolhidos; o servidor não grava por cima do que não foi salvo).\n\
          \n\
          ## Testes de jogo\n\
          \n\

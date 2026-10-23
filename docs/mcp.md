@@ -6,11 +6,15 @@ A ferramenta `nn` tem um **servidor MCP** (Model Context Protocol). Ele liga um 
 nn mcp <pasta-do-jogo>
 ```
 
-O servidor conversa com o agente pela entrada e saída padrão: quem abre o `nn mcp` é o próprio cliente, configurado como mostrado abaixo. Ele só mexe em arquivos **dentro da pasta do jogo**, e **cada mudança pode ser desfeita** (ferramenta `desfazer`).
+O servidor conversa com o agente pela entrada e saída padrão: quem abre o `nn mcp` é o próprio cliente, configurado como mostrado abaixo (ou pelo NN Studio, em **Jogo > Ligar um agente de IA**). Ele só mexe em arquivos **dentro da pasta do jogo**, e **cada mudança pode ser desfeita** (ferramenta `desfazer`).
 
 ## Ligar no seu agente
 
-O `nn` vem nos pacotes da release:
+O jeito mais fácil é pelo NN Studio: com o projeto aberto, **Jogo > Ligar um agente de IA…** mostra o comando ou a configuração de cada cliente, já com o caminho do `nn` e da pasta, com um botão para copiar. Ele também grava a configuração para você: o `.mcp.json` do projeto (Claude Code), a do Claude Desktop (guardando uma cópia da de antes) ou o `.cursor/mcp.json` (Cursor).
+
+![Ligar um agente de IA no NN Studio](imagens/nn-studio-agente.png)
+
+À mão: o `nn` vem nos pacotes da release:
 
 - **Windows (instalador):** `C:\Users\<você>\AppData\Local\Programs\NN Studio\nn.exe`.
 - **Windows (zip portátil) e Linux (tar.gz):** o `nn` fica na pasta que você extraiu.
@@ -26,7 +30,7 @@ De dentro da pasta do jogo:
 claude mcp add nn -- nn mcp .
 ```
 
-Com `--scope project`, a configuração vai para um `.mcp.json` na pasta. Quem abrir o projeto com o Claude Code ganha o servidor também. Para ver se ligou, use `/mcp` dentro do Claude Code.
+Com `--scope project`, a configuração vai para um `.mcp.json` na pasta. Quem abrir o projeto com o Claude Code ganha o servidor também. Sem a pasta (`nn mcp`), o servidor usa a do projeto que o Claude Code abriu, e o `.mcp.json` pode levar `"args": ["mcp", "${CLAUDE_PROJECT_DIR:-.}"]`. Para ver se ligou, use `/mcp` dentro do Claude Code.
 
 No Windows, com o instalador:
 
@@ -87,15 +91,16 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `criar_prefab` | Transforma um objeto num prefab. Mudar o prefab muda todas as cópias. |
 | `listar_componentes`, `listar_comportamentos` | Os componentes (com os campos e padrões) e os comportamentos prontos e do projeto (com as propriedades, opções e ajuda). |
 | `listar_eventos`, `por_regra`, `tirar_regra` | Os eventos "Quando... Então..." sem código. |
-| `buscar_documentacao` | A API Lua `nn.*` e os guias (este, o de Lua, o de 3D e o do NN Studio). |
+| `buscar_documentacao` | A API Lua `nn.*` e os guias (este, o de Lua, o de 3D e o do NN Studio): os trechos que citam as palavras, ou uma seção inteira (`secao`). |
 | `conferir_lua` | A sintaxe de um trecho de Lua, sem gravar. |
-| `rodar_jogo` | Roda o jogo **sem janela**, com teclas e cliques simulados, e mostra os erros (com arquivo e linha), avisos, prints, as regras que dispararam, as trocas de cena, o que mudou nos objetos e variáveis, e **capturas da tela**. Veja [Rodar e ver](#rodar-e-ver). |
+| `rodar_jogo` | Roda o jogo **sem janela**, com teclas e cliques simulados, e mostra os erros (com arquivo e linha), avisos, prints, as regras que dispararam, as trocas de cena, o que mudou nos objetos e variáveis, e **capturas da tela** (com `ver_corpos`, os corpos da física desenhados por cima). Veja [Rodar e ver](#rodar-e-ver). |
 | `rodar_testes` | Roda os [testes de jogo](lua.md#testes-de-jogo) do projeto (`testes/*.lua`) e mostra quem falhou, a linha, os prints e a tela na hora da falha. |
 | `abrir_jogo` | Abre o jogo **numa janela** no seu computador (você vê e pode jogar junto) e liga nele. Veja [O jogo aberto](#o-jogo-aberto). |
 | `ver_jogo_aberto` | Olha o jogo aberto (por `abrir_jogo`, pelo ▶ Jogar do NN Studio ou por `nn .`) enquanto alguém joga: a cena, os erros, prints e regras desde a última olhada, o que mudou e a tela. |
-| `mexer_no_jogo` | Muda o jogo aberto **na hora, sem gravar**: campos de objetos e comportamentos, variáveis, Lua; pausa, avança quadros e fecha. |
+| `mexer_no_jogo` | Muda o jogo aberto **na hora, sem gravar**: campos de objetos e comportamentos, variáveis, Lua, teclas como se alguém jogasse; pausa, avança quadros e fecha. |
+| `ver_editor` | Olha o NN Studio aberto com o projeto: a aba da frente, os **objetos escolhidos** (de quem você fala quando diz "este"), o que ainda não foi gravado e a imagem da janela. Veja [Junto com o NN Studio](#junto-com-o-nn-studio). |
 
-Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
+São 30. Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
 
 ## Objetos no formato do arquivo
 
@@ -159,6 +164,8 @@ O jogador é simulado com **ações**, cada uma no seu tempo (`em`, em segundos 
 | `"capturar": true` ou `"capturar": "nome"` | Guarda uma captura da tela agora. |
 | `"lua": "self.objects.heroi:move_to(0, 0)"` | Roda código com `self` = a cena da frente: para preparar a situação (levar o herói até a porta, mudar uma variável). |
 
+Com `"ver_corpos": true`, as capturas mostram os **corpos da física** por cima: cinza o que é parado, verde o que cai, azul o que se move sozinho (o personagem 3D, uma plataforma) e amarelo os sensores. Serve quando algo não encosta, atravessa ou fica parado no ar.
+
 As teclas têm os nomes do `nn.input`: `a` a `z`, `0` a `9`, `space`, `enter`, `escape`, `left`, `right`, `up`, `down`, `shift`, `ctrl`, `alt`, `tab`... Sem `cena`, o jogo começa na cena inicial do `config.lua`. Com `"segundos": 0`, só mostra a primeira tela.
 
 A resposta conta o que aconteceu, com o tempo de cada coisa:
@@ -196,23 +203,34 @@ Com o jogo aberto numa janela, o agente acompanha você jogando. Ele liga no jog
   "variaveis": {"vidas": 9},
   "lua": "self.objects.heroi:move_to(400, 0)",
   "pausar": true,
-  "avancar": 30
+  "teclas": [{"segurar": "right", "por": 0.5}, {"em": 0.2, "apertar": "space"}],
+  "avancar": 60
 }
 ```
 
-  `avancar` anda um número de quadros (60 = 1 s) e deixa o jogo pausado; `"pausar": false` continua, e `"fechar": true` fecha o jogo.
-- O que fica, o agente grava nos arquivos (`mudar_objeto`, `escrever_arquivo`...): o jogo aberto recarrega sozinho, e o NN Studio mostra a mudança.
+  Na ordem: `mudar`, `variaveis`, `lua`, `pausar`, `teclas`, `avancar`, `fechar`. `teclas` aperta e segura teclas como se alguém jogasse, contando o tempo de jogo (pausado, elas esperam o `avancar`). `avancar` anda um número de quadros (60 = 1 s) e deixa o jogo pausado; `"pausar": false` continua, e `"fechar": true` fecha o jogo. Assim o agente ajusta, por exemplo, a força do pulo sem ninguém jogando: pausa, muda o valor, segura a seta e o pulo, avança e olha com `ver_jogo_aberto`.
+- O que fica, o agente grava nos arquivos (`mudar_objeto`, `escrever_arquivo`...): o jogo aberto recarrega sozinho, e o NN Studio mostra a mudança. Ao recarregar, os objetos voltam ao que está no arquivo; as variáveis (`nn.vars`) continuam.
+- Se o jogo aberto está lento (o computador ocupado), `ver_jogo_aberto` avisa: com a janela aberta, `rodar_jogo` e os testes também ficam mais lentos.
 
 O jogo aberto atende numa porta do próprio computador (`127.0.0.1`), com uma senha num arquivo que só o seu usuário lê. Um programa de fora do computador não fala com ele. Um jogo exportado não atende ninguém.
 
+## Junto com o NN Studio
+
+Com o projeto aberto no NN Studio, o agente trabalha junto com você:
+
+- **`ver_editor`** mostra a aba da frente, os objetos escolhidos na cena (com a posição e os componentes), as abas abertas, o que ainda não foi gravado e a **imagem da janela**. Escolha um inimigo e peça *"deixa este mais rápido"*: o agente sabe de quem você fala.
+- **Ele não grava por cima do que você não salvou.** Se a cena aberta tem mudanças suas ainda não gravadas, as ferramentas que gravam nela param e pedem para você salvar (Ctrl+S) ou descartar antes. O `desfazer` também.
+- **O que ele muda aparece no Console** com ✨, a ferramenta e o arquivo (clique para abrir). As abas abertas recarregam sozinhas.
+
+O NN Studio atende numa porta do próprio computador, como o jogo aberto, com uma senha num arquivo que só o seu usuário lê.
+
 ## Segurança
 
+- O jogo aberto e o NN Studio guardam a porta e a senha numa pasta só do usuário: no Linux, `$XDG_RUNTIME_DIR/nn-ao-vivo` (ou `~/.cache/nn-ao-vivo`, com permissão só para você); no Windows e no macOS, a pasta temporária do usuário. Cada ligação precisa mandar a senha nos primeiros 5 segundos, e um pedido passa de 1 MB não é aceito.
 - O servidor recusa caminhos fora da pasta do jogo (`..`, caminhos absolutos, links que saem dela) e não mexe em `.git`, `dist` e `target`.
 - Ele grava cada arquivo de uma vez (num temporário que troca de nome), então o jogo aberto e o NN Studio nunca veem um arquivo pela metade.
 - `desfazer` volta as mudanças do agente enquanto o servidor estiver aberto. Se você mudou o mesmo arquivo depois (no NN Studio, à mão), ele só desfaz com `forcar`, para não perder o seu trabalho. Para um histórico de verdade, use o git na pasta do jogo.
 
 ## O que vem depois
 
-Depois desta, vem a revisão e o lançamento da v0.7. Depois, na v0.8:
-
-- **Arte, modelagem e animação (v0.8):** pixel art, sons, modelos 3D e animações pelas ferramentas, com prévias em imagem.
+Na v0.8, **arte, modelagem e animação pelo agente**: pixel art e animações de sprite, mapas, partículas, sons, diálogos, modelos 3D (as operações do modelador, kits) e esqueletos e animações, tudo com prévias em imagem. E o que faltou aos agentes que fizeram jogos do zero na revisão da v0.7: saber o tamanho, a origem e as animações de um `.glb`, tingir o brilho de um modelo, peças de cenário (cerca, muro) e uma câmera pronta para as telas de menu 3D.

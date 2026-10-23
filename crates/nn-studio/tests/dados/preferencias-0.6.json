@@ -1,0 +1,276 @@
+{
+  "recent": [
+    {
+      "path": "/home/ana/jogos/Ilha 3D",
+      "title": "Ilha 3D",
+      "opened_at": 1792715153
+    }
+  ],
+  "theme": "Escuro",
+  "mode": "Simples",
+  "zoom": 1.0,
+  "projects_dir": null,
+  "clear_console_on_play": true,
+  "layouts": {
+    "/home/ana/jogos/Ilha 3D": {
+      "surfaces": [
+        {
+          "Main": {
+            "nodes": [
+              {
+                "Horizontal": {
+                  "rect": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "fraction": 0.2,
+                  "fully_collapsed": false,
+                  "collapsed_leaf_count": 0
+                }
+              },
+              {
+                "Vertical": {
+                  "rect": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "fraction": 0.5,
+                  "fully_collapsed": false,
+                  "collapsed_leaf_count": 0
+                }
+              },
+              {
+                "Horizontal": {
+                  "rect": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "fraction": 0.72,
+                  "fully_collapsed": false,
+                  "collapsed_leaf_count": 0
+                }
+              },
+              {
+                "Leaf": {
+                  "rect": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "viewport": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "tabs": [
+                    "Files"
+                  ],
+                  "active": 0,
+                  "scroll": 0.0,
+                  "collapsed": false,
+                  "tab_bar_hidden": false
+                }
+              },
+              {
+                "Leaf": {
+                  "rect": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "viewport": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "tabs": [
+                    "Hierarchy"
+                  ],
+                  "active": 0,
+                  "scroll": 0.0,
+                  "collapsed": false,
+                  "tab_bar_hidden": false
+                }
+              },
+              {
+                "Vertical": {
+                  "rect": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "fraction": 0.66,
+                  "fully_collapsed": false,
+                  "collapsed_leaf_count": 0
+                }
+              },
+              {
+                "Leaf": {
+                  "rect": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "viewport": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "tabs": [
+                    "Inspector"
+                  ],
+                  "active": 0,
+                  "scroll": 0.0,
+                  "collapsed": false,
+                  "tab_bar_hidden": false
+                }
+              },
+              "Empty",
+              "Empty",
+              "Empty",
+              "Empty",
+              {
+                "Leaf": {
+                  "rect": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "viewport": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "tabs": [
+                    "Home",
+                    {
+                      "Scene": "cenas/ilha.cena"
+                    }
+                  ],
+                  "active": 1,
+                  "scroll": 0.0,
+                  "collapsed": false,
+                  "tab_bar_hidden": false
+                }
+              },
+              {
+                "Leaf": {
+                  "rect": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "viewport": {
+                    "min": {
+                      "x": 0.0,
+                      "y": 0.0
+                    },
+                    "max": {
+                      "x": 0.0,
+                      "y": 0.0
+                    }
+                  },
+                  "tabs": [
+                    "Console",
+                    "Events"
+                  ],
+                  "active": 0,
+                  "scroll": 0.0,
+                  "collapsed": false,
+                  "tab_bar_hidden": false
+                }
+              },
+              "Empty",
+              "Empty"
+            ],
+            "focused_node": 11,
+            "collapsed": false,
+            "collapsed_leaf_count": 0
+          }
+        }
+      ],
+      "focused_surface": 0
+    }
+  },
+  "check_updates": true,
+  "last_update_check": 0,
+  "latest_version": null,
+  "latest_url": null,
+  "skipped_version": null,
+  "accent": "Laranja",
+  "ui_sounds": true,
+  "animations": true,
+  "celebrations": true,
+  "celebrated": [
+    "primeiro-jogo",
+    "primeiro-modelo"
+  ]
+}

@@ -648,7 +648,7 @@ E o caminho de volta, do jogo para o editor:
   selecionado, o Inspetor mostra as variáveis do jogo agora.
 - **Pausar / Continuar / Avançar 1 quadro**, na barra da cena, congelam o
   jogo para olhar com calma.
-- **🧭 Caminhos** mostra no jogo por onde os inimigos podem andar (a grade de
+- **🗺 Caminhos** mostra no jogo por onde os inimigos podem andar (a grade de
   caminhos, azulada) e o caminho que cada um está seguindo (pontos amarelos).
 - **Ctrl+clique** num objeto, na janela do jogo, seleciona ele no editor.
 - **Eventos ao vivo:** o que você muda nas regras também vale na hora, e cada
@@ -930,7 +930,7 @@ Elas aparecem atrás e na frente dos objetos certos e pegam a névoa.
 
 Nos eventos, **Soltar partículas**, **Ligar ou desligar partículas**,
 **Faíscas** e **Partículas terminarem** funcionam no 3D. **Tocar som** ganha
-**saindo de**: o som sai do objeto escolhido (no Herói, o pulo; numa porta,
+**sai de**: o som sai do objeto escolhido (no Herói, o pulo; numa porta,
 o rangido). O **Coletável** solta um brilho 3D ao ser pego.
 
 ### Inimigos, vida e dano no 3D
@@ -955,7 +955,7 @@ o rangido). O **Coletável** solta um brilho 3D ao ser pego.
   volta de paredes, árvores e cenário, e não entra em buracos, barrancos nem
   na água de um Terreno. O caminho vem da **grade de caminhos** da cena,
   montada sozinha a partir dos Corpos 3D parados e dos terrenos. Para ver a
-  grade, abra o jogo com **▶ Testar daqui** e ligue **🧭 Caminhos** na barra
+  grade, abra o jogo com **▶ Testar daqui** e ligue **🗺 Caminhos** na barra
   da cena: no jogo, o chão andável fica azulado e cada inimigo mostra os
   pontos do caminho que segue. Portas e plataformas que andam não entram na
   grade (desviar delas é com a física).
@@ -1591,13 +1591,38 @@ O campo de tile tem um **…** para escolher no tileset. No Lua:
   modo Completo). **Limpar ao jogar** começa cada partida com o console limpo.
 - **Jogo > Conferir com os testes (Ctrl+F5)** salva tudo e roda os
   [testes de jogo](lua.md#testes-de-jogo) (os arquivos de `testes/`) sem
-  janela, em segundo plano. Cada teste aparece no Console: ✓ quando passa, ✗
+  janela, em segundo plano. Cada teste aparece no Console: ✔ quando passa, ✖
   com o motivo quando falha, e o `arquivo.lua:12` da falha é um link para a
   linha. Os modelos Plataforma, Aventura, Nave, 3D e Padrão já vêm com testes.
 - **Com um agente de IA:** o jogo aberto pelo ▶ Jogar também atende o
   [servidor MCP](mcp.md#o-jogo-aberto). O agente vê o que acontece enquanto
-  você joga, muda valores na hora (sem gravar), pausa e avança quadros. O que
-  ele grava nos arquivos aparece no editor sozinho, e o jogo recarrega.
+  você joga, muda valores na hora (sem gravar), aperta teclas, pausa e avança
+  quadros. O que ele grava nos arquivos aparece no editor sozinho, e o jogo
+  recarrega.
+
+## Agente de IA
+
+Um agente de IA (como o Claude) pode fazer o jogo junto com você, pelo
+[servidor MCP](mcp.md) que vem com o NN Studio: montar cenas, pôr
+comportamentos e eventos, escrever Lua, jogar sem janela, rodar os testes e
+acompanhar o jogo aberto.
+
+- **Jogo > Ligar um agente de IA…** (ou "claude" na paleta) mostra como ligar
+  o Claude Code, o Claude Desktop, o Cursor ou outro cliente, já com o caminho
+  do `nn` e da pasta, com um botão para copiar. Os botões gravam a
+  configuração para você: o `.mcp.json` do projeto, a do Claude Desktop (com
+  uma cópia da de antes) ou o `.cursor/mcp.json`.
+- **O agente vê o editor.** Escolha um objeto e peça *"deixa este inimigo mais
+  rápido"*: com `ver_editor`, ele sabe a aba da frente, os objetos escolhidos e
+  vê a janela.
+- **Ele não grava por cima do que você não salvou.** Com mudanças suas ainda
+  não gravadas numa cena, ele pede para você salvar (Ctrl+S) ou descartar
+  antes de mudar essa cena.
+- **O que ele muda aparece no Console** com ✨, a ferramenta e o arquivo
+  (clique para abrir). As abas abertas recarregam sozinhas.
+- O `.mcp.json`, o `.cursor` e o `AGENTS.md` não vão para o jogo exportado.
+
+![Ligar um agente de IA](imagens/nn-studio-agente.png)
 
 ## Configurações do projeto
 
@@ -1742,17 +1767,17 @@ quase não usa o processador.
 
 ## O que vem depois
 
-A **v0.6** trouxe o modelar e animar dentro do NN Studio: o modelador de
-peças low-poly, o Repetir em linha e em círculo, os kits, a biblioteca de
-modelos prontos, os esqueletos prontos e o animador com a linha do tempo e
-as animações prontas. Antes dela, a v0.5 deixou o NN Studio mais gostoso de
+A **v0.7** trouxe o **desenvolvimento guiado por IA**: o
+[servidor MCP](mcp.md) (`nn mcp`) liga um agente de IA ao projeto para ele
+montar cenas, eventos e scripts, jogar sem janela, rodar os testes de jogo e
+acompanhar o jogo aberto, junto com você no NN Studio. Antes dela, a v0.6
+trouxe o modelador e o animador, a v0.5 deixou o NN Studio mais gostoso de
 usar, a v0.4 deixou os mundos 3D mais vivos, a v0.3 trouxe o combate e a
 v0.2, o 3D. Está tudo no [CHANGELOG](../CHANGELOG.md).
 
-A próxima etapa, a **v0.7**, é o **desenvolvimento guiado por IA**: o
-[servidor MCP](mcp.md) (`nn mcp`) liga um agente de IA ao projeto para ele
-montar cenas, eventos e scripts, rodar o jogo e ver o resultado. Depois, a
-**v0.8** leva a arte, a modelagem e a animação para o agente também.
+A próxima etapa, a **v0.8**, leva **a arte, a modelagem e a animação para o
+agente**: pixel art e animações de sprite, mapas, partículas, sons, diálogos,
+modelos 3D, esqueletos e animações, tudo com prévias em imagem.
 
 Ainda não tem, e são ideias para depois:
 

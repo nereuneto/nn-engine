@@ -1252,3 +1252,48 @@ fn uso_de_ponta_a_ponta_v06() {
     tela(&mut h, "06-18-cena");
     let _ = Select::Faces;
 }
+
+/// Ferramenta: a imagem de Jogo > Ligar um agente de IA para o guia do
+/// servidor MCP (`cargo test -p nn-studio --test revisao captura_do_agente
+/// -- --ignored`).
+#[test]
+#[ignore]
+fn captura_do_agente_para_a_documentacao() {
+    let out = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/imagens");
+    let dir = temp("captura-agente");
+    let proj = dir.join("meu-jogo");
+    create_project(&NewOptions {
+        dir: proj.clone(),
+        title: Some("Meu jogo".into()),
+        template: Template::Visual,
+    })
+    .unwrap();
+    // O nn ao lado do NN Studio, como no pacote da release.
+    let bin = dir.join("NN Studio");
+    std::fs::create_dir_all(&bin).unwrap();
+    std::fs::write(bin.join(format!("nn{}", std::env::consts::EXE_SUFFIX)), "").unwrap();
+    let options = StudioOptions {
+        settings_path: Some(dir.join("preferencias.json")),
+        open: Some(proj),
+        exe: Some(bin.join("nn-studio")),
+        check_updates: false,
+    };
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .wgpu()
+        .build_eframe(move |cc| {
+            let mut app = StudioApp::new(&cc.egui_ctx, options);
+            app.set_render_state(cc.wgpu_render_state.clone());
+            app
+        });
+    passos(&mut h);
+    h.state_mut()
+        .project_mut()
+        .unwrap()
+        .open_file("cenas/fase.cena", None);
+    passos(&mut h);
+    h.state_mut().project_mut().unwrap().agent_dialog = Some(Default::default());
+    passos(&mut h);
+    let img = h.render().expect("imagem");
+    img.save(out.join("nn-studio-agente.png")).unwrap();
+}

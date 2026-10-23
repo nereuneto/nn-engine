@@ -54,6 +54,7 @@ winresource = "0.1"
 
 [dev-dependencies]
 egui_kittest = { version = "0.36", features = ["eframe", "wgpu", "snapshot"] }
+nn-mcp.workspace = true
 
 [lints]
 workspace = true

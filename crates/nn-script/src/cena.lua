@@ -3493,6 +3493,11 @@ function M.draw(scene)
     if o.alive and o:shown() then draw_object(o, alpha) end
   end
   for _, fx in pairs(scene._fx or {}) do fx:draw() end
+  -- Os corpos da física por cima (rodar_jogo com ver_corpos).
+  if M.show_bodies then
+    if scene.world then scene.world:debug_draw() end
+    if scene._world3 then scene._world3:debug_draw() end
+  end
   each_behavior(scene, "draw")
   draw_numbers(scene)
   M.draw_paths(scene)

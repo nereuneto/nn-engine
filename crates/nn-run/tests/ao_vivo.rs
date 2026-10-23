@@ -99,6 +99,15 @@ fn agente_ve_e_mexe_no_jogo_aberto() {
         out.push(call(&mut s, "mexer_no_jogo", json!({ "avancar": 30 })));
         out.push(call(&mut s, "mexer_no_jogo", json!({ "lua": x })));
         out.push(call(&mut s, "ver_jogo_aberto", json!({ "captura": false })));
+        // Teclas: pausado, o herói anda para a direita só nos quadros avançados.
+        let hx = "return self.objects.heroi.x";
+        out.push(call(&mut s, "mexer_no_jogo", json!({ "lua": hx })));
+        out.push(call(
+            &mut s,
+            "mexer_no_jogo",
+            json!({ "teclas": [ { "segurar": "right", "por": 0.5 } ], "avancar": 40 }),
+        ));
+        out.push(call(&mut s, "mexer_no_jogo", json!({ "lua": hx })));
         out.push(call(
             &mut s,
             "mexer_no_jogo",
@@ -192,7 +201,15 @@ fn agente_ve_e_mexe_no_jogo_aberto() {
     assert!((25.0..=35.0).contains(&(x3 - x2).abs()), "{x2} → {x3}");
     assert!(out[8].1.contains("PAUSADO"), "{}", out[8].1);
 
-    let (err, text, _) = &out[9];
+    let (err, text, _) = &out[10];
+    assert!(!err, "{text}");
+    assert!(
+        text.contains("✓ teclas: segurar right de 0.00 s por 0.50 s"),
+        "{text}"
+    );
+    let (hx1, hx2) = (x(&out[9].1), x(&out[11].1));
+    assert!(hx2 - hx1 > 20.0, "segurar right devia andar: {hx1} → {hx2}");
+    let (err, text, _) = &out[12];
     assert!(err);
     assert!(
         text.contains("não achei o objeto \"dragao\" (tem: "),
@@ -202,13 +219,13 @@ fn agente_ve_e_mexe_no_jogo_aberto() {
         text.contains("não tem o componente \"nn:voar\" (tem: "),
         "{text}"
     );
-    let (err, text, _) = &out[10];
+    let (err, text, _) = &out[13];
     assert!(err);
     assert!(text.contains("✗ lua: lua:1: ops"), "{text}");
     assert!(
-        out[11].1.contains("✓ jogo continuando\n✓ jogo fechado"),
+        out[14].1.contains("✓ jogo continuando\n✓ jogo fechado"),
         "{}",
-        out[11].1
+        out[14].1
     );
 
     // Ao sair, o arquivo de conexão vai embora.

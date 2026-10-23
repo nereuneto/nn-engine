@@ -1160,7 +1160,7 @@ fn jogo_conta_onde_estao_os_objetos_e_o_editor_pausa() {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     // Caminhos pede para o jogo mostrar a grade dos caminhos.
-    h.get_by_label("🧭 Caminhos").click();
+    h.get_by_label("🗺 Caminhos").click();
     h.run_steps(3);
     let start = std::time::Instant::now();
     loop {
@@ -6846,12 +6846,12 @@ fn rodar_os_testes_mostra_no_console_e_leva_a_linha() {
     h.run_steps(4);
     h.key_press_modifiers(Modifiers::COMMAND, Key::F5);
     h.run_steps(2);
-    assert!(console_text(&h).contains("🧪 Rodando os testes do jogo"));
+    assert!(console_text(&h).contains("🔬 Rodando os testes do jogo"));
     let started = std::time::Instant::now();
     let text = loop {
         h.run_steps(2);
         let text = console_text(&h);
-        if text.contains("🧪 5 testes") || text.contains("Não foi possível rodar os testes") {
+        if text.contains("🔬 5 testes") || text.contains("Não foi possível rodar os testes") {
             break text;
         }
         assert!(started.elapsed().as_secs() < 300, "{text}");
@@ -6865,18 +6865,169 @@ fn rodar_os_testes_mostra_no_console_e_leva_a_linha() {
         return;
     }
     assert!(
-        text.contains("✓ testes/jogo.lua › o herói anda e pula"),
+        text.contains("✔ testes/jogo.lua › o herói anda e pula"),
         "{text}"
     );
     assert!(
-        text.contains("✗ testes/quebra.lua › cai no abismo: testes/quebra.lua:3: caiu"),
+        text.contains("✖ testes/quebra.lua › cai no abismo: testes/quebra.lua:3: caiu"),
         "{text}"
     );
     assert!(
-        text.contains("🧪 5 testes: 4 passaram, 1 falhou."),
+        text.contains("🔬 5 testes: 4 passaram, 1 falhou."),
         "{text}"
     );
     h.get_by_label("testes/quebra.lua:3").click();
     h.run_steps(4);
     assert!(tabs(&h).contains(&Tab::Code("testes/quebra.lua".into())));
+}
+
+/// Uma ferramenta do servidor MCP (como um agente chamaria).
+fn ferramenta(s: &mut nn_mcp::Server, tool: &str, args: serde_json::Value) -> (bool, String) {
+    let r = s
+        .handle(
+            serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": tool, "arguments": args } }),
+        )
+        .unwrap();
+    let text = r["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    (r["result"]["isError"] == true, text)
+}
+
+#[test]
+fn agente_ve_o_editor_e_nao_grava_por_cima() {
+    let dir = temp("agente-editor");
+    let proj = dir.join("jogo");
+    nn_run::create_project(&nn_run::NewOptions {
+        dir: proj.clone(),
+        title: None,
+        template: nn_run::Template::Visual,
+    })
+    .unwrap();
+    // (O título tem um herói animado: a tela redesenha sempre.)
+    let options = StudioOptions {
+        settings_path: Some(dir.join("preferencias.json")),
+        open: Some(proj.clone()),
+        exe: Some(fake_game(&dir)),
+        check_updates: false,
+    };
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1280.0, 800.0))
+        .build_eframe(move |cc| StudioApp::new(&cc.egui_ctx, options));
+    h.run_steps(3);
+    // A pessoa escolhe o herói e o mexe, sem gravar.
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        ws.open_file("cenas/fase.cena", None);
+    }
+    h.run_steps(3);
+    {
+        let ws = h.state_mut().project_mut().unwrap();
+        let doc = ws.scenes.get_mut("cenas/fase.cena").unwrap();
+        doc.selection = vec![5];
+        doc.data.find_mut(5).unwrap().x += 40.0;
+    }
+    h.run_steps(3);
+    assert!(nn_script::remote::connection_file_for(&proj, nn_script::remote::EDITOR).is_file());
+
+    let p = proj.clone();
+    let agent = std::thread::spawn(move || {
+        let mut s = nn_mcp::Server::new(p, nn_run::mcp_hooks());
+        let ver = ferramenta(
+            &mut s,
+            "ver_editor",
+            serde_json::json!({ "captura": false }),
+        );
+        let por_cima = ferramenta(
+            &mut s,
+            "mudar_objeto",
+            serde_json::json!({ "cena": "cenas/fase.cena", "objeto": "heroi", "mudar": { "y": 0 } }),
+        );
+        let outra = ferramenta(
+            &mut s,
+            "mudar_objeto",
+            serde_json::json!({ "cena": "cenas/titulo.cena", "objeto": 1, "mudar": { "x": 123 } }),
+        );
+        (ver, por_cima, outra)
+    });
+    let started = std::time::Instant::now();
+    while !agent.is_finished() {
+        h.run_steps(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert!(started.elapsed().as_secs() < 60, "o agente não terminou");
+    }
+    let (ver, por_cima, outra) = agent.join().unwrap();
+    h.run_steps(3);
+
+    let (err, text) = ver;
+    assert!(!err, "{text}");
+    assert!(
+        text.contains("Aba da frente: cenas/fase.cena (cena)."),
+        "{text}"
+    );
+    assert!(text.contains("heroi (id 5): x "), "{text}");
+    assert!(text.contains("nn:plataforma"), "{text}");
+    assert!(text.contains("Mudanças NÃO gravadas"), "{text}");
+    assert!(text.contains("cenas/fase.cena"), "{text}");
+
+    let (err, text) = por_cima;
+    assert!(err, "devia recusar: {text}");
+    assert!(
+        text.contains("mudanças ainda não gravadas em cenas/fase.cena"),
+        "{text}"
+    );
+    // A mudança da pessoa continua lá.
+    assert!(h.state().project().unwrap().is_dirty("cenas/fase.cena"));
+
+    let (err, text) = outra;
+    assert!(!err, "{text}");
+    let ws = h.state().project().unwrap();
+    let e = ws
+        .console
+        .entries()
+        .find(|e| e.text.starts_with("Agente (mudar_objeto)"))
+        .unwrap_or_else(|| panic!("sem a linha do agente:\n{}", console_text(&h)));
+    assert_eq!(e.files, vec!["cenas/titulo.cena".to_string()]);
+}
+
+#[test]
+fn ligar_um_agente_grava_a_configuracao() {
+    let dir = temp("ligar-agente");
+    let proj = dir.join("jogo");
+    nn_run::create_project(&nn_run::NewOptions {
+        dir: proj.clone(),
+        title: None,
+        template: nn_run::Template::Minimo,
+    })
+    .unwrap();
+    let mut h = studio_with(&dir, Some(proj.clone()), fake_game(&dir), true);
+    paleta(&mut h, "claude");
+    h.run_steps(2);
+    tela(&mut h, "agente-claude-code");
+    h.get_by_label("✨ Ligar um agente de IA");
+    h.get_by_label_contains("claude mcp add nn-jogo -- ");
+    h.get_by_label("📄 Gravar .mcp.json no projeto").click();
+    h.run_steps(2);
+    let v: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(proj.join(".mcp.json")).unwrap()).unwrap();
+    assert_eq!(
+        v["mcpServers"]["nn-engine"]["args"],
+        serde_json::json!(["mcp", "${CLAUDE_PROJECT_DIR:-.}"])
+    );
+    h.get_by_label_contains("Pronto: criei");
+    h.get_by_label("Cursor").click();
+    h.run_steps(2);
+    h.get_by_label("📄 Gravar .cursor/mcp.json no projeto")
+        .click();
+    h.run_steps(2);
+    tela(&mut h, "agente-cursor");
+    h.get_by_label("Claude Desktop").click();
+    h.run_steps(2);
+    tela(&mut h, "agente-desktop");
+    assert!(proj.join(".cursor/mcp.json").is_file());
+    h.get_by_label("Fechar").click();
+    h.run_steps(2);
+    assert!(h.state().project().unwrap().agent_dialog.is_none());
 }

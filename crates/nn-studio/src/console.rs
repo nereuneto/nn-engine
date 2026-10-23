@@ -29,6 +29,8 @@ pub enum Level {
 pub enum Source {
     Editor,
     Game,
+    /// O agente de IA (pelo servidor MCP).
+    Agent,
 }
 
 /// Grupo do filtro do console.
@@ -51,6 +53,8 @@ pub struct Entry {
     pub text: String,
     /// Quantas vezes seguidas a mesma mensagem apareceu.
     pub count: u32,
+    /// Arquivos para abrir com um clique (o que o agente mudou).
+    pub files: Vec<String>,
 }
 
 /// Registro de log no formato que o jogo escreve (`@nn {json}`).
@@ -166,6 +170,8 @@ pub enum ConsoleAction {
     },
     /// O ▶ Jogar do Console vazio.
     Play,
+    /// Um arquivo que o agente mudou.
+    OpenFile(String),
 }
 
 #[derive(Debug)]
@@ -224,6 +230,17 @@ impl Console {
         category: Category,
         text: impl Into<String>,
     ) {
+        self.push_with_files(source, level, category, text, Vec::new());
+    }
+
+    fn push_with_files(
+        &mut self,
+        source: Source,
+        level: Level,
+        category: Category,
+        text: impl Into<String>,
+        files: Vec<String>,
+    ) {
         let text = text.into();
         if category == Category::Error {
             self.unseen_errors += 1;
@@ -232,6 +249,7 @@ impl Console {
             && last.text == text
             && last.source == source
             && last.level == level
+            && last.files == files
         {
             last.count += 1;
             return;
@@ -244,6 +262,7 @@ impl Console {
             category,
             text,
             count: 1,
+            files,
         });
         while self.entries.len() > MAX_ENTRIES {
             if let Some(old) = self.entries.pop_front() {
@@ -263,6 +282,11 @@ impl Console {
 
     pub fn error(&mut self, text: impl Into<String>) {
         self.push(Source::Editor, Level::Error, Category::Error, text);
+    }
+
+    /// O que o agente de IA fez, com os arquivos que ele mudou.
+    pub fn agent(&mut self, text: impl Into<String>, files: Vec<String>) {
+        self.push_with_files(Source::Agent, Level::Info, Category::Message, text, files);
     }
 
     /// Uma linha da saída do jogo.
@@ -414,6 +438,7 @@ impl Console {
             Category::Message => match e.source {
                 Source::Game => ("💬", ui.visuals().text_color()),
                 Source::Editor => ("✏", ui.visuals().weak_text_color()),
+                Source::Agent => ("✨", ui.visuals().text_color()),
             },
             Category::Engine => ("⚙", ui.visuals().weak_text_color()),
         };
@@ -422,6 +447,7 @@ impl Console {
         let first = lines.next().unwrap_or("").to_string();
         let rest: Vec<String> = lines.map(str::to_string).collect();
         let count = e.count;
+        let files = e.files.clone();
         let expanded = self.expanded.contains(&id);
         let mut action = None;
         ui.horizontal_wrapped(|ui| {
@@ -454,6 +480,16 @@ impl Console {
             }
             if count > 1 {
                 ui.label(RichText::new(format!("  ×{count}")).small().weak());
+            }
+            for f in &files {
+                ui.label("  ");
+                if ui
+                    .link(RichText::new(f).monospace())
+                    .on_hover_text("Abrir o arquivo")
+                    .clicked()
+                {
+                    action = Some(ConsoleAction::OpenFile(f.clone()));
+                }
             }
         });
         if expanded {

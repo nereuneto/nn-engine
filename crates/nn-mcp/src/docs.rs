@@ -125,7 +125,7 @@ pub fn prompt(params: &Value) -> Result<Value, String> {
              Comece por ver_projeto e pelas cenas envolvidas (ver_cena). Mude com as ferramentas de cena e eventos, \
              escreva Lua só quando precisar. Confira jogando (rodar_jogo), rode os testes do projeto (rodar_testes) \
              e acrescente um teste para o que mudou. Se o jogo estiver aberto numa janela, veja o efeito nele \
-             (ver_jogo_aberto). Termine com conferir_projeto.",
+             (ver_jogo_aberto); se o NN Studio estiver aberto, ver_editor mostra de que objeto a pessoa fala. Termine com conferir_projeto.",
             arg("pedido")
         ),
         other => return Err(format!("prompt desconhecido: {other}")),
@@ -149,7 +149,9 @@ pub fn instructions(server: &Server) -> String {
          - Depois de uma leva de mudanças, conferir_projeto. Errou? desfazer.\n\
          - Veja funcionando: rodar_jogo roda sem janela, com teclas e cliques simulados, e mostra erros, prints, regras que dispararam, o que mudou e capturas da tela.\n\
          - Testes de jogo: arquivos Lua em testes/ com test(\"nome\", function(t) ... end); rodar_testes roda todos. Rode antes e depois de mudar.\n\
-         - Jogo aberto numa janela (abrir_jogo, ou o ▶ Jogar do NN Studio): ver_jogo_aberto mostra o que acontece enquanto a pessoa joga; mexer_no_jogo muda valores na hora (sem gravar), pausa e avança quadros. Bom para ajustar números junto com a pessoa; o que ficar, grave nos arquivos.\n\
+         - Jogo aberto numa janela (abrir_jogo, ou o ▶ Jogar do NN Studio): ver_jogo_aberto mostra o que acontece enquanto a pessoa joga; mexer_no_jogo muda valores na hora (sem gravar), aperta teclas, pausa e avança quadros. Bom para ajustar números junto com a pessoa; o que ficar, grave nos arquivos.\n\
+         - Algo não encosta ou fica no ar? rodar_jogo com ver_corpos desenha os corpos da física.\n\
+         - Com o NN Studio aberto no projeto, ver_editor mostra a aba e os objetos escolhidos (\"este\" que a pessoa fala) e o que não foi gravado: o servidor não grava por cima disso.\n\
          - 2D: pixels, y para cima, (0,0) no meio da tela. 3D: metros, y é a altura.",
     );
     if !server.has_project() {

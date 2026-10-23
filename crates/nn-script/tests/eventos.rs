@@ -161,6 +161,7 @@ fn regras_da_cena_comecar_tecla_tempo_e_variavel() {
     {{ mode = "enquanto", when = {{ {{ cond = "variavel", var = "pontos", op = ">=", valor = 15 }} }},
       actions = {{ {{ act = "variavel", var = "quadros", op = "somar", valor = 1 }} }} }},
     {{ off = true, when = {{ {{ cond = "comecou" }} }}, actions = {{ {{ act = "variavel", var = "desligada", op = "definir", valor = 1 }} }} }},
+    {{ comment = "Uma regra com nome roda", when = {{ {{ cond = "comecou" }} }}, actions = {{ {{ act = "variavel", var = "com_nome", op = "definir", valor = 1 }} }} }},
     {{ when = {{ {{ cond = "tecla", modo = "apertar", tecla = "z" }}, {{ cond = "variavel", var = "pontos", op = ">", valor = 100, nao = true }} }},
       actions = {{ {{ act = "variavel", var = "texto", op = "definir", valor = "tem {{pontos}}" }} }} }},
   }},
@@ -174,6 +175,11 @@ fn regras_da_cena_comecar_tecla_tempo_e_variavel() {
     h.run_frames(2);
     assert_eq!(lua::<f64>(&rt, "nn.vars.pontos"), 10.0);
     assert_eq!(lua::<Option<f64>>(&rt, "nn.vars.desligada"), None);
+    assert_eq!(
+        lua::<f64>(&rt, "nn.vars.com_nome"),
+        1.0,
+        "regra com comment roda"
+    );
     apertar(&mut h, KeyCode::KeyX);
     assert_eq!(lua::<f64>(&rt, "nn.vars.pontos"), 15.0);
     h.run_frames(10);

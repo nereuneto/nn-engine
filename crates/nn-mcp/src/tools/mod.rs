@@ -8,6 +8,7 @@ mod aovivo;
 mod arquivos;
 mod cenas;
 mod docs;
+mod editor;
 mod eventos;
 mod jogar;
 mod projeto;
@@ -75,6 +76,7 @@ fn all() -> Vec<&'static Tool> {
     v.extend(eventos::TOOLS);
     v.extend(jogar::TOOLS);
     v.extend(aovivo::TOOLS);
+    v.extend(editor::TOOLS);
     v.extend(docs::TOOLS);
     v
 }
@@ -195,6 +197,7 @@ impl Server {
         if before.as_deref() == Some(data) {
             return Ok(());
         }
+        self.check_unsaved(&rel)?;
         crate::paths::write_atomic(&full, data)
             .map_err(|e| format!("não foi possível gravar {rel}: {e}"))?;
         self.history.record(&rel, before, Some(data.to_vec()));
@@ -209,6 +212,7 @@ impl Server {
                 "{rel} é uma pasta; apague os arquivos dela um a um"
             ));
         }
+        self.check_unsaved(&rel)?;
         let before =
             std::fs::read(&full).map_err(|e| format!("não foi possível ler {rel}: {e}"))?;
         std::fs::remove_file(&full).map_err(|e| format!("não foi possível apagar {rel}: {e}"))?;

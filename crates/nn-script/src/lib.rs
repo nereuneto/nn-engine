@@ -411,6 +411,13 @@ impl ScriptRuntime {
         self.inner.front.borrow().clone()
     }
 
+    /// Desenha os corpos da física (2D e 3D) por cima das cenas visuais:
+    /// para ver onde o jogo acha que as coisas estão.
+    pub fn set_show_bodies(&self, on: bool) -> mlua::Result<()> {
+        let m: Table = self.lua().named_registry_value(SCENE_RUNTIME_KEY)?;
+        m.set("show_bodies", on)
+    }
+
     /// Os erros que pararam cenas desde a última chamada.
     pub fn take_errors(&self) -> Vec<SceneError> {
         std::mem::take(&mut *self.inner.errors.borrow_mut())

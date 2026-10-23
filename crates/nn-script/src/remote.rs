@@ -15,6 +15,7 @@
 //! {"token": "...", "pedido": "mudar", "objeto": "heroi", "campo": "velocidade", "componente": "nn:plataforma", "valor": 500}
 //! {"token": "...", "pedido": "variavel", "nome": "vidas", "valor": 9}
 //! {"token": "...", "pedido": "lua", "codigo": "self.objects.heroi:move_to(0, 0)"}
+//! {"token": "...", "pedido": "teclas", "teclas": [{"em": 0, "tecla": "right", "baixo": true}, {"em": 1, "tecla": "right", "baixo": false}]}
 //! {"token": "...", "pedido": "pausar"}            (e "continuar", "avancar" com "quadros")
 //! {"token": "...", "pedido": "captura"}
 //! {"token": "...", "pedido": "fechar"}
@@ -28,9 +29,9 @@ use std::hash::{BuildHasher, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Sender, channel};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use mlua::{Function, LuaSerdeExt, Table, Value as LuaValue};
@@ -53,6 +54,16 @@ static QUEUE: Mutex<Vec<Pending>> = Mutex::new(Vec::new());
 /// Quem pediu a imagem da tela e espera ela sair.
 static CAPTURES: Mutex<Vec<Sender<Value>>> = Mutex::new(Vec::new());
 
+/// Uma tecla para apertar ou soltar daqui a `wait` segundos de jogo (só
+/// contam os quadros que andam: pausado, o tempo para).
+struct KeyEvent {
+    wait: f64,
+    keys: &'static [nn_input::KeyCode],
+    down: bool,
+}
+
+static KEYS: Mutex<Vec<KeyEvent>> = Mutex::new(Vec::new());
+
 /// O jogo está atendendo pela porta local?
 pub fn serving() -> bool {
     SERVING.load(Ordering::Relaxed)
@@ -60,6 +71,16 @@ pub fn serving() -> bool {
 
 /// O arquivo com a porta e a senha do jogo aberto de uma pasta.
 pub fn connection_file(project_dir: &Path) -> PathBuf {
+    connection_file_for(project_dir, GAME)
+}
+
+/// Quem atende pela porta local: o jogo aberto (`GAME`) ou o NN Studio com o
+/// projeto aberto (`EDITOR`).
+pub const GAME: &str = "";
+pub const EDITOR: &str = "editor";
+
+/// O arquivo de conexão de `kind` ([`GAME`] ou [`EDITOR`]) de uma pasta.
+pub fn connection_file_for(project_dir: &Path, kind: &str) -> PathBuf {
     let dir = project_dir
         .canonicalize()
         .unwrap_or_else(|_| project_dir.to_path_buf());
@@ -69,7 +90,11 @@ pub fn connection_file(project_dir: &Path) -> PathBuf {
         h ^= u64::from(*b);
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
-    base_dir().join(format!("{h:016x}.json"))
+    if kind.is_empty() {
+        base_dir().join(format!("{h:016x}.json"))
+    } else {
+        base_dir().join(format!("{h:016x}-{kind}.json"))
+    }
 }
 
 /// Onde ficam os arquivos de conexão: uma pasta só do usuário (a senha deixa
@@ -131,11 +156,16 @@ fn random_token() -> String {
     out
 }
 
-/// O jogo escutando: tira o arquivo de conexão ao sair de cena.
+/// Quem atende pela porta: recebe o pedido (já com a senha conferida) e
+/// devolve a resposta.
+pub type Handler = Arc<dyn Fn(Value) -> Value + Send + Sync>;
+
+/// Atendendo pela porta: tira o arquivo de conexão ao sair de cena.
 #[derive(Debug)]
 pub struct Listener {
     file: PathBuf,
     port: u16,
+    game: bool,
 }
 
 impl Listener {
@@ -146,7 +176,9 @@ impl Listener {
 
 impl Drop for Listener {
     fn drop(&mut self) {
-        SERVING.store(false, Ordering::Relaxed);
+        if self.game {
+            SERVING.store(false, Ordering::Relaxed);
+        }
         // Só se ainda for o nosso (outro jogo da mesma pasta pode ter aberto depois).
         if let Ok(text) = std::fs::read_to_string(&self.file)
             && let Ok(v) = serde_json::from_str::<Value>(&text)
@@ -159,10 +191,25 @@ impl Drop for Listener {
 
 /// Começa a atender pela porta local o jogo da pasta `project_dir`.
 pub fn listen(project_dir: &Path) -> std::io::Result<Listener> {
+    capture::ensure_installed();
+    capture::enable_live();
+    let mut listener = listen_with(project_dir, GAME, Arc::new(answer))?;
+    listener.game = true;
+    SERVING.store(true, Ordering::Relaxed);
+    log::info!(
+        "jogo aberto atendendo na porta {} (servidor MCP)",
+        listener.port
+    );
+    Ok(listener)
+}
+
+/// Atende pela porta local, para quem é `kind` na pasta `project_dir`, com
+/// `handler` respondendo os pedidos (numa thread de cada ligação).
+pub fn listen_with(project_dir: &Path, kind: &str, handler: Handler) -> std::io::Result<Listener> {
     let listener = TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))?;
     let port = listener.local_addr()?.port();
     let token = random_token();
-    let file = connection_file(project_dir);
+    let file = connection_file_for(project_dir, kind);
     let info = json!({
         "porta": port,
         "token": token,
@@ -170,37 +217,103 @@ pub fn listen(project_dir: &Path) -> std::io::Result<Listener> {
         "pasta": project_dir.canonicalize().unwrap_or_else(|_| project_dir.to_path_buf()),
     });
     write_private(&file, &info.to_string())?;
-    capture::ensure_installed();
-    capture::enable_live();
-    SERVING.store(true, Ordering::Relaxed);
+    let connections = Arc::new(AtomicUsize::new(0));
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(stream) = stream else { continue };
             let token = token.clone();
-            std::thread::spawn(move || handle_connection(stream, &token));
+            let handler = handler.clone();
+            let connections = connections.clone();
+            std::thread::spawn(move || handle_connection(stream, &token, &handler, &connections));
         }
     });
-    log::info!("jogo aberto atendendo na porta {port} (servidor MCP)");
-    Ok(Listener { file, port })
+    Ok(Listener {
+        file,
+        port,
+        game: false,
+    })
 }
 
-fn handle_connection(stream: TcpStream, token: &str) {
+/// O maior pedido aceito (um script Lua grande cabe com folga).
+const MAX_REQUEST: u64 = 1 << 20;
+/// Quanto uma ligação nova tem para mandar o primeiro pedido, com a senha.
+const HELLO_TIMEOUT: Duration = Duration::from_secs(5);
+/// Quantas ligações ao mesmo tempo (o servidor MCP usa uma).
+const MAX_CONNECTIONS: usize = 8;
+
+/// Compara a senha sem deixar o tempo da comparação dizer quanto acertou.
+fn same_token(given: Option<&str>, token: &str) -> bool {
+    let Some(given) = given else {
+        return false;
+    };
+    let (a, b) = (given.as_bytes(), token.as_bytes());
+    let mut diff = u8::from(a.len() != b.len());
+    for (i, x) in b.iter().enumerate() {
+        diff |= x ^ a.get(i).copied().unwrap_or(0);
+    }
+    diff == 0
+}
+
+/// Lê uma linha de no máximo `MAX_REQUEST` bytes. `Ok(None)` no fim da
+/// ligação; `Err` se a linha passou do limite ou a leitura falhou.
+fn read_request<R: BufRead>(reader: &mut R) -> std::io::Result<Option<String>> {
+    let mut buf = Vec::new();
+    let n = std::io::Read::take(&mut *reader, MAX_REQUEST + 1).read_until(b'\n', &mut buf)?;
+    if n == 0 {
+        return Ok(None);
+    }
+    if buf.len() as u64 > MAX_REQUEST {
+        return Err(std::io::Error::other("pedido grande demais"));
+    }
+    Ok(Some(String::from_utf8_lossy(&buf).into_owned()))
+}
+
+fn handle_connection(stream: TcpStream, token: &str, handler: &Handler, count: &AtomicUsize) {
+    if count.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
+        count.fetch_sub(1, Ordering::SeqCst);
+        let mut out = stream;
+        let _ = writeln!(out, "{}", json!({ "erro": "ligações demais" }));
+        return;
+    }
+    serve_connection(stream, token, handler);
+    count.fetch_sub(1, Ordering::SeqCst);
+}
+
+fn serve_connection(stream: TcpStream, token: &str, handler: &Handler) {
     let Ok(read) = stream.try_clone() else {
         return;
     };
+    // Quem liga e não diz nada (ou não sabe a senha) não fica ocupando o jogo.
+    let _ = stream.set_read_timeout(Some(HELLO_TIMEOUT));
     let mut out = stream;
-    for line in BufReader::new(read).lines() {
-        let Ok(line) = line else { break };
+    let mut reader = BufReader::new(read);
+    let mut known = false;
+    loop {
+        let line = match read_request(&mut reader) {
+            Ok(Some(line)) => line,
+            Ok(None) => break,
+            Err(e) => {
+                let _ = writeln!(out, "{}", json!({ "erro": e.to_string() }));
+                break;
+            }
+        };
         if line.trim().is_empty() {
             continue;
         }
         let reply = match serde_json::from_str::<Value>(&line) {
-            Err(e) => json!({ "erro": format!("JSON inválido: {e}") }),
-            Ok(req) if req["token"].as_str() != Some(token) => {
+            Ok(req) if !same_token(req["token"].as_str(), token) => {
                 let _ = writeln!(out, "{}", json!({ "erro": "senha errada" }));
                 break;
             }
-            Ok(req) => answer(req),
+            Err(_) if !known => break,
+            Err(e) => json!({ "erro": format!("JSON inválido: {e}") }),
+            Ok(req) => {
+                if !known {
+                    known = true;
+                    let _ = out.set_read_timeout(None);
+                }
+                handler(req)
+            }
         };
         if writeln!(out, "{reply}").and_then(|()| out.flush()).is_err() {
             break;
@@ -221,6 +334,16 @@ fn answer(req: Value) -> Value {
             live::push(r#"{"cmd":"resume"}"#);
             json!({ "ok": true, "pausado": false })
         }
+        "teclas" => match parse_keys(&req["teclas"]) {
+            Ok(events) => {
+                let n = events.len();
+                KEYS.lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .extend(events);
+                json!({ "ok": true, "teclas": n })
+            }
+            Err(e) => json!({ "erro": e }),
+        },
         "avancar" => {
             let n = req["quadros"].as_u64().unwrap_or(1).clamp(1, 600);
             for _ in 0..n {
@@ -249,6 +372,42 @@ fn answer(req: Value) -> Value {
     }
 }
 
+fn parse_keys(list: &Value) -> Result<Vec<KeyEvent>, String> {
+    let list = list.as_array().ok_or("\"teclas\" é uma lista")?;
+    let mut out = Vec::new();
+    for t in list {
+        let name = t["tecla"]
+            .as_str()
+            .ok_or("cada tecla precisa de \"tecla\"")?;
+        let keys = crate::convert::keys(name).map_err(|e| crate::format_error(&e))?;
+        out.push(KeyEvent {
+            wait: t["em"].as_f64().unwrap_or(0.0).max(0.0),
+            keys,
+            down: t["baixo"].as_bool().unwrap_or(true),
+        });
+    }
+    Ok(out)
+}
+
+/// Aperta e solta as teclas pedidas que chegaram na hora, num quadro que
+/// vai andar (pausado, espera o "avancar").
+fn press_keys(ctx: &mut nn_app::Context) {
+    let mut keys = KEYS.lock().unwrap_or_else(|e| e.into_inner());
+    if keys.is_empty() || (live::paused() && live::pending_steps() == 0) {
+        return;
+    }
+    let dt = f64::from(ctx.time.delta_secs());
+    keys.retain_mut(|k| {
+        if k.wait <= 1e-6 {
+            crate::game_run::set_key(&mut ctx.input, k.keys, k.down);
+            false
+        } else {
+            k.wait -= dt;
+            true
+        }
+    });
+}
+
 /// Atende os pedidos que chegaram (chamado a cada quadro pela cena da frente).
 pub(crate) fn serve(
     runtime: &ScriptRuntime,
@@ -258,6 +417,7 @@ pub(crate) fn serve(
     ctx: &mut nn_app::Context,
 ) {
     capture::set_live_time(f64::from(ctx.time.elapsed_secs()));
+    press_keys(ctx);
     // A imagem pedida no quadro anterior.
     {
         let mut waiting = CAPTURES.lock().unwrap_or_else(|e| e.into_inner());
@@ -469,7 +629,12 @@ pub const NOT_OPEN: &str = "o jogo desta pasta não está aberto";
 impl Client {
     /// Liga no jogo aberto da pasta (`Err` com o motivo, se não houver).
     pub fn connect(project_dir: &Path) -> Result<Self, String> {
-        let file = connection_file(project_dir);
+        Self::connect_to(project_dir, GAME)
+    }
+
+    /// Liga em quem atende `kind` ([`GAME`] ou [`EDITOR`]) na pasta.
+    pub fn connect_to(project_dir: &Path, kind: &str) -> Result<Self, String> {
+        let file = connection_file_for(project_dir, kind);
         let text = std::fs::read_to_string(&file).map_err(|_| NOT_OPEN.to_string())?;
         let info: Value = serde_json::from_str(&text).map_err(|_| NOT_OPEN.to_string())?;
         let port = info["porta"].as_u64().unwrap_or(0) as u16;
@@ -539,6 +704,27 @@ mod tests {
         assert_eq!(mode(&file), 0o600);
         assert_eq!(mode(file.parent().unwrap()), 0o700);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn senha_comparada_inteira() {
+        assert!(same_token(Some("abc123"), "abc123"));
+        assert!(!same_token(Some("abc12"), "abc123"));
+        assert!(!same_token(Some("abc1234"), "abc123"));
+        assert!(!same_token(Some("abc124"), "abc123"));
+        assert!(!same_token(Some(""), "abc123"));
+        assert!(!same_token(None, "abc123"));
+    }
+
+    #[test]
+    fn pedido_grande_demais() {
+        let big = format!("{}\n", "x".repeat(MAX_REQUEST as usize + 10));
+        let mut r = std::io::Cursor::new(big.into_bytes());
+        assert!(read_request(&mut r).is_err());
+        let mut r = std::io::Cursor::new(b"{\"a\":1}\n{\"b\":2}".to_vec());
+        assert_eq!(read_request(&mut r).unwrap().unwrap(), "{\"a\":1}\n");
+        assert_eq!(read_request(&mut r).unwrap().unwrap(), "{\"b\":2}");
+        assert_eq!(read_request(&mut r).unwrap(), None);
     }
 
     #[test]

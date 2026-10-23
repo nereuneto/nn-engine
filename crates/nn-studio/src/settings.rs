@@ -338,6 +338,23 @@ mod tests {
         assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
     }
 
+    /// Gravadas pelo NN Studio 0.6.0 (com um projeto 3D aberto e a cor, os
+    /// sons e as comemorações mudados).
+    #[test]
+    fn preferencias_da_0_6_abrem() {
+        let dir = temp("da-0-6");
+        let path = dir.join(SETTINGS_FILE);
+        std::fs::write(&path, include_str!("../tests/dados/preferencias-0.6.json")).unwrap();
+        let s = Settings::load(&path);
+        assert_eq!(s.recent.len(), 1);
+        assert_eq!(s.recent[0].title, "Ilha 3D");
+        assert_eq!(s.layouts.len(), 1, "o layout do projeto ficou");
+        assert_eq!(s.accent, Accent::Laranja);
+        assert!(s.ui_sounds);
+        assert!(s.celebrated.contains("primeiro-modelo"));
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+    }
+
     #[test]
     fn recentes_sem_repetir_e_com_limite() {
         let dir = temp("recentes");

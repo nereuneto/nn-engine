@@ -77,3 +77,24 @@ jobs:
       # A engine e a ferramenta `nn` seguem no Rust 1.89 (a física 3D, pelo nalgebra, pede o 1.89). O NN Studio (editor)
       # usa a interface egui, que pede o Rust 1.95; ele é testado nos outros jobs.
       - run: cargo check --workspace --all-targets --exclude nn-studio
+
+  clippy-beta:
+    name: Clippy do próximo Rust (só aviso)
+    runs-on: ubuntu-latest
+    # Um lint novo do Rust que vem aí aparece aqui umas semanas antes de
+    # chegar ao estável (e quebrar o job de cima), sem bloquear o merge.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@beta
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: ALSA e udev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
+      - name: Clippy (beta)
+        shell: bash
+        run: |
+          echo "::notice::$(rustc --version) / $(cargo clippy --version)"
+          cargo clippy --workspace --all-targets --color never --message-format=short -- -D warnings 2>&1 | tee clippy.txt \
+            || { sed -nE 's/^([^ ]+):([0-9]+):([0-9]+): (error|warning): (.*)$/::warning file=\1,line=\2,col=\3::(Rust beta) \5/p' clippy.txt; exit 1; }

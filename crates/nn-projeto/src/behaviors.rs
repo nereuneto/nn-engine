@@ -233,7 +233,17 @@ pub fn read_props(props: &Table) -> Vec<PropSpec> {
             .ok()
             .flatten()
             .and_then(|t| {
-                let mut it = t.sequence_values::<String>().filter_map(Result::ok);
+                // Os valores como o Inspetor compara (true, 2, "atras").
+                let mut it = t
+                    .sequence_values::<Value>()
+                    .filter_map(Result::ok)
+                    .map(|v| match v {
+                        Value::String(s) => s.to_string_lossy(),
+                        Value::Boolean(b) => b.to_string(),
+                        Value::Integer(n) => n.to_string(),
+                        Value::Number(n) => crate::scene_data::format_num(n),
+                        _ => String::new(),
+                    });
                 let key = it.next()?;
                 Some((key, it.collect()))
             });
@@ -466,6 +476,14 @@ mod tests {
             cena.show_if,
             Some(("ao_acabar".to_string(), vec!["cena".to_string()]))
         );
+        // Mostrar quando um sim/não está ligado (true vira "true").
+        let j3 = list.iter().find(|b| b.script == "nn:jogador3d").unwrap();
+        assert_eq!(
+            j3.prop("anim_andar").unwrap().show_if,
+            Some(("animar".to_string(), vec!["true".to_string()]))
+        );
+        let perigo = list.iter().find(|b| b.script == "nn:perigo").unwrap();
+        assert_eq!(perigo.prop("cena").unwrap().kind, PropType::Scene);
         assert!(categories().contains(&"Jogador"));
     }
 

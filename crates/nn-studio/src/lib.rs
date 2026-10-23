@@ -6,6 +6,7 @@
 //! mapa, o console e o botão
 //! ▶ Jogar, que roda o jogo na própria janela dele.
 
+pub mod agent;
 pub mod anim_file;
 pub use nn_projeto::{behaviors, config_lua, events, lua_syntax, scene_data};
 pub mod app;

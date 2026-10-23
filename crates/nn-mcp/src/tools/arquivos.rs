@@ -252,6 +252,11 @@ fn desfazer(s: &mut Server, a: &Value) -> Result<Output, String> {
         if s.history.is_empty() {
             break;
         }
+        if let Some((_, files)) = s.history.list().into_iter().next() {
+            for f in &files {
+                s.check_unsaved(f)?;
+            }
+        }
         done.push(s.history.undo(&s.root.clone(), force)?);
     }
     if done.is_empty() {

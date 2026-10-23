@@ -200,7 +200,8 @@ pub struct Rule {
     pub repeat: bool,
     /// Desligada.
     pub off: bool,
-    /// Linha de comentário (sem condições nem ações).
+    /// Sem condições nem ações, uma linha de comentário; numa regra, o
+    /// nome dela.
     pub comment: Option<String>,
 }
 

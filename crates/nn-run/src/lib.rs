@@ -46,8 +46,8 @@ pub fn mcp_hooks() -> nn_mcp::Hooks {
 
 /// Abre o jogo da pasta numa janela com o próprio `nn` (`nn <pasta> --cena`).
 fn play(dir: &Path, scene: Option<&str>, log: &Path) -> std::io::Result<std::process::Child> {
-    let exe = std::env::current_exe()?;
-    let mut cmd = Command::new(exe);
+    let exe = own_exe()?;
+    let mut cmd = Command::new(&exe);
     cmd.arg(dir);
     if let Some(scene) = scene {
         cmd.args(["--cena", scene]);
@@ -58,6 +58,30 @@ fn play(dir: &Path, scene: Option<&str>, log: &Path) -> std::io::Result<std::pro
         .stdout(log.try_clone()?)
         .stderr(log)
         .spawn()
+        .map_err(|e| std::io::Error::new(e.kind(), format!("{} ({e})", exe.display())))
+}
+
+/// O próprio executável. No Linux, se ele foi trocado com o programa aberto
+/// (uma atualização, ou compilado de novo), o caminho ganha " (deleted)":
+/// vale o arquivo novo no mesmo lugar.
+fn own_exe() -> std::io::Result<PathBuf> {
+    let exe = std::env::current_exe()?;
+    if exe.exists() {
+        return Ok(exe);
+    }
+    let text = exe.to_string_lossy();
+    if let Some(path) = text.strip_suffix(" (deleted)").map(PathBuf::from)
+        && path.exists()
+    {
+        return Ok(path);
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!(
+            "o executável {} não existe mais (foi atualizado ou apagado com o servidor aberto); reinicie o servidor MCP",
+            exe.display()
+        ),
+    ))
 }
 
 /// Sufixo dos executáveis nesta plataforma (`.exe` no Windows).
@@ -122,8 +146,8 @@ pub fn export(opts: &ExportOptions) -> Result<ExportReport, String> {
         {
             continue;
         }
-        // Os testes de jogo não vão para quem joga.
-        if rel.starts_with(&tests) {
+        // Os testes de jogo e o guia do agente de IA não vão para quem joga.
+        if rel.starts_with(&tests) || rel == "AGENTS.md" {
             continue;
         }
         let data = std::fs::read(&full).map_err(|e| format!("{}: {e}", full.display()))?;
@@ -266,6 +290,8 @@ mod tests {
         write(&proj, "lib/a.lua", "return 1");
         write(&proj, ".git/config", "ignorado");
         write(&proj, "testes/jogo.lua", "test(\"x\", function(t) end)");
+        write(&proj, "AGENTS.md", "# para o agente");
+        write(&proj, ".mcp.json", "{}");
         let runtime = dir.join("nn-jogo.exe");
         std::fs::write(&runtime, b"RUNTIME").unwrap();
         // Saída dentro do projeto: não pode entrar no pacote.

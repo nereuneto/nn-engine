@@ -72,8 +72,16 @@ pub struct Server {
     /// O estado do jogo aberto na última olhada (cena e estado), para dizer
     /// o que mudou.
     live_last: Option<(String, Value)>,
+    /// Quando foi a última olhada e em que quadro o jogo estava (para dizer
+    /// quantos quadros por segundo ele roda).
+    live_clock: Option<(std::time::Instant, u64)>,
     /// O jogo que `abrir_jogo` abriu.
     game: Option<std::process::Child>,
+    /// A ligação com o NN Studio aberto no projeto (se houver).
+    editor: Option<nn_script::remote::Client>,
+    /// Os arquivos que o NN Studio tem com mudanças não gravadas (lido antes
+    /// de cada ferramenta que grava).
+    unsaved: Vec<String>,
 }
 
 /// Erro de JSON-RPC: código e mensagem.
@@ -96,7 +104,10 @@ impl Server {
             catalog: Default::default(),
             client: String::new(),
             live_last: None,
+            live_clock: None,
             game: None,
+            editor: None,
+            unsaved: Vec::new(),
         }
     }
 
@@ -230,11 +241,41 @@ impl Server {
         log::info!("ferramenta {name}");
         // Tudo que uma ferramenta grava vira um passo do `desfazer`.
         if !tool.read_only {
+            self.fetch_unsaved();
             self.history.begin(&step_label(name, &args));
         }
-        let result = (tool.run)(self, &args);
+        // Um defeito numa ferramenta vira uma resposta de erro: o agente
+        // continua com o servidor.
+        let result =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (tool.run)(self, &args)))
+                .unwrap_or_else(|panic| {
+                    let why = panic
+                        .downcast_ref::<&str>()
+                        .map(|s| s.to_string())
+                        .or_else(|| panic.downcast_ref::<String>().cloned())
+                        .unwrap_or_default();
+                    log::error!("a ferramenta {name} quebrou: {why}");
+                    Err(format!(
+                        "A ferramenta {name} quebrou por um defeito da nn-engine ({why}). \
+                 O servidor continua; tente de outro jeito e, se puder, conte o defeito em \
+                 https://github.com/nereuneto/nn-engine/issues."
+                    ))
+                });
         if !tool.read_only {
+            let files = self.history.current_files();
             self.history.end();
+            self.unsaved.clear();
+            // Conta ao NN Studio aberto o que mudou.
+            if let Ok(out) = &result
+                && (!files.is_empty() || name == "desfazer")
+            {
+                let text = out
+                    .content
+                    .iter()
+                    .find_map(|c| c["text"].as_str())
+                    .unwrap_or("");
+                self.notify_editor(name, files, text);
+            }
         }
         Ok(match result {
             Ok(out) => json!({ "content": out.content, "isError": false }),
@@ -290,9 +331,16 @@ pub fn serve_stdio(mut server: Server) -> std::io::Result<()> {
         server.root.display()
     );
     let stdin = std::io::stdin();
+    let mut stdin = stdin.lock();
     let mut stdout = std::io::stdout();
-    for line in stdin.lock().lines() {
-        let line = line?;
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        if stdin.read_until(b'\n', &mut buf)? == 0 {
+            break;
+        }
+        // Bytes que não são UTF-8 viram um erro de JSON, e não o fim do servidor.
+        let line = String::from_utf8_lossy(&buf);
         if let Some(response) = server.handle_line(&line) {
             // Uma mensagem por linha: o JSON compacto não tem quebras.
             stdout.write_all(response.as_bytes())?;

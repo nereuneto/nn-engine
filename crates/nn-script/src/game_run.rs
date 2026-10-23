@@ -380,7 +380,8 @@ impl GameRun {
         let t = self.time();
         self.sink.set_time(t);
         self.arm();
-        self.headless.frame(Headless::<SceneStack>::FRAME);
+        // Sem desenhar na GPU: só quando alguém pede a tela (bem mais rápido).
+        self.headless.frame_undrawn(Headless::<SceneStack>::FRAME);
         self.disarm();
         self.frames += 1;
         if let (path, Some(scene)) = before
@@ -500,6 +501,11 @@ impl GameRun {
     pub fn screenshot(&mut self, label: &str) -> Result<Capture, String> {
         if self.frames == 0 {
             self.frame();
+        }
+        if !self.headless.drawn() {
+            self.arm();
+            self.headless.redraw();
+            self.disarm();
         }
         let pixels = self
             .headless
@@ -645,7 +651,7 @@ impl GameRun {
                 }
                 other => {
                     return Ok(Outcome::Failed(format!(
-                        "coroutine.yield não pode ser usado direto num teste (recebeu \"{other}\")"
+                        "coroutine.yield não pode ser usado direto aqui (recebeu \"{other}\"): para esperar quadros, use t:frames(n) num teste ou \"em\" nas ações do rodar_jogo"
                     )));
                 }
             }
@@ -698,7 +704,7 @@ pub fn check_key(name: &str) -> Result<(), String> {
 }
 
 /// Aperta ou solta as teclas de um nome (`"shift"` são as duas).
-fn set_key(input: &mut nn_input::Input, keys: &[nn_input::KeyCode], down: bool) {
+pub(crate) fn set_key(input: &mut nn_input::Input, keys: &[nn_input::KeyCode], down: bool) {
     if down {
         if let Some(k) = keys.first() {
             input.press_key(*k);

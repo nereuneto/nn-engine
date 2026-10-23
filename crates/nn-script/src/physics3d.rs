@@ -618,12 +618,13 @@ fn debug_draw(lua: &Lua, world: &SharedWorld3) -> Result<()> {
             }
             Shape3::Mesh { .. } => continue,
         };
+        // As mesmas cores do 2D.
         let color = if s.world.is_sensor(id) {
-            Color::rgba(0.3, 1.0, 0.4, 0.3)
+            Color::rgba(1.0, 0.85, 0.2, 0.3)
         } else {
             match kind {
                 BodyKind3::Static => Color::rgba(0.6, 0.6, 0.7, 0.3),
-                BodyKind3::Dynamic => Color::rgba(1.0, 0.6, 0.2, 0.35),
+                BodyKind3::Dynamic => Color::rgba(0.3, 1.0, 0.45, 0.35),
                 BodyKind3::Kinematic => Color::rgba(0.3, 0.6, 1.0, 0.35),
             }
         };

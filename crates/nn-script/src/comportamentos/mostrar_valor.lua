@@ -23,4 +23,9 @@ function B:update(dt)
   if texto then texto.text = (self.texto:gsub("{([%w_]+)}", valor)) end
 end
 
+-- Já certo no primeiro quadro (antes, mostrava o texto do arquivo).
+function B:start()
+  self:update(0)
+end
+
 return B

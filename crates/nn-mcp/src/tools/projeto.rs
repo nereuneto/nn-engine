@@ -147,6 +147,23 @@ fn ver_projeto(s: &mut Server, _: &Value) -> Result<Output, String> {
             short_list(list, 60)
         ));
     }
+    let docs: Vec<String> = group(&files, &[".md", ".txt"]);
+    if !docs.is_empty() {
+        out.push_str(&format!(
+            "Textos ({}): {}\n",
+            docs.len(),
+            short_list(&docs, 20)
+        ));
+    }
+    let tests = group(&files, &[".lua"])
+        .into_iter()
+        .filter(|f| f.starts_with("testes/"))
+        .count();
+    out.push_str(&if tests > 0 {
+        format!("Testes de jogo: {tests} arquivo(s) em testes/ (rodar_testes)\n")
+    } else {
+        "Testes de jogo: nenhum ainda (escreva em testes/; veja buscar_documentacao \"testes de jogo\")\n".into()
+    });
     if s.root.join("AGENTS.md").is_file() {
         out.push_str(
             "\nLeia o AGENTS.md do projeto (ler_arquivo) para saber como ele está organizado.\n",
