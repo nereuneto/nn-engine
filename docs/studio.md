@@ -1173,6 +1173,12 @@ Numa cena 3D, **➕ Adicionar componente** mostra só o que funciona nela:
 - **Porta 3D**, **Zona de gatilho**, **Interagir** e **Diálogo** (Fases);
 - **Girar e flutuar** (Movimento): gira em volta de um eixo e sobe e desce
   devagar (estrelas, moedas);
+- **Câmera girando em volta** (Câmera): numa Câmera 3D, dá voltas devagar em
+  volta de um objeto ou do meio da cena, olhando para ele (telas de título e
+  de menu). **➕ Objeto > Câmera de menu (girando)** já vem pronta;
+- **Contagem regressiva** (Fases): conta os segundos para trás numa variável
+  do jogo (mostre no HUD com `{tempo}`) e, no zero, avisa a condição
+  **Contagem acabar**, reinicia a cena ou vai para outra (também no 2D);
 - **Plataforma que anda** (Movimento): vai e volta em X, Y e Z, com espera
   nas pontas; já ganha um Corpo 3D que se move sozinho;
 - **Animação 3D** (um componente, não um comportamento): toca uma animação
@@ -1304,7 +1310,8 @@ prontos para o animador.
 
 **📚 Biblioteca.** Modelos prontos para começar ou para pôr no seu modelo:
 árvore, pinheiro, pedra, cerca, casinha, baú, lampião, fogueira, personagem
-e carrinho.
+e carrinho, e peças de cenário para montar fases (de 2 m, para emendar):
+muro, borda, escada, ponte e placa.
 
 - No **➕ Novo > 🎲 Modelo 3D**, o **Começar com** cria o modelo novo a partir
   de um deles.

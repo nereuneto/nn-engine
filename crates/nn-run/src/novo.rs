@@ -518,7 +518,8 @@ pub fn agents_md(template: Template, title: &str) -> String {
          `por_regra`, `buscar_documentacao`, `escrever_arquivo` (confere o Lua antes de gravar), \
          `criar_imagem`, `desenhar`, `ver_imagem` e `animar` (pixel art), \
          `criar_mapa` e `pintar_mapa` (mapas de tiles), `particulas`, `criar_som` (efeitos \
-         sonoros), `escrever_dialogo` (conversas), \
+         sonoros), `escrever_dialogo` (conversas), `criar_modelo`, `modelar` e `ver_modelo` \
+         (modelos 3D; `ver_modelo` também confere qualquer .glb), \
          `conferir_projeto`, `rodar_jogo` (joga sem janela e mostra erros, prints, o que mudou \
          e a tela), `rodar_testes` e `desfazer`. Com o jogo aberto numa janela (`abrir_jogo`, \
          ou o ▶ Jogar do NN Studio): `ver_jogo_aberto` e `mexer_no_jogo` (muda valores na hora, \

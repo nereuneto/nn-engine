@@ -96,6 +96,7 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `criar_mapa`, `pintar_mapa`, `ver_mapa`, `marcar_tiles` | **Mapas de tiles** (`.tmj`, o formato do Tiled que o NN Studio edita): cria de uma imagem de tiles, pinta (com desenho como texto e terreno automático), marca os tiles sólidos e mostra o mapa desenhado. Veja [Mapas, partículas, sons e diálogos](#mapas-partículas-sons-e-diálogos). |
 | `particulas` | Um efeito de partículas pronto (fogo, fumaça, faíscas, explosão, chuva...) num objeto, ajustes e uma prévia do efeito em quatro momentos. Com `pixel`, quadradinhos de pixel art. |
 | `criar_som` | Um **efeito sonoro** sintetizado (`.wav`): moeda, pulo, tiro, laser, explosão, power-up, dano, clique, blip, com variações e ajustes. Volta a forma da onda e a nota ao longo do tempo. |
+| `criar_modelo`, `modelar`, `ver_modelo` | **Modelos 3D** (`.modelo`, os do modelador do NN Studio, e o `.glb` que o jogo usa): cria do zero ou de um pronto, monta e muda com operações de peças e faces e mostra em quatro vistas. `ver_modelo` também abre qualquer `.glb` (Blender, Mixamo). Veja [Modelos 3D](#modelos-3d). |
 | `escrever_dialogo`, `ver_dialogo` | **Conversas** (`.dialogo`, as do editor de conversa): falas, escolhas, variáveis e itens, em JSON de ida e volta. |
 | `buscar_documentacao` | A API Lua `nn.*` e os guias (este, o de Lua, o de 3D e o do NN Studio): os trechos que citam as palavras, ou uma seção inteira (`secao`). |
 | `conferir_lua` | A sintaxe de um trecho de Lua, sem gravar. |
@@ -106,7 +107,7 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `mexer_no_jogo` | Muda o jogo aberto **na hora, sem gravar**: campos de objetos e comportamentos, variáveis, Lua, teclas como se alguém jogasse; pausa, avança quadros e fecha. |
 | `ver_editor` | Olha o NN Studio aberto com o projeto: a aba da frente, os **objetos escolhidos** (de quem você fala quando diz "este"), o que ainda não foi gravado e a imagem da janela. Veja [Junto com o NN Studio](#junto-com-o-nn-studio). |
 
-São 43. Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
+São 46. Os guias também vão para o agente como **recursos** (`nn://docs/lua.md`, `nn://docs/3d.md`, `nn://docs/studio.md`, `nn://docs/mcp.md` e `nn://projeto/AGENTS.md`).
 
 ## Objetos no formato do arquivo
 
@@ -261,6 +262,32 @@ Num jogo de 1280x720, um sprite de 16x16 fica pequeno. Para pixel art, o jogo co
 ```
 
 Sem `depois`, uma fala vai para a próxima da lista, e a última termina; o fim de um ramo de escolha precisa de `"depois": "fim"`. A resposta conta a conversa pelos caminhos e avisa de falas que nunca aparecem. `ver_dialogo` devolve a conversa no mesmo formato, para mudar e mandar de volta. Na cena, um personagem com o comportamento `nn:dialogo` e `"arquivo"`.
+
+## Modelos 3D
+
+O agente faz os modelos 3D do jogo com as peças do modelador do NN Studio (low-poly: cada face de uma cor) e vê cada passo desenhado em quatro vistas: a frente (de +Z) e o lado (de +X), com uma grade de 1 m e o chão, de cima e na diagonal. As medidas são em metros, Y para cima, a frente é **+Z**, e a base do modelo fica em **y = 0**: a origem é o ponto que fica na posição do objeto na cena.
+
+```json
+{
+  "caminho": "modelos/castelo.modelo",
+  "operacoes": [
+    {"criar": "torre", "forma": "cilindro", "lados": 8, "tamanho": [1.2, 3, 1.2],
+     "em": [-1.4, 0, 0], "cor": "#B8B8B8"},
+    {"peca": "torre", "extrudar": "cima", "distancia": 1, "afinar": 0},
+    {"peca": "torre", "cor": "#E84A4A", "lado": "cima"},
+    {"copiar": "torre", "nome": "torre_d", "espelhar": "x"}
+  ]
+}
+```
+
+- `criar_modelo` começa um modelo vazio, de um modelo pronto (árvore, pinheiro, pedra, cerca, casinha, baú, lampião, fogueira, personagem, carrinho, e as peças de cenário muro, borda, escada, ponte e placa) ou da cópia de outro.
+- `modelar` faz várias operações numa chamada:
+  - `criar` uma peça de uma forma (cubo, cilindro, cone, pirâmide, esfera, plano, rampa), com `tamanho`, `em` (o meio da base), `giro` e `cor`; ou uma peça dos kits (`"kit": "Casa/Parede"`);
+  - com `peca`: `em`, `andar`, `giro`, `escala`, `tamanho`, `cor` (com `lado`, só as faces daquele lado), `extrudar` (puxa as faces de um lado; `afinar` deixa a ponta menor), `recuar` (janelas e portas: uma face menor, afundada com `fundo` e pintada com `cor_dentro`), `afinar`, `simetria` e `renomear`;
+  - `copiar` (com `espelhar`: `"x"`), `apagar` e `juntar`.
+- `ver_modelo` mostra o tamanho, onde ficam a base e a origem, as peças, os triângulos, as cores, os ossos e as animações, em quatro vistas ou numa só (`vista`). Também abre qualquer `.glb`, e avisa quando ele está em centímetros (use `scale` 0.01 no objeto), afunda ou flutua. Num modelo com animações, `animacao` e `tempo` mostram um quadro dela.
+
+Cada mudança grava o `.modelo` e o `.glb` (o que vai na cena: `{"type": "model", "file": "modelos/castelo.glb"}`). O modelador do NN Studio aberto mostra a mudança, e o `desfazer` volta.
 
 ## O jogo aberto
 
