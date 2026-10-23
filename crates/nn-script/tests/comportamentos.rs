@@ -933,3 +933,90 @@ fn pulo_avisa_os_eventos_e_animacao_pelos_nomes() {
         "a regra Pular disparou"
     );
 }
+
+/// A contagem regressiva desce a variável e avisa os eventos ao acabar.
+#[test]
+fn contagem_regressiva_desce_e_avisa() {
+    let dir = projeto(
+        "contagem",
+        &[(
+            "cenas/fase.cena",
+            r#"return { events = {
+    { when = { { cond = "contagem_acabou", quem = "relogio" } }, actions = { { act = "variavel", var = "fim", op = "definir", valor = 1 } } },
+  }, objects = {
+  { id = 1, name = "relogio", x = 0, y = 0, components = {
+    { type = "behavior", script = "nn:contagem", segundos = 1, variavel = "tempo" },
+  } },
+} }"#,
+        )],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/fase.cena") else {
+        return;
+    };
+    rt.lua().load("nn.vars.fim = 0").exec().unwrap();
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.tempo"), 1.0);
+    h.run_frames(40);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.fim"), 0.0, "ainda não acabou");
+    h.run_frames(30);
+    assert_eq!(lua::<f64>(&rt, "nn.vars.tempo"), 0.0);
+    assert_eq!(
+        lua::<f64>(&rt, "nn.vars.fim"),
+        1.0,
+        "a regra Contagem acabar disparou"
+    );
+}
+
+/// A câmera gira em volta do alvo, na distância e altura, olhando para ele.
+#[test]
+fn camera_gira_em_volta_olhando_para_o_alvo() {
+    let dir = projeto(
+        "orbita",
+        &[(
+            "cenas/menu.cena",
+            r#"return { mode = "3d", objects = {
+  { id = 1, name = "castelo", x = 2, y = 0, z = 0, components = { { type = "shape3d", shape = "cube" } } },
+  { id = 2, name = "camera", x = 2, y = 3, z = 10, components = {
+    { type = "camera3d" },
+    { type = "behavior", script = "nn:camera_orbita", alvo = "castelo", raio = 10, altura = 4, velocidade = 90 },
+  } },
+} }"#,
+        )],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/menu.cena") else {
+        return;
+    };
+    let pos = rt
+        .lua()
+        .load(
+            r#"return function(scene)
+  local c = scene.objects.camera
+  local m = c:matrix3d()
+  local fx, fy, fz = m:forward()
+  return c.x, c.y, c.z, fx, fy, fz
+end"#,
+        )
+        .eval::<mlua::Function>()
+        .unwrap();
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    let (x, y, z, ..): (f64, f64, f64, f64, f64, f64) =
+        pos.call(h.game.0.table().unwrap()).unwrap();
+    assert!(
+        (x - 2.0).abs() < 0.3 && (z - 10.0).abs() < 0.5 && (y - 4.0).abs() < 1e-3,
+        "começa na frente: {x} {y} {z}"
+    );
+    h.run_frames(60);
+    let (x, _, z, fx, fy, fz): (f64, f64, f64, f64, f64, f64) =
+        pos.call(h.game.0.table().unwrap()).unwrap();
+    // Um quarto de volta (90 graus em 1 s): do lado (+X) do castelo.
+    assert!(
+        (x - 12.0).abs() < 0.5 && z.abs() < 0.5,
+        "deu um quarto de volta: {x} {z}"
+    );
+    // Olha para o castelo (de cima, um pouco para baixo).
+    let d = glam::DVec3::new(2.0 - x, 1.0 - 4.0, -z).normalize();
+    let f = glam::DVec3::new(fx, fy, fz);
+    assert!(f.dot(d) > 0.99, "olha para o alvo: {f} {d}");
+}

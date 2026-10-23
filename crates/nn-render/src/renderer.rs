@@ -1394,12 +1394,19 @@ impl Renderer {
     ) {
         let rest = model.rest_joints.clone();
         let joints = joints.unwrap_or(&rest);
+        // O brilho do arquivo também pega a cor do objeto (tingir um modelo
+        // que brilha muda a cor do brilho).
         let k = material.glow.color;
         for &(mesh, texture, emissive) in &model.parts {
             let m = crate::d3::Material3D {
                 glow: crate::d3::Glow {
                     amount: material.glow.amount,
-                    color: Color::rgba(emissive.r * k.r, emissive.g * k.g, emissive.b * k.b, 1.0),
+                    color: Color::rgba(
+                        emissive.r * k.r * color.r,
+                        emissive.g * k.g * color.g,
+                        emissive.b * k.b * color.b,
+                        1.0,
+                    ),
                 },
                 ..material
             };

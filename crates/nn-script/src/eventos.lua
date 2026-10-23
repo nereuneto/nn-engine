@@ -672,6 +672,21 @@ E.CONDITIONS = {
     end,
   },
   {
+    id = "contagem_acabou", name = "Contagem acabar", category = "Cena e tempo", trigger = true,
+    text = "a contagem de {quem} acabar",
+    help = "A Contagem regressiva chegou a zero.",
+    props = { who("quem") },
+    lua = "-- acabou_o_tempo() no comportamento",
+    test = function(ctx, p, st, b)
+      local out = {}
+      local who_set = set_of(resolve(ctx.scene, p.quem, b, true))
+      for _, s in ipairs(signals(ctx.scene, "mensagem", "acabou_o_tempo")) do
+        if who_set[s.obj] then table.insert(out, { este = s.obj }) end
+      end
+      return out
+    end,
+  },
+  {
     id = "pulou", name = "Pular", category = "Mensagens", trigger = true,
     text = "{quem} pular",
     help = "O Jogador de plataforma pulou (do chão, no coiote, guardado ou no ar). Bom para um som ou poeira.",
