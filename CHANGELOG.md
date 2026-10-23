@@ -2,6 +2,17 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### Física 2D com grade espacial (Sprint 60)
+
+- **A física 2D ficou muito mais rápida com muitos corpos.** Antes, cada corpo que se movia conferia todos os outros, em cada subpasso; agora uma grade espacial deixa conferir só quem está perto. Vale para o movimento, para os corpos que se empurram, para os sensores e para os raios e as consultas (`raycast`, `query_point`, `query_aabb`, `overlapping`).
+  - 500 corpos caindo: de uns 33 ms para uns 5 ms por quadro no jogo, contando o Lua.
+  - 1.500 corpos numa cena cheia: de 12,8 ms para 2,6 ms por passo de física.
+- **O resultado é o mesmo de antes:** um teste roda cenas cheias com e sem a grade e confere que as posições, os eventos e as consultas saem iguais.
+- **O passo ficou previsível:** as plataformas móveis eram percorridas numa ordem que mudava de uma execução para outra, e a mesma cena podia dar posições um pouco diferentes. Agora elas vão sempre na mesma ordem.
+- **Para quem usa as crates:** `World::stats()` diz quantos corpos e quantas conferências o último passo teve.
+
 ## 0.8.0
 
 A versão da **arte, da modelagem e da animação pelo agente**. O servidor MCP passa de 30 para **48 ferramentas**, e o agente de IA faz sozinho o que antes pedia um artista:
