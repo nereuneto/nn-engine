@@ -42,12 +42,14 @@ mod particles;
 mod physics;
 mod physics3d;
 pub mod remote;
+pub mod report;
 mod save;
 mod terrain3d;
 pub mod testing;
 mod tilemap;
 mod types;
 mod ui;
+pub mod watchdog;
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
@@ -294,6 +296,11 @@ struct Inner {
     errors: RefCell<Vec<SceneError>>,
     /// O módulo do jogo sem janela e do jogo aberto (`testes.lua`).
     driver: RefCell<Option<Table>>,
+    /// Jogo exportado: onde escrever os erros (e a tela simples para quem
+    /// joga). `None` no jogo em desenvolvimento.
+    report: RefCell<Option<Arc<report::ErrorReport>>>,
+    /// O vigia do laço sem fim (jogo com janela).
+    watchdog: RefCell<Option<Arc<watchdog::Watchdog>>>,
 }
 
 /// Um erro de script que parou uma cena.
@@ -387,6 +394,8 @@ impl ScriptRuntime {
                 front: RefCell::new((String::new(), None)),
                 errors: RefCell::new(Vec::new()),
                 driver: RefCell::new(None),
+                report: RefCell::new(None),
+                watchdog: RefCell::new(None),
             }),
         };
         // Registra o estado atual dos arquivos, para só recarregar o que mudar depois.
@@ -440,6 +449,25 @@ impl ScriptRuntime {
 
     fn set_front(&self, path: &str, instance: Option<Table>) {
         *self.inner.front.borrow_mut() = (path.to_string(), instance);
+        if let Some(w) = &*self.inner.watchdog.borrow() {
+            w.set_scene(path);
+        }
+    }
+
+    /// Jogo exportado: os erros vão para o arquivo de `report`, e quem joga
+    /// vê a tela simples em vez da mensagem do script.
+    pub fn set_report(&self, report: Option<Arc<report::ErrorReport>>) {
+        *self.inner.report.borrow_mut() = report;
+    }
+
+    /// Liga o vigia do laço sem fim; ele roda até o guarda sair. `on_hang`
+    /// roda na linha do vigia quando o Lua trava sem chamar a engine.
+    fn start_watchdog(&self, on_hang: Box<dyn FnOnce(watchdog::Hang) + Send>) -> watchdog::Guard {
+        let (watch, guard) = watchdog::Watchdog::start(on_hang);
+        watch.set_scene(&self.inner.front.borrow().0);
+        api::CtxSlot::watch(&self.inner.lua, watch.clone());
+        *self.inner.watchdog.borrow_mut() = Some(watch);
+        guard
     }
 
     /// Verifica a sintaxe de todos os `.lua`, sem executar nada.
@@ -735,6 +763,10 @@ impl LuaScene {
             message: msg.clone(),
         });
         drop(errors);
+        let report = self.runtime.inner.report.borrow().clone();
+        if let Some(report) = report {
+            report.write(&format!("Erro no script {}:\n\n{msg}", self.path));
+        }
         self.error = Some(msg);
     }
 
@@ -1007,7 +1039,11 @@ impl Scene for LuaScene {
         self.apply_live(ctx);
         self.call(ctx, "draw", ());
         if let Some(message) = self.error.clone() {
-            self.draw_error(ctx, &message);
+            let report = self.runtime.inner.report.borrow().clone();
+            match report {
+                Some(r) => report::draw_player_error(ctx, r.path().as_deref(), false),
+                None => self.draw_error(ctx, &message),
+            }
         }
     }
 
@@ -1051,6 +1087,9 @@ pub struct Project {
     pub config: nn_app::AppConfig,
     /// Cena inicial, relativa à raiz do projeto.
     pub start: String,
+    /// Jogo exportado: onde escrever os erros (veja [`report`]). `None` no
+    /// jogo em desenvolvimento, que mostra o erro inteiro na tela.
+    pub report: Option<Arc<report::ErrorReport>>,
 }
 
 impl Project {
@@ -1196,7 +1235,11 @@ impl Project {
                 source.describe(Path::new(&start)).display()
             )));
         }
-        Ok(Self { config, start })
+        Ok(Self {
+            config,
+            start,
+            report: None,
+        })
     }
 
     /// Origem dos arquivos do projeto.
@@ -1234,12 +1277,56 @@ pub fn run_project_from(
     run(project)
 }
 
-/// Abre a janela e roda um projeto já aberto (de pasta ou pacote).
+/// Abre a janela e roda um projeto já aberto (de pasta ou pacote). Com o
+/// vigia do laço sem fim e, no jogo exportado ([`Project::report`]), o
+/// arquivo de erro e a tela simples para quem joga.
 pub fn run(project: Project) -> Result<(), Box<dyn std::error::Error>> {
     let runtime = ScriptRuntime::with_source(project.source())?;
+    runtime.set_report(project.report.clone());
+    let _watchdog = runtime.start_watchdog(on_hang(project.report.clone()));
     let start = project.start.clone();
     nn_app::run(project.config, move |ctx| {
         nn_app::SceneStack::new(ctx, runtime.scene(start))
     })?;
     Ok(())
+}
+
+/// Como [`run`], sem janela: roda `frames` quadros (de 1/60 s) e grava a
+/// última tela em `screenshot`. Serve para testar um jogo exportado onde não
+/// há tela (no CI).
+pub fn run_headless(
+    project: Project,
+    frames: u32,
+    screenshot: Option<&Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let runtime = ScriptRuntime::with_source(project.source())?;
+    runtime.set_report(project.report.clone());
+    let _watchdog = runtime.start_watchdog(on_hang(project.report.clone()));
+    let start = project.start.clone();
+    let rt = runtime.clone();
+    let mut h = nn_app::Headless::new(project.config, move |ctx| {
+        nn_app::SceneStack::new(ctx, rt.scene(start))
+    })?;
+    h.run_frames(frames);
+    if let Some(path) = screenshot {
+        h.save_png(path)?;
+    }
+    Ok(())
+}
+
+/// O jogo travou num laço só de Lua: avisa (no jogo exportado, no arquivo de
+/// erro e na tela de erro, num processo novo) e fecha.
+fn on_hang(report: Option<Arc<report::ErrorReport>>) -> Box<dyn FnOnce(watchdog::Hang) + Send> {
+    Box::new(move |hang| {
+        let msg = hang.message();
+        log::error!("{msg}");
+        eprintln!("erro: {msg}");
+        if let Some(r) = report {
+            r.write(&format!("O jogo travou e foi fechado.\n\n{msg}"));
+            if let Some(show) = r.show {
+                show(&r);
+            }
+        }
+        std::process::exit(3);
+    })
 }
