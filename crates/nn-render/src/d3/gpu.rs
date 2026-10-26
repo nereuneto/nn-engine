@@ -218,7 +218,7 @@ pub(crate) struct Renderer3D {
     bloom_pass: super::bloom::BloomPass,
     /// Os segundos das ondas e do vento (`None`: o relógio desde o começo).
     pub time: Option<f32>,
-    clock: std::time::Instant,
+    clock: web_time::Instant,
     /// Quantas malhas foram desenhadas no último frame.
     pub last_count: u32,
     /// O que o último frame desenhou de fato (veja [`Stats3`]).
@@ -805,7 +805,7 @@ impl Renderer3D {
             bloom: super::Bloom::default(),
             bloom_pass: super::bloom::BloomPass::new(device, format),
             time: None,
-            clock: std::time::Instant::now(),
+            clock: web_time::Instant::now(),
             last_count: 0,
         }
     }
