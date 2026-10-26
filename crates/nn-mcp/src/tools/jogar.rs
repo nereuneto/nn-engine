@@ -410,7 +410,7 @@ fn write_report(out: &mut String, report: &Report) {
         let p = &report.perf;
         let n = p.frames as f32;
         out.push_str(&format!(
-            "\nDesempenho (média por quadro, nesta máquina e sem placa de vídeo): passos fixos {:.2} ms (física {:.2} ms), update {:.2} ms, draw do jogo {:.2} ms; o quadro mais pesado: {:.1} ms em {:.2} s.\n",
+            "\nDesempenho (média por quadro, nesta máquina e sem placa de vídeo): passos fixos {:.2} ms (física {:.2} ms), update {:.2} ms, draw do jogo {:.2} ms; o quadro mais pesado: {:.1} ms em {:.2} s. Aqui o Lua roda mais devagar que no jogo de verdade (até uns 40%), pela checagem de laço sem fim deste modo.\n",
             p.total.fixed / n,
             p.total.physics / n,
             p.total.update / n,

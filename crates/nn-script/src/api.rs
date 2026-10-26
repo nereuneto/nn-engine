@@ -10,13 +10,27 @@ use crate::types::{LAnimation, LAnimator, LFont, LSheet, LSoundData, LTexture, e
 
 /// Onde fica o contexto da engine durante um callback da cena: guardado nos
 /// dados do estado Lua, para cada `nn.*` não precisar buscar o contexto no
-/// registro do Lua pelo nome.
+/// registro do Lua pelo nome. Junto, o vigia do laço sem fim (no jogo com
+/// janela).
 #[derive(Debug, Default, Clone)]
-pub(crate) struct CtxSlot(std::rc::Rc<std::cell::RefCell<Option<AnyUserData>>>);
+pub(crate) struct CtxSlot(std::rc::Rc<CtxInner>);
+
+#[derive(Debug, Default)]
+pub(crate) struct CtxInner {
+    ud: std::cell::RefCell<Option<AnyUserData>>,
+    watch: std::cell::OnceCell<std::sync::Arc<crate::watchdog::Watchdog>>,
+}
 
 impl CtxSlot {
     fn of(lua: &Lua) -> Option<Self> {
         lua.app_data_ref::<CtxSlot>().map(|s| s.clone())
+    }
+
+    /// Liga o vigia do laço sem fim (uma vez).
+    pub(crate) fn watch(lua: &Lua, watch: std::sync::Arc<crate::watchdog::Watchdog>) {
+        if let Some(slot) = Self::of(lua) {
+            let _ = slot.0.watch.set(watch);
+        }
     }
 
     /// Deixa `ctx` disponível para as funções `nn.*` enquanto `f` roda.
@@ -34,10 +48,16 @@ impl CtxSlot {
             struct Restore(CtxSlot, Option<AnyUserData>);
             impl Drop for Restore {
                 fn drop(&mut self) {
-                    *self.0.0.borrow_mut() = self.1.take();
+                    *self.0.0.ud.borrow_mut() = self.1.take();
+                    if let Some(w) = self.0.0.watch.get() {
+                        w.leave_lua();
+                    }
                 }
             }
-            let previous = slot.0.replace(Some(ud));
+            if let Some(w) = slot.0.watch.get() {
+                w.enter_lua();
+            }
+            let previous = slot.0.ud.replace(Some(ud));
             let _restore = Restore(slot.clone(), previous);
             f()
         })
@@ -68,13 +88,36 @@ pub(crate) struct Shared {
 
 /// Acessa o contexto da engine. Só funciona dentro dos callbacks da cena.
 pub(crate) fn with_ctx<R>(lua: &Lua, f: impl FnOnce(&mut Context) -> Result<R>) -> Result<R> {
-    let ud = CtxSlot::of(lua).and_then(|s| s.0.borrow().clone());
+    let slot = CtxSlot::of(lua);
+    let ud = slot.as_ref().and_then(|s| s.0.ud.borrow().clone());
     let Some(ud) = ud else {
         return Err(err(
             "as funções nn.* só podem ser usadas durante a execução da cena (enter, update, draw...)",
         ));
     };
-    ud.borrow_mut_scoped::<Context, _>(f)?
+    // O vigia do laço sem fim: o tempo aqui dentro não conta, e um quadro
+    // que passou do limite é cortado na primeira nn.* que o Lua chamar.
+    let watch = slot.as_ref().and_then(|s| s.0.watch.get());
+    if let Some(w) = watch
+        && !w.enter_rust()
+    {
+        // Onde o Lua estava (quem chamou esta função): arquivo e linha.
+        let at = lua
+            .inspect_stack(1, |d| {
+                let line = d.current_line()?;
+                let src = d.source();
+                let file = src.short_src.filter(|_| src.what != "C")?;
+                Some(format!("{file}:{line}: "))
+            })
+            .flatten()
+            .unwrap_or_default();
+        return Err(err(format!("{at}{}", crate::watchdog::cut_message())));
+    }
+    let result = ud.borrow_mut_scoped::<Context, _>(f);
+    if let Some(w) = watch {
+        w.leave_rust();
+    }
+    result?
 }
 
 /// Soma o tempo de um passo de física no medidor do quadro (se houver um

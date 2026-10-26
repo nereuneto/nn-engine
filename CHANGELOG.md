@@ -4,6 +4,27 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Erros no jogo exportado e laço sem fim (Sprint 63)
+
+- **Quando o jogo exportado dá erro, quem joga vê uma tela simples:** "O jogo encontrou um problema", com o caminho do arquivo para mandar a quem fez o jogo, e Esc fecha. Antes aparecia a tela de desenvolvedor, com a mensagem do script.
+- **O arquivo `<nome>-erro.txt`** fica ao lado do executável (ou na pasta temporária, se ali não der para escrever). Ele traz:
+  - o nome do jogo e a versão da engine;
+  - a mensagem com o arquivo e a linha;
+  - onde está o log completo.
+
+  Antes ele só existia quando o jogo nem abria. Agora vale também para:
+  - erro de script e laço sem fim: a tela aparece no próprio jogo;
+  - erro interno da engine: o jogo fecha e a tela abre numa janela nova.
+- **Laço sem fim também com janela.** Um quadro em que o Lua passa de 5 segundos sem voltar não trava mais o jogo:
+  - se o laço chama alguma função `nn.*`, ela dá erro ali mesmo, e a tela de erro mostra o arquivo e a linha (por exemplo, `while not nn.input.pressed("space") do end`, que nunca termina porque a tecla só é lida entre quadros);
+  - um laço só de Lua (`while true do end`) não tem como ser parado por fora: depois de mais 3 segundos, o jogo fecha dizendo a cena.
+
+  O vigia é uma linha de execução separada e não custa nada por quadro. Medimos a alternativa, um gancho do Lua que dá arquivo e linha em todo caso, e ela deixava o Lua uns 40% mais lento.
+- **No jogo em desenvolvimento** (`nn`, ▶ Jogar) a tela de erro segue a mesma, com a mensagem inteira.
+- **Testes de ponta a ponta com o executável exportado de verdade:** erro de script, laço que chama a engine, laço só de Lua e erro interno geram o arquivo e a tela. Eles rodam sem janela, com `NN_JOGO_SEM_JANELA`, e por isso rodam também no CI.
+- **`rodar_jogo`** avisa que ali o Lua roda mais devagar que no jogo de verdade, por causa da checagem de laço sem fim desse modo.
+- **Para quem usa as crates:** `Project::report` e `nn_script::report` (`ErrorReport`, a tela de erro), `nn_script::run_headless` e `nn_script::watchdog`.
+
 ### Cenas visuais mais leves (Sprint 62)
 
 - **As cenas visuais gastam bem menos tempo por quadro**, com o mesmo resultado na tela. Com 2.000 objetos, medido sem janela:

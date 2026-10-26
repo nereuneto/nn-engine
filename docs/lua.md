@@ -87,6 +87,12 @@ Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#vari�
 
 As mensagens de erro do Lua aparecem em português ("tentou chamar um valor nil (vazio) (método 'pular')"), na tela de erro do jogo e no console do NN Studio.
 
+**Laço sem fim.** Se o Lua passa de 5 segundos num quadro sem voltar (um `while` que nunca termina), o jogo não fica travado:
+- se o laço chama alguma função `nn.*` (como `while not nn.input.pressed("space") do end`, que espera uma tecla que nunca chega, porque a tecla só é lida entre um quadro e outro), essa função dá erro ali mesmo, e a tela de erro mostra o arquivo e a linha;
+- se o laço é só de Lua (`while true do end`), não há como pará-lo por fora: depois de mais 3 segundos o jogo fecha e diz em qual cena estava (no console do NN Studio e no log).
+
+Isso não custa nada ao jogo: quem vigia é uma linha de execução separada, que só olha o relógio.
+
 ## Distribuindo o jogo
 
 ```sh
@@ -105,7 +111,11 @@ Opções:
 | `--nome <nome>` | Nome do arquivo (padrão: nome da pasta do projeto). |
 | `--runtime <arquivo>` | Executável `nn-jogo` a usar. Para gerar o jogo de Windows estando no Linux (ou o contrário), baixe o `nn-jogo` do outro sistema nas *releases* do repositório e passe aqui. |
 
-Se o jogo exportado não abrir (por exemplo, por falta de suporte de vídeo), ele deixa um arquivo `<nome>-erro.txt` ao lado do executável explicando o motivo.
+**Quando o jogo exportado dá erro**, quem joga não vê a mensagem do script. O erro vai para um arquivo `<nome>-erro.txt` ao lado do executável (ou na pasta temporária, se ali não der para escrever), com o nome do jogo, a versão da engine, a mensagem com o arquivo e a linha, e onde está o log completo. Quem joga vê uma tela simples, "O jogo encontrou um problema", com o caminho do arquivo para mandar a quem fez o jogo; Esc fecha. Vale para:
+- erro de script e laço sem fim (a tela aparece no próprio jogo);
+- o jogo que não abriu, por exemplo, por falta de suporte de vídeo, e um erro interno da engine (o jogo fecha e a tela abre numa janela nova).
+
+No jogo aberto da pasta do projeto (`nn`, ▶ Jogar), nada disso muda: a tela de erro mostra a mensagem inteira, e a cena recarrega ao salvar.
 
 A pasta `testes/` (os [testes de jogo](#testes-de-jogo)) não vai para o executável.
 
