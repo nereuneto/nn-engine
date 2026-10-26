@@ -27,6 +27,30 @@ struct MapState {
 #[derive(Debug, Clone)]
 pub(crate) struct LTileMap(Rc<RefCell<MapState>>);
 
+/// Pré-carrega as imagens dos tilesets de um mapa do Tiled (com as opções
+/// que o componente Mapa usa) e devolve quem as segura.
+pub(crate) fn preload(
+    ctx: &mut nn_app::Context,
+    path: &str,
+) -> std::result::Result<Vec<nn_app::AssetHandle>, String> {
+    let mut map = load_tiled(
+        Path::new(path),
+        |p| ctx.assets.read_to_string(p).map_err(|e| e.to_string()),
+        1.0,
+    )
+    .map_err(|e| e.to_string())?;
+    let mut images = Vec::new();
+    map.load_textures(|p| {
+        // As mesmas opções do componente Mapa (`nn.tilemap.load` sem
+        // opções): pixel art.
+        let (id, h) = ctx.texture_handle(p, texture_options(None).unwrap_or_default())?;
+        images.push(h);
+        Ok::<_, nn_app::AssetError>(id)
+    })
+    .map_err(|e| e.to_string())?;
+    Ok(images)
+}
+
 impl LTileMap {
     /// Retângulo do mapa no mundo.
     pub(crate) fn bounds(&self) -> nn_render::Bounds {

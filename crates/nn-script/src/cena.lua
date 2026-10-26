@@ -3841,6 +3841,80 @@ local function load_script(path)
 end
 
 --- Cria a cena a partir dos dados de um .cena.
+-- Pré-carregar ---------------------------------------------------------------
+
+local AUDIO_EXT = { wav = true, ogg = true, mp3 = true }
+
+--- O que uma cena visual vai carregar (as imagens, os sons, os modelos, as
+--- fontes e os mapas dos componentes, também os de dentro dos prefabs e os
+--- sons nas propriedades dos comportamentos), para a engine carregar antes de
+--- a cena começar. Cada item: { kind = "texture" | "sound" | "model" |
+--- "font" | "map", path = ..., pixel_art = (imagens), flat = (modelos) }.
+function M.assets_of(data)
+  local out, seen = {}, {}
+  local cache = {}
+  local function add(kind, path, opt)
+    if type(path) ~= "string" or path == "" then return end
+    local key = kind .. "|" .. path .. "|" .. tostring(opt)
+    if seen[key] then return end
+    seen[key] = true
+    local item = { kind = kind, path = path }
+    if kind == "texture" then item.pixel_art = opt and true or false end
+    if kind == "model" then item.flat = opt and true or false end
+    out[#out + 1] = item
+  end
+  -- O valor do campo, ou o padrão do tipo de componente.
+  local function value(c, key)
+    if c[key] ~= nil then return c[key] end
+    for _, f in ipairs(M.FIELDS[c.type] or {}) do
+      if f[1] == key then return f[2] end
+    end
+  end
+  local function has_field(kind, key)
+    for _, f in ipairs(M.FIELDS[kind] or {}) do
+      if f[1] == key then return true end
+    end
+    return false
+  end
+  local function component(c)
+    local t = c.type
+    if t == "sprite" then
+      add("texture", value(c, "image"), value(c, "pixel_art"))
+    elseif t == "particles" then
+      add("texture", value(c, "image"), true)
+    elseif t == "panel" or t == "button" or t == "icons" then
+      add("texture", value(c, "image"), value(c, "pixel_art") ~= false)
+      if t == "button" then add("texture", value(c, "icon"), value(c, "pixel_art") ~= false) end
+    elseif t == "sound" then
+      add("sound", value(c, "sound"))
+    elseif t == "model" then
+      add("model", value(c, "file"), value(c, "flat"))
+    elseif t == "map" then
+      add("map", value(c, "map"))
+    elseif t == M.BEHAVIOR then
+      for _, v in pairs(c) do
+        if type(v) == "string" and AUDIO_EXT[(v:match("%.(%w+)$") or ""):lower()] then add("sound", v) end
+      end
+    end
+    if has_field(t, "font") then
+      local f = value(c, "font")
+      if f == nil or f == "" then f = M.theme("font") end
+      add("font", f)
+    end
+  end
+  local function object(o, depth)
+    if type(o) ~= "table" or depth > 16 then return end
+    local ok, full = pcall(M.expand, cache, o)
+    if not ok then full = o end
+    for _, c in ipairs(full.components or {}) do
+      if type(c) == "table" then component(c) end
+    end
+    for _, ch in ipairs(full.children or {}) do object(ch, depth + 1) end
+  end
+  for _, o in ipairs(data.objects or {}) do object(o, 0) end
+  return out
+end
+
 function M.new(data, path)
   if type(data) ~= "table" then
     error(path .. ": o arquivo da cena deve devolver uma tabela", 0)
@@ -3849,6 +3923,14 @@ function M.new(data, path)
   if data.script and data.script ~= "" then script = load_script(data.script) end
   local scene = setmetatable({}, { __index = script })
   scene.overlay = data.overlay or script.overlay
+
+  -- O que carregar antes de a cena começar (a engine chama): o que os
+  -- componentes usam, mais a lista `preload` do .cena.
+  function scene:_assets()
+    local list = M.assets_of(data)
+    for _, p in ipairs(data.preload or {}) do list[#list + 1] = p end
+    return list
+  end
 
   local function call(name, self, ...)
     local f = script[name]
