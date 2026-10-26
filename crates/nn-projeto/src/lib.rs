@@ -27,7 +27,8 @@ pub mod sfx;
 pub mod tileset;
 
 /// Um Lua para ler arquivos do projeto (cenas, `config.lua`, comportamentos)
-/// sem rodar o jogo: o `print` vai para o log e não há `io` nem `os.exit`.
+/// sem rodar o jogo: o `print` vai para o log, e não há `io` nem `os.exit`
+/// (é o Lua dos jogos, veja [`nn_script::sandbox`]).
 /// Assim um arquivo escrito à mão não escreve na saída padrão (que o
 /// servidor MCP usa para o protocolo) nem fecha o programa.
 pub fn quiet_lua() -> mlua::Lua {
@@ -43,11 +44,9 @@ pub fn quiet_lua() -> mlua::Lua {
     }) {
         let _ = globals.set("print", print);
     }
-    let _ = globals.set("io", mlua::Value::Nil);
-    if let Ok(os) = globals.get::<mlua::Table>("os") {
-        for name in ["exit", "execute", "remove", "rename", "tmpname"] {
-            let _ = os.set(name, mlua::Value::Nil);
-        }
+    // Sem io, os.execute, os.exit... (o mesmo Lua dos jogos).
+    if let Err(e) = nn_script::sandbox(&lua) {
+        log::warn!("Lua sem a proteção dos jogos: {e}");
     }
     lua
 }

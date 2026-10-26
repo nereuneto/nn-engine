@@ -301,6 +301,9 @@ struct Inner {
     report: RefCell<Option<Arc<report::ErrorReport>>>,
     /// O vigia do laço sem fim (jogo com janela).
     watchdog: RefCell<Option<Arc<watchdog::Watchdog>>>,
+    /// Erros de comportamentos que foram desligados (a cena seguiu): a cena
+    /// e a mensagem, para a tela do jogo em desenvolvimento.
+    behavior_errors: RefCell<Vec<(String, String)>>,
 }
 
 /// Um erro de script que parou uma cena.
@@ -346,6 +349,7 @@ impl ScriptRuntime {
     /// Cria o ambiente com os scripts lidos de `source` (pasta ou pacote).
     pub fn with_source(source: Arc<dyn AssetSource>) -> Result<Self, ScriptError> {
         let lua = Lua::new();
+        sandbox(&lua)?;
         api::install(&lua)?;
         install_require(&lua, source.clone())?;
         let scene_runtime: Table = lua.load(SCENE_RUNTIME).set_name("@nn/cena.lua").eval()?;
@@ -396,8 +400,10 @@ impl ScriptRuntime {
                 driver: RefCell::new(None),
                 report: RefCell::new(None),
                 watchdog: RefCell::new(None),
+                behavior_errors: RefCell::new(Vec::new()),
             }),
         };
+        runtime.install_behavior_errors()?;
         // Registra o estado atual dos arquivos, para só recarregar o que mudar depois.
         let files = runtime.scan();
         runtime.inner.watch.borrow_mut().files = files;
@@ -452,6 +458,54 @@ impl ScriptRuntime {
         if let Some(w) = &*self.inner.watchdog.borrow() {
             w.set_scene(path);
         }
+    }
+
+    /// `nn._behavior_error` e `nn._traceback`: um comportamento com erro é
+    /// desligado sozinho (veja `cena.lua`), e o erro vem para cá.
+    fn install_behavior_errors(&self) -> mlua::Result<()> {
+        let lua = &self.inner.lua;
+        let nn: Table = lua.globals().get("nn")?;
+        let weak = Rc::downgrade(&self.inner);
+        nn.set(
+            "_behavior_error",
+            lua.create_function(move |_, text: String| {
+                if let Some(inner) = weak.upgrade() {
+                    ScriptRuntime { inner }.behavior_error(&text);
+                }
+                Ok(())
+            })?,
+        )?;
+        nn.set("_traceback", lua.create_function(traceback)?)?;
+        Ok(())
+    }
+
+    /// Um comportamento deu erro e foi desligado: o erro vai para o log (o
+    /// console do NN Studio), para a lista de erros (o `rodar_jogo` e os
+    /// testes de jogo mostram), para o arquivo de erro (jogo exportado) e
+    /// para a tela (jogo em desenvolvimento).
+    fn behavior_error(&self, text: &str) {
+        let msg = translate_error(text);
+        let scene = self.inner.front.borrow().0.clone();
+        log::error!(target: SCENE_ERROR_TARGET, "erro em {scene}:\n{msg}");
+        let mut errors = self.inner.errors.borrow_mut();
+        if errors.len() >= MAX_ERRORS {
+            errors.remove(0);
+        }
+        errors.push(SceneError {
+            scene: scene.clone(),
+            message: msg.clone(),
+        });
+        drop(errors);
+        if let Some(report) = self.inner.report.borrow().clone() {
+            report.write(&format!(
+                "Erro num comportamento, em {scene} (o jogo seguiu):\n\n{msg}"
+            ));
+        }
+        let mut shown = self.inner.behavior_errors.borrow_mut();
+        if shown.len() >= 20 {
+            shown.remove(0);
+        }
+        shown.push((scene, msg));
     }
 
     /// Jogo exportado: os erros vão para o arquivo de `report`, e quem joga
@@ -689,6 +743,98 @@ fn install_require(lua: &Lua, source: Arc<dyn AssetSource>) -> mlua::Result<()> 
     Ok(())
 }
 
+/// O caminho até o erro, para o `xpcall` dos comportamentos (o Lua dos
+/// jogos não tem a biblioteca `debug`). Vai das funções mais novas até o
+/// `cena.lua` que chamou o comportamento (o resto é da engine).
+fn traceback(lua: &Lua, err: Value) -> mlua::Result<String> {
+    let mut out = match &err {
+        Value::String(s) => s.to_string_lossy(),
+        Value::Error(e) => root_cause(e),
+        other => lua
+            .coerce_string(other.clone())
+            .ok()
+            .flatten()
+            .map(|s| s.to_string_lossy())
+            .unwrap_or_else(|| format!("{other:?}")),
+    };
+    out.push_str("\nstack traceback:");
+    for level in 1..40 {
+        let frame = lua.inspect_stack(level, |d| {
+            let src = d.source();
+            let file = src.short_src.as_deref().unwrap_or("?").to_string();
+            let what = src.what;
+            let defined = src.line_defined;
+            let name = d.names().name.map(|n| n.to_string());
+            (file, what, defined, d.current_line(), name)
+        });
+        let Some((file, what, defined, line, name)) = frame else {
+            break;
+        };
+        // Daqui para baixo é a engine (o `xpcall` que chamou o comportamento).
+        if (level > 1 && file == "nn/cena.lua") || name.as_deref() == Some("xpcall") {
+            break;
+        }
+        let place = match (what, line) {
+            ("C", _) => "[C]".to_string(),
+            (_, Some(l)) => format!("{file}:{l}"),
+            _ => file.clone(),
+        };
+        let func = match (name, defined) {
+            (Some(n), _) => format!("in function '{n}'"),
+            (None, Some(d)) if what != "C" => format!("in function <{file}:{d}>"),
+            _ => "in ?".to_string(),
+        };
+        out.push_str(&format!("\n\t{place}: {func}"));
+    }
+    Ok(out)
+}
+
+/// O Lua dos jogos sem o que mexe no computador de quem joga: sem `io`, sem
+/// `os.execute`, `os.remove`, `os.rename`, `os.exit`, `os.getenv`...,
+/// sem `dofile`, `loadfile` e `package.loadlib`, e o `load` só aceita texto
+/// (um trecho já compilado pode quebrar a memória do Lua). Ficam `os.time`,
+/// `os.clock`, `os.date` e `os.difftime`. Quem usar o que saiu recebe um erro
+/// que diz o que usar no lugar.
+pub fn sandbox(lua: &Lua) -> mlua::Result<()> {
+    lua.load(SANDBOX_LUA).set_name("=nn/sandbox").exec()
+}
+
+const SANDBOX_LUA: &str = r##"
+local function blocked(lib, kept, hints)
+  return setmetatable(kept, {
+    __index = function(_, k)
+      error(("%s.%s não existe nos jogos da nn-engine: %s")
+        :format(lib, tostring(k), hints[k] or hints[1]), 2)
+    end,
+  })
+end
+local files = "o jogo não mexe nos arquivos do computador de quem joga. Para ler um "
+  .. "arquivo do jogo, use nn.assets.read; para guardar o progresso, nn.save; para "
+  .. "mostrar um texto, print"
+io = blocked("io", {}, { files })
+local os0 = os
+os = blocked("os", {
+  time = os0.time, clock = os0.clock, date = os0.date, difftime = os0.difftime,
+}, {
+  "o jogo não mexe no computador de quem joga (do os, só existem os.time, "
+    .. "os.clock, os.date e os.difftime)",
+  exit = "para fechar o jogo, use nn.quit()",
+  remove = files, rename = files, tmpname = files,
+})
+package.loaded.io, package.loaded.os = io, os
+local function gone(name, hint)
+  return function() error(name .. " não existe nos jogos da nn-engine: " .. hint, 2) end
+end
+dofile = gone("dofile", "use require para carregar outro script do jogo")
+loadfile = gone("loadfile", "use require, ou nn.assets.read e load")
+package.loadlib, package.searchpath = nil, nil
+local load0 = load
+load = function(chunk, name, mode, ...)
+  if select("#", ...) > 0 then return load0(chunk, name, "t", ...) end
+  return load0(chunk, name, "t")
+end
+"##;
+
 /// Uma cena escrita em Lua.
 pub struct LuaScene {
     runtime: ScriptRuntime,
@@ -772,6 +918,12 @@ impl LuaScene {
 
     /// Carrega o arquivo e cria (ou atualiza) a instância da cena.
     fn load(&mut self, ctx: &mut Context) {
+        // Os comportamentos começam de novo: os erros deles saem da tela.
+        self.runtime
+            .inner
+            .behavior_errors
+            .borrow_mut()
+            .retain(|(scene, _)| scene != &self.path);
         let module = match self.runtime.load_module(ctx, &self.path) {
             Ok(m) => m,
             Err(e) => {
@@ -909,6 +1061,74 @@ impl LuaScene {
         }
     }
 
+    /// Jogo em desenvolvimento: os comportamentos desta cena que deram erro
+    /// (e foram desligados), numa faixa embaixo, por cima do jogo que segue.
+    fn draw_behavior_errors(&self, ctx: &mut Context) {
+        let errors = self.runtime.inner.behavior_errors.borrow();
+        let mine: Vec<&String> = errors
+            .iter()
+            .filter(|(scene, _)| scene == &self.path)
+            .map(|(_, m)| m)
+            .collect();
+        let Some(last) = mine.last() else {
+            return;
+        };
+        let view = ctx.viewport().as_vec2();
+        let size = (view.y / 30.0).clamp(9.0, 22.0);
+        let k = size / 16.0;
+        let max_chars = ((view.x - 40.0 * k) / (size * 0.52)).max(20.0) as usize;
+        let mut lines: Vec<String> = last
+            .lines()
+            .take(8)
+            .map(|l| {
+                let l = l.replace('\t', "    ");
+                if l.chars().count() > max_chars {
+                    let mut s: String = l.chars().take(max_chars.saturating_sub(3)).collect();
+                    s.push_str("...");
+                    s
+                } else {
+                    l
+                }
+            })
+            .collect();
+        if mine.len() > 1 {
+            lines.push(format!(
+                "(e mais {} erro(s) de comportamento no console)",
+                mine.len() - 1
+            ));
+        }
+        lines.push("Corrija o arquivo e salve: a cena recarrega sozinha.".into());
+        let pad = 12.0 * k;
+        let body = lines.join("\n");
+        let title_h = size * 1.8;
+        let body_h = ctx.renderer.measure_text(&Text::new(&body).size(size)).y;
+        let h = title_h + body_h + pad * 2.0;
+        let top = view.y - h;
+        let mut screen = ctx.renderer.screen();
+        screen.draw_rect(
+            Vec2::new(0.0, top),
+            Vec2::new(view.x, h),
+            Color::hex(0x1A0D10).with_alpha(0.9),
+        );
+        screen.draw_rect(
+            Vec2::new(0.0, top),
+            Vec2::new(view.x, 4.0 * k),
+            Color::hex(0xE5484D),
+        );
+        screen.draw_text(
+            &Text::new("Erro num comportamento (ele foi desligado; o jogo segue)")
+                .at(Vec2::new(pad, top + pad))
+                .size(size * 1.1)
+                .color(Color::hex(0xFF8A8A)),
+        );
+        screen.draw_text(
+            &Text::new(&body)
+                .at(Vec2::new(pad, top + pad + title_h))
+                .size(size)
+                .color(Color::hex(0xF2E6E6)),
+        );
+    }
+
     fn draw_error(&self, ctx: &mut Context, message: &str) {
         let view = ctx.viewport().as_vec2();
         let mut screen = ctx.renderer.screen();
@@ -1038,12 +1258,14 @@ impl Scene for LuaScene {
         self.reload_if_changed(ctx);
         self.apply_live(ctx);
         self.call(ctx, "draw", ());
+        let report = self.runtime.inner.report.borrow().clone();
         if let Some(message) = self.error.clone() {
-            let report = self.runtime.inner.report.borrow().clone();
             match report {
                 Some(r) => report::draw_player_error(ctx, r.path().as_deref(), false),
                 None => self.draw_error(ctx, &message),
             }
+        } else if report.is_none() {
+            self.draw_behavior_errors(ctx);
         }
     }
 
@@ -1140,6 +1362,7 @@ impl Project {
         match source.read(Path::new("config.lua")) {
             Ok(bytes) => {
                 let lua = Lua::new();
+                sandbox(&lua).map_err(|e| ScriptError(e.to_string()))?;
                 let t: Table = lua
                     .load(&bytes)
                     .set_name("@config.lua")
