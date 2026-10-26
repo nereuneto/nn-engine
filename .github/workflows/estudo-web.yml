@@ -133,7 +133,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -f estudo-web/resultados
           git commit -q -m "Estudo web: resultados do run ${{ github.run_id }}" || exit 0
+          # O build pode ter mexido em arquivos do ramo (o Cargo.lock): fica só o commit.
+          git checkout -- .
           for i in 1 2 3; do
-            git pull -q --rebase origin estudo-web && git push -q origin HEAD:estudo-web && break
+            if out=$(git pull --rebase origin estudo-web 2>&1 && git push origin HEAD:estudo-web 2>&1); then
+              exit 0
+            fi
+            echo "::warning title=gravar ($i)::$(echo "$out" | tail -5 | tr '\n' ' ')"
             sleep 5
           done
+          exit 1
