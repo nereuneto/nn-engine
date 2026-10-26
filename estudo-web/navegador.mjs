@@ -9,6 +9,8 @@ const browser = await chromium.launch({
     "--use-angle=swiftshader",
     "--enable-unsafe-swiftshader",
     "--enable-unsafe-webgpu",
+    "--enable-features=Vulkan",
+    "--use-webgpu-adapter=swiftshader",
     "--ignore-gpu-blocklist",
     "--autoplay-policy=no-user-gesture-required",
   ],

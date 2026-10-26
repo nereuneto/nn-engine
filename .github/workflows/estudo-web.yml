@@ -91,15 +91,29 @@ jobs:
         continue-on-error: true
         working-directory: estudo-web
         run: bash e3-lua.sh mlua-unknown
+      - name: E3 — mlua no wasm32-unknown-unknown com a libc do wasi-sdk
+        continue-on-error: true
+        working-directory: estudo-web
+        run: |
+          W=$HOME/wasi-sdk-27.0-x86_64-linux
+          [ -d $W ] || curl -sSL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-27/wasi-sdk-27.0-x86_64-linux.tar.gz | tar xz -C $HOME
+          B=$(dirname $(ls $W/lib/clang/*/lib/wasm32-unknown-wasip1/libclang_rt.builtins.a 2>/dev/null || ls $W/lib/clang/*/lib/wasip1/libclang_rt.builtins-wasm32.a | head -1))
+          ls $B
+          export CC_wasm32_unknown_unknown=$W/bin/clang AR_wasm32_unknown_unknown=$W/bin/llvm-ar
+          export CFLAGS_wasm32_unknown_unknown="--target=wasm32-wasip1 --sysroot=$W/share/wasi-sysroot"
+          RB=$(basename $(ls $B/*.a | head -1) .a); RB=${RB#lib}
+          export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="-L native=$W/share/wasi-sysroot/lib/wasm32-wasip1 -L native=$B -l c -l $RB"
+          bash e3-lua.sh mlua-web
       - name: E3 — mlua no wasm32-wasip1
         continue-on-error: true
         working-directory: estudo-web
         run: |
-          curl -sSL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-27/wasi-sdk-27.0-x86_64-linux.tar.gz | tar xz -C $HOME
           W=$HOME/wasi-sdk-27.0-x86_64-linux
+          [ -d $W ] || curl -sSL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-27/wasi-sdk-27.0-x86_64-linux.tar.gz | tar xz -C $HOME
           export CC_wasm32_wasip1=$W/bin/clang AR_wasm32_wasip1=$W/bin/llvm-ar
           export CFLAGS_wasm32_wasip1="--sysroot=$W/share/wasi-sysroot"
-          export CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="-L $W/share/wasi-sysroot/lib/wasm32-wasip1"
+          # Toda a libc (e o crt) do wasi-sdk, não a que vem com o Rust.
+          export CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="-C link-self-contained=no -L native=$W/share/wasi-sysroot/lib/wasm32-wasip1"
           bash e3-lua.sh mlua-wasi
 
       - uses: mymindstorm/setup-emsdk@v14

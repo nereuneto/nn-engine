@@ -1,0 +1,13 @@
+[package]
+name = "lua-mlua-web"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# O Lua 5.4 em C no wasm32-unknown-unknown (o alvo do winit/wgpu/web-sys), com
+# a libc do wasi-sdk; o lua-src aceita esse alvo pelo patch em lua-src-web/.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+mlua = { version = "0.12", features = ["lua54", "vendored"] }

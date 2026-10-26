@@ -1,7 +1,8 @@
 # Estudo da versão web (S67). Fica fora do workspace da engine: roda só no
 # workflow `estudo-web.yml`, que grava os resultados em `resultados/`.
 [workspace]
-members = ["prova", "lua-piccolo", "lua-mlua"]
+members = ["prova", "lua-piccolo", "lua-mlua", "lua-mlua-web"]
+exclude = ["lua-src-web"]
 resolver = "3"
 
 [profile.release]
@@ -9,3 +10,7 @@ opt-level = "z"
 lto = true
 codegen-units = 1
 panic = "abort"
+
+# O lua-src com o wasm32-unknown-unknown (veja lua-src-web/src/lib.rs).
+[patch.crates-io]
+lua-src = { path = "lua-src-web" }

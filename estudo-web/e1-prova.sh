@@ -19,7 +19,7 @@ tempo=$(( $(date +%s) - s ))
 wasm=target/wasm32-unknown-unknown/release/prova.wasm
 wasm-bindgen --target web --no-typescript --out-dir "$S" "$wasm"
 cru=$(stat -c %s "$S/prova_bg.wasm")
-wasm-opt -Oz --all-features "$S/prova_bg.wasm" -o "$S/opt.wasm"
+wasm-opt -Oz --all-features --strip-debug --strip-producers "$S/prova_bg.wasm" -o "$S/opt.wasm"
 mv "$S/opt.wasm" "$S/prova_bg.wasm"
 cp index.html "$S/"
 tam() { stat -c %s "$1"; }
@@ -39,10 +39,16 @@ j=$S/prova.js
   echo "| wasm (wasm-opt -Oz) | $(kb "$(tam "$w")") | $(kb "$(gz "$w")") | $(kb "$(br "$w")") |"
   echo "| js | $(kb "$(tam "$j")") | $(kb "$(gz "$j")") | $(kb "$(br "$j")") |"
   echo
-  echo "Os maiores pedaços do wasm (twiggy):"
+  echo "Os maiores pedaços do wasm final (twiggy; sem nomes, então só os tamanhos por seção e as maiores funções):"
   echo
   echo '```'
-  twiggy top -n 25 target/wasm32-unknown-unknown/release/prova.wasm 2>&1 | head -30 || true
+  twiggy top -n 12 "$w" 2>&1 | head -18 || true
+  echo '```'
+  echo
+  echo "As maiores crates (twiggy no wasm antes do wasm-opt, que ainda tem os nomes):"
+  echo
+  echo '```'
+  python3 crates.py "$wasm" 2>&1 | head -25 || true
   echo '```'
 } > "$R/e1-$nome.md"
 cat "$R/e1-$nome.md"
