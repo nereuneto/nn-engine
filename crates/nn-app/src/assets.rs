@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
+
+use web_time::Instant;
 
 use nn_audio::{AudioError, SoundId};
 use nn_render::{FontId, RenderError, TextureId, TextureOptions};
