@@ -146,6 +146,9 @@ pub struct Renderer {
     screen_view: View,
     texture_layout: wgpu::BindGroupLayout,
     textures: Vec<GpuTexture>,
+    /// Texturas liberadas ([`Renderer::free_texture`]): o lugar delas fica
+    /// com uma de 1×1 transparente e é reaproveitado pela próxima criada.
+    freed: std::collections::BTreeSet<u32>,
     white: TextureId,
     /// Para montar os sprites de um painel sem alocar a cada um.
     panel_buf: Vec<Sprite>,
@@ -317,6 +320,7 @@ impl Renderer {
             textures: Vec::new(),
             white: TextureId(0),
             panel_buf: Vec::new(),
+            freed: Default::default(),
             last_color: std::cell::Cell::new((color_bits(Color::WHITE), Color::WHITE)),
             circle: TextureId(0),
             rounded: std::collections::HashMap::new(),
@@ -383,8 +387,7 @@ impl Renderer {
             (size.x * size.y * 4) as usize,
             "quantidade de bytes não confere com o tamanho da textura"
         );
-        let id = TextureId(self.textures.len() as u32);
-        self.textures.push(GpuTexture::from_rgba8(
+        let texture = GpuTexture::from_rgba8(
             &self.device,
             &self.queue,
             &self.texture_layout,
@@ -392,8 +395,42 @@ impl Renderer {
             rgba,
             options,
             None,
-        ));
-        id
+        );
+        if let Some(i) = self.freed.pop_first() {
+            self.textures[i as usize] = texture;
+            return TextureId(i);
+        }
+        self.textures.push(texture);
+        TextureId(self.textures.len() as u32 - 1)
+    }
+
+    /// Libera a memória de uma textura (de uma imagem que ninguém usa mais).
+    /// O id passa a desenhar nada (uma textura de 1×1 transparente) até ser
+    /// reaproveitado por uma textura nova. As da engine (o branco, o círculo,
+    /// as letras) não são liberadas.
+    pub fn free_texture(&mut self, id: TextureId) {
+        let i = id.0 as usize;
+        if i >= self.textures.len() || self.freed.contains(&id.0) || self.is_builtin(id) {
+            return;
+        }
+        self.textures[i] = GpuTexture::from_rgba8(
+            &self.device,
+            &self.queue,
+            &self.texture_layout,
+            UVec2::ONE,
+            &[0, 0, 0, 0],
+            TextureOptions::default(),
+            None,
+        );
+        self.freed.insert(id.0);
+    }
+
+    /// Texturas da própria engine (que [`Renderer::free_texture`] não libera).
+    fn is_builtin(&self, id: TextureId) -> bool {
+        id == self.white
+            || id == self.circle
+            || self.text.owns(id)
+            || self.rounded.values().any(|(a, b, _)| *a == id || *b == id)
     }
 
     /// Substitui os pixels de uma região de uma textura existente.
@@ -1001,6 +1038,28 @@ impl Renderer {
             .replace_mesh(&self.device, &self.queue, id, &vertices, &mesh.indices);
     }
 
+    /// Libera a memória de uma malha que ninguém desenha mais. O id passa a
+    /// desenhar nada até ser reaproveitado por uma malha nova.
+    pub fn free_mesh(&mut self, id: crate::d3::MeshId) {
+        self.d3.free_mesh(&self.device, &self.queue, id);
+    }
+
+    /// Libera um modelo (as malhas e as texturas dele). Clones do modelo
+    /// param de desenhar.
+    pub fn free_model(&mut self, model: &crate::d3::Model) {
+        for (mesh, texture, _) in &model.parts {
+            self.free_mesh(*mesh);
+            if let Some(t) = texture {
+                self.free_texture(*t);
+            }
+        }
+    }
+
+    /// Quantas malhas 3D estão na GPU.
+    pub fn mesh_count(&self) -> usize {
+        self.d3.mesh_count()
+    }
+
     /// Como [`Renderer::create_mesh`], com os ossos de cada vértice (para
     /// desenhar com [`Renderer::draw_mesh_skinned`]).
     pub fn create_mesh_skinned(
@@ -1530,13 +1589,15 @@ impl Renderer {
     pub fn texture_bytes(&self) -> u64 {
         self.textures
             .iter()
-            .map(|t| u64::from(t.size.x) * u64::from(t.size.y) * 4)
+            .enumerate()
+            .filter(|(i, _)| !self.freed.contains(&(*i as u32)))
+            .map(|(_, t)| u64::from(t.size.x) * u64::from(t.size.y) * 4)
             .sum()
     }
 
     /// Quantas texturas estão carregadas.
     pub fn texture_count(&self) -> usize {
-        self.textures.len()
+        self.textures.len() - self.freed.len()
     }
 
     /// Quantas páginas (texturas de 1024×1024) o atlas de glifos já usa.

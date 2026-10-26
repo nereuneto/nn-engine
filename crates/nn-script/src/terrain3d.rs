@@ -38,7 +38,7 @@ impl LTerrain {
             }
         }
         self.dirty = false;
-        Ok(self.mesh.expect("malha"))
+        Ok(self.mesh.clone().expect("malha"))
     }
 
     fn changed(&mut self) {

@@ -10,12 +10,62 @@ use crate::api::with_ctx;
 use crate::convert::{color, err, opt, opt_color};
 use crate::types::LTexture;
 
-/// Uma malha 3D já enviada para a GPU.
-#[derive(Debug, Clone, Copy)]
+/// Uma malha 3D já enviada para a GPU. Enquanto houver uma `LMesh` com o id
+/// (o `keep`), a malha fica; a troca de cena libera as que sobraram.
+#[derive(Debug, Clone)]
 pub(crate) struct LMesh {
     pub id: MeshId,
     triangles: usize,
     size: Vec3,
+    keep: std::rc::Rc<()>,
+}
+
+/// As malhas enviadas pelo Lua: o id, quem usa e, das de `nn.d3.mesh`, o
+/// conteúdo (a mesma malha pedida de novo reaproveita a enviada).
+#[derive(Debug, Default)]
+struct MeshRegistry {
+    meshes: Vec<(MeshId, std::rc::Weak<()>, usize, Vec3)>,
+    by_content: HashMap<u64, MeshId>,
+    /// `nn.assets.keep`: ficam para sempre.
+    kept: Vec<std::rc::Rc<()>>,
+}
+
+impl LMesh {
+    /// `nn.assets.keep`: a malha nunca é liberada.
+    pub(crate) fn keep_forever(&self, lua: &Lua) {
+        if let Some(mut reg) = lua.app_data_mut::<MeshRegistry>() {
+            reg.kept.push(self.keep.clone());
+        }
+    }
+}
+
+impl LModel {
+    /// A chave do modelo no cache (veja [`nn_app::model_key`]).
+    pub(crate) fn key(&self) -> &str {
+        &self.key
+    }
+}
+
+/// Libera as malhas que o Lua não usa mais (a engine chama na troca de
+/// cena, depois do coletor de lixo). Devolve quantas.
+pub(crate) fn unload_meshes(lua: &Lua, ctx: &mut nn_app::Context) -> usize {
+    let Some(mut reg) = lua.app_data_mut::<MeshRegistry>() else {
+        return 0;
+    };
+    let mut freed = Vec::new();
+    reg.meshes.retain(|(id, users, ..)| {
+        let alive = users.strong_count() > 0;
+        if !alive {
+            freed.push(*id);
+        }
+        alive
+    });
+    reg.by_content.retain(|_, id| !freed.contains(id));
+    drop(reg);
+    for id in &freed {
+        ctx.renderer.free_mesh(*id);
+    }
+    freed.len()
 }
 
 impl UserData for LMesh {
@@ -83,6 +133,8 @@ pub(crate) struct LModel {
     pub collision: std::sync::Arc<d3::CollisionMesh>,
     /// Esqueleto e animações (modelos animados).
     pub skeleton: Option<std::sync::Arc<d3::Skeleton>>,
+    /// O modelo fica carregado enquanto houver um `LModel` dele.
+    _keep: nn_app::AssetHandle,
 }
 
 impl UserData for LModel {
@@ -121,8 +173,9 @@ impl UserData for LModel {
 pub(crate) fn load_model(lua: &Lua, path: &str, opts: Option<&Table>) -> Result<LModel> {
     let flat = opt::<bool>(opts, "flat")?.unwrap_or(false);
     with_ctx(lua, |c| {
-        let model = c.load_model(path, flat).map_err(|e| err(e.to_string()))?;
+        let (model, keep) = c.model_handle(path, flat).map_err(|e| err(e.to_string()))?;
         Ok(LModel {
+            _keep: keep,
             key: nn_app::model_key(path, flat),
             triangles: model.triangles,
             size: model.size(),
@@ -151,13 +204,45 @@ pub(crate) fn reupload(lua: &Lua, target: &mut LMesh, mesh: &Mesh) -> Result<()>
 
 pub(crate) fn upload(lua: &Lua, mesh: &Mesh) -> Result<LMesh> {
     let (min, max) = mesh.bounds();
-    with_ctx(lua, |c| {
-        Ok(LMesh {
-            id: c.renderer.create_mesh(mesh),
-            triangles: mesh.triangle_count(),
-            size: max - min,
+    let id = with_ctx(lua, |c| Ok(c.renderer.create_mesh(mesh)))?;
+    let m = LMesh {
+        id,
+        triangles: mesh.triangle_count(),
+        size: max - min,
+        keep: std::rc::Rc::new(()),
+    };
+    if lua.app_data_ref::<MeshRegistry>().is_none() {
+        lua.set_app_data(MeshRegistry::default());
+    }
+    if let Some(mut reg) = lua.app_data_mut::<MeshRegistry>() {
+        reg.meshes
+            .push((id, std::rc::Rc::downgrade(&m.keep), m.triangles, m.size));
+    }
+    Ok(m)
+}
+
+/// `nn.d3.mesh`: a mesma malha (os mesmos vértices e índices) pedida de novo
+/// reaproveita a já enviada, em vez de ocupar mais memória a cada chamada.
+fn upload_shared(lua: &Lua, mesh: &Mesh) -> Result<LMesh> {
+    let hash = mesh.content_hash();
+    let found = lua.app_data_ref::<MeshRegistry>().and_then(|reg| {
+        let id = *reg.by_content.get(&hash)?;
+        let (_, users, triangles, size) = reg.meshes.iter().find(|m| m.0 == id)?;
+        Some(LMesh {
+            id,
+            triangles: *triangles,
+            size: *size,
+            keep: users.upgrade()?,
         })
-    })
+    });
+    if let Some(m) = found {
+        return Ok(m);
+    }
+    let m = upload(lua, mesh)?;
+    if let Some(mut reg) = lua.app_data_mut::<MeshRegistry>() {
+        reg.by_content.insert(hash, m.id);
+    }
+    Ok(m)
 }
 
 pub(crate) fn shape(
@@ -168,13 +253,13 @@ pub(crate) fn shape(
 ) -> Result<LMesh> {
     if let Some(m) = lua
         .app_data_ref::<ShapeCache>()
-        .and_then(|c| c.0.get(&(name, detail)).copied())
+        .and_then(|c| c.0.get(&(name, detail)).cloned())
     {
         return Ok(m);
     }
     let mesh = upload(lua, &make(detail))?;
     if let Some(mut cache) = lua.app_data_mut::<ShapeCache>() {
-        cache.0.insert((name, detail), mesh);
+        cache.0.insert((name, detail), mesh.clone());
     }
     Ok(mesh)
 }
@@ -322,7 +407,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
     )?;
     t.set(
         "mesh",
-        lua.create_function(|lua, opts: Table| upload(lua, &custom_mesh(&opts)?))?,
+        lua.create_function(|lua, opts: Table| upload_shared(lua, &custom_mesh(&opts)?))?,
     )?;
     t.set("terrain", crate::terrain3d::constructor(lua)?)?;
 
@@ -334,7 +419,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                 Model(String),
             }
             let thing = match &what {
-                Value::UserData(ud) if ud.is::<LMesh>() => Thing::Mesh(*ud.borrow::<LMesh>()?),
+                Value::UserData(ud) if ud.is::<LMesh>() => Thing::Mesh(ud.borrow::<LMesh>()?.clone()),
                 Value::UserData(ud) if ud.is::<crate::terrain3d::LTerrain>() => {
                     Thing::Mesh(ud.borrow_mut::<crate::terrain3d::LTerrain>()?.mesh(lua)?)
                 }

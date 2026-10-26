@@ -855,8 +855,8 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         lua.create_function(|lua, (path, opts): (String, Option<Table>)| {
             let options = texture_options(opts.as_ref())?;
             with_ctx(lua, |c| {
-                c.load_texture(&path, options)
-                    .map(LTexture)
+                c.texture_handle(&path, options)
+                    .map(|(id, h)| LTexture(id, Some(h)))
                     .map_err(|e| err(e.to_string()))
             })
         })?,
@@ -872,11 +872,17 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
                     return Err(err("o tamanho do quadro precisa ser maior que zero"));
                 }
                 with_ctx(lua, |c| {
-                    let texture = match &source {
-                        Value::String(path) => c
-                            .load_texture(path.to_str()?.as_ref() as &str, options)
-                            .map_err(|e| err(e.to_string()))?,
-                        other => expect::<LTexture>(other, "um caminho ou uma imagem")?.0,
+                    let (texture, handle) = match &source {
+                        Value::String(path) => {
+                            let (id, h) = c
+                                .texture_handle(path.to_str()?.as_ref() as &str, options)
+                                .map_err(|e| err(e.to_string()))?;
+                            (id, Some(h))
+                        }
+                        other => {
+                            let t = expect::<LTexture>(other, "um caminho ou uma imagem")?;
+                            (t.0, t.1.clone())
+                        }
                     };
                     let size = c.renderer.texture_size(texture);
                     if fw > size.x || fh > size.y {
@@ -890,7 +896,7 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
                         .sprite_sheet(texture, glam::UVec2::new(fw, fh))
                         .with_margin(margin)
                         .with_spacing(spacing);
-                    Ok(LSheet(sheet))
+                    Ok(LSheet(sheet, handle))
                 })
             },
         )?,
@@ -899,8 +905,8 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         "sound",
         lua.create_function(|lua, path: String| {
             with_ctx(lua, |c| {
-                c.load_sound(&path)
-                    .map(LSoundData)
+                c.sound_handle(&path)
+                    .map(|(id, h)| LSoundData(id, Some(h)))
                     .map_err(|e| err(e.to_string()))
             })
         })?,
@@ -919,6 +925,38 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         "model",
         lua.create_function(|lua, (path, opts): (String, Option<Table>)| {
             crate::d3::load_model(lua, &path, opts.as_ref())
+        })?,
+    )?;
+    assets.set(
+        "keep",
+        lua.create_function(|lua, v: Value| {
+            let Value::UserData(ud) = &v else {
+                return Err(err(format!(
+                    "nn.assets.keep: esperava uma imagem, spritesheet, som, modelo ou malha, recebeu {}",
+                    v.type_name()
+                )));
+            };
+            if let Ok(m) = ud.borrow::<crate::d3::LMesh>() {
+                m.keep_forever(lua);
+                return Ok(v.clone());
+            }
+            with_ctx(lua, |c| {
+                if let Ok(t) = ud.borrow::<LTexture>() {
+                    c.keep_texture(t.0);
+                } else if let Ok(s) = ud.borrow::<LSheet>() {
+                    c.keep_texture(s.0.texture());
+                } else if let Ok(s) = ud.borrow::<LSoundData>() {
+                    c.keep_sound(s.0);
+                } else if let Ok(m) = ud.borrow::<crate::d3::LModel>() {
+                    c.keep_model(m.key());
+                } else {
+                    return Err(err(
+                        "nn.assets.keep: esperava uma imagem, spritesheet, som, modelo ou malha",
+                    ));
+                }
+                Ok(())
+            })?;
+            Ok(v.clone())
         })?,
     )?;
     assets.set(

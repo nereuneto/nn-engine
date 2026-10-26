@@ -390,8 +390,19 @@ pub(crate) fn constructor(lua: &Lua) -> Result<mlua::Function> {
         );
         // Sem taxa contínua, o emissor só solta partículas com burst.
         emitter.emitting = opt::<bool>(Some(&opts), "emitting")?.unwrap_or(true);
-        Ok(LParticles::D2(emitter))
+        holding_texture(lua, LParticles::D2(emitter), &opts)
     })
+}
+
+/// O emissor guarda a imagem que usa (a userdata, junto dele no Lua): assim
+/// a imagem não é descarregada na troca de cena enquanto ele existir.
+fn holding_texture(lua: &Lua, p: LParticles, opts: &Table) -> Result<mlua::AnyUserData> {
+    let ud = lua.create_userdata(p)?;
+    let texture: Value = opts.get("texture")?;
+    if !texture.is_nil() {
+        ud.set_user_value(texture)?;
+    }
+    Ok(ud)
 }
 
 /// `nn.particles3d(opções)`
@@ -409,6 +420,6 @@ pub(crate) fn constructor3d(lua: &Lua) -> Result<mlua::Function> {
             opt::<f32>(o, "z")?.unwrap_or(0.0),
         );
         emitter.emitting = opt::<bool>(o, "emitting")?.unwrap_or(true);
-        Ok(LParticles::D3(emitter))
+        holding_texture(lua, LParticles::D3(emitter), &opts)
     })
 }

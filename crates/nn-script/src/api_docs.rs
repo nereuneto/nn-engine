@@ -352,6 +352,11 @@ pub const API_DOCS: &[ApiDoc] = &[
     ),
     d("nn.assets.exists", "(caminho)", "O arquivo existe no jogo?"),
     d(
+        "nn.assets.keep",
+        "(asset)",
+        "Guarda uma imagem, spritesheet, som, modelo ou malha para sempre: a troca de cena não a descarrega (a música que toca em todas as cenas). Devolve o mesmo asset.",
+    ),
+    d(
         "nn.assets.animations",
         "(imagem)",
         "As animações do .anim da imagem: { nome = animação } (use com nn.animator).",

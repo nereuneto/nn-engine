@@ -508,6 +508,29 @@ impl ScriptRuntime {
         shown.push((scene, msg));
     }
 
+    /// Libera as imagens, os sons, os modelos e as malhas que o Lua não usa
+    /// mais (nada que alguma cena ainda guarde, nem o que foi guardado com
+    /// `nn.assets.keep`). Roda o coletor de lixo antes, para o Lua soltar o
+    /// que a cena anterior usava. A engine chama ao entrar numa cena.
+    pub fn unload_unused(&self, ctx: &mut Context) -> nn_app::Unloaded {
+        let lua = &self.inner.lua;
+        // Duas voltas: a primeira roda os finalizadores (__gc) das userdata.
+        let _ = lua.gc_collect();
+        let _ = lua.gc_collect();
+        let meshes = d3::unload_meshes(lua, ctx);
+        let unloaded = ctx.unload_unused();
+        if meshes > 0 || !unloaded.is_empty() {
+            log::info!(
+                "troca de cena: liberadas {} imagens, {} sons, {} modelos e {} malhas",
+                unloaded.textures,
+                unloaded.sounds,
+                unloaded.models,
+                meshes
+            );
+        }
+        unloaded
+    }
+
     /// Jogo exportado: os erros vão para o arquivo de `report`, e quem joga
     /// vê a tela simples em vez da mensagem do script.
     pub fn set_report(&self, report: Option<Arc<report::ErrorReport>>) {
@@ -1175,6 +1198,8 @@ impl Scene for LuaScene {
         // Com erro ao carregar, a cena da frente fica sem `self`.
         self.runtime.set_front(&self.path, None);
         self.load(ctx);
+        // A cena de antes já saiu: o que só ela usava sai da memória.
+        self.runtime.unload_unused(ctx);
     }
 
     fn exit(&mut self, ctx: &mut Context) {

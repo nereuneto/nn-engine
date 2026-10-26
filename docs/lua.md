@@ -890,8 +890,17 @@ Usar uma ação que não foi criada com `bind` é um erro (para pegar erros de d
 | `read(caminho)` | Conteúdo de um arquivo de texto. |
 | `exists(caminho)` | O arquivo existe? |
 | `animations(imagem)` | As [animações](#animações-anim) do `.anim` da imagem, por nome: `nn.assets.animations("assets/imagens/heroi.png").andar` (prontas para `nn.animator`). |
+| `keep(asset)` | Guarda uma imagem, spritesheet, som, modelo ou malha para sempre (a troca de cena não a descarrega) e devolve o mesmo asset. |
 
 Cada arquivo é carregado uma vez; pedir de novo devolve o mesmo. Imagens e sons alterados no disco são recarregados sozinhos.
+
+**Memória ao trocar de cena.** Ao entrar numa cena, o que nenhuma cena usa mais sai da memória: as imagens, os sons, os modelos e as malhas 3D que só a cena anterior guardava (nos objetos dela, no `self` do script). O que outra cena ainda aberta usa (o jogo embaixo de uma pausa, por exemplo) fica, e o que um módulo do `require` guarda também. Para algo que toda cena usa e que não vale a pena carregar de novo a cada troca, como a música, use `nn.assets.keep`:
+
+```lua
+local musica = nn.assets.keep(nn.assets.sound("sons/tema.ogg"))
+```
+
+Pedir de novo algo que saiu carrega outra vez, sem erro. A tela F3 mostra a memória das imagens.
 
 ### nn.audio
 
@@ -1266,7 +1275,7 @@ O exemplo completo, com árvores, casas e pedras em `.glb`, um herói que anda p
 | `nn.d3.cylinder(lados)` | Cilindro de altura 1 e diâmetro 1 (padrão 16 lados). |
 | `nn.d3.cone(lados)` | Cone de altura 1, base de diâmetro 1, ponta para cima. Com poucos lados, um pinheiro. |
 | `nn.d3.capsule(lados)` | Cápsula de altura 1 e diâmetro 0,5: o corpo de um personagem simples. |
-| `nn.d3.mesh(opts)` | Uma malha sua (abaixo). |
+| `nn.d3.mesh(opts)` | Uma malha sua (abaixo). A mesma malha (os mesmos pontos, triângulos e cores) pedida de novo reaproveita a já criada. |
 
 Chamar a mesma forma de novo devolve a mesma malha (não gasta memória). A malha tem `triangles`, `width`, `height` e `depth`.
 
