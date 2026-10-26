@@ -1,0 +1,125 @@
+# Estudo da versão web (S67). Roda a cada push no ramo estudo-web e grava os
+# resultados em estudo-web/resultados/ no próprio ramo.
+name: Estudo web
+
+on:
+  push:
+    branches: [estudo-web]
+    paths-ignore: ["estudo-web/resultados/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: estudo-web
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: never
+
+jobs:
+  estudo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown,wasm32-unknown-emscripten,wasm32-wasip1
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            estudo-web -> target
+      - name: Preparar
+        run: |
+          R=estudo-web/resultados
+          rm -rf $R && mkdir -p $R
+          sudo apt-get update -qq && sudo apt-get install -y -qq brotli libasound2-dev libudev-dev > /dev/null
+          curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_123/binaryen-version_123-x86_64-linux.tar.gz | tar xz -C $HOME
+          echo "$HOME/binaryen-version_123/bin" >> $GITHUB_PATH
+          V=$(grep -A1 '^name = "wasm-bindgen"$' estudo-web/Cargo.lock | sed -n 's/version = "\(.*\)"/\1/p')
+          echo "WB=$V" >> $GITHUB_ENV
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ env.WB }},wasmtime,twiggy
+      - name: Versões
+        run: |
+          R=estudo-web/resultados/versoes.md
+          { echo "# Versões"; echo; rustc --version; wasm-bindgen --version; wasm-opt --version; node --version; } > $R
+          cat $R
+
+      - name: E0 — crates no wasm32-unknown-unknown
+        continue-on-error: true
+        run: bash estudo-web/e0-crates.sh wasm32-unknown-unknown
+
+      - name: E1 — prova sem som
+        continue-on-error: true
+        working-directory: estudo-web
+        run: bash e1-prova.sh
+      - name: E1 — prova com som
+        continue-on-error: true
+        working-directory: estudo-web
+        run: bash e1-prova.sh som
+      - name: E1 — no navegador
+        continue-on-error: true
+        working-directory: estudo-web
+        run: |
+          npm i --no-save --silent playwright@1.47.2
+          npx playwright install --with-deps chromium > /dev/null
+          python3 -m http.server 8000 --directory site > /dev/null 2>&1 &
+          sleep 1
+          R=resultados
+          for v in sem-som com-som; do
+            [ -f site/$v/prova.js ] || continue
+            node navegador.mjs "http://localhost:8000/$v/index.html?webgl" "webgl-$v" $R || true
+          done
+          if [ -f site/com-som/prova.js ]; then S=com-som; else S=sem-som; fi
+          node navegador.mjs "http://localhost:8000/$S/index.html?webgpu" "webgpu-$S" $R || true
+          node navegador.mjs "http://localhost:8000/$S/index.html?webgl&carga=2000" "webgl-carga2000" $R || true
+
+      - name: E3 — Lua no desktop
+        continue-on-error: true
+        working-directory: estudo-web
+        run: bash e3-lua.sh desktop
+      - name: E3 — piccolo no wasm
+        continue-on-error: true
+        working-directory: estudo-web
+        run: bash e3-lua.sh piccolo
+      - name: E3 — mlua no wasm32-unknown-unknown
+        continue-on-error: true
+        working-directory: estudo-web
+        run: bash e3-lua.sh mlua-unknown
+      - name: E3 — mlua no wasm32-wasip1
+        continue-on-error: true
+        working-directory: estudo-web
+        run: |
+          curl -sSL https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-27/wasi-sdk-27.0-x86_64-linux.tar.gz | tar xz -C $HOME
+          W=$HOME/wasi-sdk-27.0-x86_64-linux
+          export CC_wasm32_wasip1=$W/bin/clang AR_wasm32_wasip1=$W/bin/llvm-ar
+          export CFLAGS_wasm32_wasip1="--sysroot=$W/share/wasi-sysroot"
+          export CARGO_TARGET_WASM32_WASIP1_RUSTFLAGS="-L $W/share/wasi-sysroot/lib/wasm32-wasip1"
+          bash e3-lua.sh mlua-wasi
+
+      - uses: mymindstorm/setup-emsdk@v14
+        continue-on-error: true
+      - name: E3 — mlua no wasm32-unknown-emscripten
+        continue-on-error: true
+        working-directory: estudo-web
+        run: bash e3-lua.sh mlua-emscripten
+      - name: E0 — crates no wasm32-unknown-emscripten
+        continue-on-error: true
+        run: bash estudo-web/e0-crates.sh wasm32-unknown-emscripten
+
+      - name: Gravar os resultados no ramo
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f estudo-web/resultados
+          git commit -q -m "Estudo web: resultados do run ${{ github.run_id }}" || exit 0
+          for i in 1 2 3; do
+            git pull -q --rebase origin estudo-web && git push -q origin HEAD:estudo-web && break
+            sleep 5
+          done

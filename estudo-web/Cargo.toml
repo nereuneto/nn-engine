@@ -1,0 +1,11 @@
+# Estudo da versão web (S67). Fica fora do workspace da engine: roda só no
+# workflow `estudo-web.yml`, que grava os resultados em `resultados/`.
+[workspace]
+members = ["prova", "lua-piccolo", "lua-mlua"]
+resolver = "3"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"

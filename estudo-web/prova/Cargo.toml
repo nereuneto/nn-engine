@@ -1,0 +1,33 @@
+[package]
+name = "prova"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+# O som (nn-audio + kira + cpal no WebAudio) num build à parte: se não
+# compilar, a prova sem som ainda roda.
+som = ["dep:nn-audio", "dep:cpal"]
+
+[dependencies]
+nn-core = { path = "../../crates/nn-core" }
+nn-render = { path = "../../crates/nn-render" }
+nn-audio = { path = "../../crates/nn-audio", optional = true }
+winit = "0.30"
+glam = "0.34"
+log = "0.4"
+web-time = "1"
+wgpu = { version = "30", features = ["webgl", "fragile-send-sync-non-atomic-wasm"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "Location"] }
+console_error_panic_hook = "0.1"
+console_log = "1"
+cpal = { version = "0.18", features = ["wasm-bindgen"], optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pollster = "0.4"
+env_logger = "0.11"
+cpal = { version = "0.18", optional = true }
