@@ -382,6 +382,14 @@ return B
 
 No NN Studio, **Adicionar componente > Script do jogo > Novo script...** cria um arquivo com esse formato. Ao salvar o script com o jogo aberto, os comportamentos são recriados.
 
+**Um comportamento com erro não para a cena.** Só ele é desligado (`self.enabled` vira `false`), naquele objeto; os outros objetos, os outros comportamentos e o script da cena seguem. Vale também para um script de comportamento que nem carrega (um erro de sintaxe): o objeto fica sem ele. O erro não some:
+- no jogo aberto da pasta do projeto, ele aparece numa faixa embaixo, por cima do jogo, com o objeto, o arquivo e a linha, e sai quando a cena recarrega;
+- vai para o console do NN Studio;
+- no `rodar_jogo` e nos testes de jogo, conta como erro;
+- no jogo exportado, vai para o arquivo de erro, e quem joga continua jogando.
+
+Uma `obj:send(...)` para um comportamento que deu erro devolve `nil`.
+
 #### Comportamentos prontos
 
 | `script` | O que faz | Propriedades (padrão) |
@@ -1835,6 +1843,16 @@ Enquanto a tela escurece, a cena que está saindo continua desenhada mas fica pa
 `nn.window.capture_mouse(true)` prende o mouse na janela e esconde o cursor (para girar a câmera com `nn.input.mouse_delta()`); `nn.window.capture_mouse(false)` solta. Solte ao abrir a pausa e os menus, e prenda de novo ao voltar (o `resume` da cena é um bom lugar). Ao sair da janela (Alt+Tab) o mouse é solto sozinho e volta a ser preso quando ela recebe o foco. `nn.window.mouse_captured()` diz se está preso.
 
 `nn.window.title()` devolve o título do jogo (o `title` do config.lua).
+
+### O Lua dos jogos
+
+Os scripts rodam num Lua 5.4 sem o que mexe no computador de quem joga:
+- **sem `io`:** para ler um arquivo do jogo, use [`nn.assets.read`](#nnassets) (e `nn.assets.exists`); para guardar o progresso, [`nn.save`](#nnsave); para mostrar um texto, `print`;
+- **do `os`, só `os.time`, `os.clock`, `os.date` e `os.difftime`:** sem `os.execute`, `os.remove`, `os.rename`, `os.getenv` nem `os.exit` (para fechar o jogo, `nn.quit()`);
+- **sem `dofile` e `loadfile`:** use `require`;
+- **o `load` só aceita texto:** um trecho já compilado (`string.dump`) poderia quebrar a memória do Lua.
+
+Quem usar o que saiu recebe um erro que diz o que usar no lugar. O `config.lua` também roda assim.
 
 ### Desempenho (nn.debug)
 

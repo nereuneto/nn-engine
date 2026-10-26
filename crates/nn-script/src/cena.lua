@@ -514,6 +514,29 @@ local function update_animations(scene, dt)
   end
 end
 
+-- Comportamentos com erro ---------------------------------------------------
+
+--- Um comportamento deu erro: só ele é desligado, e a cena segue. O erro vai
+--- para o console e, no jogo em desenvolvimento, aparece na tela.
+local function behavior_failed(b, what, err)
+  b.enabled = false
+  b._error = err
+  local o, c = b.obj, b.component
+  local text = ("Erro no comportamento %s do objeto \"%s\" (em %s). Ele foi desligado, "
+    .. "e o resto da cena segue.\n%s"):format(c and c.script or "?", o and o.name or "?",
+    what, tostring(err))
+  if nn._behavior_error then nn._behavior_error(text) else print(text) end
+end
+
+--- Chama `f(b, ...)` (uma função do comportamento `b`) protegida, e devolve
+--- o primeiro resultado.
+local function call_behavior(b, what, f, ...)
+  local ok, v = xpcall(f, nn._traceback or tostring, b, ...)
+  if ok then return v end
+  behavior_failed(b, what, v)
+end
+M.call_behavior = call_behavior
+
 -- Objetos -------------------------------------------------------------------
 
 local Object = {}
@@ -669,7 +692,7 @@ end
 function Object:destroy()
   if not self.alive then return end
   for _, b in ipairs(self.behaviors) do
-    if type(b.destroyed) == "function" then b:destroyed() end
+    if not b._error and type(b.destroyed) == "function" then call_behavior(b, "destroyed", b.destroyed) end
   end
   if self.scene and M.events then
     -- As regras "for destruído" (inclusive as do próprio objeto) ainda rodam
@@ -722,7 +745,7 @@ function Object:send(msg, ...)
   for _, b in ipairs(self.behaviors) do
     local f = b[msg]
     if b.enabled and type(f) == "function" then
-      local v = f(b, ...)
+      local v = call_behavior(b, tostring(msg), f, ...)
       if result == nil then result = v end
     end
   end
@@ -1126,14 +1149,16 @@ end
 local function start_behaviors(list)
   for _, o in ipairs(list) do
     for _, b in ipairs(o.behaviors) do
-      if o.alive and b.enabled and type(b.start) == "function" then b:start() end
+      if o.alive and b.enabled and type(b.start) == "function" then call_behavior(b, "start", b.start) end
     end
   end
   -- Depois que todos começaram (um placar lê o que uma contagem escreveu
   -- no start dela, antes do primeiro quadro).
   for _, o in ipairs(list) do
     for _, b in ipairs(o.behaviors) do
-      if o.alive and b.enabled and type(b.after_start) == "function" then b:after_start() end
+      if o.alive and b.enabled and type(b.after_start) == "function" then
+        call_behavior(b, "after_start", b.after_start)
+      end
     end
   end
 end
@@ -1150,7 +1175,7 @@ local function each_behavior(scene, name, ...)
       local j, b = 1, bs[1]
       while b do
         local f = b[name]
-        if b.enabled and type(f) == "function" then f(b, ...) end
+        if b.enabled and type(f) == "function" then call_behavior(b, name, f, ...) end
         if not o.alive then break end
         j = j + 1
         b = bs[j]
@@ -2930,7 +2955,17 @@ local function prepare_all(scene, list)
   end
   for _, o in ipairs(list) do
     for _, c in ipairs(o.components) do
-      if c.type == M.BEHAVIOR then make_behavior(scene, o, c) end
+      if c.type == M.BEHAVIOR then
+        -- Um script de comportamento que não carrega (erro de sintaxe, nome
+        -- errado): o objeto fica sem ele, e o resto da cena segue.
+        local ok, err = pcall(make_behavior, scene, o, c)
+        if not ok then
+          local text = ("Erro ao carregar o comportamento %s do objeto \"%s\". O objeto "
+            .. "ficou sem ele, e o resto da cena segue.\n%s"):format(c.script or "?",
+            o.name or "?", tostring(err))
+          if nn._behavior_error then nn._behavior_error(text) else print(text) end
+        end
+      end
     end
     for _, b in ipairs(o.behaviors) do
       if b.player then o._player = true end
@@ -3125,7 +3160,7 @@ function M.fixed_update(scene, dt)
         local o, other = pair[1], pair[2]
         if o and o.alive then
           for _, b in ipairs(o.behaviors) do
-            if b.enabled and type(b.contact) == "function" then b:contact(other, e) end
+            if b.enabled and type(b.contact) == "function" then call_behavior(b, "contact", b.contact, other, e) end
           end
         end
       end
@@ -3146,7 +3181,7 @@ function M.fixed_update(scene, dt)
       local o, other = pair[1], pair[2]
       if o and o.alive then
         for _, b in ipairs(o.behaviors) do
-          if b.enabled and type(b.contact) == "function" then b:contact(other, e) end
+          if b.enabled and type(b.contact) == "function" then call_behavior(b, "contact", b.contact, other, e) end
         end
       end
     end
@@ -3661,7 +3696,7 @@ function M.live(scene, msg)
           if b == inst then table.remove(o.behaviors, i) break end
         end
         local b = make_behavior(scene, o, c)
-        if b and type(b.start) == "function" then b:start() end
+        if b and type(b.start) == "function" then call_behavior(b, "start", b.start) end
       else
         inst[msg.field] = msg.value
       end

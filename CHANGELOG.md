@@ -4,6 +4,25 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Comportamentos com erro e o Lua sem `io` (Sprint 64)
+
+- **Um comportamento com erro não para mais a cena.** Antes, o primeiro erro num comportamento parava tudo. Agora só aquele comportamento é desligado, naquele objeto; o resto da cena, os outros comportamentos e o script da cena seguem. Vale para:
+  - os erros em `start`, `update`, `contact` e nas mensagens (`obj:send`);
+  - um script de comportamento que nem carrega: o objeto fica sem ele.
+- **O erro continua aparecendo:**
+  - no jogo em desenvolvimento, numa faixa embaixo, por cima do jogo, com o objeto, o arquivo, a linha e o caminho até o erro;
+  - no console do NN Studio;
+  - no `rodar_jogo` e nos testes de jogo, como erro;
+  - no jogo exportado, no arquivo de erro, sem interromper quem joga.
+- **O Lua dos jogos não mexe mais no computador de quem joga:**
+  - sem `io`;
+  - do `os`, só `os.time`, `os.clock`, `os.date` e `os.difftime`;
+  - sem `dofile`, `loadfile` e `package.loadlib`;
+  - o `load` só aceita texto (um trecho compilado podia quebrar a memória do Lua).
+
+  Quem usar o que saiu recebe um erro dizendo o que usar no lugar: `nn.assets.read` para ler um arquivo do jogo, `nn.save` para guardar, `nn.quit()` para fechar, `require` para outro script. O `config.lua` e o Lua que o NN Studio e o servidor MCP usam para ler os arquivos do projeto também rodam assim.
+- **Ajuste nos projetos:** um script que usava `io` ou `os.execute` precisa trocar pelo equivalente acima.
+
 ### Erros no jogo exportado e laço sem fim (Sprint 63)
 
 - **Quando o jogo exportado dá erro, quem joga vê uma tela simples:** "O jogo encontrou um problema", com o caminho do arquivo para mandar a quem fez o jogo, e Esc fecha. Antes aparecia a tela de desenvolvedor, com a mensagem do script.
