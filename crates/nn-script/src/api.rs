@@ -79,11 +79,32 @@ pub(crate) enum SceneRequest {
     Quit,
 }
 
+/// A tela que aparece enquanto a cena nova carrega (`loading` nas opções
+/// da troca de cena).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum LoadingScreen {
+    /// A tela padrão, com uma barra.
+    Default,
+    /// Uma cena do jogo (ela lê o andamento em `nn.scene.progress()`).
+    Scene(String),
+}
+
+/// Uma troca de cena pedida pelo script.
+#[derive(Debug)]
+pub(crate) struct Request {
+    pub scene: SceneRequest,
+    pub fade: Option<nn_app::Fade>,
+    pub loading: Option<LoadingScreen>,
+}
+
 /// Dados compartilhados guardados no estado Lua.
 #[derive(Debug, Default)]
 pub(crate) struct Shared {
-    /// Troca de cena pedida e o escurecimento (se houver).
-    pub request: Option<(SceneRequest, Option<nn_app::Fade>)>,
+    /// Troca de cena pedida (aplicada depois do `update`).
+    pub request: Option<Request>,
+    /// Quanto da cena nova já carregou (de 0 a 1), enquanto uma tela de
+    /// carregamento aparece.
+    pub progress: Option<f32>,
 }
 
 /// Acessa o contexto da engine. Só funciona dentro dos callbacks da cena.
@@ -131,10 +152,25 @@ pub(crate) fn count_physics(lua: &Lua, d: std::time::Duration) {
 
 fn request(lua: &Lua, r: SceneRequest, opts: Option<&Table>) -> Result<()> {
     let fade = fade_options(opts)?;
+    let loading = match opt::<Value>(opts, "loading")? {
+        None | Some(Value::Nil) | Some(Value::Boolean(false)) => None,
+        Some(Value::Boolean(true)) => Some(LoadingScreen::Default),
+        Some(Value::String(s)) => Some(LoadingScreen::Scene(s.to_str()?.to_string())),
+        Some(other) => {
+            return Err(err(format!(
+                "loading: use true (a tela padrão) ou o caminho de uma cena, recebeu {}",
+                other.type_name()
+            )));
+        }
+    };
     let mut shared = lua
         .app_data_mut::<Shared>()
         .ok_or_else(|| err("estado interno do script ausente"))?;
-    shared.request = Some((r, fade));
+    shared.request = Some(Request {
+        scene: r,
+        fade,
+        loading,
+    });
     Ok(())
 }
 
@@ -631,6 +667,8 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
                 )?;
                 t.set("lua_mb", c.perf.lua_kb / 1024.0)?;
                 t.set("objects", c.perf.objects)?;
+                t.set("loads", c.perf.last.loads)?;
+                t.set("total_loads", c.perf.total_loads)?;
                 Ok(t)
             })
         })?,
@@ -1072,6 +1110,10 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         lua.create_function(|lua, opts: Option<Table>| {
             request(lua, SceneRequest::Pop, opts.as_ref())
         })?,
+    )?;
+    scene.set(
+        "progress",
+        lua.create_function(|lua, ()| Ok(lua.app_data_ref::<Shared>().and_then(|s| s.progress)))?,
     )?;
     nn.set("scene", scene)?;
     nn.set(

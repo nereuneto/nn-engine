@@ -218,7 +218,7 @@ pub(crate) struct Renderer3D {
     bloom_pass: super::bloom::BloomPass,
     /// Os segundos das ondas e do vento (`None`: o relógio desde o começo).
     pub time: Option<f32>,
-    clock: std::time::Instant,
+    clock: web_time::Instant,
     /// Quantas malhas foram desenhadas no último frame.
     pub last_count: u32,
     /// O que o último frame desenhou de fato (veja [`Stats3`]).
@@ -303,7 +303,15 @@ impl Renderer3D {
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         texture_layout: &wgpu::BindGroupLayout,
+        independent_blend: bool,
     ) -> Self {
+        // O brilho é escrito sem mistura; onde a placa não deixa misturar cada
+        // alvo de um jeito, ele mistura igual à cor.
+        let glow_blend = if independent_blend {
+            None
+        } else {
+            Some(wgpu::BlendState::ALPHA_BLENDING)
+        };
         let shader = device.create_shader_module(wgpu::include_wgsl!("mesh3d.wgsl"));
         let view_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nn 3d view"),
@@ -470,7 +478,7 @@ impl Renderer3D {
                     // O que brilha (para o halo).
                     Some(wgpu::ColorTargetState {
                         format: GLOW_FORMAT,
-                        blend: None,
+                        blend: glow_blend,
                         write_mask: wgpu::ColorWrites::ALL,
                     }),
                 ],
@@ -593,7 +601,7 @@ impl Renderer3D {
                     // O que brilha (para o halo).
                     Some(wgpu::ColorTargetState {
                         format: GLOW_FORMAT,
-                        blend: None,
+                        blend: glow_blend,
                         write_mask: wgpu::ColorWrites::ALL,
                     }),
                 ],
@@ -805,7 +813,7 @@ impl Renderer3D {
             bloom: super::Bloom::default(),
             bloom_pass: super::bloom::BloomPass::new(device, format),
             time: None,
-            clock: std::time::Instant::now(),
+            clock: web_time::Instant::now(),
             last_count: 0,
         }
     }

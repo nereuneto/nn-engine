@@ -427,6 +427,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Fecha a cena atual e volta para a de baixo.",
     ),
     d(
+        "nn.scene.progress",
+        "()",
+        "Numa tela de carregamento (a opção loading da troca de cena), quanto da cena nova já carregou, de 0 a 1; fora dela, nil.",
+    ),
+    d(
         "nn.scene.replace",
         "(caminho, args, opts)",
         "Troca a cena atual.",
@@ -475,7 +480,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.debug.stats",
         "()",
-        "Tabela com a média dos últimos quadros: fps, frame_ms, worst_ms, fixed_ms, physics_ms, update_ms, draw_ms, sprites, draw_calls, textures, texture_mb, lua_mb, objects.",
+        "Tabela com a média dos últimos quadros: fps, frame_ms, worst_ms, fixed_ms, physics_ms, update_ms, draw_ms, sprites, draw_calls, textures, texture_mb, lua_mb, objects; e loads (arquivos carregados no último quadro) e total_loads (desde o começo).",
     ),
     d(
         "nn.debug.overlay",

@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
+
+use web_time::Instant;
 
 use nn_audio::{AudioError, SoundId};
 use nn_render::{FontId, RenderError, TextureId, TextureOptions};
@@ -264,8 +266,10 @@ impl Context {
     ) -> Result<&mut Tracked<nn_render::d3::Model>, AssetError> {
         let key = model_key(&path, flat);
         if !self.assets.models.contains_key(&key) {
+            let t = Instant::now();
             let file = normalize(path.as_ref());
             let model = self.read_model(&file, flat)?;
+            self.perf.add_load(t.elapsed());
             let modified = self.assets.source.modified(Path::new(&file));
             self.assets
                 .models
@@ -416,6 +420,7 @@ impl Context {
     ) -> Result<&mut Tracked<TextureId>, AssetError> {
         let key = (normalize(path.as_ref()), options);
         if !self.assets.textures.contains_key(&key) {
+            let t = Instant::now();
             let bytes = self.assets.read(&key.0)?;
             let id = self
                 .renderer
@@ -428,6 +433,7 @@ impl Context {
             self.assets
                 .textures
                 .insert(key.clone(), Tracked::new(id, modified));
+            self.perf.add_load(t.elapsed());
         }
         Ok(self.assets.textures.get_mut(&key).expect("inserido acima"))
     }
@@ -452,6 +458,7 @@ impl Context {
     fn sound_entry(&mut self, path: impl AsRef<Path>) -> Result<&mut Tracked<SoundId>, AssetError> {
         let key = normalize(path.as_ref());
         if !self.assets.sounds.contains_key(&key) {
+            let t = Instant::now();
             let bytes = self.assets.read(&key)?;
             let id = self
                 .audio
@@ -464,6 +471,7 @@ impl Context {
             self.assets
                 .sounds
                 .insert(key.clone(), Tracked::new(id, modified));
+            self.perf.add_load(t.elapsed());
         }
         Ok(self.assets.sounds.get_mut(&key).expect("inserido acima"))
     }
@@ -552,6 +560,7 @@ impl Context {
         if let Some(id) = self.assets.fonts.get(&key) {
             return Ok(*id);
         }
+        let t = Instant::now();
         let bytes = self.assets.read(&key)?;
         let id = self
             .renderer
@@ -561,6 +570,7 @@ impl Context {
                 source,
             })?;
         self.assets.fonts.insert(key, id);
+        self.perf.add_load(t.elapsed());
         Ok(id)
     }
 

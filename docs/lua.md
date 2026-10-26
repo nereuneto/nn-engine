@@ -83,7 +83,7 @@ Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#vari�
 
 **Limite de quadros** (`fps_max`): sem ele, o jogo segue o monitor com `vsync = true` e fica em até 240 quadros por segundo com `vsync = false`. Um número limita (60, 120...), o que poupa a bateria e o processador; `0` tira o limite (o jogo roda o mais rápido que der e ocupa um núcleo inteiro). Com a janela minimizada, o jogo para de simular e de desenhar (a música continua) e segue de onde estava quando ela volta.
 
-**Desempenho (F3).** No jogo aberto da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), F3 abre uma tela no canto com os quadros por segundo, o tempo dos passos fixos, da física, do `update` e do desenho, os sprites e as chamadas de desenho, a memória das texturas e do Lua e os objetos da cena. No jogo exportado, F3 não faz nada. Os mesmos números estão em [`nn.debug.stats()`](#desempenho-nndebug).
+**Desempenho (F3).** No jogo aberto da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), F3 abre uma tela no canto com os quadros por segundo, o tempo dos passos fixos, da física, do `update` e do desenho, os sprites e as chamadas de desenho, a memória das texturas e do Lua, os objetos da cena e quantos arquivos o jogo já carregou (com o último quadro que carregou alguma coisa: um quadro que carrega no meio do jogo é uma travada). No jogo exportado, F3 não faz nada. Os mesmos números estão em [`nn.debug.stats()`](#desempenho-nndebug).
 
 As mensagens de erro do Lua aparecem em português ("tentou chamar um valor nil (vazio) (método 'pular')"), na tela de erro do jogo e no console do NN Studio.
 
@@ -1841,6 +1841,31 @@ nn.quit({ fade = 0.4 })
 
 Enquanto a tela escurece, a cena que está saindo continua desenhada mas fica parada (sem `update`) e os menus não respondem, então um segundo aperto não dispara outra troca. A cena nova já roda enquanto a tela clareia.
 
+**Pré-carregar.** Ao começar, a cena carrega antes o que vai usar, para o jogo não travar no meio, no primeiro uso de uma imagem ou de um som:
+- **numa cena visual,** a lista sai sozinha dos componentes: as imagens, os sons, os modelos, as fontes e os mapas (também os de dentro dos prefabs e os sons das propriedades dos comportamentos);
+- **numa cena em Lua** (ou no script de uma cena visual), liste no campo `preload`. Um caminho basta: o tipo sai da extensão. Para uma imagem de pixel art, `{ "caminho", pixel_art = true }`; para um modelo achatado, `{ "caminho", flat = true }`.
+
+```lua
+local cena = { preload = { "sons/explosao.wav", { "assets/imagens/heroi.png", pixel_art = true } } }
+```
+
+**Tela de carregamento.** Uma cena que demora para carregar pode mostrar o andamento em vez de deixar a janela parada. Use a opção `loading` na troca de cena:
+- `loading = true` mostra a tela padrão, com uma barra;
+- `loading = "cenas/carregando.lua"` usa uma cena sua, que lê o andamento em `nn.scene.progress()` (de 0 a 1; fora de uma tela de carregamento, `nil`).
+
+A cena nova carrega um pouco a cada quadro e começa quando terminar.
+
+```lua
+nn.scene.switch("cenas/fase2.cena", nil, { loading = true })
+
+-- cenas/carregando.lua
+local c = {}
+function c:draw()
+  nn.screen.text(("Carregando %d%%"):format(nn.scene.progress() * 100), 20, 20)
+end
+return c
+```
+
 ### nn.time e nn.window
 
 `nn.time.delta()`, `elapsed()`, `fixed_delta()`, `alpha()` (fração entre passos fixos, para interpolar posições no `draw`), `frame()`.
@@ -1865,7 +1890,7 @@ Quem usar o que saiu recebe um erro que diz o que usar no lugar. O `config.lua` 
 
 ### Desempenho (nn.debug)
 
-`nn.debug.stats()` devolve a média dos últimos quadros, a mesma da tela F3: `fps`, `frame_ms` (o quadro inteiro), `worst_ms` (o pior dos últimos 2 segundos), `fixed_ms` (os passos fixos), `physics_ms` (a física, dentro dos passos fixos), `update_ms`, `draw_ms` (o `draw` e o envio para a placa de vídeo), `sprites` e `draw_calls` do último quadro, `textures` e `texture_mb` (a memória das texturas), `lua_mb` (a memória do Lua) e `objects` (os objetos de uma cena visual).
+`nn.debug.stats()` devolve a média dos últimos quadros, a mesma da tela F3: `fps`, `frame_ms` (o quadro inteiro), `worst_ms` (o pior dos últimos 2 segundos), `fixed_ms` (os passos fixos), `physics_ms` (a física, dentro dos passos fixos), `update_ms`, `draw_ms` (o `draw` e o envio para a placa de vídeo), `sprites` e `draw_calls` do último quadro, `textures` e `texture_mb` (a memória das texturas), `lua_mb` (a memória do Lua), `objects` (os objetos de uma cena visual), `loads` (os arquivos carregados no último quadro) e `total_loads` (desde o começo).
 
 `nn.debug.overlay(true)` abre a tela de desempenho e `nn.debug.overlay(false)` fecha; sem argumento, diz se está aberta. Também vale no jogo exportado, para quem quiser um "modo de diagnóstico" num menu de opções.
 

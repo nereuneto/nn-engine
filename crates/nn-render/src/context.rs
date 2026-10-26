@@ -43,10 +43,7 @@ impl GpuContext {
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("nn-engine"),
-                // Limites conservadores: rodam em qualquer GPU com suporte a wgpu,
-                // inclusive placas antigas e drivers por software.
-                required_limits: wgpu::Limits::downlevel_defaults()
-                    .using_resolution(adapter.limits()),
+                required_limits: limits_for(&adapter.limits()),
                 ..Default::default()
             })
             .await
@@ -65,5 +62,39 @@ impl GpuContext {
         let instance =
             wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
         Self::new(instance, None).await
+    }
+}
+
+/// Os limites que a engine pede à GPU: conservadores, para rodar em qualquer
+/// placa com wgpu (inclusive antigas e drivers por software). Onde nem esses
+/// existem (WebGL2, OpenGL ES 3.0), os do WebGL2: o renderer só usa uniforms,
+/// sem buffers de armazenamento nem compute.
+fn limits_for(adapter: &wgpu::Limits) -> wgpu::Limits {
+    let downlevel = wgpu::Limits::downlevel_defaults();
+    if downlevel.check_limits(adapter) {
+        downlevel
+    } else {
+        wgpu::Limits::downlevel_webgl2_defaults()
+    }
+    .using_resolution(adapter.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::limits_for;
+
+    #[test]
+    fn placa_sem_os_limites_comuns_usa_os_do_webgl2() {
+        let webgl = wgpu::Limits::downlevel_webgl2_defaults();
+        let l = limits_for(&webgl);
+        assert!(l.check_limits(&webgl));
+        assert_eq!(l.max_storage_buffers_per_shader_stage, 0);
+        let comum = wgpu::Limits::default();
+        let l = limits_for(&comum);
+        assert_eq!(
+            l.max_storage_buffers_per_shader_stage,
+            wgpu::Limits::downlevel_defaults().max_storage_buffers_per_shader_stage
+        );
+        assert_eq!(l.max_texture_dimension_2d, comum.max_texture_dimension_2d);
     }
 }
