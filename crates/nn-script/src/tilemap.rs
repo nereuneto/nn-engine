@@ -19,6 +19,8 @@ struct MapState {
     map: TileMap,
     /// Mundos em que o mapa foi adicionado, para atualizar a colisão ao trocar tiles.
     grids: Vec<(Weak<RefCell<World>>, GridId)>,
+    /// As imagens dos tilesets ficam carregadas enquanto o mapa existir.
+    _images: Vec<nn_app::AssetHandle>,
 }
 
 /// Mapa de tiles no Lua.
@@ -31,10 +33,11 @@ impl LTileMap {
         self.0.borrow().map.bounds()
     }
 
-    fn new(map: TileMap) -> Self {
+    fn new(map: TileMap, images: Vec<nn_app::AssetHandle>) -> Self {
         Self(Rc::new(RefCell::new(MapState {
             map,
             grids: Vec::new(),
+            _images: images,
         })))
     }
 
@@ -404,10 +407,15 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                     scale,
                 )
                 .map_err(|e| err(e.to_string()))?;
-                map.load_textures(|p| c.load_texture(p, options))
-                    .map_err(|e| err(e.to_string()))?;
+                let mut images = Vec::new();
+                map.load_textures(|p| {
+                    let (id, h) = c.texture_handle(p, options)?;
+                    images.push(h);
+                    Ok::<_, nn_app::AssetError>(id)
+                })
+                .map_err(|e| err(e.to_string()))?;
                 apply_origin(&mut map, o)?;
-                Ok(LTileMap::new(map))
+                Ok(LTileMap::new(map, images))
             })
         })?,
     )?;
@@ -466,16 +474,18 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             let mut map = TileMap::from_ascii(&row_refs, Vec2::new(tile_w, tile_h), |c| {
                 defs.get(&c).cloned()
             });
+            let mut images = Vec::new();
             if let Some(sheet) = opt::<AnyUserData>(o, "sheet")? {
                 let sheet = sheet
                     .borrow::<LSheet>()
                     .map_err(|_| err("`sheet` deve ser uma spritesheet (nn.assets.sheet)"))?
-                    .0;
-                let size = with_ctx(lua, |c| Ok(c.renderer.texture_size(sheet.texture())))?;
-                map.add_sheet(&sheet, size);
+                    .clone();
+                let size = with_ctx(lua, |c| Ok(c.renderer.texture_size(sheet.0.texture())))?;
+                map.add_sheet(&sheet.0, size);
+                images.extend(sheet.1);
             }
             apply_origin(&mut map, o)?;
-            Ok(LTileMap::new(map))
+            Ok(LTileMap::new(map, images))
         })?,
     )?;
 

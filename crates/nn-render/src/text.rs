@@ -165,6 +165,26 @@ pub(crate) struct GlyphKey {
 pub(crate) struct AtlasGlyph {
     pub texture: TextureId,
     pub region: Rect,
+    /// A página do atlas (índice em `TextSystem::pages`).
+    page: usize,
+}
+
+impl AtlasPage {
+    /// Lugar para um glifo de `size` (com a margem) nesta página, se couber.
+    fn fit(&mut self, size: UVec2) -> Option<UVec2> {
+        let side = TextSystem::PAGE_SIZE;
+        if self.cursor.x + size.x > side {
+            self.cursor = UVec2::new(0, self.cursor.y + self.shelf_height);
+            self.shelf_height = 0;
+        }
+        if self.cursor.y + size.y > side {
+            return None;
+        }
+        let origin = self.cursor;
+        self.cursor.x += size.x;
+        self.shelf_height = self.shelf_height.max(size.y);
+        Some(origin)
+    }
 }
 
 #[derive(Debug)]
@@ -172,6 +192,8 @@ struct AtlasPage {
     texture: TextureId,
     cursor: UVec2,
     shelf_height: u32,
+    /// O último quadro em que um glifo desta página foi desenhado.
+    used: u64,
 }
 
 /// Layouts já feitos, pelo texto, fonte, tamanho e alinhamento. Guarda os do
@@ -204,19 +226,29 @@ pub(crate) struct TextSystem {
     fonts: Vec<fontdue::Font>,
     glyphs: FxHashMap<GlyphKey, Option<AtlasGlyph>>,
     pages: Vec<AtlasPage>,
+    /// A página onde os glifos novos entram.
+    current: usize,
     layouts: RefCell<LayoutCache>,
+    /// Conta os quadros (para saber qual página foi usada há mais tempo).
+    frame: std::cell::Cell<u64>,
 }
 
 impl TextSystem {
     pub const PAGE_SIZE: u32 = 1024;
     const PADDING: u32 = 1;
+    /// Páginas do atlas antes de reaproveitar a menos usada (4 MB cada). Um
+    /// jogo com muitos tamanhos de letra passa disso; textos que aparecem
+    /// por um tempo e somem deixam de ocupar memória para sempre.
+    pub const MAX_PAGES: usize = 4;
 
     pub fn new() -> Self {
         let mut system = Self {
             fonts: Vec::new(),
             glyphs: FxHashMap::default(),
             pages: Vec::new(),
+            current: 0,
             layouts: RefCell::default(),
+            frame: std::cell::Cell::new(1),
         };
         system
             .load_font(DEFAULT_FONT)
@@ -276,6 +308,7 @@ impl TextSystem {
     /// Fim do quadro: os layouts que não foram usados neste nem no anterior
     /// saem da memória.
     pub fn end_frame(&self) {
+        self.frame.set(self.frame.get() + 1);
         let mut cache = self.layouts.borrow_mut();
         let current = std::mem::take(&mut cache.current);
         cache.previous = current;
@@ -363,6 +396,11 @@ impl TextSystem {
         textures: &mut Vec<GpuTexture>,
     ) -> Option<AtlasGlyph> {
         if let Some(cached) = self.glyphs.get(&key) {
+            if let Some(g) = cached
+                && let Some(page) = self.pages.get_mut(g.page)
+            {
+                page.used = self.frame.get();
+            }
             return *cached;
         }
 
@@ -376,10 +414,13 @@ impl TextSystem {
             None
         } else {
             let (page, origin) = self.allocate(padded, device, queue, layout, textures);
+            let texture = self.pages[page].texture;
+            self.pages[page].used = self.frame.get();
             let rgba: Vec<u8> = coverage.iter().flat_map(|&a| [255, 255, 255, a]).collect();
-            textures[page.0 as usize].write(queue, origin, size, &rgba);
+            textures[texture.0 as usize].write(queue, origin, size, &rgba);
             Some(AtlasGlyph {
-                texture: page,
+                page,
+                texture,
                 region: Rect::from_pixels(
                     origin.x,
                     origin.y,
@@ -394,6 +435,9 @@ impl TextSystem {
     }
 
     /// Reserva espaço em uma página do atlas (empacotamento em prateleiras).
+    /// Devolve a página e onde, nela. Com [`TextSystem::MAX_PAGES`] cheias,
+    /// esvazia a usada há mais tempo (nunca uma usada neste quadro, que pode
+    /// estar na fila de desenho).
     fn allocate(
         &mut self,
         size: UVec2,
@@ -401,39 +445,74 @@ impl TextSystem {
         queue: &wgpu::Queue,
         layout: &wgpu::BindGroupLayout,
         textures: &mut Vec<GpuTexture>,
-    ) -> (TextureId, UVec2) {
-        if let Some(page) = self.pages.last_mut() {
-            if page.cursor.x + size.x > Self::PAGE_SIZE {
-                page.cursor = UVec2::new(0, page.cursor.y + page.shelf_height);
+    ) -> (usize, UVec2) {
+        if let Some(page) = self.pages.get_mut(self.current)
+            && let Some(origin) = page.fit(size)
+        {
+            return (self.current, origin);
+        }
+        let blank = || vec![0u8; (Self::PAGE_SIZE * Self::PAGE_SIZE * 4) as usize];
+        let now = self.frame.get();
+        let oldest = self
+            .pages
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.used < now)
+            .min_by_key(|(_, p)| p.used)
+            .map(|(i, _)| i);
+        match oldest {
+            Some(i) if self.pages.len() >= Self::MAX_PAGES => {
+                // Esvazia a página: os glifos dela são refeitos quando voltarem.
+                self.glyphs
+                    .retain(|_, g| g.as_ref().is_none_or(|g| g.page != i));
+                let page = &mut self.pages[i];
+                textures[page.texture.0 as usize].write(
+                    queue,
+                    UVec2::ZERO,
+                    UVec2::splat(Self::PAGE_SIZE),
+                    &blank(),
+                );
+                page.cursor = UVec2::ZERO;
                 page.shelf_height = 0;
+                log::debug!("página {i} do atlas de glifos reaproveitada");
+                self.current = i;
             }
-            if page.cursor.y + size.y <= Self::PAGE_SIZE {
-                let origin = page.cursor;
-                page.cursor.x += size.x;
-                page.shelf_height = page.shelf_height.max(size.y);
-                return (page.texture, origin);
+            _ => {
+                if self.pages.len() >= Self::MAX_PAGES {
+                    log::debug!(
+                        "atlas de glifos com {} páginas: todas em uso neste quadro",
+                        self.pages.len() + 1
+                    );
+                }
+                let texture = TextureId(textures.len() as u32);
+                textures.push(GpuTexture::from_rgba8(
+                    device,
+                    queue,
+                    layout,
+                    UVec2::splat(Self::PAGE_SIZE),
+                    &blank(),
+                    TextureOptions::default(),
+                    Some("nn glyph atlas"),
+                ));
+                log::debug!("nova página do atlas de glifos ({})", self.pages.len() + 1);
+                self.pages.push(AtlasPage {
+                    texture,
+                    cursor: UVec2::ZERO,
+                    shelf_height: 0,
+                    used: now,
+                });
+                self.current = self.pages.len() - 1;
             }
         }
+        let origin = self.pages[self.current]
+            .fit(size)
+            .expect("cabe numa página vazia (conferido em glyph)");
+        (self.current, origin)
+    }
 
-        // Página nova.
-        let texture = TextureId(textures.len() as u32);
-        let blank = vec![0u8; (Self::PAGE_SIZE * Self::PAGE_SIZE * 4) as usize];
-        textures.push(GpuTexture::from_rgba8(
-            device,
-            queue,
-            layout,
-            UVec2::splat(Self::PAGE_SIZE),
-            &blank,
-            TextureOptions::default(),
-            Some("nn glyph atlas"),
-        ));
-        log::debug!("nova página do atlas de glifos ({})", self.pages.len() + 1);
-        self.pages.push(AtlasPage {
-            texture,
-            cursor: UVec2::new(size.x, 0),
-            shelf_height: size.y,
-        });
-        (texture, UVec2::ZERO)
+    /// A textura é de uma página do atlas?
+    pub fn owns(&self, id: TextureId) -> bool {
+        self.pages.iter().any(|p| p.texture == id)
     }
 
     pub fn page_count(&self) -> usize {

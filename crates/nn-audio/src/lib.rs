@@ -336,6 +336,8 @@ pub struct Audio {
     /// Uma trilha do mixer por canal (vazio no modo mudo).
     tracks: Vec<TrackHandle>,
     sounds: Vec<StaticSoundData>,
+    /// Sons liberados ([`Audio::free`]): o lugar é reaproveitado.
+    freed: std::collections::BTreeSet<u32>,
     master_volume: f32,
     channel_volumes: [f32; 2],
     listener: Listener,
@@ -392,6 +394,7 @@ impl Audio {
             manager: None,
             tracks: Vec::new(),
             sounds: Vec::new(),
+            freed: Default::default(),
             master_volume: 1.0,
             channel_volumes: [1.0; 2],
             listener: Listener::default(),
@@ -449,8 +452,34 @@ impl Audio {
     }
 
     fn add(&mut self, data: StaticSoundData) -> SoundId {
+        if let Some(i) = self.freed.pop_first() {
+            self.sounds[i as usize] = data;
+            return SoundId(i);
+        }
         self.sounds.push(data);
         SoundId(self.sounds.len() as u32 - 1)
+    }
+
+    /// Libera a memória de um som que ninguém vai tocar de novo. O que já
+    /// está tocando segue até o fim; o id passa a tocar silêncio até ser
+    /// reaproveitado por um som novo.
+    pub fn free(&mut self, id: SoundId) {
+        let i = id.0 as usize;
+        if i >= self.sounds.len() || self.freed.contains(&id.0) {
+            return;
+        }
+        self.sounds[i] = StaticSoundData {
+            sample_rate: 44_100,
+            frames: Arc::from([Frame::ZERO]),
+            settings: StaticSoundSettings::default(),
+            slice: None,
+        };
+        self.freed.insert(id.0);
+    }
+
+    /// Quantos sons estão carregados (sem os liberados).
+    pub fn sound_count(&self) -> usize {
+        self.sounds.len() - self.freed.len()
     }
 
     /// Duração do som.

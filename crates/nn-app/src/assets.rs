@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -32,10 +33,65 @@ pub enum AssetError {
     },
 }
 
-#[derive(Debug, Clone, Copy)]
+/// Quem usa um asset carregado. Enquanto houver um vivo (ou o asset estiver
+/// guardado com [`Context::keep_texture`] e afins), [`Context::unload_unused`]
+/// não o descarrega. Guarde junto de quem usa o id (a imagem de um sprite, o
+/// mapa com o tileset...).
+#[derive(Debug, Clone)]
+pub struct AssetHandle(#[allow(dead_code)] Rc<()>);
+
+#[derive(Debug, Clone)]
 struct Tracked<T> {
     id: T,
     modified: Option<SystemTime>,
+    /// Os [`AssetHandle`] deste asset.
+    users: Weak<()>,
+    /// Pedido sem um [`AssetHandle`] (`load_texture` e afins): quem pediu
+    /// pode guardar o id por quanto quiser, então nunca é descarregado.
+    pinned: bool,
+    /// Guardado de propósito (`nn.assets.keep`): nunca é descarregado.
+    kept: bool,
+}
+
+impl<T> Tracked<T> {
+    fn new(id: T, modified: Option<SystemTime>) -> Self {
+        Self {
+            id,
+            modified,
+            users: Weak::new(),
+            pinned: false,
+            kept: false,
+        }
+    }
+
+    fn handle(&mut self) -> AssetHandle {
+        match self.users.upgrade() {
+            Some(rc) => AssetHandle(rc),
+            None => {
+                let rc = Rc::new(());
+                self.users = Rc::downgrade(&rc);
+                AssetHandle(rc)
+            }
+        }
+    }
+
+    fn unused(&self) -> bool {
+        !self.pinned && !self.kept && self.users.strong_count() == 0
+    }
+}
+
+/// O que [`Context::unload_unused`] descarregou.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Unloaded {
+    pub textures: usize,
+    pub sounds: usize,
+    pub models: usize,
+}
+
+impl Unloaded {
+    pub fn is_empty(&self) -> bool {
+        self.textures + self.sounds + self.models == 0
+    }
 }
 
 /// Assets carregados a partir da pasta do jogo (ou do pacote, num jogo exportado).
@@ -51,7 +107,7 @@ pub struct Assets {
     sounds: HashMap<String, Tracked<SoundId>>,
     fonts: HashMap<String, FontId>,
     /// Modelos 3D, pela chave de [`model_key`].
-    models: HashMap<String, (nn_render::d3::Model, Option<SystemTime>)>,
+    models: HashMap<String, Tracked<nn_render::d3::Model>>,
     last_poll: Option<Instant>,
     reloaded: Vec<PathBuf>,
 }
@@ -185,20 +241,42 @@ impl Context {
         path: impl AsRef<Path>,
         flat: bool,
     ) -> Result<nn_render::d3::Model, AssetError> {
+        let entry = self.model_entry(path, flat)?;
+        entry.pinned = true;
+        Ok(entry.id.clone())
+    }
+
+    /// Como [`Context::load_model`], com quem usa: sem nenhum
+    /// [`AssetHandle`] vivo, [`Context::unload_unused`] descarrega o modelo.
+    pub fn model_handle(
+        &mut self,
+        path: impl AsRef<Path>,
+        flat: bool,
+    ) -> Result<(nn_render::d3::Model, AssetHandle), AssetError> {
+        let entry = self.model_entry(path, flat)?;
+        Ok((entry.id.clone(), entry.handle()))
+    }
+
+    fn model_entry(
+        &mut self,
+        path: impl AsRef<Path>,
+        flat: bool,
+    ) -> Result<&mut Tracked<nn_render::d3::Model>, AssetError> {
         let key = model_key(&path, flat);
-        if let Some((m, _)) = self.assets.models.get(&key) {
-            return Ok(m.clone());
+        if !self.assets.models.contains_key(&key) {
+            let file = normalize(path.as_ref());
+            let model = self.read_model(&file, flat)?;
+            let modified = self.assets.source.modified(Path::new(&file));
+            self.assets
+                .models
+                .insert(key.clone(), Tracked::new(model, modified));
         }
-        let file = normalize(path.as_ref());
-        let model = self.read_model(&file, flat)?;
-        let modified = self.assets.source.modified(Path::new(&file));
-        self.assets.models.insert(key, (model.clone(), modified));
-        Ok(model)
+        Ok(self.assets.models.get_mut(&key).expect("inserido acima"))
     }
 
     /// Um modelo já carregado, pela chave de [`model_key`].
     pub fn model(&self, key: &str) -> Option<&nn_render::d3::Model> {
-        self.assets.models.get(key).map(|(m, _)| m)
+        self.assets.models.get(key).map(|t| &t.id)
     }
 
     /// Desenha o modelo carregado com a chave `key` (de [`model_key`]), na
@@ -210,8 +288,8 @@ impl Context {
         color: nn_core::Color,
         cast_shadow: bool,
     ) -> bool {
-        match self.assets.models.get(key) {
-            Some((model, _)) => {
+        match self.assets.models.get(key).map(|t| &t.id) {
+            Some(model) => {
                 self.renderer.draw_model(model, matrix, color, cast_shadow);
                 true
             }
@@ -229,8 +307,8 @@ impl Context {
         cast_shadow: bool,
         joints: &[glam::Mat4],
     ) -> bool {
-        match self.assets.models.get(key) {
-            Some((model, _)) => {
+        match self.assets.models.get(key).map(|t| &t.id) {
+            Some(model) => {
                 self.renderer
                     .draw_model_posed(model, matrix, color, cast_shadow, joints);
                 true
@@ -272,8 +350,8 @@ impl Context {
         material: nn_render::d3::Material3D,
         joints: Option<&[glam::Mat4]>,
     ) -> bool {
-        match self.assets.models.get(key) {
-            Some((model, _)) => {
+        match self.assets.models.get(key).map(|t| &t.id) {
+            Some(model) => {
                 self.renderer.draw_model_material(
                     model,
                     matrix,
@@ -315,42 +393,157 @@ impl Context {
         path: impl AsRef<Path>,
         options: TextureOptions,
     ) -> Result<TextureId, AssetError> {
-        let key = normalize(path.as_ref());
-        if let Some(t) = self.assets.textures.get(&(key.clone(), options)) {
-            return Ok(t.id);
+        let entry = self.texture_entry(path, options)?;
+        entry.pinned = true;
+        Ok(entry.id)
+    }
+
+    /// Como [`Context::load_texture`], com quem usa: sem nenhum
+    /// [`AssetHandle`] vivo, [`Context::unload_unused`] libera a textura.
+    pub fn texture_handle(
+        &mut self,
+        path: impl AsRef<Path>,
+        options: TextureOptions,
+    ) -> Result<(TextureId, AssetHandle), AssetError> {
+        let entry = self.texture_entry(path, options)?;
+        Ok((entry.id, entry.handle()))
+    }
+
+    fn texture_entry(
+        &mut self,
+        path: impl AsRef<Path>,
+        options: TextureOptions,
+    ) -> Result<&mut Tracked<TextureId>, AssetError> {
+        let key = (normalize(path.as_ref()), options);
+        if !self.assets.textures.contains_key(&key) {
+            let bytes = self.assets.read(&key.0)?;
+            let id = self
+                .renderer
+                .load_texture_bytes(&bytes, options)
+                .map_err(|source| AssetError::Render {
+                    path: self.assets.resolve(&key.0),
+                    source,
+                })?;
+            let modified = self.assets.source.modified(Path::new(&key.0));
+            self.assets
+                .textures
+                .insert(key.clone(), Tracked::new(id, modified));
         }
-        let bytes = self.assets.read(&key)?;
-        let id = self
-            .renderer
-            .load_texture_bytes(&bytes, options)
-            .map_err(|source| AssetError::Render {
-                path: self.assets.resolve(&key),
-                source,
-            })?;
-        let modified = self.assets.source.modified(Path::new(&key));
-        self.assets
-            .textures
-            .insert((key, options), Tracked { id, modified });
-        Ok(id)
+        Ok(self.assets.textures.get_mut(&key).expect("inserido acima"))
     }
 
     /// Carrega um som (WAV, OGG Vorbis ou MP3) dos assets, com cache.
     pub fn load_sound(&mut self, path: impl AsRef<Path>) -> Result<SoundId, AssetError> {
+        let entry = self.sound_entry(path)?;
+        entry.pinned = true;
+        Ok(entry.id)
+    }
+
+    /// Como [`Context::load_sound`], com quem usa: sem nenhum
+    /// [`AssetHandle`] vivo, [`Context::unload_unused`] libera o som.
+    pub fn sound_handle(
+        &mut self,
+        path: impl AsRef<Path>,
+    ) -> Result<(SoundId, AssetHandle), AssetError> {
+        let entry = self.sound_entry(path)?;
+        Ok((entry.id, entry.handle()))
+    }
+
+    fn sound_entry(&mut self, path: impl AsRef<Path>) -> Result<&mut Tracked<SoundId>, AssetError> {
         let key = normalize(path.as_ref());
-        if let Some(t) = self.assets.sounds.get(&key) {
-            return Ok(t.id);
+        if !self.assets.sounds.contains_key(&key) {
+            let bytes = self.assets.read(&key)?;
+            let id = self
+                .audio
+                .load_bytes(bytes)
+                .map_err(|source| AssetError::Audio {
+                    path: self.assets.resolve(&key),
+                    source,
+                })?;
+            let modified = self.assets.source.modified(Path::new(&key));
+            self.assets
+                .sounds
+                .insert(key.clone(), Tracked::new(id, modified));
         }
-        let bytes = self.assets.read(&key)?;
-        let id = self
-            .audio
-            .load_bytes(bytes)
-            .map_err(|source| AssetError::Audio {
-                path: self.assets.resolve(&key),
-                source,
-            })?;
-        let modified = self.assets.source.modified(Path::new(&key));
-        self.assets.sounds.insert(key, Tracked { id, modified });
-        Ok(id)
+        Ok(self.assets.sounds.get_mut(&key).expect("inserido acima"))
+    }
+
+    /// Guarda a textura para sempre (nunca descarregada). `false` se ela não
+    /// veio dos assets.
+    pub fn keep_texture(&mut self, id: TextureId) -> bool {
+        let mut found = false;
+        for t in self.assets.textures.values_mut().filter(|t| t.id == id) {
+            t.kept = true;
+            found = true;
+        }
+        found
+    }
+
+    /// Guarda o som para sempre (a música que toca em todas as cenas).
+    pub fn keep_sound(&mut self, id: SoundId) -> bool {
+        let mut found = false;
+        for t in self.assets.sounds.values_mut().filter(|t| t.id == id) {
+            t.kept = true;
+            found = true;
+        }
+        found
+    }
+
+    /// Guarda o modelo (pela chave de [`model_key`]) para sempre.
+    pub fn keep_model(&mut self, key: &str) -> bool {
+        match self.assets.models.get_mut(key) {
+            Some(t) => {
+                t.kept = true;
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Descarrega as texturas, os sons e os modelos que ninguém usa mais:
+    /// pedidos só com um [`AssetHandle`], sem nenhum vivo, e não guardados.
+    /// Pedir de novo carrega outra vez. A engine chama isto ao trocar de
+    /// cena (depois de o Lua soltar o que a cena anterior usava).
+    pub fn unload_unused(&mut self) -> Unloaded {
+        let mut out = Unloaded::default();
+        let textures: Vec<_> = self
+            .assets
+            .textures
+            .iter()
+            .filter(|(_, t)| t.unused())
+            .map(|(k, t)| (k.clone(), t.id))
+            .collect();
+        for (key, id) in textures {
+            self.renderer.free_texture(id);
+            self.assets.textures.remove(&key);
+            out.textures += 1;
+        }
+        let sounds: Vec<_> = self
+            .assets
+            .sounds
+            .iter()
+            .filter(|(_, t)| t.unused())
+            .map(|(k, t)| (k.clone(), t.id))
+            .collect();
+        for (key, id) in sounds {
+            self.audio.free(id);
+            self.assets.sounds.remove(&key);
+            out.sounds += 1;
+        }
+        let models: Vec<String> = self
+            .assets
+            .models
+            .iter()
+            .filter(|(_, t)| t.unused())
+            .map(|(k, _)| k.clone())
+            .collect();
+        for key in models {
+            if let Some(t) = self.assets.models.remove(&key) {
+                self.renderer.free_model(&t.id);
+                out.models += 1;
+            }
+        }
+        out
     }
 
     /// Carrega uma fonte (.ttf, .otf) dos assets, com cache.
@@ -385,7 +578,7 @@ impl Context {
             .assets
             .textures
             .iter()
-            .map(|(k, v)| (k.clone(), *v))
+            .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         for ((path, options), tracked) in textures {
             let current = source.modified(Path::new(&path));
@@ -418,7 +611,7 @@ impl Context {
             .assets
             .sounds
             .iter()
-            .map(|(k, v)| (k.clone(), *v))
+            .map(|(k, v)| (k.clone(), v.clone()))
             .collect();
         for (path, tracked) in sounds {
             let current = source.modified(Path::new(&path));
@@ -450,7 +643,7 @@ impl Context {
             .assets
             .models
             .iter()
-            .map(|(k, (_, m))| (k.clone(), *m))
+            .map(|(k, t)| (k.clone(), t.modified))
             .collect();
         for (key, modified) in models {
             let (file, flat) = match key.strip_suffix("|flat") {
@@ -464,7 +657,16 @@ impl Context {
             match self.read_model(&file, flat) {
                 Ok(model) => {
                     log::info!("recarregado: {file}");
-                    self.assets.models.insert(key, (model, current));
+                    if let Some(t) = self.assets.models.get_mut(&key) {
+                        // Quem desenha pela chave passa a desenhar o novo. O
+                        // velho sai da GPU, a não ser que alguém tenha pedido
+                        // o modelo sem um AssetHandle (e guardado um clone).
+                        let old = std::mem::replace(&mut t.id, model);
+                        t.modified = current;
+                        if !t.pinned {
+                            self.renderer.free_model(&old);
+                        }
+                    }
                     self.assets.reloaded.push(PathBuf::from(file));
                 }
                 Err(e) => log::warn!("não foi possível recarregar: {e}"),

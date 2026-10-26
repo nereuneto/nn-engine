@@ -487,3 +487,72 @@ fn painel_de_imagem_em_nove_fatias() {
     assert_color(img.pixel(32, 15), BLUE, "borda de cima");
     assert_color(img.pixel(2, 32), BLACK, "fora");
 }
+
+#[test]
+fn textura_liberada_some_e_o_lugar_e_reaproveitado() {
+    let Some(mut h) = Harness::new() else {
+        return;
+    };
+    let antes = (h.renderer.texture_count(), h.renderer.texture_bytes());
+    let a = h.renderer.create_texture(
+        UVec2::new(4, 4),
+        &[255; 4 * 4 * 4],
+        TextureOptions::PIXEL_ART,
+    );
+    assert_eq!(h.renderer.texture_count(), antes.0 + 1);
+    h.renderer.free_texture(a);
+    h.renderer.free_texture(a);
+    assert_eq!(
+        (h.renderer.texture_count(), h.renderer.texture_bytes()),
+        antes
+    );
+    // Desenhar o id liberado não quebra: não aparece nada.
+    h.renderer
+        .draw(&Sprite::new(a).at(Vec2::ZERO).size(Vec2::splat(64.0)));
+    let img = h.render(&Camera2D::new(Vec2::ZERO), Color::BLACK);
+    assert_color(img.pixel(32, 32), [0, 0, 0, 255], "centro");
+    // A próxima textura usa o mesmo lugar.
+    let b = h.renderer.create_texture(
+        UVec2::new(2, 2),
+        &[255; 2 * 2 * 4],
+        TextureOptions::PIXEL_ART,
+    );
+    assert_eq!(a, b);
+    // As da engine não são liberadas.
+    let branco = h.renderer.white_texture();
+    h.renderer.free_texture(branco);
+    assert_eq!(h.renderer.texture_count(), antes.0 + 1);
+}
+
+#[test]
+fn o_atlas_de_letras_reaproveita_as_paginas_menos_usadas() {
+    let Some(mut h) = Harness::new() else {
+        return;
+    };
+    // Muitos tamanhos de letra, um por quadro: sem limite, cada um ficaria
+    // ocupando o atlas para sempre.
+    for i in 0..80 {
+        let text = nn_render::Text::new(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789",
+        )
+        .at(Vec2::ZERO)
+        .size(60.0 + i as f32 * 2.0);
+        h.renderer.screen().draw_text(&text);
+        h.render(&Camera2D::new(Vec2::ZERO), Color::BLACK);
+    }
+    let pages = h.renderer.glyph_atlas_pages();
+    assert!(pages <= 4, "{pages} páginas");
+    // Depois de reaproveitar páginas, as letras ainda aparecem.
+    h.renderer.screen().draw_text(
+        &nn_render::Text::new("█")
+            .at(Vec2::new(8.0, 8.0))
+            .size(40.0)
+            .color(Color::WHITE),
+    );
+    let img = h.render(&Camera2D::new(Vec2::ZERO), Color::BLACK);
+    let lit = (0..SIZE.y)
+        .flat_map(|y| (0..SIZE.x).map(move |x| (x, y)))
+        .filter(|&(x, y)| img.pixel(x, y)[0] > 128)
+        .count();
+    assert!(lit > 50, "{lit} pixels acesos");
+}

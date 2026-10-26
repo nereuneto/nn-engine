@@ -203,6 +203,8 @@ pub(crate) struct Renderer3D {
     shadow_sampler: wgpu::Sampler,
     shadow_map: ShadowMap,
     meshes: Vec<GpuMesh>,
+    /// Malhas liberadas: o lugar é reaproveitado pela próxima criada.
+    freed: std::collections::BTreeSet<u32>,
     draws: Vec<Draw3>,
     instances: wgpu::Buffer,
     capacity: usize,
@@ -789,6 +791,7 @@ impl Renderer3D {
             shadow_sampler,
             shadow_map,
             meshes: Vec::new(),
+            freed: Default::default(),
             last_stats: Stats3::default(),
             draws: Vec::new(),
             instances,
@@ -968,10 +971,7 @@ impl Renderer3D {
         if (id.0 as usize) >= self.meshes.len() {
             return;
         }
-        let new = self.create_mesh(device, queue, vertices, indices, None);
-        let mesh = self.meshes.pop().expect("criada agora");
-        debug_assert_eq!(new.0 as usize, self.meshes.len());
-        self.meshes[id.0 as usize] = mesh;
+        self.meshes[id.0 as usize] = Self::build_mesh(device, queue, vertices, indices, None);
     }
 
     pub(crate) fn create_mesh(
@@ -982,6 +982,38 @@ impl Renderer3D {
         indices: &[u32],
         skin: Option<&[SkinVertex]>,
     ) -> MeshId {
+        let mesh = Self::build_mesh(device, queue, vertices, indices, skin);
+        if let Some(i) = self.freed.pop_first() {
+            self.meshes[i as usize] = mesh;
+            return MeshId(i);
+        }
+        self.meshes.push(mesh);
+        MeshId(self.meshes.len() as u32 - 1)
+    }
+
+    /// Libera a memória de uma malha: o id passa a desenhar nada até ser
+    /// reaproveitado por uma malha nova.
+    pub(crate) fn free_mesh(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, id: MeshId) {
+        let i = id.0 as usize;
+        if i >= self.meshes.len() || self.freed.contains(&id.0) {
+            return;
+        }
+        self.meshes[i] = Self::build_mesh(device, queue, &[], &[], None);
+        self.freed.insert(id.0);
+    }
+
+    /// Quantas malhas estão na GPU (sem as liberadas).
+    pub(crate) fn mesh_count(&self) -> usize {
+        self.meshes.len() - self.freed.len()
+    }
+
+    fn build_mesh(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        vertices: &[Vertex3],
+        indices: &[u32],
+        skin: Option<&[SkinVertex]>,
+    ) -> GpuMesh {
         let make = |label: &str, bytes: &[u8], usage: wgpu::BufferUsages| {
             let buffer = device.create_buffer(&wgpu::BufferDescriptor {
                 label: Some(label),
@@ -994,7 +1026,7 @@ impl Renderer3D {
             }
             buffer
         };
-        let mesh = GpuMesh {
+        GpuMesh {
             vertices: make(
                 "nn 3d vertices",
                 bytemuck::cast_slice(vertices),
@@ -1031,9 +1063,7 @@ impl Renderer3D {
                     wgpu::BufferUsages::VERTEX,
                 )
             }),
-        };
-        self.meshes.push(mesh);
-        MeshId(self.meshes.len() as u32 - 1)
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

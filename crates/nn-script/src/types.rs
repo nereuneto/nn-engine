@@ -1,15 +1,17 @@
 //! Tipos expostos ao Lua como userdata.
 
 use mlua::{AnyUserData, Lua, Result, Table, UserData, UserDataFields, UserDataMethods, Value};
+use nn_app::AssetHandle;
 use nn_audio::{PlayOptions, Sound, SoundId};
 use nn_render::{Animation, AnimationPlayer, FontId, Playback, SpriteSheet, TextureId};
 
 use crate::api::with_ctx;
 use crate::convert::{err, opt};
 
-/// Imagem carregada.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct LTexture(pub TextureId);
+/// Imagem carregada. O `AssetHandle` diz que a imagem está em uso: quando
+/// nenhum sobra (o Lua soltou todas), a troca de cena a descarrega.
+#[derive(Debug, Clone)]
+pub(crate) struct LTexture(pub TextureId, pub Option<AssetHandle>);
 
 impl UserData for LTexture {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
@@ -23,8 +25,8 @@ impl UserData for LTexture {
 }
 
 /// Spritesheet: imagem dividida em quadros. Quadros numerados a partir de 1.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct LSheet(pub SpriteSheet);
+#[derive(Debug, Clone)]
+pub(crate) struct LSheet(pub SpriteSheet, pub Option<AssetHandle>);
 
 impl UserData for LSheet {
     fn add_fields<F: UserDataFields<Self>>(f: &mut F) {
@@ -43,8 +45,8 @@ pub(crate) struct LFont(pub FontId);
 impl UserData for LFont {}
 
 /// Som carregado (ainda não tocando).
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct LSoundData(pub SoundId);
+#[derive(Debug, Clone)]
+pub(crate) struct LSoundData(pub SoundId, #[allow(dead_code)] pub Option<AssetHandle>);
 
 impl UserData for LSoundData {
     fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
@@ -251,11 +253,11 @@ impl UserData for LAnimator {
 }
 
 /// Converte um valor em referência a userdata do tipo `T`, com mensagem clara.
-pub(crate) fn expect<T: 'static + Copy>(value: &Value, what: &str) -> Result<T> {
+pub(crate) fn expect<T: 'static + Clone>(value: &Value, what: &str) -> Result<T> {
     match value {
         Value::UserData(ud) => ud
             .borrow::<T>()
-            .map(|r| *r)
+            .map(|r| r.clone())
             .map_err(|_| err(format!("esperava {what}"))),
         other => Err(err(format!(
             "esperava {what}, recebeu {}",

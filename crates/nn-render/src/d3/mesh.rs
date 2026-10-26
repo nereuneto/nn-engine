@@ -38,6 +38,17 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    /// Um número que muda quando os vértices ou os índices mudam (para
+    /// reaproveitar uma malha igual já enviada).
+    pub fn content_hash(&self) -> u64 {
+        use std::hash::Hasher;
+        let mut h = rustc_hash::FxHasher::default();
+        h.write(bytemuck::cast_slice(&self.vertices));
+        h.write(bytemuck::cast_slice(&self.indices));
+        h.write_usize(self.vertices.len());
+        h.finish()
+    }
+
     pub fn new() -> Self {
         Self::default()
     }

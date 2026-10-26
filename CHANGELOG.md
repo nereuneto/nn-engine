@@ -4,6 +4,32 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Memória: trocar de cena libera o que não se usa mais (Sprint 65)
+
+- **Ao entrar numa cena, o que nenhuma cena usa mais sai da memória:**
+  - as imagens (inclusive as dos tilesets e as das partículas);
+  - os sons;
+  - os modelos 3D, com as malhas e as texturas deles;
+  - as malhas do `nn.d3.mesh` e dos terrenos.
+
+  Antes, tudo o que o jogo carregava ficava até ele fechar: um jogo com muitas fases ia enchendo a memória da placa de vídeo.
+- **O que fica:**
+  - o que outra cena ainda aberta usa (o jogo embaixo de uma pausa);
+  - o que um módulo do `require` guarda;
+  - o que for guardado com **`nn.assets.keep(asset)`**, para o que toda cena usa, como a música.
+- **Pedir de novo** algo que saiu carrega outra vez, sem erro.
+- **`nn.d3.mesh`** com os mesmos pontos e triângulos reaproveita a malha já criada, em vez de ocupar mais memória a cada chamada.
+- **O atlas de letras tem um limite** de 4 páginas (16 MB). Cheio, a página usada há mais tempo é reaproveitada (nunca uma desenhada no quadro atual). Antes, um jogo com muitos tamanhos de letra crescia sem parar.
+- **Testes:**
+  - trocar 200 vezes entre duas cenas com imagens, sons, malhas e modelos diferentes deixa a memória igual à da primeira volta, só com o que a cena atual usa;
+  - uma pausa não descarrega o jogo de baixo;
+  - o atlas com 80 tamanhos de letra fica em 4 páginas.
+- **Para quem usa as crates:**
+  - `Context::texture_handle`, `sound_handle` e `model_handle` devolvem um `AssetHandle`; sem nenhum vivo, `Context::unload_unused` descarrega o asset. Pedido com `load_texture` e afins, o asset nunca é descarregado (como antes);
+  - `keep_texture`, `keep_sound` e `keep_model`;
+  - `Renderer::free_texture`, `free_mesh`, `free_model` e `mesh_count`;
+  - `Audio::free` e `sound_count`.
+
 ### Comportamentos com erro e o Lua sem `io` (Sprint 64)
 
 - **Um comportamento com erro não para mais a cena.** Antes, o primeiro erro num comportamento parava tudo. Agora só aquele comportamento é desligado, naquele objeto; o resto da cena, os outros comportamentos e o script da cena seguem. Vale para:

@@ -163,7 +163,7 @@ impl UserData for LNav {
                 }
                 this.dirty = false;
             }
-            Ok(this.mesh.expect("malha"))
+            Ok(this.mesh.clone().expect("malha"))
         });
     }
 }
