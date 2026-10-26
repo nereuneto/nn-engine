@@ -41,6 +41,7 @@ mod nav;
 mod particles;
 mod physics;
 mod physics3d;
+mod preload;
 pub mod remote;
 pub mod report;
 mod save;
@@ -587,7 +588,7 @@ impl ScriptRuntime {
         crate::api::CtxSlot::enter(lua, ctx, || f(lua))
     }
 
-    fn take_request(&self) -> Option<(SceneRequest, Option<nn_app::Fade>)> {
+    fn take_request(&self) -> Option<api::Request> {
         self.inner
             .lua
             .app_data_mut::<Shared>()
@@ -869,6 +870,13 @@ pub struct LuaScene {
     generation: u64,
     /// Pausado pelo editor e pediram para avançar: roda um passo fixo.
     step_fixed: bool,
+    /// O arquivo já avaliado, antes de a cena começar (para saber o que
+    /// pré-carregar sem avaliar duas vezes).
+    module: Option<Table>,
+    /// A lista do que pré-carregar já foi lida.
+    prepared: bool,
+    /// O que a cena carregou antes de começar (e segura enquanto existir).
+    preloaded: preload::Preloaded,
 }
 
 impl std::fmt::Debug for LuaScene {
@@ -892,7 +900,44 @@ impl LuaScene {
             error: None,
             generation,
             step_fixed: false,
+            module: None,
+            prepared: false,
+            preloaded: preload::Preloaded::default(),
         }
+    }
+
+    /// O ambiente Lua desta cena.
+    pub(crate) fn runtime(&self) -> &ScriptRuntime {
+        &self.runtime
+    }
+
+    /// Avalia o arquivo da cena e lê o que ela vai usar (uma vez).
+    pub(crate) fn prepare(&mut self, ctx: &mut Context) {
+        if self.prepared {
+            return;
+        }
+        self.prepared = true;
+        // Com erro, a cena mostra o erro ao começar (avaliando de novo).
+        let Ok(module) = self.runtime.load_module(ctx, &self.path) else {
+            return;
+        };
+        match self.runtime.with_ctx(ctx, |_| preload::list_of(&module)) {
+            Ok(list) => self.preloaded.items = list,
+            Err(e) => log::warn!(
+                "{}: lista do que pré-carregar: {}",
+                self.path,
+                format_error(&e)
+            ),
+        }
+        self.module = Some(module);
+    }
+
+    pub(crate) fn preloaded(&self) -> &preload::Preloaded {
+        &self.preloaded
+    }
+
+    pub(crate) fn preload_next(&mut self, ctx: &mut Context) {
+        self.preloaded.load_next(ctx);
     }
 
     /// Caminho do arquivo da cena.
@@ -947,12 +992,15 @@ impl LuaScene {
             .behavior_errors
             .borrow_mut()
             .retain(|(scene, _)| scene != &self.path);
-        let module = match self.runtime.load_module(ctx, &self.path) {
-            Ok(m) => m,
-            Err(e) => {
-                self.set_error(&e);
-                return;
-            }
+        let module = match self.module.take() {
+            Some(m) => m,
+            None => match self.runtime.load_module(ctx, &self.path) {
+                Ok(m) => m,
+                Err(e) => {
+                    self.set_error(&e);
+                    return;
+                }
+            },
         };
         self.error = None;
         let lua = self.runtime.lua().clone();
@@ -1197,6 +1245,12 @@ impl Scene for LuaScene {
     fn enter(&mut self, ctx: &mut Context) {
         // Com erro ao carregar, a cena da frente fica sem `self`.
         self.runtime.set_front(&self.path, None);
+        // O que a cena vai usar carrega antes de ela montar os objetos (o
+        // que uma tela de carregamento já carregou não carrega de novo).
+        self.prepare(ctx);
+        while self.preloaded.has_more() {
+            self.preloaded.load_next(ctx);
+        }
         self.load(ctx);
         // A cena de antes já saiu: o que só ela usava sai da memória.
         self.runtime.unload_unused(ctx);
@@ -1261,10 +1315,22 @@ impl Scene for LuaScene {
             return Transition::Quit;
         }
 
-        let Some((request, fade)) = self.runtime.take_request() else {
+        let Some(api::Request {
+            scene: request,
+            fade,
+            loading,
+        }) = self.runtime.take_request()
+        else {
             return Transition::None;
         };
-        let scene = |path, args| Box::new(LuaScene::new(self.runtime.clone(), path, args));
+        // Com `loading`, uma tela de carregamento vem antes da cena nova.
+        let scene = |path, args| -> Box<dyn Scene> {
+            let next = LuaScene::new(self.runtime.clone(), path, args);
+            match &loading {
+                Some(screen) => Box::new(preload::LoadingScene::new(next, screen)),
+                None => Box::new(next),
+            }
+        };
         let transition = match request {
             SceneRequest::Pop => Transition::Pop,
             SceneRequest::Quit => Transition::Quit,

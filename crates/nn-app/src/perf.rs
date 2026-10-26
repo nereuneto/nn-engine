@@ -25,6 +25,10 @@ pub struct FrameTimes {
     pub draw: f32,
     /// Passos fixos neste quadro.
     pub steps: u32,
+    /// Arquivos carregados neste quadro (imagens, sons, modelos, fontes).
+    pub loads: u32,
+    /// O tempo carregando esses arquivos.
+    pub load: f32,
 }
 
 impl FrameTimes {
@@ -36,6 +40,8 @@ impl FrameTimes {
         m(&mut self.update, new.update);
         m(&mut self.draw, new.draw);
         self.steps = new.steps;
+        self.loads = new.loads;
+        self.load = new.load;
     }
 }
 
@@ -61,6 +67,9 @@ pub struct Perf {
     open: bool,
     worst_timer: f32,
     frames: u64,
+    /// Arquivos carregados desde o começo, e o último quadro que carregou.
+    pub total_loads: u64,
+    pub last_load: FrameTimes,
 }
 
 impl Perf {
@@ -69,6 +78,14 @@ impl Perf {
             allowed,
             ..Self::default()
         }
+    }
+
+    /// Conta um arquivo carregado (imagem, som, modelo, fonte) no quadro de
+    /// agora, com o tempo que levou.
+    pub fn add_load(&mut self, d: Duration) {
+        self.current.loads += 1;
+        self.current.load += ms(d);
+        self.total_loads += 1;
     }
 
     /// Soma um tempo de física ao quadro de agora.
@@ -103,6 +120,9 @@ impl Perf {
     fn end(&mut self) {
         self.open = false;
         self.last = self.current;
+        if self.last.loads > 0 {
+            self.last_load = self.last;
+        }
         self.frames += 1;
         let k = if self.frames == 1 { 1.0 } else { 0.1 };
         self.average.blend(&self.last, k);
@@ -173,6 +193,13 @@ impl Context {
         lines.push(mem);
         if self.perf.objects > 0 {
             lines.push(format!("objetos: {}", self.perf.objects));
+        }
+        if self.perf.total_loads > 0 {
+            let l = &self.perf.last_load;
+            lines.push(format!(
+                "carregados: {} arquivos; o último quadro que carregou: {} em {:.1} ms",
+                self.perf.total_loads, l.loads, l.load
+            ));
         }
         lines
     }

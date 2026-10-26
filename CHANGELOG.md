@@ -4,6 +4,16 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Pré-carregar e a tela de carregamento (Sprint 66)
+
+- **Ao começar, a cena carrega antes o que vai usar.** Antes, uma imagem ou um som carregava no primeiro uso, e o jogo dava uma travada no meio: o som do item na primeira vez que tocava, a fonte do placar no primeiro desenho.
+  - Numa cena visual, a lista sai sozinha dos componentes: imagens, sons, modelos, fontes e mapas, também os dos prefabs e os sons das propriedades dos comportamentos.
+  - Numa cena em Lua, ou no script de uma cena visual, há o campo `preload`, com os caminhos (`{ "caminho", pixel_art = true }` para pixel art).
+- **Tela de carregamento**, com a opção `loading` na troca de cena: `loading = true` mostra a tela padrão, com uma barra; `loading = "cenas/carregando.lua"` usa uma cena sua, que lê o andamento em **`nn.scene.progress()`**. A cena nova carrega um pouco a cada quadro e começa quando terminar.
+- **F3 e `nn.debug.stats()`** contam os arquivos carregados e mostram o último quadro que carregou alguma coisa: um quadro que carrega no meio do jogo é uma travada à vista.
+- **Testes:** trocar para uma cena com 21 imagens e 5 sons (um deles tocado por um comportamento, e uma imagem usada só no `draw`) carrega tudo no quadro da troca e nada no primeiro quadro da cena nova; a tela de carregamento mostra o andamento subindo até o fim.
+- **Para quem usa as crates:** `FrameTimes::loads` e `load`, e `Perf::add_load`, `total_loads` e `last_load`.
+
 ### Memória: trocar de cena libera o que não se usa mais (Sprint 65)
 
 - **Ao entrar numa cena, o que nenhuma cena usa mais sai da memória:**
