@@ -86,8 +86,8 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `escrever_arquivo`, `apagar_arquivo` | Scripts, mapas, diálogos. Um Lua com erro de sintaxe **não é gravado**: volta a linha e o erro em português. |
 | `desfazer` | Volta as últimas mudanças feitas pelo agente. |
 | `ver_cena` | Uma cena ou um prefab em JSON, no formato do arquivo, com as regras de eventos em frases. |
-| `criar_cena`, `mudar_cena` | Cenas 2D ou 3D, a cor do fundo, a gravidade, o ambiente 3D (céu, sol, névoa), e `ordenar_por_y`: as camadas em que quem está mais embaixo fica na frente (numa vista de cima). |
-| `criar_objeto`, `mudar_objeto`, `copiar_objeto`, `apagar_objeto` | Objetos com componentes e comportamentos, cada campo conferido. Também filhos, fileiras de cópias e trocar de pai. |
+| `criar_cena`, `mudar_cena` | Cenas 2D ou 3D, a cor do fundo, a gravidade, o ambiente 3D (céu, sol, névoa; no `mudar_cena`, `ambiente_pronto` põe um pronto de uma vez: `"noite"`, `"caverna"`...), e `ordenar_por_y`: as camadas em que quem está mais embaixo fica na frente (numa vista de cima). |
+| `criar_objeto`, `mudar_objeto`, `copiar_objeto`, `apagar_objeto` | Objetos com componentes e comportamentos, cada campo conferido. Também filhos, fileiras de cópias e trocar de pai. No `mudar_objeto`, os campos do objeto vão em `mudar` e os componentes em `componentes`: `{"objeto": "Chão", "mudar": {"y": -1}, "componentes": [{"type": "shape3d", "color": "#3A4A30"}]}`. |
 | `criar_prefab` | Transforma um objeto num prefab. Mudar o prefab muda todas as cópias. |
 | `listar_componentes`, `listar_comportamentos` | Os componentes (com os campos e padrões) e os comportamentos prontos e do projeto (com as propriedades, opções e ajuda). |
 | `listar_eventos`, `por_regra`, `tirar_regra` | Os eventos "Quando... Então..." sem código. |
@@ -362,6 +362,8 @@ No jogo, o **Jogador 3D** toca sozinho parado, andar, correr, pular e cair (e o 
 
 ## O que vem depois
 
+A v0.11 trouxe **o render 3D**: folhagem recortada (também numa Forma 3D com imagem), holofotes com sombra, o sol em cascatas para a sombra chegar longe, e antisserrilhado e tonemap. Na revisão, dois agentes fizeram uma floresta à noite com lanterna e um vale de 240 m com o dia e noite.
+
 A v0.10 trouxe **o render 2D**: formas (linhas, polígonos, contornos), painéis, recortes, texto com quebra e contorno, a fonte de pixel art, canvas (desenhar numa imagem) e efeitos (shaders prontos e em WGSL). Na revisão, dois agentes fizeram um RPG de vista de cima e um arcade cheio de efeitos.
 
 A v0.9 trouxe **desempenho, robustez e memória**, e o agente vê mais do jogo:
@@ -373,7 +375,7 @@ A v0.8 trouxe **a arte, a modelagem e a animação pelo agente**: pixel art e an
 
 Ideias para depois, do que os agentes da revisão sentiram falta:
 
+- imagens nas peças do modelador (`modelar`), e o `ver_modelo` mostrando a imagem e os buracos do recorte;
 - mais fontes de pixel art prontas (a de hoje tem as maiúsculas com acento achatadas, para caber em 8 pixels);
 - rastros num canvas que somem de todo com transparência baixa (hoje, fica uma sombra fraca);
 - portas e janelas com paredes retas no `recuar` (hoje, a borda vira um chanfro);
-- no `rodar_jogo`, o mouse girando a câmera do Jogador 3D.

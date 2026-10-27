@@ -283,3 +283,51 @@ fn holofote_com_sombra_vale_mesmo_sem_a_sombra_do_sol() {
     drop(h);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn forma_3d_com_imagem_recortada_deixa_ver_o_que_esta_atras() {
+    // Um Plano em pé com uma imagem meio transparente (a metade da direita)
+    // e Recorte, na frente de um cubo vermelho aceso.
+    let dir = projeto(
+        "forma-imagem",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            (
+                "cenas/c.cena",
+                r##"return { format = 1, mode = "3d", script = "cenas/obs.lua",
+  environment = { sky = false, fog = false, shadows = false, sun_color = "#000000",
+    ambient_sky = "#FFFFFF", ambient_ground = "#FFFFFF" },
+  objects = {
+    { id = 2, name = "Câmera", z = 3, components = { { type = "camera3d" } } },
+    { id = 3, name = "Folha", rx = 90, scale_x = 2, scale_z = 2,
+      components = { { type = "shape3d", shape = "plane", color = "#FFFFFF", image = "folha.png",
+        cutout = 0.5, double_sided = true } } },
+    { id = 4, name = "Cubo", z = -2.5, scale_x = 3, scale_y = 3, scale_z = 3,
+      components = { { type = "shape3d", shape = "cube", color = "#FF0000" } } },
+  } }"##,
+            ),
+        ],
+    );
+    image::RgbaImage::from_raw(2, 1, vec![255, 255, 255, 255, 255, 255, 255, 0])
+        .unwrap()
+        .save(dir.join("folha.png"))
+        .unwrap();
+    let Some((mut h, rt)) = cena(&dir, "cenas/c.cena") else {
+        return;
+    };
+    h.run_frames(3);
+    assert_eq!(h.game.0.error(), None);
+    let img = h.pixels().unwrap();
+    let (esq, dir_) = (
+        pixel(&img, W / 2 - 12, H / 2),
+        pixel(&img, W / 2 + 12, H / 2),
+    );
+    assert!(brilho(esq) > 700, "a metade opaca, branca: {esq:?}");
+    assert!(
+        dir_[0] > 200 && dir_[1] < 40,
+        "pelo recorte, o cubo: {dir_:?}"
+    );
+    let _ = rt;
+    drop(h);
+    let _ = std::fs::remove_dir_all(&dir);
+}

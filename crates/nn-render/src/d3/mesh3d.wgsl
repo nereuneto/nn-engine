@@ -263,14 +263,13 @@ fn sunlit_cascades(world: vec3<f32>, n: vec3<f32>) -> f32 {
     return 1.0;
 }
 
-// O tonemap (o "PBR Neutral" da Khronos): as cores até perto do branco
-// quase não mudam; as acima são comprimidas, sem estourar em branco puro.
+// O tonemap (a compressão do "PBR Neutral" da Khronos, sem o ajuste do
+// preto): as cores até 0,76 não mudam; as acima são comprimidas, sem
+// estourar em branco puro. Os escuros (uma cena de noite) ficam iguais.
 fn pbr_neutral(color: vec3<f32>) -> vec3<f32> {
-    let start = 0.8 - 0.04;
+    let start = 0.76;
     let desaturation = 0.15;
-    let x = min(color.r, min(color.g, color.b));
-    let offset = select(0.04, x - 6.25 * x * x, x < 0.08);
-    var c = color - offset;
+    var c = color;
     let peak = max(c.r, max(c.g, c.b));
     if (peak < start) {
         return c;
@@ -329,6 +328,10 @@ fn fs_main(in: VertexOut, @builtin(front_facing) front: bool) -> FragOut {
             discard;
         }
         albedo.a = 1.0;
+    } else if (in.material.z < 0.0 && albedo.a < 0.004) {
+        // Uma imagem com transparência sem recorte: o que é de todo
+        // transparente não tampa o que está atrás.
+        discard;
     }
     if (in.material.x > 0.5) {
         return water(in, albedo);
@@ -432,7 +435,10 @@ fn vs_shadow_cut(v: VertexIn) -> ShadowOut {
 @fragment
 fn fs_shadow_cut(in: ShadowOut) {
     let a = textureSample(tex, samp, in.uv).a * in.cut.x;
-    if (in.cut.y > 0.0 && a < in.cut.y) {
+    // Sem recorte (-1), a sombra fica com os buracos do que é mais que meio
+    // transparente.
+    let limit = select(in.cut.y, 0.5, in.cut.y < 0.0);
+    if (limit > 0.0 && a < limit) {
         discard;
     }
 }

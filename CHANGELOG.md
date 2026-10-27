@@ -2,12 +2,57 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
-## Não lançado
+## 0.11.0
+
+A versão do **render 3D**. As sombras e o acabamento do 3D chegaram onde os jogos pequenos precisam:
+- **folhagem:** folhas, grades e cercas recortadas pela transparência da imagem, com as duas faces e a sombra com os buracos, do Blender (`.glb`), de uma Forma 3D com imagem ou do `nn.d3.draw`;
+- **holofotes com sombra:** até 4 ao mesmo tempo, sem trocar por pouco nem piscar, e sem redesenhar a sombra de uma luz parada;
+- **o sol em cascatas:** a sombra chega a 100 m ou mais sem perder a nitidez de perto;
+- **antisserrilhado e tonemap:** bordas lisas e luz forte sem estourar em branco, ligados nos modelos de projeto 3D novos;
+- tudo conferido no navegador (WebGL2) a cada mudança, como na 0.10.
+
+### Para quem vem da 0.10
+
+- **Os projetos da 0.10 abrem e rodam.** Conferido com os modelos de projeto e os jogos da 0.10, e com os dois jogos que os agentes fizeram na revisão da 0.10:
+  - abertos e gravados pelo editor, 71 dos 74 arquivos saem iguais, byte a byte. Os outros três são mapas e tilesets do Tiled, que o editor já regravava no formato dele na 0.10;
+  - os testes dos modelos e dos jogos passam no `nn` novo. Falha só um teste da revisão da 0.10, que já falhava na 0.10 (ele conferia o efeito com erro antes da mudança feita na própria revisão);
+  - as fotos dos 13 jogos e modelos não mudaram.
+- **As preferências da 0.10 abrem na 0.11** como estão.
+- **O que muda sem você mexer:**
+  - **Uma imagem com transparência no 3D, sem recorte,** não tampa mais o que está atrás nos pixels de todo transparentes, e a sombra dela fura onde ela é mais que meio transparente (antes, a sombra era o retângulo inteiro).
+  - **Um `.glb` com *Alpha Clip* recorta, um sem *Backface Culling* desenha as duas faces, e um com *Alpha Blend* vai com as transparentes, sem sombra.** Antes, tudo era desenhado como opaco de uma face.
+  - **O `shadows = false` do ambiente de uma cena tira só a sombra do sol:** os holofotes com "Faz sombra" continuam. `nn.d3.shadows(false)` desliga todas.
+  - **Com o Dia e noite, o ambiente não desfaz mais** um `nn.d3.shadows`, `nn.d3.bloom` ou `nn.d3.wind` do jogo a cada quadro: ele só mexe neles quando os dele mudam.
+- **Para quem usa as crates:** o que é novo está nas seções abaixo. `Material3D`, `Lamp3D`, `Shadows`, `ModelPart` e `Stats3` ganharam campos.
+
+### Revisão (Sprint 81)
+
+- **A prova: dois agentes fizeram jogos 3D que usam o render novo,** sem acesso ao código:
+  - **"Floresta à Noite":** uma exploração com uma lanterna presa ao herói (um holofote com sombra), seis postes com sombra, árvores, arbustos e grades com folhas recortadas, e três cristais para achar;
+  - **"Vale Grande":** um terreno de 240 x 240 m com estrada, 18 casas, 13 postes com sombra que acendem à noite, 140 árvores e um celeiro, com o sol baixo, o Dia e noite e a sombra até 120 m. As cascatas funcionaram: a sombra chega a mais de 200 m, a de perto continua nítida, e girando ou andando a câmera as sombras não tremem.
+- **O que os dois encontraram virou os acertos abaixo:**
+  - **Folhagem sem o Blender:** a Forma 3D ganhou "Imagem", "Recorte (folhas)" e "Duas faces" (`image`, `pixel_art`, `cutout`, `double_sided`). Um Plano em pé com uma imagem com transparência vira uma folha, uma grade ou uma cerca, no NN Studio e pelo agente.
+  - **Imagem com transparência sem recorte:** os pixels de todo transparentes tampavam o que estava atrás, e a sombra era um retângulo cheio.
+  - **Holofote atrás da câmera:** um holofote cujo cone a câmera não vê ocupava um dos 4 lugares de sombra; agora só os que a câmera vê disputam.
+  - **Dia e noite e as sombras do jogo:** com a hora andando, `nn.d3.shadows(false)` (uma opção do menu) voltava a valer só por um quadro.
+  - **Tonemap:** escurecia e mudava o tom das cores escuras e do meio (uma cena de noite ficava mais escura e roxa). Agora só as cores acima de uns três quartos do branco são comprimidas.
+  - **No agente (MCP):**
+    - um parâmetro que a ferramenta não tem dá erro, com a lista dos que valem (antes, respondia "Pronto." sem fazer nada);
+    - `ambiente_pronto` no `mudar_cena` põe um ambiente pronto ("noite", "caverna") de uma vez;
+    - o `mudar_objeto` diz que os componentes vão no parâmetro `componentes` quando vêm dentro de `mudar`;
+    - o `ver_modelo` diz o tamanho das imagens do modelo e se o material recorta, é meio transparente ou tem duas faces;
+    - o `criar_imagem` num projeto 3D diz como pôr a imagem numa Forma 3D;
+    - "1 teste: 1 passou".
+  - **Documentação:** `nn.d3.stats()` sem janela (os números da última captura), a sombra do sol desligada num lugar fechado (o sol ilumina dentro da casa: use um ambiente escuro), a luz de um objeto escondido apaga, a seção do Terreno dentro do `nn.d3`, e o exemplo de `mudar_objeto` com componentes.
+- **Ideias para depois, do que os agentes sentiram falta:**
+  - o modelador do agente pôr imagens nas peças, e o `ver_modelo` mostrar a imagem e os buracos do recorte;
+  - *alpha to coverage* (a borda de uma folha recortada mais lisa com o antisserrilhado);
+  - um holofote dentro de um prédio fechado ainda disputa as sombras (a escolha não sabe o que tampa a luz).
 
 ### Antisserrilhado e tonemap (Sprint 80)
 
 - **Bordas lisas no 3D:** `antialias = true` no `config.lua` (ou "Antisserrilhado" nas Configurações do projeto, ou `nn.d3.antialias(true)`): 4 amostras por pixel no céu, nas malhas, nas transparentes e nas partículas. O 3D é desenhado num alvo à parte e juntado por cima do fundo do jogo. Numa placa que não consegue, não faz nada.
-- **A luz forte não estoura:** `tonemap = true` (ou `nn.d3.tonemap(true)`) comprime as cores acima do branco (o *PBR Neutral* da Khronos): uma lâmpada forte ou o sol na água ficam claros com a cor deles, e as cores do meio quase não mudam. Feito no próprio shader, sem uma imagem de cor alta, que o WebGL2 nem sempre tem.
+- **A luz forte não estoura:** `tonemap = true` (ou `nn.d3.tonemap(true)`) comprime as cores acima do branco (a compressão do *PBR Neutral* da Khronos): uma lâmpada forte ou o sol na água ficam claros com a cor deles, e as cores até uns três quartos do branco não mudam. Feito no próprio shader, sem uma imagem de cor alta, que o WebGL2 nem sempre tem.
 - **Desligados por padrão nos projetos que já existem,** e ligados nos modelos de projeto 3D novos (3D, Vale 3D, Visual 3D e 3D vazio). O NN Studio mostra a cena com os do projeto.
 - Uma cena nova no teste do navegador, "antisserrilhado", confere os dois no Chromium (WebGL2). As fotos dos 13 jogos e modelos não mudaram.
 - **Para quem usa as crates:** `Renderer::set_antialias3d` e `set_tonemap3d`; `AppConfig::antialias` e `tonemap`.

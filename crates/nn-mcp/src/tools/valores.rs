@@ -553,9 +553,24 @@ pub fn set_object_field(o: &mut Object, key: &str, v: &Value) -> Result<(), Stri
             }
             o.anchor = s.to_string();
         }
+        "components" => {
+            return Err(
+                "os componentes não vão em \"mudar\": use o parâmetro \"componentes\" do mudar_objeto, ao lado de \"mudar\": \"componentes\": [{ \"type\": \"shape3d\", \"color\": \"#3A4A30\" }]"
+                    .into(),
+            );
+        }
+        "children" => {
+            return Err(
+                "os filhos não vão em \"mudar\": crie com criar_objeto (com \"pai\") ou mude o pai de um objeto com o parâmetro \"pai\" do mudar_objeto"
+                    .into(),
+            );
+        }
+        "events" => {
+            return Err("as regras não vão em \"mudar\": use por_regra".into());
+        }
         other => {
             return Err(format!(
-                "o objeto não tem o campo \"{other}\". Campos: {}, components, children, prefab, events",
+                "o objeto não tem o campo \"{other}\". Campos: {} (componentes vão no parâmetro \"componentes\")",
                 names(&OBJECT_FIELDS)
             ));
         }

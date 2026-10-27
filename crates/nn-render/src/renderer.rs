@@ -625,6 +625,9 @@ impl Renderer {
         );
         assert_eq!(rgba.len(), (size.x * size.y * 4) as usize);
         texture.write(&self.queue, origin, size, rgba);
+        if rgba.as_chunks::<4>().0.iter().any(|p| p[3] < 255) {
+            self.textures[id.0 as usize].has_alpha = true;
+        }
     }
 
     /// Troca todo o conteúdo de uma textura (inclusive o tamanho), mantendo o
@@ -1843,6 +1846,7 @@ impl Renderer {
     ) {
         let srgb = self.format.is_srgb();
         let texture = texture.unwrap_or(self.white);
+        let material = self.clear_pixels(texture, material);
         self.d3.draw_skinned(
             mesh,
             model,
@@ -1928,8 +1932,31 @@ impl Renderer {
     ) {
         let srgb = self.format.is_srgb();
         let texture = texture.unwrap_or(self.white);
+        let material = self.clear_pixels(texture, material);
         self.d3
             .draw(mesh, model, color, texture, cast_shadow, srgb, material);
+    }
+
+    /// Uma imagem com pixels transparentes, sem recorte: os pixels de todo
+    /// transparentes não são desenhados (nem tampam o que está atrás), e a
+    /// sombra fica com os buracos (o recorte "só o invisível", -1).
+    fn clear_pixels(
+        &self,
+        texture: TextureId,
+        material: crate::d3::Material3D,
+    ) -> crate::d3::Material3D {
+        let alpha = self
+            .textures
+            .get(texture.0 as usize)
+            .is_some_and(|t| t.has_alpha);
+        if alpha && material.cutout == 0.0 && !material.water {
+            crate::d3::Material3D {
+                cutout: -1.0,
+                ..material
+            }
+        } else {
+            material
+        }
     }
 
     /// O halo do brilho (bloom) no mundo 3D: o que brilha ganha um halo

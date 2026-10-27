@@ -140,7 +140,9 @@ impl Instance3 {
         i.material = [
             if m.water { 1.0 } else { 0.0 },
             m.sway.max(0.0),
-            m.cutout.clamp(0.0, 1.0),
+            // -1: só os pixels de todo transparentes somem (uma imagem com
+            // transparência sem recorte).
+            m.cutout.clamp(-1.0, 1.0),
             if m.double_sided { 1.0 } else { 0.0 },
         ];
         i
@@ -394,6 +396,24 @@ impl Frustum {
             let far = Vec3::select(n.cmpge(Vec3::ZERO), max, min);
             n.dot(far) + p.w >= 0.0
         })
+    }
+
+    /// Se o volume de outra câmera (os oito cantos da matriz `m`) pode
+    /// aparecer nesta: falso quando todos os cantos estão fora de um plano.
+    fn touches_frustum(&self, m: Mat4) -> bool {
+        let inv = m.inverse();
+        let mut corners = [Vec3::ZERO; 8];
+        for (k, c) in corners.iter_mut().enumerate() {
+            let ndc = Vec3::new(
+                if k & 1 == 0 { -1.0 } else { 1.0 },
+                if k & 2 == 0 { -1.0 } else { 1.0 },
+                if k & 4 == 0 { 0.0 } else { 1.0 },
+            );
+            *c = inv.project_point3(ndc);
+        }
+        self.0
+            .iter()
+            .all(|p| corners.iter().any(|c| p.truncate().dot(*c) + p.w >= 0.0))
     }
 }
 
@@ -1462,7 +1482,7 @@ impl Renderer3D {
                 texture,
                 cast_shadow,
                 two_sided: material.double_sided,
-                cutout: material.cutout > 0.0,
+                cutout: material.cutout != 0.0,
                 instance: Instance3::new(model, color, srgb).with_material(material, srgb),
                 bounds: m.bounds.map(|b| {
                     let (a, c) = world_bounds(&model, b);
@@ -1513,7 +1533,7 @@ impl Renderer3D {
             texture,
             cast_shadow,
             two_sided: material.double_sided,
-            cutout: material.cutout > 0.0,
+            cutout: material.cutout != 0.0,
             instance: Instance3::new(model, color, srgb).with_material(material, srgb),
             bounds,
             joints: Some(slot),
@@ -1550,9 +1570,19 @@ impl Renderer3D {
     /// com vantagem para quem já tinha sombra (não trocam a cada quadro).
     /// Numa troca, o que sai apaga a sombra aos poucos, numa camada a mais,
     /// enquanto o novo acende. `dt`: segundos desde o quadro anterior.
-    fn pick_spots(&mut self, order: &[(usize, f32)], dt: f32) -> Vec<SpotPick> {
+    fn pick_spots(&mut self, order: &[(usize, f32)], dt: f32, camera: &Frustum) -> Vec<SpotPick> {
         let lamps = &self.lamps;
-        let cone_of = |i: usize| lamps[i].cone.filter(|_| lamps[i].shadow);
+        // Só os holofotes cujo cone a câmera vê (um atrás dela, apontando
+        // para longe, não gasta um lugar).
+        let seen: Vec<bool> = (0..lamps.len())
+            .map(|i| {
+                let l = &lamps[i];
+                l.cone.is_some_and(|c| {
+                    camera.touches_frustum(spot_view_proj(l.position, l.range, c).0)
+                })
+            })
+            .collect();
+        let cone_of = |i: usize| lamps[i].cone.filter(|_| lamps[i].shadow && seen[i]);
         let same = |m: &SpotMemory, i: usize| {
             let l = &lamps[i];
             l.cone.is_some_and(|c| {
@@ -2159,7 +2189,7 @@ impl Renderer3D {
         }
         let order = self.lamp_order(&Frustum::of(view_proj));
         let spots = if wants_spots {
-            self.pick_spots(&order, dt)
+            self.pick_spots(&order, dt, &Frustum::of(view_proj))
         } else {
             self.spot_memory.clear();
             Vec::new()

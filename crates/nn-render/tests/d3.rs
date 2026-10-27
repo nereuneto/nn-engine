@@ -1353,12 +1353,13 @@ fn folha_recortada_deixa_ver_o_que_esta_atras() {
         [255, 0, 0, 255],
         "pelo buraco, o cubo atrás",
     );
-    // Sem o recorte, a parte transparente esconde o cubo (como antes).
+    // Sem o recorte, o que é de todo transparente também não tampa o cubo
+    // (até a 0.10, tampava).
     let sem = cena(&mut h, 0.0);
     assert_color(
         pixel(&sem, 44, 32),
-        [0, 0, 0, 255],
-        "sem recorte, o buraco tampa o cubo",
+        [255, 0, 0, 255],
+        "sem recorte, o buraco mostra o cubo",
     );
 }
 
@@ -1408,12 +1409,13 @@ fn folha_recortada_faz_sombra_com_os_buracos() {
         brightness(sombra) + 60 < brightness(luz),
         "embaixo da metade opaca, sombra ({sombra:?}); embaixo do buraco, sol ({luz:?})"
     );
-    // Sem o recorte, a folha inteira faz sombra.
+    // Sem o recorte, a sombra também tem o buraco (o que é mais que meio
+    // transparente não faz sombra; até a 0.10, a folha inteira fazia).
     let sem = cena(&mut h, 0.0);
     let buraco_sem = pixel(&sem, dx, dy);
     assert!(
-        brightness(buraco_sem) + 60 < brightness(luz),
-        "sem recorte, o buraco também faz sombra ({buraco_sem:?})"
+        brightness(buraco_sem) + 20 > brightness(luz),
+        "sem recorte, o buraco sem sombra ({buraco_sem:?})"
     );
 }
 
@@ -1826,4 +1828,91 @@ fn tonemap_nao_deixa_a_luz_forte_estourar() {
     // Longe, no escuro, quase igual.
     let (x, y) = (pixel(&sem, 2, 2), pixel(&com, 2, 2));
     assert!(brightness(x).abs_diff(brightness(y)) < 30, "{x:?} {y:?}");
+}
+
+// --- Acertos da revisão (Sprint 81) -------------------------------------------
+
+#[test]
+fn holofote_atras_da_camera_nao_ocupa_lugar_de_sombra() {
+    let Some(mut h) = Harness::new() else { return };
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    h.renderer.set_camera3d(Camera3D::looking_at(
+        Vec3::new(0.0, 2.0, 0.0),
+        Vec3::new(0.0, 0.0, -10.0),
+    ));
+    h.renderer
+        .draw_mesh(plane, Mat4::from_scale(Vec3::splat(60.0)), Color::WHITE);
+    let spot = |p: Vec3| {
+        let mut l = Lamp3D::at(p);
+        l.range = 8.0;
+        l.shadow = true;
+        l.cone = Some(Cone3D {
+            direction: Vec3::NEG_Y,
+            angle: 30.0,
+            softness: 0.2,
+        });
+        l
+    };
+    // Quatro atrás da câmera (o cone ilumina o chão atrás dela) e um na
+    // frente, mais longe.
+    for x in [-3.0, -1.0, 1.0, 3.0] {
+        h.renderer.add_lamp3d(spot(Vec3::new(x, 4.0, 6.0)));
+    }
+    h.renderer.add_lamp3d(spot(Vec3::new(0.0, 4.0, -9.0)));
+    h.render(Color::BLACK);
+    let s = h.renderer.last_stats3();
+    assert_eq!(s.spot_shadows, 1, "só o da frente: {s:?}");
+}
+
+#[test]
+fn imagem_com_transparencia_sem_recorte_nao_tampa_o_que_esta_atras() {
+    let Some(mut h) = Harness::new() else { return };
+    // A metade da direita da imagem é transparente; um cubo vermelho atrás.
+    let folha = meia_folha(&mut h);
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.0, 3.0), Vec3::ZERO));
+    h.renderer.draw_mesh_material(
+        plane,
+        Mat4::from_rotation_x(std::f32::consts::FRAC_PI_2) * Mat4::from_scale(Vec3::splat(2.0)),
+        Color::WHITE,
+        Some(folha),
+        false,
+        Material3D::default(),
+    );
+    h.renderer.draw_mesh_with(
+        cube,
+        Mat4::from_translation(Vec3::new(0.0, 0.0, -2.5)) * Mat4::from_scale(Vec3::splat(3.0)),
+        Color::RED,
+        None,
+        false,
+    );
+    let img = h.render(Color::BLACK);
+    assert_color(pixel(&img, 20, 32), [255, 255, 255, 255], "a metade opaca");
+    assert_color(
+        pixel(&img, 44, 32),
+        [255, 0, 0, 255],
+        "pelo transparente, o cubo",
+    );
+}
+
+#[test]
+fn tonemap_nao_mexe_nos_escuros() {
+    let Some(mut h) = Harness::new() else { return };
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    let cena = |h: &mut Harness, tonemap: bool| {
+        h.renderer.set_tonemap3d(tonemap);
+        h.renderer
+            .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.0, 3.0), Vec3::ZERO));
+        h.renderer
+            .draw_mesh(cube, Mat4::IDENTITY, Color::rgb(0.25, 0.2, 0.35));
+        h.render(Color::BLACK)
+    };
+    let (sem, com) = (cena(&mut h, false), cena(&mut h, true));
+    assert_eq!(
+        pixel(&sem, 32, 32),
+        pixel(&com, 32, 32),
+        "uma cor escura não muda"
+    );
 }

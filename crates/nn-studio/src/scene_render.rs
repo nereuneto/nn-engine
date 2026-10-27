@@ -1263,17 +1263,24 @@ impl SceneRenderer {
                 }
                 "shape3d" => {
                     let mesh = self.mesh3(c.str("shape"));
+                    let image = c.str("image");
+                    let texture = if image.is_empty() {
+                        None
+                    } else {
+                        self.texture(root, image, c.bool("pixel_art"))
+                    };
                     self.renderer.draw_mesh_material(
                         mesh,
                         m,
                         parse_color(c.str("color")),
-                        None,
+                        texture,
                         c.bool("shadow"),
                         nn_render::d3::Material3D {
                             glow: nn_render::d3::Glow::own(glow_of(&c, night)),
                             water: c.str("material") == "agua",
                             sway: c.num("sway") as f32,
-                            ..Default::default()
+                            cutout: c.num("cutout").clamp(0.0, 1.0) as f32,
+                            double_sided: c.bool("double_sided"),
                         },
                     );
                 }

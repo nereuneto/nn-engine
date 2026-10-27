@@ -238,6 +238,24 @@ impl Server {
                 "os argumentos precisam ser um objeto".into(),
             ));
         }
+        // Um parâmetro que a ferramenta não tem é erro (o esquema diz
+        // additionalProperties: false): um nome errado não pode passar como
+        // "Pronto." sem ter feito nada.
+        let known: Vec<&str> = (tool.params)().into_iter().map(|(n, _, _)| n).collect();
+        if let Some(bad) = args
+            .as_object()
+            .and_then(|o| o.keys().find(|k| !known.contains(&k.as_str())))
+        {
+            let mut list = known.clone();
+            list.sort_unstable();
+            return Ok(json!({
+                "content": [{ "type": "text", "text": format!(
+                    "{name}: o parâmetro \"{bad}\" não existe. Os que valem: {}.",
+                    if list.is_empty() { "nenhum".to_string() } else { list.join(", ") }
+                ) }],
+                "isError": true,
+            }));
+        }
         log::info!("ferramenta {name}");
         // Tudo que uma ferramenta grava vira um passo do `desfazer`.
         if !tool.read_only {

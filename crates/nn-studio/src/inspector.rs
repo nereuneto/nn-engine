@@ -1095,6 +1095,28 @@ const SHAPE3D_FIELDS: &[F] = &[
         ),
         "Com Vento (☀ Ambiente): embaixo fica parado e em cima balança (1 = uma árvore; 0 = nada). Bom para árvores, grama, bandeiras.",
     ),
+    help(
+        f("image", "Imagem", W::File(FileKind::Image)),
+        "Uma imagem nas faces da forma. Num Plano em pé, com Recorte, vira uma folha, uma grade ou uma cerca (os pixels transparentes da imagem somem).",
+    ),
+    adv("pixel_art", "Pixel art (sem suavizar)", W::Bool),
+    help(
+        f(
+            "cutout",
+            "Recorte (folhas)",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 1.0,
+                suffix: "",
+            },
+        ),
+        "Onde a imagem é mais transparente que isso, a forma some (também na sombra), e o resto fica opaco: folhas, grades, cercas. 0 = sem recorte (os pixels de todo transparentes somem mesmo assim).",
+    ),
+    help(
+        f("double_sided", "Duas faces", W::Bool),
+        "Desenha as faces dos dois lados, com a luz certa em cada um: um Plano visto de trás (uma folha, um pano).",
+    ),
 ];
 
 const LIGHT3D_FIELDS: &[F] = &[

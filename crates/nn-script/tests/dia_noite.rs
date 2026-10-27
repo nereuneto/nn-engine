@@ -277,3 +277,43 @@ fn sem_o_ciclo_de_noite_e_um_ambiente_escuro() {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+#[test]
+fn com_a_hora_andando_o_ambiente_nao_desfaz_as_sombras_do_jogo() {
+    // Uma opção "sombras" de um menu: nn.d3.shadows(false) uma vez. Com o Dia
+    // e noite, o ambiente é aplicado a cada quadro, mas não religa as
+    // sombras (nem o halo, nem o vento).
+    let obs = r#"
+local c = {}
+function c:enter() C = self end
+function c:update()
+  if DESLIGAR then nn.d3.shadows(false); nn.d3.bloom(false); DESLIGAR = nil end
+end
+function c:draw() STATS = nn.d3.stats(); LIGADAS = nn.d3.shadows(); HALO = nn.d3.bloom() end
+return c
+"#;
+    let dir = projeto(
+        "sombras-menu",
+        &[
+            ("cenas/obs.lua", obs),
+            ("cenas/c.cena", &com_ciclo(0.2, 12.0, "")),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir) else {
+        return;
+    };
+    h.run_frames(3);
+    assert_eq!(h.game.0.error(), None);
+    assert!(lua::<u32>(&rt, "STATS.shadow") > 0, "o sol faz sombra");
+    exec(&rt, "DESLIGAR = true");
+    h.run_frames(30);
+    assert_eq!(h.game.0.error(), None);
+    assert!(
+        !lua::<bool>(&rt, "LIGADAS"),
+        "continuam desligadas com a hora andando"
+    );
+    assert!(!lua::<bool>(&rt, "HALO"), "o halo também");
+    assert_eq!(lua::<u32>(&rt, "STATS.shadow"), 0);
+    drop(h);
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -985,7 +985,42 @@ fn describe_glb(rel: &str, d: &nn_render::d3::ModelData) -> String {
         None => out.push_str(&format!("{rel}: sem triângulos.\n")),
     }
     if !d.images.is_empty() {
-        out.push_str(&format!("Imagens (texturas): {}.\n", d.images.len()));
+        let sizes: Vec<String> = d
+            .images
+            .iter()
+            .map(|i| format!("{}x{}", i.size.x, i.size.y))
+            .collect();
+        out.push_str(&format!(
+            "Imagens (texturas): {} ({}). As vistas mostram as cores das faces, sem a imagem; para ver a imagem e os buracos do recorte, rode o jogo com uma captura.\n",
+            d.images.len(),
+            sizes.join(", ")
+        ));
+    }
+    // O que o material diz da transparência e das faces.
+    let mut how = Vec::new();
+    for (k, p) in d.parts.iter().enumerate() {
+        let mut t = Vec::new();
+        if p.cutout > 0.0 {
+            t.push(format!(
+                "recorta onde a imagem é mais transparente que {:.2} (Alpha Clip)",
+                p.cutout
+            ));
+        }
+        if p.blend {
+            t.push(
+                "meio transparente (Alpha Blend: desenhada depois do resto, sem sombra)"
+                    .to_string(),
+            );
+        }
+        if p.double_sided {
+            t.push("duas faces".to_string());
+        }
+        if !t.is_empty() {
+            how.push(format!("parte {}: {}", k + 1, t.join(", ")));
+        }
+    }
+    if !how.is_empty() {
+        out.push_str(&format!("Material: {}.\n", how.join("; ")));
     }
     let glow: Vec<String> = d
         .parts
