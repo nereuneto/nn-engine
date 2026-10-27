@@ -244,7 +244,7 @@ Os componentes 3D:
 
 | `type` | Campos (padrão) |
 |---|---|
-| `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; as partes que o `.glb` faz brilhar, com `emissiveFactor`, brilham sempre), `glow_night` (false: o brilho, e o do arquivo, só de noite), `sway` (0: quanto balança com o vento; 1 = uma árvore) |
+| `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; as partes que o `.glb` faz brilhar, com `emissiveFactor`, brilham sempre), `glow_night` (false: o brilho, e o do arquivo, só de noite), `sway` (0: quanto balança com o vento; 1 = uma árvore), `cutout` (0: o recorte por transparência, como no `nn.d3.draw`; 0 = o que o arquivo diz), `double_sided` (false: as duas faces, além das que o arquivo já marca) |
 | `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; não ilumina em volta), `glow_night` (false: só de noite), `material` ("normal" ou "agua": ondinhas, o céu refletido e o brilho do sol), `sway` (0: quanto balança com o vento) |
 | `light3d` | Uma luz: `kind` ("point": ilumina em volta; "spot": um holofote, num cone para a frente do objeto, −Z), `color`, `intensity` (1.5), `range` (8 m: até onde chega), `angle` (30°: metade da abertura do holofote), `soft` (0.3: a borda do cone que apaga aos poucos), `flicker` (0 a 1: tremula como fogo), `on` (true), `night` (false: acesa só de noite). Valem as 32 mais perto da câmera; só o sol faz sombra. `obj.light3d.on = false` apaga. |
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
@@ -748,6 +748,7 @@ O `t` de cada teste:
 | `t:click(x, y, botão)` | Clica num ponto da tela (pixels, y para baixo, como `nn.input.mouse()`). |
 | `t:click(objeto)`, `t:click("nome")` | Clica no objeto (um botão do menu, um objeto do mundo). |
 | `t:mouse(x, y)` | Põe o mouse no ponto, sem clicar. |
+| `t:mouse_motion(dx, dy, s)` | Move o mouse preso `dx, dy` pixels, aos poucos por `s` segundos (sem `s`, num quadro): gira a câmera do Jogador 3D. |
 | `t:scroll(linhas, x, y)` | Gira a roda do mouse (positivo para cima), com o mouse no ponto se `x, y` vierem: rola uma lista do `nn.ui`, muda o zoom. |
 | `t:type(texto)` | Escreve um texto (num campo de texto). |
 | `t:open(cena, args)` | Troca para a cena (como `nn.scene.switch`) e espera ela rodar o primeiro quadro. |
@@ -1460,6 +1461,10 @@ Os modelos dos exemplos e dos modelos de projeto 3D trazem o `heroi.glb` (as ani
 | `glow` | De 0 a 1: a própria cor brilha, mesmo no escuro ([brilho](#lâmpadas-holofotes-e-brilho)). `emissive = false` apaga o brilho que vem no arquivo do modelo. |
 | `material` | `"water"` (ou `"agua"`): ondinhas que se mexem, o céu refletido (mais forte olhando de lado) e o brilho do sol. Fica bonito num plano com uma cor um pouco transparente. Padrão `"normal"`. |
 | `sway` | Quanto balança com o [vento](#vento-e-halo) (0 = nada; 1 = uma árvore; 1.5 = grama). Embaixo (o y 0 da malha) fica parado e, quanto mais alto, mais balança. |
+| `cutout` | Recorte por transparência, de 0 a 1 (`true` = 0.5): onde a transparência da imagem (vezes a da cor) é menor que isso, nada é desenhado; o resto fica opaco. Para folhas, grades, cercas e grama numa imagem com buracos. A sombra fica com os mesmos buracos. Padrão 0 (sem recorte). |
+| `double_sided` | `true`: as duas faces aparecem (uma folha ou um pano feito de um plano só), cada uma com a luz do lado dela, e as duas fazem sombra. |
+
+**Folhas e transparência nos modelos.** Um `.glb` traz isso no material: no Blender, o modo *Alpha Clip* vira o recorte (`alphaMode` MASK, no `alphaCutoff`), *Alpha Blend* vira meio transparente (BLEND: desenhado depois do resto, como o vidro, e sem sombra) e o material sem *Backface Culling* desenha as duas faces (`doubleSided`). O `cutout` e o `double_sided` do `nn.d3.draw` valem por cima do arquivo.
 
 `nn.d3.text(texto, opts)` escreve no mundo 3D: nomes em cima dos personagens, placas, avisos. Sempre virado para a câmera, em `x`, `y`, `z`, com `size` (0.5 m: a altura das letras), `color`, `font`, `anchor` ("center"), `align`, `background` (uma cor: um retângulo atrás) e `outline` (uma cor: contorno em volta das letras). Com `matrix = nn.d3.matrix({...})`, fica preso como uma placa (nos eixos X e Y da matriz, com a escala; lido de frente pelo +Z e espelhado quando visto de trás); `face_camera = true` usa só a posição e a escala da matriz. Como as partículas, aparece atrás das paredes e com névoa.
 

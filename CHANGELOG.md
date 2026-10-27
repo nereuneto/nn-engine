@@ -2,6 +2,19 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### Folhagem: recorte por transparência e duas faces (Sprint 76)
+
+- **Folhas, grades e cercas recortadas:** `cutout` no `nn.d3.draw` (de 0 a 1, ou `true` = 0.5) não desenha onde a imagem é mais transparente que isso, e o resto fica opaco. A sombra fica com os mesmos buracos.
+- **As duas faces:** `double_sided = true` desenha uma folha ou um pano feito de um plano só dos dois lados, cada um com a luz do lado dele, e os dois fazem sombra.
+- **Os modelos `.glb` trazem isso do material:** o *Alpha Clip* do Blender (`alphaMode` MASK, no `alphaCutoff`) recorta, o material sem *Backface Culling* (`doubleSided`) tem as duas faces, e o *Alpha Blend* (BLEND) é desenhado como o vidro, depois do resto.
+- **No componente Modelo 3D,** "Recorte (folhas)" e "Duas faces" valem por cima do arquivo (`cutout` e `double_sided` na cena; os projetos da 0.10 gravam igual).
+- **No `rodar_jogo`, o mouse gira a câmera do Jogador 3D:** a ação `{"girar_mouse": [300, 0], "por": 0.5}` move o mouse preso. Nos testes de jogo, `t:mouse_motion(dx, dy, s)`.
+- Uma cena nova no teste do navegador, "folhagem", confere o recorte, as duas faces e a sombra no Chromium (WebGL2). As fotos dos 13 jogos e modelos não mudaram.
+- **O que muda sem você mexer:** um `.glb` com material *Alpha Blend* era desenhado como opaco, com sombra; agora vai com as transparentes, sem sombra. Um com *Alpha Clip* agora recorta, e um sem *Backface Culling* desenha as duas faces. Os modelos dos modelos de projeto são todos opacos e de uma face, e saem iguais.
+- **Para quem usa as crates:** `Material3D::cutout` e `double_sided`; `ModelPart::cutout`, `blend` e `double_sided`; `ActionKind::MouseMotion`.
+
 ## 0.10.0
 
 A versão do **render 2D**. O que se desenha num jogo 2D ganhou o que faltava para uma interface caprichada e para efeitos de arcade:

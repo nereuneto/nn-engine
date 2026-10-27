@@ -33,6 +33,7 @@ pub use bloom::Bloom;
 pub use gpu::Stats3;
 pub(crate) use gpu::{Quad3, Renderer3D};
 pub use mesh::{Mesh, Vertex3};
+pub(crate) use model::GpuPart;
 pub use model::{CollisionMesh, Model, ModelData, ModelError, ModelImage, ModelPart};
 pub use particles::{EmitArea3, ParticleConfig3, ParticleEmitter3};
 pub use skin::{Animation, MAX_JOINTS, Pose, SkelNode, Skeleton, SkinVertex, Trs};
@@ -313,6 +314,13 @@ pub struct Material3D {
     /// Quanto balança com o vento (0 = nada, 1 = uma árvore): embaixo fica
     /// parado, em cima balança mais.
     pub sway: f32,
+    /// Recorte por transparência (folhas, grades): o que tem a
+    /// transparência da imagem abaixo deste valor não é desenhado, e o resto
+    /// fica opaco (também na sombra). 0 = sem recorte.
+    pub cutout: f32,
+    /// Desenha as duas faces (uma folha plana vista dos dois lados), com a
+    /// luz certa nas duas, e faz sombra das duas.
+    pub double_sided: bool,
 }
 
 impl Material3D {

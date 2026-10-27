@@ -120,6 +120,9 @@ M.FIELDS = {
   model = {
     { "file", "" }, { "color", "#FFFFFF" }, { "flat", false }, { "shadow", true },
     { "glow", 0 }, { "glow_night", false }, { "sway", 0 },
+    -- cutout: recorte por transparência (0 = o que o arquivo diz);
+    -- double_sided: as duas faces (além das que o arquivo já marca).
+    { "cutout", 0 }, { "double_sided", false },
   },
   -- material: "normal" ou "agua" (ondinhas, o céu refletido, o brilho do
   -- sol). sway: quanto balança com o vento (0 a 1).
@@ -3812,6 +3815,8 @@ local function draw_object(o, alpha, W, H)
       d.emissive = not dia
       d.sway = c.sway
       d.material = c.material == "agua" and "water" or nil
+      d.cutout = c.cutout
+      d.double_sided = c.double_sided
       nn.d3.draw(c._model or c._mesh, d)
     elseif c.type == "light3d" and o.scene and o.scene._3d then
       m3 = m3 or o:matrix3d(alpha)

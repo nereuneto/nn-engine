@@ -84,7 +84,15 @@ fn parse_actions(list: &Value, duration: f64) -> Result<Vec<Action>, String> {
             }
         };
         let kinds = [
-            "apertar", "segurar", "soltar", "clicar", "mouse", "rolar", "digitar", "capturar",
+            "apertar",
+            "segurar",
+            "soltar",
+            "clicar",
+            "mouse",
+            "rolar",
+            "girar_mouse",
+            "digitar",
+            "capturar",
             "lua",
         ];
         let found: Vec<&str> = kinds
@@ -131,6 +139,20 @@ fn parse_actions(list: &Value, duration: f64) -> Result<Vec<Action>, String> {
                     "ação {n}: \"rolar\" são as linhas da roda do mouse (negativo desce a lista)"
                 )
             })? as f32),
+            ["girar_mouse"] => {
+                let (dx, dy) = point(&obj["girar_mouse"]).ok_or_else(|| {
+                    format!("ação {n}: \"girar_mouse\" é [dx, dy] (pixels que o mouse anda)")
+                })?;
+                let seconds = match obj.get("por") {
+                    None | Some(Value::Null) => 0.0,
+                    Some(v) => v
+                        .as_f64()
+                        .filter(|s| *s >= 0.0)
+                        .ok_or_else(|| format!("ação {n}: \"por\" precisa ser os segundos"))?
+                        as f32,
+                };
+                ActionKind::MouseMotion { dx, dy, seconds }
+            }
             ["digitar"] => ActionKind::Type(
                 obj["digitar"]
                     .as_str()
@@ -831,7 +853,7 @@ pub static TOOLS: &[&Tool] = &[
     &Tool {
         name: "rodar_jogo",
         title: "Rodar o jogo",
-        description: "Roda o jogo sem janela (60 quadros por segundo de jogo, o mais rápido que der, sem som, salvo só na memória) e mostra o que aconteceu: erros (com arquivo e linha), avisos, prints, regras dos eventos que dispararam, trocas de cena, o que mudou nos objetos e nas variáveis, e capturas da tela (a do fim e as pedidas). Simule o jogador com \"acoes\", cada uma no seu tempo \"em\" (segundos): {\"em\": 0.5, \"apertar\": \"space\"} (um toque de um quadro: num pulo que fica mais alto segurando, dá um pulinho), {\"em\": 1, \"segurar\": \"right\", \"por\": 2}, {\"soltar\": \"right\"}, {\"clicar\": [x, y]} (pixels da tela, y para baixo) ou {\"clicar\": \"nome do objeto\"}, {\"mouse\": [x, y]}, {\"rolar\": -3} (a roda do mouse: negativo desce a lista; ponha o mouse em cima antes), {\"digitar\": \"texto\"}, {\"capturar\": true} ou {\"capturar\": \"nome\"}, {\"lua\": \"self.objects.heroi:move_to(0, 0)\"} (código com self = a cena da frente: para preparar a situação; self.objects.nome é o primeiro com esse nome, e self:find_all(\"nome\") devolve todos). Teclas: os nomes do nn.input (a-z, 0-9, space, enter, escape, left, right, up, down, shift, ctrl...). Com \"segundos\": 0, só mostra a primeira tela.",
+        description: "Roda o jogo sem janela (60 quadros por segundo de jogo, o mais rápido que der, sem som, salvo só na memória) e mostra o que aconteceu: erros (com arquivo e linha), avisos, prints, regras dos eventos que dispararam, trocas de cena, o que mudou nos objetos e nas variáveis, e capturas da tela (a do fim e as pedidas). Simule o jogador com \"acoes\", cada uma no seu tempo \"em\" (segundos): {\"em\": 0.5, \"apertar\": \"space\"} (um toque de um quadro: num pulo que fica mais alto segurando, dá um pulinho), {\"em\": 1, \"segurar\": \"right\", \"por\": 2}, {\"soltar\": \"right\"}, {\"clicar\": [x, y]} (pixels da tela, y para baixo) ou {\"clicar\": \"nome do objeto\"}, {\"mouse\": [x, y]}, {\"rolar\": -3} (a roda do mouse: negativo desce a lista; ponha o mouse em cima antes), {\"girar_mouse\": [300, 0], \"por\": 0.5} (o mouse preso andando: gira a câmera do Jogador 3D), {\"digitar\": \"texto\"}, {\"capturar\": true} ou {\"capturar\": \"nome\"}, {\"lua\": \"self.objects.heroi:move_to(0, 0)\"} (código com self = a cena da frente: para preparar a situação; self.objects.nome é o primeiro com esse nome, e self:find_all(\"nome\") devolve todos). Teclas: os nomes do nn.input (a-z, 0-9, space, enter, escape, left, right, up, down, shift, ctrl...). Com \"segundos\": 0, só mostra a primeira tela.",
         params: || {
             vec![
                 (

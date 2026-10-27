@@ -59,7 +59,8 @@ struct VertexIn {
     @location(11) tint: vec4<f32>,
     // Brilho: rgb = cor que brilha por cima, a = quanto da própria cor.
     @location(14) glow: vec4<f32>,
-    // x = 1 na água, y = quanto balança com o vento.
+    // x = 1 na água, y = quanto balança com o vento, z = o recorte por
+    // transparência (0 = sem), w = 1 com as duas faces.
     @location(15) material: vec4<f32>,
 };
 
@@ -188,14 +189,25 @@ fn fog_amount(world: vec3<f32>) -> f32 {
 }
 
 @fragment
-fn fs_main(in: VertexOut) -> FragOut {
+fn fs_main(in: VertexOut, @builtin(front_facing) front: bool) -> FragOut {
     // A amostra antes do `if`: o WGSL só deixa amostrar fora de desvios que
     // variam de pixel para pixel.
-    let albedo = in.color * textureSample(tex, samp, in.uv);
+    var albedo = in.color * textureSample(tex, samp, in.uv);
+    // Recorte (folhas, grades): abaixo do limite some; o resto fica opaco.
+    if (in.material.z > 0.0) {
+        if (albedo.a < in.material.z) {
+            discard;
+        }
+        albedo.a = 1.0;
+    }
     if (in.material.x > 0.5) {
         return water(in, albedo);
     }
-    let n = normalize(in.normal);
+    var n = normalize(in.normal);
+    // Com as duas faces, a de trás é iluminada pelo lado dela.
+    if (in.material.w > 0.5 && !front) {
+        n = -n;
+    }
     let f = fog_amount(in.world);
     var out: FragOut;
     if (f > 0.995) {
@@ -268,6 +280,33 @@ fn vs_shadow(v: VertexIn) -> @builtin(position) vec4<f32> {
     return view.light_view_proj * sway(model * vec4<f32>(v.position, 1.0), v.m3.xyz, v.material.y);
 }
 
+// Sombra com recorte ou com as duas faces: a transparência da imagem decide
+// o que faz sombra (as folhas, com os buracos).
+struct ShadowOut {
+    @builtin(position) clip: vec4<f32>,
+    @location(0) uv: vec2<f32>,
+    // x = a transparência da cor, y = o recorte (0 = sem).
+    @location(1) cut: vec2<f32>,
+};
+
+@vertex
+fn vs_shadow_cut(v: VertexIn) -> ShadowOut {
+    let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
+    var out: ShadowOut;
+    out.clip = view.light_view_proj * sway(model * vec4<f32>(v.position, 1.0), v.m3.xyz, v.material.y);
+    out.uv = v.uv;
+    out.cut = vec2<f32>(v.color.a * v.tint.a, v.material.z);
+    return out;
+}
+
+@fragment
+fn fs_shadow_cut(in: ShadowOut) {
+    let a = textureSample(tex, samp, in.uv).a * in.cut.x;
+    if (in.cut.y > 0.0 && a < in.cut.y) {
+        discard;
+    }
+}
+
 // --- Malhas com ossos (modelos animados) ----------------------------------
 
 struct Joints {
@@ -308,6 +347,16 @@ fn vs_skinned(v: VertexIn, s: SkinIn) -> VertexOut {
 fn vs_shadow_skinned(v: VertexIn, s: SkinIn) -> @builtin(position) vec4<f32> {
     let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
     return view.light_view_proj * sway(model * skin_matrix(s) * vec4<f32>(v.position, 1.0), v.m3.xyz, v.material.y);
+}
+
+@vertex
+fn vs_shadow_cut_skinned(v: VertexIn, s: SkinIn) -> ShadowOut {
+    let model = mat4x4<f32>(v.m0, v.m1, v.m2, v.m3);
+    var out: ShadowOut;
+    out.clip = view.light_view_proj * sway(model * skin_matrix(s) * vec4<f32>(v.position, 1.0), v.m3.xyz, v.material.y);
+    out.uv = v.uv;
+    out.cut = vec2<f32>(v.color.a * v.tint.a, v.material.z);
+    return out;
 }
 
 // --- Céu: um triângulo que cobre a tela -----------------------------------

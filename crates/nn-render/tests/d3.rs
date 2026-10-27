@@ -1283,6 +1283,7 @@ fn cor_do_objeto_tinge_o_brilho_do_modelo() {
             image: None,
             skin: Vec::new(),
             emissive: Color::WHITE,
+            ..Default::default()
         }],
         images: Vec::new(),
         skeleton: None,
@@ -1298,4 +1299,195 @@ fn cor_do_objeto_tinge_o_brilho_do_modelo() {
         p[0] > 200 && p[1] < 40 && p[2] < 40,
         "brilho vermelho: {p:?}"
     );
+}
+
+// --- Folhagem: recorte por transparência e duas faces (Sprint 76) --------
+
+/// Uma imagem de 2x1: a metade da esquerda branca, a da direita transparente.
+fn meia_folha(h: &mut Harness) -> nn_render::TextureId {
+    h.renderer.create_texture(
+        UVec2::new(2, 1),
+        &[255, 255, 255, 255, 255, 255, 255, 0],
+        nn_render::TextureOptions::PIXEL_ART,
+    )
+}
+
+#[test]
+fn folha_recortada_deixa_ver_o_que_esta_atras() {
+    let Some(mut h) = Harness::new() else { return };
+    let folha = meia_folha(&mut h);
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.0, 3.0), Vec3::ZERO));
+    let cena = |h: &mut Harness, cutout: f32| {
+        // A folha em pé, virada para a câmera, e um cubo vermelho atrás.
+        h.renderer.draw_mesh_material(
+            plane,
+            Mat4::from_rotation_x(std::f32::consts::FRAC_PI_2) * Mat4::from_scale(Vec3::splat(2.0)),
+            Color::WHITE,
+            Some(folha),
+            false,
+            Material3D {
+                cutout,
+                ..Material3D::default()
+            },
+        );
+        h.renderer.draw_mesh_with(
+            cube,
+            Mat4::from_translation(Vec3::new(0.0, 0.0, -2.5)) * Mat4::from_scale(Vec3::splat(3.0)),
+            Color::RED,
+            None,
+            false,
+        );
+        h.render(Color::BLACK)
+    };
+    let com = cena(&mut h, 0.5);
+    assert_color(
+        pixel(&com, 20, 32),
+        [255, 255, 255, 255],
+        "a metade opaca da folha",
+    );
+    assert_color(
+        pixel(&com, 44, 32),
+        [255, 0, 0, 255],
+        "pelo buraco, o cubo atrás",
+    );
+    // Sem o recorte, a parte transparente esconde o cubo (como antes).
+    let sem = cena(&mut h, 0.0);
+    assert_color(
+        pixel(&sem, 44, 32),
+        [0, 0, 0, 255],
+        "sem recorte, o buraco tampa o cubo",
+    );
+}
+
+#[test]
+fn folha_recortada_faz_sombra_com_os_buracos() {
+    let Some(mut h) = Harness::new() else { return };
+    let folha = meia_folha(&mut h);
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    let floor = h.renderer.create_mesh(&shapes::plane());
+    let eye = Vec3::new(0.0, 6.0, 6.0);
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(eye, Vec3::ZERO));
+    h.renderer.set_light3d(Light3D {
+        sun_direction: Vec3::NEG_Y,
+        sun_color: Color::rgb(0.7, 0.7, 0.7),
+        sky: Color::rgb(0.3, 0.3, 0.3),
+        ground: Color::rgb(0.3, 0.3, 0.3),
+        fog: None,
+    });
+    let cena = |h: &mut Harness, cutout: f32| {
+        h.renderer
+            .draw_mesh(floor, Mat4::from_scale(Vec3::splat(20.0)), Color::WHITE);
+        // A folha deitada no ar, sobre o ponto (0, 0, 2).
+        h.renderer.draw_mesh_material(
+            plane,
+            Mat4::from_translation(Vec3::new(0.0, 1.5, 2.0)),
+            Color::WHITE,
+            Some(folha),
+            true,
+            Material3D {
+                cutout,
+                ..Material3D::default()
+            },
+        );
+        h.render(Color::BLACK)
+    };
+    let onde = |x: f32| {
+        let p = Camera3D::looking_at(eye, Vec3::ZERO)
+            .screen_point(Vec3::new(x, 0.0, 2.0), SIZE.as_vec2())
+            .unwrap();
+        (p.x as u32, p.y as u32)
+    };
+    let ((ex, ey), (dx, dy)) = (onde(-0.25), onde(0.25));
+    let com = cena(&mut h, 0.5);
+    let (sombra, luz) = (pixel(&com, ex, ey), pixel(&com, dx, dy));
+    assert!(
+        brightness(sombra) + 60 < brightness(luz),
+        "embaixo da metade opaca, sombra ({sombra:?}); embaixo do buraco, sol ({luz:?})"
+    );
+    // Sem o recorte, a folha inteira faz sombra.
+    let sem = cena(&mut h, 0.0);
+    let buraco_sem = pixel(&sem, dx, dy);
+    assert!(
+        brightness(buraco_sem) + 60 < brightness(luz),
+        "sem recorte, o buraco também faz sombra ({buraco_sem:?})"
+    );
+}
+
+#[test]
+fn duas_faces_aparecem_por_baixo_com_a_luz_do_lado_delas() {
+    let Some(mut h) = Harness::new() else { return };
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    // A câmera embaixo do plano, e o sol também embaixo, iluminando para cima.
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, -3.0, 1.0), Vec3::ZERO));
+    h.renderer.set_light3d(Light3D {
+        sun_direction: Vec3::Y,
+        sun_color: Color::WHITE,
+        sky: Color::BLACK,
+        ground: Color::BLACK,
+        fog: None,
+    });
+    let cena = |h: &mut Harness, double_sided: bool| {
+        h.renderer.draw_mesh_material(
+            plane,
+            Mat4::from_scale(Vec3::splat(4.0)),
+            Color::WHITE,
+            None,
+            false,
+            Material3D {
+                double_sided,
+                ..Material3D::default()
+            },
+        );
+        h.render(Color::rgb(0.0, 0.0, 1.0))
+    };
+    // Uma face só: por baixo, não aparece (o fundo azul).
+    assert_color(
+        pixel(&cena(&mut h, false), 32, 32),
+        [0, 0, 255, 255],
+        "face de trás",
+    );
+    // Duas faces: aparece, acesa pelo sol de baixo.
+    let duas = pixel(&cena(&mut h, true), 32, 32);
+    assert!(
+        brightness(duas) > 600,
+        "a face de baixo, iluminada: {duas:?}"
+    );
+}
+
+#[test]
+fn gltf_traz_o_recorte_a_transparencia_e_as_duas_faces() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/modelos");
+    let texto = std::fs::read_to_string(dir.join("caixote.gltf")).unwrap();
+    let com = |extra: &str| {
+        let t = texto.replacen(
+            "\"name\": \"caixote-0\",",
+            &format!("\"name\": \"caixote-0\", {extra}"),
+            1,
+        );
+        assert_ne!(t, texto, "o material do caixote mudou de nome");
+        ModelData::from_gltf(t.as_bytes(), &mut |uri| std::fs::read(dir.join(uri)).ok()).unwrap()
+    };
+    let m = com("\"alphaMode\": \"MASK\", \"alphaCutoff\": 0.3, \"doubleSided\": true,");
+    assert!(
+        (m.parts[0].cutout - 0.3).abs() < 1e-6,
+        "{}",
+        m.parts[0].cutout
+    );
+    assert!(m.parts[0].double_sided && !m.parts[0].blend);
+    // MASK sem o alphaCutoff: 0.5, o padrão do glTF.
+    let m = com("\"alphaMode\": \"MASK\",");
+    assert!((m.parts[0].cutout - 0.5).abs() < 1e-6);
+    let m = com("\"alphaMode\": \"BLEND\",");
+    assert!(m.parts[0].blend && m.parts[0].cutout == 0.0 && !m.parts[0].double_sided);
+    // Opaco (o padrão): nada muda.
+    let m = ModelData::from_gltf(texto.as_bytes(), &mut |uri| {
+        std::fs::read(dir.join(uri)).ok()
+    })
+    .unwrap();
+    assert!(m.parts[0].cutout == 0.0 && !m.parts[0].blend && !m.parts[0].double_sided);
 }

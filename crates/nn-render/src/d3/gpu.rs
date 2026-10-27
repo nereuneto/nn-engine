@@ -129,7 +129,12 @@ impl Instance3 {
 
     pub(crate) fn with_material(self, m: Material3D, srgb: bool) -> Self {
         let mut i = self.with_glow(m.glow, srgb);
-        i.material = [if m.water { 1.0 } else { 0.0 }, m.sway.max(0.0), 0.0, 0.0];
+        i.material = [
+            if m.water { 1.0 } else { 0.0 },
+            m.sway.max(0.0),
+            m.cutout.clamp(0.0, 1.0),
+            if m.double_sided { 1.0 } else { 0.0 },
+        ];
         i
     }
 
@@ -159,6 +164,10 @@ struct Draw3 {
     mesh: MeshId,
     texture: TextureId,
     cast_shadow: bool,
+    /// Desenha as duas faces.
+    two_sided: bool,
+    /// Com recorte por transparência.
+    cutout: bool,
     instance: Instance3,
     /// A caixa no mundo (None: desenha sempre).
     bounds: Option<(Vec3, Vec3)>,
@@ -175,9 +184,15 @@ struct ShadowMap {
 /// A parte 3D do renderer.
 pub(crate) struct Renderer3D {
     pipeline: wgpu::RenderPipeline,
+    /// As duas faces (folhas, panos).
+    two_sided_pipeline: wgpu::RenderPipeline,
     shadow_pipeline: wgpu::RenderPipeline,
+    /// A sombra com recorte ou com as duas faces (lê a imagem).
+    shadow_cut_pipeline: wgpu::RenderPipeline,
     skinned_pipeline: wgpu::RenderPipeline,
+    skinned_two_sided_pipeline: wgpu::RenderPipeline,
     skinned_shadow_pipeline: wgpu::RenderPipeline,
+    skinned_shadow_cut_pipeline: wgpu::RenderPipeline,
     /// Grupo vazio para as posições 1 e 2 da sombra com ossos (navegadores
     /// que não aceitam buracos na lista de grupos).
     empty_group: wgpu::BindGroup,
@@ -450,77 +465,135 @@ impl Renderer3D {
             ],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nn 3d"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &buffers,
-            },
-            primitive,
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[
-                    Some(wgpu::ColorTargetState {
-                        format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }),
-                    // O que brilha (para o halo).
-                    Some(wgpu::ColorTargetState {
-                        format: GLOW_FORMAT,
-                        blend: glow_blend,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }),
-                ],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        // As malhas opacas: `cull` = None desenha as duas faces.
+        let mesh_pipeline = |label: &str,
+                             layout: &wgpu::PipelineLayout,
+                             vs: &str,
+                             buffers: &[Option<wgpu::VertexBufferLayout>],
+                             cull: Option<wgpu::Face>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some(vs),
+                    compilation_options: Default::default(),
+                    buffers,
+                },
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: cull,
+                    ..primitive
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    stencil: Default::default(),
+                    bias: Default::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: Default::default(),
+                    targets: &[
+                        Some(wgpu::ColorTargetState {
+                            format,
+                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }),
+                        // O que brilha (para o halo).
+                        Some(wgpu::ColorTargetState {
+                            format: GLOW_FORMAT,
+                            blend: glow_blend,
+                            write_mask: wgpu::ColorWrites::ALL,
+                        }),
+                    ],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        // O mapa de sombras: só a profundidade. Com `fs` (o recorte), a
+        // transparência da imagem decide o que faz sombra.
+        let shadow_pipeline_with = |label: &str,
+                                    layout: &wgpu::PipelineLayout,
+                                    vs: &str,
+                                    buffers: &[Option<wgpu::VertexBufferLayout>],
+                                    cull: Option<wgpu::Face>,
+                                    fs: Option<&str>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some(vs),
+                    compilation_options: Default::default(),
+                    buffers,
+                },
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: cull,
+                    ..primitive
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: DEPTH_FORMAT,
+                    depth_write_enabled: Some(true),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    stencil: Default::default(),
+                    bias: wgpu::DepthBiasState {
+                        constant: 2,
+                        slope_scale: 2.0,
+                        clamp: 0.0,
+                    },
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                fragment: fs.map(|fs| wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(fs),
+                    compilation_options: Default::default(),
+                    targets: &[],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let pipeline = mesh_pipeline(
+            "nn 3d",
+            &layout,
+            "vs_main",
+            &buffers,
+            Some(wgpu::Face::Back),
+        );
+        let two_sided_pipeline =
+            mesh_pipeline("nn 3d two sided", &layout, "vs_main", &buffers, None);
 
         let view_only = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("nn 3d view only"),
             bind_group_layouts: &[Some(&view_layout)],
             immediate_size: 0,
         });
-        let shadow_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nn 3d shadow"),
-            layout: Some(&view_only),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_shadow"),
-                compilation_options: Default::default(),
-                buffers: &buffers,
-            },
-            primitive,
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: Default::default(),
-                bias: wgpu::DepthBiasState {
-                    constant: 2,
-                    slope_scale: 2.0,
-                    clamp: 0.0,
-                },
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            fragment: None,
-            multiview_mask: None,
-            cache: None,
+        let shadow_pipeline = shadow_pipeline_with(
+            "nn 3d shadow",
+            &view_only,
+            "vs_shadow",
+            &buffers,
+            Some(wgpu::Face::Back),
+            None,
+        );
+        // Recorte e duas faces: a sombra lê a imagem (grupo 1).
+        let view_texture = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("nn 3d shadow cutout"),
+            bind_group_layouts: &[Some(&view_layout), Some(texture_layout)],
+            immediate_size: 0,
         });
+        let shadow_cut_pipeline = shadow_pipeline_with(
+            "nn 3d shadow cutout",
+            &view_texture,
+            "vs_shadow_cut",
+            &buffers,
+            None,
+            Some("fs_shadow_cut"),
+        );
         let transparent_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("nn 3d transparent"),
             layout: Some(&layout),
@@ -573,45 +646,20 @@ impl Renderer3D {
             ],
             immediate_size: 0,
         });
-        let skinned_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nn 3d skinned"),
-            layout: Some(&skinned_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_skinned"),
-                compilation_options: Default::default(),
-                buffers: &skinned_buffers,
-            },
-            primitive,
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[
-                    Some(wgpu::ColorTargetState {
-                        format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }),
-                    // O que brilha (para o halo).
-                    Some(wgpu::ColorTargetState {
-                        format: GLOW_FORMAT,
-                        blend: glow_blend,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }),
-                ],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let skinned_pipeline = mesh_pipeline(
+            "nn 3d skinned",
+            &skinned_layout,
+            "vs_skinned",
+            &skinned_buffers,
+            Some(wgpu::Face::Back),
+        );
+        let skinned_two_sided_pipeline = mesh_pipeline(
+            "nn 3d skinned two sided",
+            &skinned_layout,
+            "vs_skinned",
+            &skinned_buffers,
+            None,
+        );
         // A sombra com ossos só usa os grupos 0 e 3; no meio vão grupos vazios
         // (o WebGPU de alguns navegadores não aceita buracos na lista).
         let empty_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -634,33 +682,32 @@ impl Renderer3D {
                 ],
                 immediate_size: 0,
             });
-        let skinned_shadow_pipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("nn 3d skinned shadow"),
-                layout: Some(&skinned_shadow_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_shadow_skinned"),
-                    compilation_options: Default::default(),
-                    buffers: &skinned_buffers,
-                },
-                primitive,
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::Less),
-                    stencil: Default::default(),
-                    bias: wgpu::DepthBiasState {
-                        constant: 2,
-                        slope_scale: 2.0,
-                        clamp: 0.0,
-                    },
-                }),
-                multisample: wgpu::MultisampleState::default(),
-                fragment: None,
-                multiview_mask: None,
-                cache: None,
-            });
+        let skinned_shadow_pipeline = shadow_pipeline_with(
+            "nn 3d skinned shadow",
+            &skinned_shadow_layout,
+            "vs_shadow_skinned",
+            &skinned_buffers,
+            Some(wgpu::Face::Back),
+            None,
+        );
+        let skinned_cut_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("nn 3d skinned shadow cutout"),
+            bind_group_layouts: &[
+                Some(&view_layout),
+                Some(texture_layout),
+                Some(&empty_layout),
+                Some(&joint_layout),
+            ],
+            immediate_size: 0,
+        });
+        let skinned_shadow_cut_pipeline = shadow_pipeline_with(
+            "nn 3d skinned shadow cutout",
+            &skinned_cut_layout,
+            "vs_shadow_cut_skinned",
+            &skinned_buffers,
+            None,
+            Some("fs_shadow_cut"),
+        );
         // Partículas: quadrados virados para a câmera, sem escrever a
         // profundidade (as de trás aparecem pelas da frente).
         let billboard_attrs = wgpu::vertex_attr_array![
@@ -794,9 +841,13 @@ impl Renderer3D {
         let billboard_buffer = Self::billboard_buffer(device, billboard_capacity);
         Self {
             pipeline,
+            two_sided_pipeline,
             shadow_pipeline,
+            shadow_cut_pipeline,
             skinned_pipeline,
+            skinned_two_sided_pipeline,
             skinned_shadow_pipeline,
+            skinned_shadow_cut_pipeline,
             empty_group,
             billboard_pipeline,
             billboard_add_pipeline,
@@ -1112,6 +1163,8 @@ impl Renderer3D {
                 mesh,
                 texture,
                 cast_shadow,
+                two_sided: material.double_sided,
+                cutout: material.cutout > 0.0,
                 instance: Instance3::new(model, color, srgb).with_material(material, srgb),
                 bounds: m.bounds.map(|b| {
                     let (a, c) = world_bounds(&model, b);
@@ -1119,7 +1172,7 @@ impl Renderer3D {
                 }),
                 joints: None,
             };
-            if color.a < 0.999 {
+            if color.a < 0.999 && material.cutout <= 0.0 {
                 self.transparent.push(Draw3 {
                     cast_shadow: false,
                     ..draw
@@ -1161,6 +1214,8 @@ impl Renderer3D {
             mesh,
             texture,
             cast_shadow,
+            two_sided: material.double_sided,
+            cutout: material.cutout > 0.0,
             instance: Instance3::new(model, color, srgb).with_material(material, srgb),
             bounds,
             joints: Some(slot),
@@ -1383,8 +1438,16 @@ impl Renderer3D {
 
         // Agrupa por malha, textura e sombra (uma chamada por grupo); os com
         // ossos vão no fim, um por chamada.
-        self.draws
-            .sort_by_key(|d| (d.joints.is_some(), d.mesh, d.texture.0, !d.cast_shadow));
+        self.draws.sort_by_key(|d| {
+            (
+                d.joints.is_some(),
+                d.two_sided || d.cutout,
+                d.two_sided,
+                d.mesh,
+                d.texture.0,
+                !d.cast_shadow,
+            )
+        });
         if !self.joint_data.is_empty() {
             let slots = (self.joint_data.len() / MAX_JOINTS) as u64;
             if slots > self.joint_capacity {
@@ -1448,7 +1511,8 @@ impl Renderer3D {
         // Grupos (malha, textura, sombra) seguidos numa lista; `base` é onde
         // a lista começa nas instâncias. Os com ossos ficam de fora (um por
         // chamada).
-        type Group = ((MeshId, TextureId, bool), std::ops::Range<u32>);
+        // A chave: malha, textura, sombra, as duas faces e o recorte.
+        type Group = ((MeshId, TextureId, bool, bool, bool), std::ops::Range<u32>);
         let group = |list: &[usize], base: u32| -> (Vec<Group>, Vec<(usize, u32)>) {
             let mut groups: Vec<Group> = Vec::new();
             let mut skinned = Vec::new();
@@ -1459,7 +1523,7 @@ impl Renderer3D {
                     skinned.push((i, at));
                     continue;
                 }
-                let key = (d.mesh, d.texture, d.cast_shadow);
+                let key = (d.mesh, d.texture, d.cast_shadow, d.two_sided, d.cutout);
                 match groups.last_mut() {
                     Some((k2, r)) if *k2 == key && r.end == at => r.end = at + 1,
                     _ => groups.push((key, at..at + 1)),
@@ -1514,8 +1578,22 @@ impl Renderer3D {
             pass.set_pipeline(&self.shadow_pipeline);
             pass.set_bind_group(0, &self.view_group, &[]);
             pass.set_vertex_buffer(1, self.instances.slice(..));
-            for ((mesh, _, _), range) in &shadow_groups {
+            let mut cut_on = false;
+            for ((mesh, tex, _, two, cut), range) in &shadow_groups {
                 let m = &self.meshes[mesh.0 as usize];
+                // Recorte ou duas faces: a sombra lê a imagem.
+                let special = *two || *cut;
+                if special != cut_on {
+                    cut_on = special;
+                    pass.set_pipeline(if special {
+                        &self.shadow_cut_pipeline
+                    } else {
+                        &self.shadow_pipeline
+                    });
+                }
+                if special {
+                    pass.set_bind_group(1, &textures[tex.0 as usize].bind_group, &[]);
+                }
                 if m.count > 0 {
                     pass.set_vertex_buffer(0, m.vertices.slice(..));
                     pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -1526,9 +1604,23 @@ impl Renderer3D {
             pass.set_pipeline(&self.skinned_shadow_pipeline);
             pass.set_bind_group(1, &self.empty_group, &[]);
             pass.set_bind_group(2, &self.empty_group, &[]);
+            let mut cut_on = false;
             for &(i, at) in &shadow_skinned {
                 let d = &self.draws[i];
                 let m = &self.meshes[d.mesh.0 as usize];
+                let special = d.two_sided || d.cutout;
+                if special != cut_on {
+                    cut_on = special;
+                    if special {
+                        pass.set_pipeline(&self.skinned_shadow_cut_pipeline);
+                    } else {
+                        pass.set_pipeline(&self.skinned_shadow_pipeline);
+                        pass.set_bind_group(1, &self.empty_group, &[]);
+                    }
+                }
+                if special {
+                    pass.set_bind_group(1, &textures[d.texture.0 as usize].bind_group, &[]);
+                }
                 if let (Some(slot), Some(skin)) = (d.joints, &m.skin)
                     && m.count > 0
                 {
@@ -1591,8 +1683,17 @@ impl Renderer3D {
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(2, &self.shadow_map.group, &[]);
             pass.set_vertex_buffer(1, self.instances.slice(..));
-            for ((mesh, tex, _), range) in &groups {
+            let mut two_on = false;
+            for ((mesh, tex, _, two, _), range) in &groups {
                 let m = &self.meshes[mesh.0 as usize];
+                if *two != two_on {
+                    two_on = *two;
+                    pass.set_pipeline(if two_on {
+                        &self.two_sided_pipeline
+                    } else {
+                        &self.pipeline
+                    });
+                }
                 if m.count > 0 {
                     pass.set_bind_group(1, &textures[tex.0 as usize].bind_group, &[]);
                     pass.set_vertex_buffer(0, m.vertices.slice(..));
@@ -1603,9 +1704,18 @@ impl Renderer3D {
             }
             if !skinned.is_empty() {
                 pass.set_pipeline(&self.skinned_pipeline);
+                let mut two_on = false;
                 for &(i, at) in &skinned {
                     let d = &self.draws[i];
                     let m = &self.meshes[d.mesh.0 as usize];
+                    if d.two_sided != two_on {
+                        two_on = d.two_sided;
+                        pass.set_pipeline(if two_on {
+                            &self.skinned_two_sided_pipeline
+                        } else {
+                            &self.skinned_pipeline
+                        });
+                    }
                     if let (Some(slot), Some(skin)) = (d.joints, &m.skin)
                         && m.count > 0
                     {

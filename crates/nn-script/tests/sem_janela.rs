@@ -368,3 +368,59 @@ end)
     assert!(summary.results[0].passed());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn mouse_preso_gira_a_camera_do_jogador_3d() {
+    let dir = projeto(
+        "mouse3d",
+        &[
+            (
+                "cenas/mundo.cena",
+                r##"return { format = 1, mode = "3d", gravity = -20,
+  environment = { fog = false, shadows = false },
+  objects = {
+    { id = 1, name = "Chão", y = -0.5, scale_x = 40, scale_z = 40,
+      components = { { type = "shape3d", shape = "cube" }, { type = "body3d", body = "static" } } },
+    { id = 10, name = "Herói", y = 1,
+      components = { { type = "shape3d", shape = "capsule", color = "#FF8C42" },
+        { type = "behavior", script = "nn:jogador3d" } } },
+  } }"##,
+            ),
+            (
+                "testes/camera.lua",
+                r#"
+local function lado()
+  local c = nn.d3.camera()
+  return math.atan(c.target.x - c.x, c.target.z - c.z)
+end
+test("o mouse preso gira a câmera", function(t)
+  t:open("cenas/mundo.cena"); t:frames(10)
+  t:check(nn.window.mouse_captured(), "o Jogador 3D prende o mouse")
+  local antes = lado()
+  t:mouse_motion(300, 0, 0.5)
+  local giro = math.abs(math.deg(lado() - antes)) % 360
+  t:check(giro > 20 and giro < 340, "a câmera devia ter girado, girou " .. giro)
+  t:check(t:time() > 0.4, "aos poucos, por meio segundo")
+end)
+"#,
+            ),
+        ],
+    );
+    let project = Project::open(&dir).unwrap();
+    let summary = match run_tests(&project, &TestOptions::default(), |_| {}) {
+        Ok(s) => s,
+        Err(e) => {
+            if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+                panic!("GPU obrigatória mas indisponível: {e}");
+            }
+            return;
+        }
+    };
+    assert!(summary.file_errors.is_empty(), "{:?}", summary.file_errors);
+    assert_eq!(summary.results.len(), 1);
+    assert!(
+        summary.results[0].passed(),
+        "{:?}",
+        summary.results[0].failure
+    );
+}

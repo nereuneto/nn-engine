@@ -147,6 +147,10 @@ fn erros_explicam_o_que_faltou() {
             "nn.d3.draw(nn.d3.cube(), { image = 3 })",
             "deve ser uma imagem",
         ),
+        (
+            "nn.d3.draw(nn.d3.plane(), { cutout = 'sim' })",
+            "\"cutout\" é a transparência",
+        ),
     ] {
         let dir = projeto(
             "erro",
@@ -475,4 +479,27 @@ fn heroi_animado_pelo_lua() {
         .unwrap_err()
         .to_string();
     assert!(e.contains("não tem a animação \"voar\""), "{e}");
+}
+
+#[test]
+fn recorte_e_duas_faces_pelo_lua() {
+    // Uma folha em pé, meio transparente, com um cubo vermelho atrás: com o
+    // recorte acima da transparência dela, ela some e o cubo aparece.
+    let dir = projeto(
+        "recorte",
+        r##"local c = {}
+function c:draw()
+  nn.d3.look_at(0, 0, 3, 0, 0, 0)
+  nn.d3.draw(nn.d3.cube(), { z = -2.5, scale = 3, color = "#FF0000", shadow = false })
+  nn.d3.draw(nn.d3.plane(), { rx = 90, scale = 2, color = "#FFFFFF80", cutout = 0.6, double_sided = true, shadow = false })
+end
+return c
+"##,
+    );
+    let Some(mut h) = cena(&dir) else { return };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    // A cor inteira tem transparência 0,5, abaixo do recorte: a folha some.
+    let p = pixel(&h, 32, 32);
+    assert!(p[0] > 120 && p[1] < 40, "o cubo pelo recorte: {p:?}");
 }
