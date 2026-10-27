@@ -2,8 +2,8 @@
 
 | crate | resultado | tempo |
 |---|---|---|
-| nn-core | compila | 1 s |
-| nn-input | **não compila** | 0 s |
+| nn-core | compila | 0 s |
+| nn-input | **não compila** | 1 s |
 | nn-render | compila | 3 s |
 | nn-audio | compila | 1 s |
 | nn-physics | compila | 1 s |
@@ -13,7 +13,7 @@
 | nn-script | **não compila** | 4 s |
 | nn-app | **não compila** | 13 s |
 | nn-projeto | **não compila** | 1 s |
-| nn-run | **não compila** | 18 s |
+| nn-run | **não compila** | 19 s |
 
 ## nn-input
 

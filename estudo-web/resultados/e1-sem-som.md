@@ -32,9 +32,29 @@ Os maiores pedaços do wasm final (twiggy; sem nomes, então só os tamanhos por
 As maiores crates (twiggy no wasm antes do wasm-opt, que ainda tem os nomes):
 
 ```
-Traceback (most recent call last):
-  File "/home/runner/work/nn-engine/nn-engine/estudo-web/crates.py", line 10, in <module>
-    nome, tam = parts[3], int(parts[1])
-                          ^^^^^^^^^^^^^
-ValueError: invalid literal for int() with base 10: ' 1usize>"'
+     1144 KB  (seção) "function names" subsection
+      709 KB  (seção) custom section '__wasm_bindgen_unstable'
+      611 KB  naga
+      540 KB  (seção) data segment ".rodata"
+      345 KB  wgpu_core
+      255 KB  core
+      143 KB  wgpu
+      123 KB  wgpu_hal
+      113 KB  zune_jpeg
+       98 KB  alloc
+       85 KB  winit
+       74 KB  hashbrown
+       52 KB  (outros)
+       48 KB  nn_render
+       46 KB  png
+       33 KB  fontdue
+       32 KB  wgpu_types
+       32 KB  compiler_builtins
+       30 KB  prova
+       25 KB  image
+       23 KB  ttf_parser
+       22 KB  js_sys
+       20 KB  (seção) export "__wbindgen_describe___wbg_set_on
+       19 KB  codespan_reporting
+       14 KB  (seção) export "__wbindgen_describe___wbg_unifor
 ```

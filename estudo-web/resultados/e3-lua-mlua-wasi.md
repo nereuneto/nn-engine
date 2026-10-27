@@ -1,13 +1,31 @@
 # E3 — mlua (Lua 5.4 em C) no wasm32-wasip1 (wasi-sdk), rodando no wasmtime
 
-não compila:
-```
-error: linking with `rust-lld` failed: exit status: 1
-  |
-  = note:  "rust-lld" "-flavor" "wasm" "--export" "__main_void" "-z" "stack-size=1048576" "--stack-first" "--no-demangle" "<1 object files omitted>" "/home/runner/work/nn-engine/nn-engine/estudo-web/target/wasm32-wasip1/release/deps/rustcqqeSce/libmlua_sys-c1353c324b3474c1.rlib" "-l" "wasi-emulated-signal" "-l" "setjmp" "-l" "c" "<sysroot>/lib/rustlib/wasm32-wasip1/lib/libcompiler_builtins-*.rlib" "-L" "/home/runner/wasi-sdk-27.0-x86_64-linux/share/wasi-sysroot/lib/wasm32-wasip1" "-L" "/home/runner/work/nn-engine/nn-engine/estudo-web/target/wasm32-wasip1/release/build/mlua-sys-1bfce7dfca678b32/out/lib" "-o" "/home/runner/work/nn-engine/nn-engine/estudo-web/target/wasm32-wasip1/release/deps/lua_mlua-07274556c912aee9.wasm" "--gc-sections" "-O2" "--strip-debug"
-  = note: some arguments are omitted. use `--verbose` to show all linker arguments
-  = note: rust-lld: error: entry symbol not defined (pass --no-entry to suppress): _start
-          
+wasm: 419 KB (brotli 143 KB)
 
-error: could not compile `lua-mlua` (bin "lua-mlua") due to 1 previous error
+## mlua (Lua 5.4 em C)
+
 ```
+ok    inteiros e //
+ok    goto (via load)
+ok    string.format
+ok    padroes (gsub/find/match)
+ok    table.sort/insert/remove/concat
+ok    table.unpack/pack
+ok    corrotinas
+ok    metatabelas
+ok    pcall/error com tabela
+ok    load com <const>
+ok    utf8
+ok    string.pack
+ok    math
+FALHA os.clock/os.time: [string "teste.lua"]:71: not supported on WASI
+ok    select e ...
+ok    tostring
+ok    string.rep/sub/byte/upper
+ok    ipairs/pairs/next
+ok    <close> (sintaxe 5.4, via load)
+ok    rawget/rawset/rawequal/rawlen
+
+```
+
+bench: 84.3 ms (resultado 163919)

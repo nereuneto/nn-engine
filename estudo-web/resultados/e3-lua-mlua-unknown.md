@@ -13,7 +13,7 @@ Caused by:
 
   --- stderr
 
-  thread 'main' (11258) panicked at lua-src-web/src/lib.rs:100:25:
+  thread 'main' (12181) panicked at lua-src-web/src/lib.rs:100:25:
   ToolExecError: command did not execute successfully (status code exit status: 1): "clang" "-Oz" "-ffunction-sections" "-fdata-sections" "--target=wasm32-unknown-unknown" "-I" "/home/runner/work/nn-engine/nn-engine/estudo-web/lua-src-web/lua-5.4.9" "-w" "-mllvm" "-wasm-enable-eh" "-mllvm" "-wasm-use-legacy-eh=false" "-mllvm" "-wasm-enable-sjlj" "-fno-common" "-DLUA_USE_POSIX" "-D_WASI_EMULATED_SIGNAL" "-DLUA_COMPAT_5_3" "-o" "/home/runner/work/nn-engine/nn-engine/estudo-web/target/wasm32-unknown-unknown/release/build/mlua-sys-c1461f46a26062ad/out/lib/fb6722624dfb7324-lbaselib.o" "-c" "/home/runner/work/nn-engine/nn-engine/estudo-web/lua-src-web/lua-5.4.9/lbaselib.c"
   note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 ```
