@@ -4,6 +4,15 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Estudo da versão web (Sprint 67)
+
+- **A engine roda no navegador:** o desenho 2D e 3D, o teclado, o mouse e o som, em WebGL2 e WebGPU, e o mesmo Lua 5.4 que usamos hoje. A recomendação é manter a web na v0.13, com cerca de 4 sprints de trabalho. O relatório completo está em [`docs/estudo-web.md`](docs/estudo-web.md), e os experimentos no ramo `estudo-web`.
+- **Correções que preparam a web, sem mudança no desktop** (as fotos dos jogos saíram iguais byte a byte):
+  - onde a placa não tem os limites comuns, a engine pede os do WebGL2;
+  - os relógios do nn-render e do nn-app funcionam no navegador;
+  - o 3D funciona onde a placa não mistura cada alvo de um jeito (WebGL2);
+  - três shaders foram ajustados ao WGSL mais rígido dos navegadores: a sombra com ossos, o céu estrelado e a água.
+
 ### Pré-carregar e a tela de carregamento (Sprint 66)
 
 - **Ao começar, a cena carrega antes o que vai usar.** Antes, uma imagem ou um som carregava no primeiro uso, e o jogo dava uma travada no meio: o som do item na primeira vez que tocava, a fonte do placar no primeiro desenho.

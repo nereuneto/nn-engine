@@ -178,6 +178,9 @@ pub(crate) struct Renderer3D {
     shadow_pipeline: wgpu::RenderPipeline,
     skinned_pipeline: wgpu::RenderPipeline,
     skinned_shadow_pipeline: wgpu::RenderPipeline,
+    /// Grupo vazio para as posições 1 e 2 da sombra com ossos (navegadores
+    /// que não aceitam buracos na lista de grupos).
+    empty_group: wgpu::BindGroup,
     billboard_pipeline: wgpu::RenderPipeline,
     /// Malhas meio transparentes (água, vidro): depois das outras, de trás
     /// para a frente, sem escrever a profundidade.
@@ -218,7 +221,7 @@ pub(crate) struct Renderer3D {
     bloom_pass: super::bloom::BloomPass,
     /// Os segundos das ondas e do vento (`None`: o relógio desde o começo).
     pub time: Option<f32>,
-    clock: std::time::Instant,
+    clock: web_time::Instant,
     /// Quantas malhas foram desenhadas no último frame.
     pub last_count: u32,
     /// O que o último frame desenhou de fato (veja [`Stats3`]).
@@ -303,7 +306,15 @@ impl Renderer3D {
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         texture_layout: &wgpu::BindGroupLayout,
+        independent_blend: bool,
     ) -> Self {
+        // O brilho é escrito sem mistura; onde a placa não deixa misturar cada
+        // alvo de um jeito, ele mistura igual à cor.
+        let glow_blend = if independent_blend {
+            None
+        } else {
+            Some(wgpu::BlendState::ALPHA_BLENDING)
+        };
         let shader = device.create_shader_module(wgpu::include_wgsl!("mesh3d.wgsl"));
         let view_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nn 3d view"),
@@ -470,7 +481,7 @@ impl Renderer3D {
                     // O que brilha (para o halo).
                     Some(wgpu::ColorTargetState {
                         format: GLOW_FORMAT,
-                        blend: None,
+                        blend: glow_blend,
                         write_mask: wgpu::ColorWrites::ALL,
                     }),
                 ],
@@ -593,7 +604,7 @@ impl Renderer3D {
                     // O que brilha (para o halo).
                     Some(wgpu::ColorTargetState {
                         format: GLOW_FORMAT,
-                        blend: None,
+                        blend: glow_blend,
                         write_mask: wgpu::ColorWrites::ALL,
                     }),
                 ],
@@ -601,10 +612,26 @@ impl Renderer3D {
             multiview_mask: None,
             cache: None,
         });
+        // A sombra com ossos só usa os grupos 0 e 3; no meio vão grupos vazios
+        // (o WebGPU de alguns navegadores não aceita buracos na lista).
+        let empty_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("nn 3d empty"),
+            entries: &[],
+        });
+        let empty_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nn 3d empty"),
+            layout: &empty_layout,
+            entries: &[],
+        });
         let skinned_shadow_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("nn 3d skinned shadow"),
-                bind_group_layouts: &[Some(&view_layout), None, None, Some(&joint_layout)],
+                bind_group_layouts: &[
+                    Some(&view_layout),
+                    Some(&empty_layout),
+                    Some(&empty_layout),
+                    Some(&joint_layout),
+                ],
                 immediate_size: 0,
             });
         let skinned_shadow_pipeline =
@@ -770,6 +797,7 @@ impl Renderer3D {
             shadow_pipeline,
             skinned_pipeline,
             skinned_shadow_pipeline,
+            empty_group,
             billboard_pipeline,
             billboard_add_pipeline,
             transparent_pipeline,
@@ -805,7 +833,7 @@ impl Renderer3D {
             bloom: super::Bloom::default(),
             bloom_pass: super::bloom::BloomPass::new(device, format),
             time: None,
-            clock: std::time::Instant::now(),
+            clock: web_time::Instant::now(),
             last_count: 0,
         }
     }
@@ -1496,6 +1524,8 @@ impl Renderer3D {
                 }
             }
             pass.set_pipeline(&self.skinned_shadow_pipeline);
+            pass.set_bind_group(1, &self.empty_group, &[]);
+            pass.set_bind_group(2, &self.empty_group, &[]);
             for &(i, at) in &shadow_skinned {
                 let d = &self.draws[i];
                 let m = &self.meshes[d.mesh.0 as usize];

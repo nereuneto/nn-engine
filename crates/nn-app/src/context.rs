@@ -226,12 +226,12 @@ pub(crate) fn simulate<G: Game>(ctx: &mut Context, game: &mut G, dt: Duration) {
     ctx.time.tick(dt);
     ctx.effects.advance(dt.as_secs_f32());
     let steps = ctx.timestep.advance(dt);
-    let t = std::time::Instant::now();
+    let t = web_time::Instant::now();
     for _ in 0..steps {
         game.fixed_update(ctx);
     }
     ctx.perf.fixed(t.elapsed(), steps);
-    let t = std::time::Instant::now();
+    let t = web_time::Instant::now();
     game.update(ctx);
     ctx.perf.update(t.elapsed());
 }
@@ -243,7 +243,7 @@ pub(crate) fn draw<G: Game>(
     game: &mut G,
     target: Option<&nn_render::wgpu::TextureView>,
 ) {
-    let t = std::time::Instant::now();
+    let t = web_time::Instant::now();
     game.render(ctx);
     // Quem ouve os sons 3D é a câmera 3D.
     let cam = ctx.renderer.camera3d();

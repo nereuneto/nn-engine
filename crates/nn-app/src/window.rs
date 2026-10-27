@@ -1,7 +1,7 @@
 //! Janela e loop principal.
 
 use std::sync::Arc;
-use std::time::Instant;
+use web_time::Instant;
 
 use glam::UVec2;
 use nn_audio::Audio;

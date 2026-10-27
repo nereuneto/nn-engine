@@ -8,6 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+web-time.workspace = true
 nn-core.workspace = true
 nn-input.workspace = true
 nn-render.workspace = true

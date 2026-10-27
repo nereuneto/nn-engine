@@ -180,7 +180,12 @@ impl Renderer {
 
     /// Cria o renderer para desenhar em alvos com o formato `format`.
     pub fn new(gpu: &GpuContext, format: wgpu::TextureFormat) -> Self {
-        Self::from_device(&gpu.device, &gpu.queue, format)
+        let independent_blend = gpu
+            .adapter
+            .get_downlevel_capabilities()
+            .flags
+            .contains(wgpu::DownlevelFlags::INDEPENDENT_BLEND);
+        Self::build(&gpu.device, &gpu.queue, format, independent_blend)
     }
 
     /// Cria o renderer sobre um dispositivo que já existe (por exemplo, o de
@@ -189,6 +194,17 @@ impl Renderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
+    ) -> Self {
+        Self::build(device, queue, format, true)
+    }
+
+    /// `independent_blend`: a placa mistura cada alvo de um jeito (o WebGL2
+    /// e o OpenGL ES 3.0 não).
+    fn build(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        independent_blend: bool,
     ) -> Self {
         let device = device.clone();
         let queue = queue.clone();
@@ -307,7 +323,7 @@ impl Renderer {
 
         let instance_buffer = Self::create_instance_buffer(&device, Self::INITIAL_CAPACITY);
 
-        let d3 = crate::d3::Renderer3D::new(&device, format, &texture_layout);
+        let d3 = crate::d3::Renderer3D::new(&device, format, &texture_layout, independent_blend);
         let mut renderer = Self {
             device,
             queue,
