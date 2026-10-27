@@ -776,6 +776,61 @@ fn efeitos_pelo_lua() {
     assert_eq!(global::<Option<String>>(&rt, "erro_agora"), None);
 }
 
+/// O pcall e o xpcall devolvem a mensagem em português; uma tabela jogada
+/// com error volta como veio, e dá para pausar (coroutine) dentro do pcall.
+#[test]
+fn pcall_em_portugues() {
+    let dir = projeto(
+        "pcall",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              local ok1, e1 = pcall(function() local t; return t.x end)
+              m1 = e1
+              local _, e2 = xpcall(function() return nil + 1 end, function(e) return "pego: " .. e end)
+              m2 = e2
+              local _, e3 = pcall(error, { codigo = 7 })
+              codigo = e3.codigo
+              local _, e4 = pcall(nn.assets.texture, "nao_existe.png")
+              m4 = tostring(e4)
+              ok5, v5, w5 = pcall(function(a, b) return a + b, "extra" end, 2, 3)
+              local co = coroutine.wrap(function()
+                local ok, v = pcall(function() return coroutine.yield(1) + 1 end)
+                return v
+              end)
+              co()
+              pausou = co(41)
+            end
+            return c
+            "##,
+        )],
+    );
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let r = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| {
+        let mut s = r.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    let m1: String = global(&rt, "m1");
+    assert!(m1.contains("tentou acessar um campo de um valor nil"), "{m1}");
+    let m2: String = global(&rt, "m2");
+    assert!(m2.starts_with("pego: ") && m2.contains("tentou fazer uma conta"), "{m2}");
+    assert_eq!(global::<i64>(&rt, "codigo"), 7);
+    let m4: String = global(&rt, "m4");
+    assert!(m4.contains("nao_existe.png"), "{m4}");
+    assert!(global::<bool>(&rt, "ok5"));
+    assert_eq!(global::<i64>(&rt, "v5"), 5);
+    assert_eq!(global::<String>(&rt, "w5"), "extra");
+    assert_eq!(global::<i64>(&rt, "pausou"), 42);
+}
+
 #[test]
 fn nn_fora_da_cena_da_erro_claro() {
     let dir = projeto("fora", &[]);

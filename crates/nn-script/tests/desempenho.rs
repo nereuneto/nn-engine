@@ -124,7 +124,15 @@ fn a_cena_visual_chama_o_rust_uma_vez_por_coisa_desenhada() {
     let calls = Rc::new(Cell::new(0u64));
     let c = calls.clone();
     lua.set_global_hook(HookTriggers::new().on_calls(), move |_, debug| {
-        if debug.source().what == "C" && !padrao.contains(&(debug.function().to_pointer() as usize))
+        // O pcall e o xpcall da biblioteca, por baixo dos que traduzem a
+        // mensagem do erro, também não são da engine.
+        let biblioteca = matches!(
+            debug.names().name.as_deref(),
+            Some("raw_pcall" | "raw_xpcall")
+        );
+        if debug.source().what == "C"
+            && !biblioteca
+            && !padrao.contains(&(debug.function().to_pointer() as usize))
         {
             c.set(c.get() + 1);
             // Com NN_NOMES=1, lista as chamadas (para achar qual passou do limite).

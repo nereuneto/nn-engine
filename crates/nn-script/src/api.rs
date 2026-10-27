@@ -1571,6 +1571,42 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         Ok(())
     })?;
     lua.globals().set("print", print)?;
+    // pcall e xpcall devolvem a mensagem do erro em português (como a tela
+    // de erro mostra; no xpcall, o que a função de tratar devolve). Só textos e erros da engine; uma tabela jogada com
+    // error({...}) volta como veio. Em Lua, para continuar podendo pausar
+    // (coroutine.yield) dentro.
+    let nn_table: Table = lua.globals().get("nn")?;
+    nn_table.set(
+        "_translate_error",
+        lua.create_function(|_, msg: String| Ok(crate::translate_error(&msg)))?,
+    )?;
+    lua.load(
+        r#"
+local raw_pcall, raw_xpcall, tr = pcall, xpcall, nn._translate_error
+local type, tostring, select = type, tostring, select
+local function pt(e)
+  local t = type(e)
+  if t == "string" then return tr(e) end
+  if t == "userdata" then
+    local ok, s = raw_pcall(tostring, e)
+    if ok and type(s) == "string" then return tr(s) end
+  end
+  return e
+end
+local function fix(ok, ...)
+  if ok then return ok, ... end
+  return false, pt((...)), select(2, ...)
+end
+function pcall(f, ...)
+  return fix(raw_pcall(f, ...))
+end
+function xpcall(f, handler, ...)
+  return fix(raw_xpcall(f, handler, ...))
+end
+"#,
+    )
+    .set_name("=nn")
+    .exec()?;
     // Avisos da engine (um arquivo que falta...): o jogo continua, e o NN
     // Studio mostra no Console como aviso.
     let nn: Table = lua.globals().get("nn")?;
