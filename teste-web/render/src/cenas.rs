@@ -26,11 +26,12 @@ pub const CENAS: &[&str] = &[
     "efeitos",
     "folhagem",
     "holofote",
+    "cascatas",
 ];
 
 /// A cor de fundo de cada cena.
 pub fn fundo(cena: usize) -> Color {
-    if cena == 6 || cena == 13 {
+    if cena == 6 || cena == 13 || cena == 15 {
         Color::hex(0x87A9D6)
     } else if cena == 14 {
         Color::hex(0x05060B)
@@ -465,6 +466,44 @@ pub fn desenhar(cena: usize, r: &mut Renderer, rec: &Recursos) {
                     softness: 0.3,
                 });
                 r.add_lamp3d(lamp);
+            }
+        }
+        15 => {
+            // Uma estrada de 150 m com postes e casas, a sombra até 120 m:
+            // as três cascatas do sol (nítida perto, e chegando longe).
+            r.set_camera3d(Camera3D::looking_at(
+                Vec3::new(2.0, 3.0, 4.0),
+                Vec3::new(0.0, 1.0, -10.0),
+            ));
+            r.set_sky3d(Some(Sky3D::default()));
+            r.set_light3d(nn_render::d3::Light3D {
+                sun_direction: Vec3::new(0.6, -0.7, 0.35).normalize(),
+                ..Default::default()
+            });
+            r.set_shadows3d(nn_render::d3::Shadows {
+                distance: 120.0,
+                ..Default::default()
+            });
+            r.draw_mesh(
+                rec.cubo,
+                Mat4::from_translation(Vec3::new(0.0, -0.1, -60.0))
+                    * Mat4::from_scale(Vec3::new(60.0, 0.2, 160.0)),
+                Color::hex(0x9FB57A),
+            );
+            for k in 0..12 {
+                let z = -(k as f32) * 12.0;
+                r.draw_mesh(
+                    rec.cubo,
+                    Mat4::from_translation(Vec3::new(-2.0, 1.5, z))
+                        * Mat4::from_scale(Vec3::new(0.25, 3.0, 0.25)),
+                    Color::hex(0x5A4A3A),
+                );
+                r.draw_mesh(
+                    rec.cubo,
+                    Mat4::from_translation(Vec3::new(-9.0, 2.0, z - 4.0))
+                        * Mat4::from_scale(Vec3::new(5.0, 4.0, 5.0)),
+                    Color::hex(0xE5A84D),
+                );
             }
         }
         _ => {}

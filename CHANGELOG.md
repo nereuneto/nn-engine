@@ -4,6 +4,12 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Sol em cascatas (Sprint 79)
+
+- **A sombra do sol chega longe:** com a distância da sombra acima de 30 m (`nn.d3.shadows({ distance = 120 })` ou "Sombras" no ambiente da cena), o sol usa três mapas, perto, meio e longe da câmera, e a sombra chega a 100 m ou mais sem perder a nitidez de perto. Perto da borda de um mapa, a sombra passa para o seguinte aos poucos, e na borda do último some aos poucos.
+- **Até 30 m, como antes:** um mapa só, em volta do ponto para onde a câmera olha. Os jogos com a distância padrão saem iguais.
+- Uma cena nova no teste do navegador, "cascatas", confere no Chromium (WebGL2). As fotos dos 13 jogos e modelos não mudaram.
+
 ### Holofotes com sombra no jogo (Sprint 78)
 
 - **Sem trocar por pouco:** quem já tem sombra só perde o lugar para um holofote uns 3 m mais perto. Dois na mesma distância não trocam mais a cada quadro.

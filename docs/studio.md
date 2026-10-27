@@ -813,7 +813,7 @@ continua).
 | Luz do sol | A cor da luz e o tamanho do disco do sol no céu |
 | Luz ambiente | A luz onde o sol não bate: a que vem de cima e a que vem de baixo |
 | Névoa | O que está longe some na cor do horizonte, entre as duas distâncias |
-| Sombras | Sombra do sol até esta distância da câmera |
+| Sombras | Sombra do sol até esta distância da câmera. Até 30 m, um mapa só; acima, três (as cascatas: perto, meio e longe), e a sombra chega longe sem perder a nitidez de perto. Desligada, os holofotes com **Faz sombra** continuam |
 | Vento | A força (0 = parado, 1 = brisa, 3 = ventania) e o lado para onde sopra: balança o que tem **Balança com o vento** e leva as partículas ([Água, vento e halo](#água-vento-e-halo)) |
 | Halo do brilho | O halo suave em volta do que brilha (0 = sem halo, 1 = o normal) |
 

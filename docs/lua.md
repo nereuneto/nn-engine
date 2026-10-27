@@ -1615,7 +1615,7 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | Chamada | Descrição |
 |---|---|
 | `nn.d3.shadows(false)` / `nn.d3.shadows(true)` | Desliga ou liga todas as sombras (bom para uma opção "sombras" no menu, para computadores mais fracos). |
-| `nn.d3.shadows({ distance =, quality =, strength =, sun = })` | `distance`: até onde há sombra em volta do ponto para onde a câmera olha (padrão 30). `quality`: `"baixa"`, `"media"` (padrão) ou `"alta"` (os holofotes usam metade). `strength`: de 0 a 1, quanto a sombra escurece (padrão 1). `sun = false` tira só a sombra do sol: os holofotes com sombra continuam (é o que o `shadows = false` do ambiente de uma cena faz, como na Caverna). |
+| `nn.d3.shadows({ distance =, quality =, strength =, sun = })` | `distance`: até onde há sombra (padrão 30). Até 30 m, um mapa só, em volta do ponto para onde a câmera olha; acima, três mapas (as **cascatas**: perto, meio e longe da câmera), e a sombra chega a 100 m ou mais sem perder a nitidez de perto (`nn.d3.shadows({ distance = 120 })` num mapa grande). As cascatas desenham a cena mais duas vezes vista do sol. `quality`: `"baixa"`, `"media"` (padrão) ou `"alta"` (os holofotes usam metade). `strength`: de 0 a 1, quanto a sombra escurece (padrão 1). `sun = false` tira só a sombra do sol: os holofotes com sombra continuam (é o que o `shadows = false` do ambiente de uma cena faz, como na Caverna). |
 
 #### Da tela para o 3D e de volta
 

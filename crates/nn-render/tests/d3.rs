@@ -1678,3 +1678,77 @@ fn holofotes_nao_trocam_a_sombra_por_pouco_e_a_troca_apaga_aos_poucos() {
     let (n, r) = quadro(&mut h, 12.0);
     assert_eq!((n, r), (5, 1), "a troca: o novo desenha, o que sai fica");
 }
+
+// --- Sol em cascatas (Sprint 79) ----------------------------------------------
+
+#[test]
+fn sombra_longe_usa_as_cascatas_e_chega_longe_sem_perder_a_de_perto() {
+    let Some(mut h) = Harness::new() else { return };
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    let camera = Camera3D::looking_at(Vec3::new(0.0, 20.0, 10.0), Vec3::new(0.0, 0.0, -20.0));
+    let at = |p: Vec3| {
+        let s = camera.screen_point(p, SIZE.as_vec2()).unwrap();
+        (s.x as u32, s.y as u32)
+    };
+    let cena = |h: &mut Harness, distance: f32| {
+        h.renderer.set_camera3d(camera);
+        h.renderer.set_light3d(Light3D {
+            sun_direction: Vec3::new(1.0, -1.0, 0.0).normalize(),
+            sun_color: Color::rgb(0.7, 0.7, 0.7),
+            sky: Color::rgb(0.3, 0.3, 0.3),
+            ground: Color::rgb(0.3, 0.3, 0.3),
+            fog: None,
+        });
+        h.renderer.set_shadows3d(Shadows {
+            distance,
+            ..Shadows::default()
+        });
+        h.renderer
+            .draw_mesh(plane, Mat4::from_scale(Vec3::splat(400.0)), Color::WHITE);
+        // Um cubo perto, a 3 m, e uma casa longe, a 80 m.
+        h.renderer.draw_mesh(
+            cube,
+            Mat4::from_translation(Vec3::new(0.0, 1.0, -3.0)) * Mat4::from_scale(Vec3::splat(2.0)),
+            Color::WHITE,
+        );
+        h.renderer.draw_mesh(
+            cube,
+            Mat4::from_translation(Vec3::new(0.0, 2.0, -80.0)) * Mat4::from_scale(Vec3::splat(4.0)),
+            Color::WHITE,
+        );
+        h.render(Color::BLACK)
+    };
+    let (perto, longe, chao) = (
+        at(Vec3::new(2.5, 0.0, -3.0)),
+        at(Vec3::new(4.0, 0.0, -80.0)),
+        at(Vec3::new(-8.0, 0.0, -40.0)),
+    );
+    let b = |img: &[u8], (x, y): (u32, u32)| brightness(pixel(img, x, y));
+    // Com 30 m (o padrão), um mapa só: a casa longe fica sem sombra.
+    let um = cena(&mut h, 30.0);
+    assert!(b(&um, perto) + 60 < b(&um, chao), "a sombra de perto");
+    assert!(
+        b(&um, longe) + 20 > b(&um, chao),
+        "longe, sem sombra com 30 m"
+    );
+    // Com 100 m, as cascatas: as duas sombras.
+    let tres = cena(&mut h, 100.0);
+    assert!(
+        b(&tres, perto) + 60 < b(&tres, chao),
+        "a sombra de perto, nas cascatas"
+    );
+    assert!(
+        b(&tres, longe) + 60 < b(&tres, chao),
+        "a sombra da casa longe"
+    );
+    // Cada cascata desenha o que ela vê (o chão está nas três).
+    assert!(
+        h.renderer.last_stats3().shadow >= 4,
+        "{:?}",
+        h.renderer.last_stats3()
+    );
+    // De volta a 30 m: igual a antes.
+    let de_novo = cena(&mut h, 30.0);
+    assert_eq!(de_novo, um, "com 30 m, o mapa de um só, como antes");
+}
