@@ -15,6 +15,7 @@ mod animation;
 mod camera;
 mod context;
 pub mod d3;
+pub mod effects;
 mod offscreen;
 mod panel;
 mod parallax;

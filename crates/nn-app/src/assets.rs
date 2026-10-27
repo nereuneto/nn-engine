@@ -9,6 +9,7 @@ use std::time::{Duration, SystemTime};
 use web_time::Instant;
 
 use nn_audio::{AudioError, SoundId};
+use nn_render::effects::{EffectId, EffectShader};
 use nn_render::{FontId, RenderError, TextureId, TextureOptions};
 
 use crate::Context;
@@ -121,6 +122,17 @@ pub struct Assets {
     /// Os canvas criados, com quem ainda os usa (descarregam como as
     /// imagens).
     canvases: Vec<(TextureId, Weak<()>)>,
+    /// Os efeitos em uso (liberados quando ninguém mais usa) e os arquivos
+    /// de efeito (.wgsl), que recarregam ao salvar.
+    effects: Vec<(EffectId, Weak<()>, Option<String>)>,
+    effect_files: HashMap<String, EffectFile>,
+}
+
+/// Um arquivo de efeito: o shader compilado (ou o erro).
+#[derive(Debug, Clone)]
+struct EffectFile {
+    modified: Option<SystemTime>,
+    shader: Result<EffectShader, String>,
 }
 
 impl Assets {
@@ -135,6 +147,8 @@ impl Assets {
             hot_reload,
             textures: HashMap::new(),
             canvases: Vec::new(),
+            effects: Vec::new(),
+            effect_files: HashMap::new(),
             sounds: HashMap::new(),
             fonts: HashMap::new(),
             models: HashMap::new(),
@@ -548,6 +562,115 @@ impl Context {
         (id, AssetHandle(rc))
     }
 
+    /// Um efeito: um pronto ("cinza", "pixelar", "crt", "onda", "contorno",
+    /// "brilho") ou um arquivo .wgsl do jogo, que recarrega ao salvar. Com
+    /// erro no arquivo, o efeito não muda nada (o jogo segue sem ele) e o
+    /// erro vem em [`Context::effect_error`]. Sai da memória quando o último
+    /// [`AssetHandle`] cai, na troca de cena.
+    pub fn effect(&mut self, name: &str) -> (EffectId, AssetHandle) {
+        let (shader, file) = match self.renderer.builtin_effect(name) {
+            Some(s) if name != "nenhum" => (s, None),
+            _ => {
+                let key = normalize(Path::new(name));
+                let shader = match self.assets.effect_files.get(&key) {
+                    Some(f) => f.shader.clone(),
+                    None => {
+                        let modified = self.assets.source.modified(Path::new(&key));
+                        let shader = self.compile_effect_file(&key);
+                        self.assets.effect_files.insert(
+                            key.clone(),
+                            EffectFile {
+                                modified,
+                                shader: shader.clone(),
+                            },
+                        );
+                        shader
+                    }
+                };
+                let shader = shader.unwrap_or_else(|_| self.passthrough_effect());
+                (shader, Some(key))
+            }
+        };
+        let id = self.renderer.create_effect(shader);
+        let rc = Rc::new(());
+        self.assets.effects.push((id, Rc::downgrade(&rc), file));
+        (id, AssetHandle(rc))
+    }
+
+    /// O erro do arquivo do efeito, se ele tiver um (com a linha).
+    pub fn effect_error(&self, effect: EffectId) -> Option<String> {
+        let file = self
+            .assets
+            .effects
+            .iter()
+            .find(|(id, _, _)| *id == effect)
+            .and_then(|(_, _, f)| f.as_ref())?;
+        self.assets
+            .effect_files
+            .get(file)
+            .and_then(|f| f.shader.as_ref().err().cloned())
+    }
+
+    fn passthrough_effect(&mut self) -> EffectShader {
+        self.renderer
+            .builtin_effect("nenhum")
+            .expect("o efeito que não muda nada")
+    }
+
+    fn compile_effect_file(&mut self, key: &str) -> Result<EffectShader, String> {
+        let bytes = self.assets.read(key).map_err(|e| e.to_string())?;
+        let source = String::from_utf8_lossy(&bytes);
+        self.renderer.compile_effect(&source).map_err(|e| {
+            let msg = format!("efeito {key}, {e}");
+            log::warn!("{msg}");
+            msg
+        })
+    }
+
+    /// Recarrega os arquivos de efeito que mudaram.
+    fn poll_effects(&mut self) {
+        let source = self.assets.source.clone();
+        let files: Vec<_> = self
+            .assets
+            .effect_files
+            .iter()
+            .map(|(k, f)| (k.clone(), f.modified))
+            .collect();
+        for (key, modified) in files {
+            let current = source.modified(Path::new(&key));
+            if current.is_none() || current == modified {
+                continue;
+            }
+            let shader = self.compile_effect_file(&key);
+            let use_shader = match &shader {
+                Ok(s) => {
+                    log::info!("recarregado: {key}");
+                    *s
+                }
+                // Com erro, o jogo segue sem o efeito.
+                Err(_) => self.passthrough_effect(),
+            };
+            let users: Vec<EffectId> = self
+                .assets
+                .effects
+                .iter()
+                .filter(|(_, _, f)| f.as_deref() == Some(key.as_str()))
+                .map(|(id, _, _)| *id)
+                .collect();
+            for id in users {
+                self.renderer.replace_effect_shader(id, use_shader);
+            }
+            self.assets.effect_files.insert(
+                key.clone(),
+                EffectFile {
+                    modified: current,
+                    shader,
+                },
+            );
+            self.assets.reloaded.push(PathBuf::from(key));
+        }
+    }
+
     /// Descarrega as texturas, os sons e os modelos que ninguém usa mais:
     /// pedidos só com um [`AssetHandle`], sem nenhum vivo, e não guardados.
     /// Pedir de novo carrega outra vez. A engine chama isto ao trocar de
@@ -567,6 +690,13 @@ impl Context {
             out.textures += 1;
         }
         let renderer = &mut self.renderer;
+        self.assets.effects.retain(|(id, users, _)| {
+            if users.strong_count() > 0 {
+                return true;
+            }
+            renderer.free_effect(*id);
+            false
+        });
         self.assets.canvases.retain(|(id, users)| {
             if users.strong_count() > 0 {
                 return true;
@@ -661,6 +791,7 @@ impl Context {
             return;
         }
         self.assets.reloaded.clear();
+        self.poll_effects();
         let source = self.assets.source.clone();
 
         let textures: Vec<_> = self

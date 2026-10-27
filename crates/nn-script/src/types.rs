@@ -8,6 +8,99 @@ use nn_render::{Animation, AnimationPlayer, FontId, Playback, SpriteSheet, Textu
 use crate::api::with_ctx;
 use crate::convert::{err, opt};
 
+/// Um efeito (shader) de `nn.effect`. Os parâmetros são campos:
+/// `e.forca = 0.5`; uma cor (`e.cor = "#FF0000"`) muda `cor_r`, `cor_g`,
+/// `cor_b` e `cor_a`.
+#[derive(Debug, Clone)]
+pub(crate) struct LEffect(
+    pub nn_render::effects::EffectId,
+    #[allow(dead_code)] pub AssetHandle,
+);
+
+impl LEffect {
+    /// Muda um parâmetro: um número, ou uma cor para `nome_r`... `nome_a`.
+    pub(crate) fn set(
+        lua: &Lua,
+        id: nn_render::effects::EffectId,
+        name: &str,
+        value: &Value,
+    ) -> Result<()> {
+        match value {
+            Value::Integer(_) | Value::Number(_) => {
+                let v: f32 = lua.unpack(value.clone())?;
+                with_ctx(lua, |c| {
+                    if c.renderer.set_effect_param(id, name, v) {
+                        Ok(())
+                    } else {
+                        Err(err(no_param(c, id, name)))
+                    }
+                })
+            }
+            other => {
+                let col = crate::convert::color(other).map_err(|_| {
+                    err(format!(
+                        "o parâmetro \"{name}\" do efeito precisa ser um número (ou uma cor), recebeu {}",
+                        other.type_name()
+                    ))
+                })?;
+                with_ctx(lua, |c| {
+                    if c.renderer.set_effect_color(id, name, col) {
+                        Ok(())
+                    } else {
+                        Err(err(no_param(c, id, &format!("{name}_r"))))
+                    }
+                })
+            }
+        }
+    }
+}
+
+fn no_param(c: &nn_app::Context, id: nn_render::effects::EffectId, name: &str) -> String {
+    let names: Vec<&str> = c
+        .renderer
+        .effect_params(id)
+        .iter()
+        .map(|(n, _)| n.as_str())
+        .collect();
+    if names.is_empty() {
+        format!("o efeito não tem o parâmetro \"{name}\" (ele não tem parâmetros)")
+    } else {
+        format!(
+            "o efeito não tem o parâmetro \"{name}\" (tem: {})",
+            names.join(", ")
+        )
+    }
+}
+
+impl UserData for LEffect {
+    fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        m.add_method("set", |lua, this, (name, value): (String, Value)| {
+            LEffect::set(lua, this.0, &name, &value)
+        });
+        m.add_meta_method(mlua::MetaMethod::Index, |lua, this, key: String| {
+            let id = this.0;
+            match key.as_str() {
+                // O erro do arquivo .wgsl (com a linha), ou nil.
+                "error" => with_ctx(lua, |c| Ok(c.effect_error(id))).and_then(|e| lua.pack(e)),
+                "params" => with_ctx(lua, |c| {
+                    Ok(c.renderer
+                        .effect_params(id)
+                        .iter()
+                        .map(|(n, _)| n.clone())
+                        .collect::<Vec<_>>())
+                })
+                .and_then(|v| lua.pack(v)),
+                name => with_ctx(lua, |c| Ok(c.renderer.effect_param(id, name)))
+                    .and_then(|v| lua.pack(v)),
+            }
+        });
+        m.add_meta_method(
+            mlua::MetaMethod::NewIndex,
+            |lua, this, (key, value): (String, Value)| LEffect::set(lua, this.0, &key, &value),
+        );
+    }
+}
+
 /// Imagem carregada. O `AssetHandle` diz que a imagem está em uso: quando
 /// nenhum sobra (o Lua soltou todas), a troca de cena a descarrega.
 #[derive(Debug, Clone)]

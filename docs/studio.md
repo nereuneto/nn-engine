@@ -781,6 +781,12 @@ Um texto em cima do céu ou de um chão claro pode sumir: no Inspetor do Texto,
 **Contorno** põe uma borda em volta das letras (o placar dos modelos 3D usa
 preto meio transparente).
 
+O componente **Efeito** (em ➕ Componente) põe um shader: tons de cinza,
+pixelar, CRT, onda, contorno, brilho, ou um arquivo `.wgsl` seu, nas imagens
+do objeto, na camada dele ou na tela inteira. Os parâmetros vão no campo
+Parâmetros, como `forca = 0.5`. A vista da cena mostra sem o efeito; dê o
+Play para ver.
+
 No Texto também: **Largura (quebra)** quebra as linhas entre as palavras
 para caber nessa largura (0 = sem quebra), e **Alinhamento** alinha as linhas
 entre si. Na **Fonte**, `pixel` é a fonte de pixel art que vem na engine,

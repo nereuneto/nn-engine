@@ -48,6 +48,8 @@ nn-projeto = { path = "crates/nn-projeto", version = "0.9.0" }
 nn-mcp = { path = "crates/nn-mcp", version = "0.9.0" }
 
 wgpu = "30"
+# Para conferir os efeitos (WGSL) e traduzir para GLSL, como no navegador.
+naga = { version = "30", features = ["wgsl-in", "glsl-out"] }
 winit = "0.30"
 glam = { version = "0.34", features = ["bytemuck"] }
 bytemuck = { version = "1", features = ["derive"] }

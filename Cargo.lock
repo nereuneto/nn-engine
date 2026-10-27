@@ -2900,6 +2900,7 @@ dependencies = [
  "gltf",
  "image",
  "log",
+ "naga",
  "nn-core",
  "pollster 1.0.1",
  "rustc-hash 2.1.3",

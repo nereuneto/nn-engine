@@ -6,7 +6,9 @@ use nn_app::Context;
 use nn_render::{Sprite, Text, TextureOptions};
 
 use crate::convert::{align, anchor, channel, color, err, opt, opt_color};
-use crate::types::{LAnimation, LAnimator, LFont, LSheet, LSoundData, LTexture, expect, play};
+use crate::types::{
+    LAnimation, LAnimator, LEffect, LFont, LSheet, LSoundData, LTexture, expect, play,
+};
 
 /// Onde fica o contexto da engine durante um callback da cena: guardado nos
 /// dados do estado Lua, para cada `nn.*` não precisar buscar o contexto no
@@ -231,6 +233,7 @@ struct SpriteOpts {
     origin_x: Option<f32>,
     origin_y: Option<f32>,
     rotation: Option<f32>,
+    effect: Option<nn_render::effects::EffectId>,
 }
 
 impl SpriteOpts {
@@ -251,6 +254,10 @@ impl SpriteOpts {
             origin_x: opt(o, "origin_x")?,
             origin_y: opt(o, "origin_y")?,
             rotation: opt(o, "rotation")?,
+            effect: match opt::<Value>(o, "effect")? {
+                None => None,
+                Some(v) => Some(expect::<LEffect>(&v, "um efeito (nn.effect)")?.0),
+            },
         })
     }
 
@@ -371,6 +378,9 @@ fn build_sprite(
         .color(tint)
         .repeat(repeat)
         .offset(offset);
+    if let Some(e) = o.effect {
+        sprite = sprite.effect(e);
+    }
     Ok(sprite)
 }
 
@@ -428,6 +438,7 @@ type ComponentSprite = (
     Option<bool>,
     Option<bool>,
     Option<i64>,
+    Option<mlua::AnyUserData>,
 );
 
 /// O componente Imagem da cena visual, sem a tabela de opções (é o que mais
@@ -436,7 +447,7 @@ type ComponentSprite = (
 /// escala do objeto multiplica; repetir põe uma cópia por unidade de escala.
 fn component_sprite(
     lua: &Lua,
-    (hud, target, x, y, sx, sy, w, h, rot, col, flip_x, flip_y, repeat, frame): ComponentSprite,
+    (hud, target, x, y, sx, sy, w, h, rot, col, flip_x, flip_y, repeat, frame, effect): ComponentSprite,
 ) -> Result<()> {
     let tint = if col.is_nil() {
         nn_core::Color::WHITE
@@ -480,13 +491,18 @@ fn component_sprite(
         }
         // Na tela, y é para baixo: a rotação vira ao contrário.
         let rotation = if hud { -rot } else { rot }.to_radians();
-        let sprite = sprite
+        let mut sprite = sprite
             .at(Vec2::new(x, y))
             .size(size)
             .origin(Vec2::splat(0.5))
             .rotation(rotation)
             .color(tint)
             .repeat(repeat);
+        if let Some(e) = &effect
+            && let Ok(e) = e.borrow::<LEffect>()
+        {
+            sprite = sprite.effect(e.0);
+        }
         if hud {
             c.renderer.screen().draw(&sprite);
         } else {
@@ -885,6 +901,28 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
             })
         })?,
     )?;
+    // O efeito na tela inteira (nil tira).
+    screen.set(
+        "effect",
+        lua.create_function(|lua, e: Option<mlua::AnyUserData>| {
+            let id = match &e {
+                None => None,
+                Some(ud) => Some(
+                    ud.borrow::<LEffect>()
+                        .map_err(|_| {
+                            err("nn.screen.effect: esperava um efeito (nn.effect) ou nil")
+                        })?
+                        .0,
+                ),
+            };
+            // Guarda o efeito enquanto ele estiver na tela.
+            lua.set_named_registry_value("nn_efeito_tela", e)?;
+            with_ctx(lua, |c| {
+                c.renderer.set_screen_effect(id);
+                Ok(())
+            })
+        })?,
+    )?;
     nn.set("screen", screen)?;
     nn.set("_sprite", lua.create_function(component_sprite)?)?;
     // O recorte das cenas visuais (as listas que rolam): `_clip(tela, x0,
@@ -919,6 +957,19 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         )?,
     )?;
 
+    nn.set(
+        "effect",
+        lua.create_function(|lua, (name, params): (String, Option<Table>)| {
+            let (id, handle) = with_ctx(lua, |c| Ok(c.effect(&name)))?;
+            if let Some(p) = params {
+                for pair in p.pairs::<String, Value>() {
+                    let (k, v) = pair?;
+                    LEffect::set(lua, id, &k, &v)?;
+                }
+            }
+            Ok(LEffect(id, handle))
+        })?,
+    )?;
     nn.set(
         "canvas",
         lua.create_function(|lua, (w, h, opts): (u32, u32, Option<Table>)| {

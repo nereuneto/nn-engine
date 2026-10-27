@@ -264,6 +264,8 @@ pub(crate) fn draw<G: Game>(
     let clear = ctx.clear_color;
     let camera = ctx.render_camera();
     let window = ctx.window;
+    // O tempo dos efeitos (shaders): o do jogo.
+    ctx.renderer.set_time(ctx.time.elapsed_secs());
     ctx.renderer.render(target, window, &camera, Some(clear));
     ctx.perf.draw(t.elapsed());
 }

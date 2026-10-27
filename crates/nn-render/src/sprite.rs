@@ -92,6 +92,8 @@ pub struct Sprite {
     /// Desloca a imagem dentro das repetições, em repetições (0,5 = meia
     /// imagem): um fundo que rola mudando só isto.
     pub offset: Vec2,
+    /// Um efeito (shader) no lugar do desenho normal.
+    pub effect: Option<crate::effects::EffectId>,
 }
 
 impl Sprite {
@@ -107,7 +109,14 @@ impl Sprite {
             blend: Blend::Alpha,
             repeat: Vec2::ONE,
             offset: Vec2::ZERO,
+            effect: None,
         }
+    }
+
+    /// Desenha com um efeito (veja [`crate::Renderer::create_effect`]).
+    pub fn effect(mut self, effect: crate::effects::EffectId) -> Self {
+        self.effect = Some(effect);
+        self
     }
 
     pub fn at(mut self, position: Vec2) -> Self {

@@ -664,6 +664,29 @@ const PANEL_FIELDS: &[F] = &[
     ),
 ];
 
+const EFFECT_FIELDS: &[F] = &[
+    help(
+        f("effect", "Efeito", W::Text),
+        "Um pronto: cinza, pixelar, crt, onda, contorno, brilho. Ou o caminho de um arquivo .wgsl do jogo (recarrega ao salvar).",
+    ),
+    help(
+        f(
+            "on",
+            "Onde",
+            W::Choice(&[
+                ("objeto", "Nas imagens do objeto"),
+                ("camada", "Na camada do objeto"),
+                ("tela", "Na tela inteira"),
+            ]),
+        ),
+        "Na camada: tudo o que está na mesma camada do objeto. Na tela: o quadro inteiro, com o HUD.",
+    ),
+    help(
+        f("params", "Parâmetros", W::Text),
+        "Como \"forca = 0.5, tamanho = 4\". cinza: forca. pixelar: tamanho. crt: curvatura, linhas, vinheta. onda: amplitude, frequencia, velocidade. contorno: espessura, cor (#RRGGBB). brilho: forca, raio.",
+    ),
+];
+
 const BUTTON_ACTIONS: &[(&str, &str)] = &[
     ("nada", "Nada (use os eventos)"),
     ("cena", "Trocar de cena"),
@@ -1746,6 +1769,7 @@ fn fields(kind: &str) -> &'static [F] {
         "checkbox" => CHECKBOX_FIELDS,
         "textfield" => TEXTFIELD_FIELDS,
         "layout" => LAYOUT_FIELDS,
+        "effect" => EFFECT_FIELDS,
         _ => &[],
     }
 }
@@ -3069,7 +3093,15 @@ impl Inspector {
                 let exists = o.component(kind).is_some();
                 let unique = matches!(
                     kind,
-                    "body" | "camera" | "map" | "layout" | "body3d" | "anim3d" | "terrain" | "bone"
+                    "body"
+                        | "camera"
+                        | "map"
+                        | "layout"
+                        | "body3d"
+                        | "anim3d"
+                        | "terrain"
+                        | "bone"
+                        | "effect"
                 );
                 if ui
                     .add_enabled(!(exists && unique), egui::Button::new(title))
