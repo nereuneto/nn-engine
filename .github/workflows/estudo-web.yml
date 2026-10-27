@@ -78,6 +78,8 @@ jobs:
           if [ -f site/com-som/prova.js ]; then S=com-som; else S=sem-som; fi
           node navegador.mjs "http://localhost:8000/$S/index.html?webgpu" "webgpu-$S" $R || true
           node navegador.mjs "http://localhost:8000/$S/index.html?webgl&carga=2000" "webgl-carga2000" $R || true
+          node navegador.mjs "http://localhost:8000/$S/index.html?webgl&3d" "webgl-3d" $R || true
+          node navegador.mjs "http://localhost:8000/$S/index.html?webgpu&3d" "webgpu-3d" $R || true
 
       - name: E3 — Lua no desktop
         continue-on-error: true

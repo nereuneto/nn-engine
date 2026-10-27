@@ -36,6 +36,8 @@ struct Estado {
     /// Tempo de CPU para montar e enviar os últimos quadros (ms).
     tempos: Vec<f32>,
     carga: u32,
+    desenho: wgpu::TextureFormat,
+    cubo: Option<nn_render::d3::MeshId>,
     #[cfg(feature = "som")]
     audio: Option<(nn_audio::Audio, nn_audio::SoundId)>,
 }
@@ -123,16 +125,29 @@ async fn iniciar(
         .get_default_config(&gpu.adapter, size.width.max(1), size.height.max(1))
         .ok_or("a superfície não tem configuração")?;
     config.format = format;
+    // O canvas do WebGPU não tem formato sRGB: desenha numa vista sRGB dele.
+    let desenho = format.add_srgb_suffix();
+    if desenho != format {
+        config.view_formats = vec![desenho];
+    }
     surface.configure(&gpu.device, &config);
     log::info!(
         "NN superficie {}x{} {format:?}",
         config.width,
         config.height
     );
-    let mut renderer = Renderer::new(&gpu, format);
+    let mut renderer = Renderer::new(&gpu, desenho);
     let moeda = renderer
         .load_texture_bytes(include_bytes!("moeda.png"), TextureOptions::PIXEL_ART)
         .map_err(|e| format!("textura: {e}"))?;
+    // `?3d`: um cubo girando com o céu estrelado (as pipelines 3D).
+    let cubo = busca().contains("3d").then(|| {
+        renderer.set_sky3d(Some(nn_render::d3::Sky3D {
+            stars: 1.0,
+            ..Default::default()
+        }));
+        renderer.create_mesh(&nn_render::d3::shapes::cube())
+    });
     let agora = Instant::now();
     Ok(Estado {
         window,
@@ -141,6 +156,8 @@ async fn iniciar(
         gpu,
         renderer,
         moeda,
+        desenho,
+        cubo,
         pos: Vec2::new(100.0, 200.0),
         teclas: HashSet::new(),
         quadros: 0,
@@ -193,9 +210,19 @@ impl Estado {
                 return;
             }
         };
-        let view = texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.desenho),
+            ..Default::default()
+        });
+        if let Some(cubo) = self.cubo {
+            let t = self.inicio.elapsed().as_secs_f32();
+            let modelo = glam::Mat4::from_rotation_y(t) * glam::Mat4::from_rotation_x(t * 0.6);
+            self.renderer.draw_mesh(
+                cubo,
+                modelo * glam::Mat4::from_scale(glam::Vec3::splat(2.0)),
+                Color::hex(0x4D9BE5),
+            );
+        }
         let tamanho = UVec2::new(self.config.width, self.config.height);
         let t = self.inicio.elapsed().as_secs_f32();
         let info = format!(
@@ -389,14 +416,19 @@ impl ApplicationHandler<Evento> for App {
     }
 }
 
-/// O endereço da página (na web) ou as variáveis de ambiente (no desktop).
-fn opcoes() -> (wgpu::Backends, u32) {
+/// O endereço da página (na web) ou a variável PROVA (no desktop).
+fn busca() -> String {
     #[cfg(target_arch = "wasm32")]
     let busca = web_sys::window()
         .and_then(|w| w.location().search().ok())
         .unwrap_or_default();
     #[cfg(not(target_arch = "wasm32"))]
     let busca = std::env::var("PROVA").unwrap_or_default();
+    busca
+}
+
+fn opcoes() -> (wgpu::Backends, u32) {
+    let busca = busca();
     let backends = if busca.contains("webgpu") {
         wgpu::Backends::BROWSER_WEBGPU
     } else if cfg!(target_arch = "wasm32") {

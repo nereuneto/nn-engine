@@ -21,14 +21,21 @@ fn relogio() -> f64 {
 fn rodar_com(agora: fn() -> f64) -> u64 {
     let mut out = String::from("## mlua (Lua 5.4 em C) no wasm32-unknown-unknown\n\n```\n");
     let lua = mlua::Lua::new();
-    match lua.load(include_str!("../../teste.lua")).set_name("teste.lua").eval::<String>() {
+    match lua
+        .load(include_str!("../../teste.lua"))
+        .set_name("teste.lua")
+        .eval::<String>()
+    {
         Ok(s) => out.push_str(&s),
         Err(e) => out.push_str(&format!("ERRO {e}\n")),
     }
     out.push_str("```\n\n");
     let lua = mlua::Lua::new();
     let t = agora();
-    match lua.load(include_str!("../../bench.lua")).eval::<mlua::Value>() {
+    match lua
+        .load(include_str!("../../bench.lua"))
+        .eval::<mlua::Value>()
+    {
         Ok(v) => out.push_str(&format!(
             "bench: {:.1} ms (resultado {})\n",
             agora() - t,
