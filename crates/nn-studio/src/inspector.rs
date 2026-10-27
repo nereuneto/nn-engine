@@ -181,6 +181,22 @@ const TEXT_FIELDS: &[F] = &[
         f("outline", "Contorno", W::OptColor),
         "Uma borda em volta das letras, nesta cor: o texto lê bem em cima de qualquer fundo (um placar em cima do céu).",
     ),
+    help(
+        f("width", "Largura (quebra)", SIZE),
+        "As linhas quebram entre as palavras para caber nesta largura. 0 = sem quebra (só onde o texto tem Enter).",
+    ),
+    help(
+        f(
+            "align",
+            "Alinhamento",
+            W::Choice(&[
+                ("left", "À esquerda"),
+                ("center", "No centro"),
+                ("right", "À direita"),
+            ]),
+        ),
+        "Como as linhas se alinham entre si (texto de várias linhas).",
+    ),
     HUD,
 ];
 
@@ -612,7 +628,7 @@ const UI_HUD: F = help(
 );
 const FONT: F = help(
     adv("font", "Fonte", W::Font),
-    "Arquivo .ttf ou .otf. Vazio = a fonte do tema (ou a da engine).",
+    "Arquivo .ttf ou .otf, ou \"pixel\" (a fonte de pixel art da engine, nítida em múltiplos de 8). Vazio = a fonte do tema (ou a da engine).",
 );
 const RADIUS: F = f("radius", "Cantos arredondados", SIZE);
 const BORDER: F = f("border", "Borda", SIZE);
@@ -3888,9 +3904,9 @@ fn field_widget(
             out
         }
         Wd::Font => {
-            let list: Vec<String> = files
-                .files_of(FileKind::Font)
-                .map(|e| e.rel.clone())
+            // "pixel": a fonte de pixel art que vem na engine.
+            let list: Vec<String> = std::iter::once("pixel".to_string())
+                .chain(files.files_of(FileKind::Font).map(|e| e.rel.clone()))
                 .collect();
             file_combo(ui, spec, current, &list, salt, "(do tema)", |p| {
                 FileKind::of(std::path::Path::new(p)) == FileKind::Font

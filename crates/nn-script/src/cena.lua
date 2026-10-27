@@ -26,7 +26,7 @@ M.FIELDS = {
   },
   text = {
     { "text", "Texto" }, { "size", 32 }, { "color", "#FFFFFF" }, { "anchor", "center" },
-    { "font", "" }, { "hud", false }, { "outline", "" },
+    { "font", "" }, { "hud", false }, { "outline", "" }, { "width", 0 }, { "align", "left" },
   },
   shape = {
     { "shape", "rect" }, { "w", 64 }, { "h", 64 }, { "radius", 32 }, { "color", "#3FA7D6" },
@@ -764,7 +764,8 @@ end
 M.icons_count = icons_count
 
 local function text_opts(c, size)
-  return { size = size or c.size, font = M.font(c.font) }
+  local w = (c.width or 0) > 0 and c.width or nil
+  return { size = size or c.size, font = M.font(c.font), width = w, align = c.align }
 end
 
 --- Largura e altura de um componente (sem a escala do objeto), ou nada.
@@ -3599,6 +3600,8 @@ local function draw_object(o, alpha, W, H)
         c._topts = opts
       end
       opts.size, opts.color, opts.anchor, opts.font = c.size * math.abs(sy), c.color, c.anchor, M.font(c.font)
+      opts.width = (c.width or 0) > 0 and c.width * math.abs(sx) or nil
+      opts.align = c.align
       local draw, px, py = nn.draw, x, y
       if hud then draw, px, py = nn.screen, hx, hy end
       -- O contorno: o texto na cor dele, em volta (lê bem em cima do céu).
@@ -3909,7 +3912,8 @@ function M.assets_of(data)
     if has_field(t, "font") then
       local f = value(c, "font")
       if f == nil or f == "" then f = M.theme("font") end
-      add("font", f)
+      -- A fonte de pixel art já vem na engine.
+      if f ~= "pixel" then add("font", f) end
     end
   end
   local object

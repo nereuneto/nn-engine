@@ -466,6 +466,57 @@ fn texto_e_medidas() {
 }
 
 #[test]
+fn fonte_de_pixel_art_e_quebra_de_linha() {
+    let dir = projeto(
+        "pixel",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:draw()
+              local o = { size = 8, font = "pixel", width = 60 }
+              linhas = nn.text_lines("um dois tres quatro", o)
+              largura, altura = nn.text_size("um dois tres quatro", o)
+              uma = select(2, nn.text_size("um", o))
+              local f = nn.assets.font("pixel")
+              mesma = select(1, nn.text_size("abc", { size = 8, font = f }))
+              nn.screen.text("um dois tres quatro", 0, 0, o)
+            end
+            return c
+            "##,
+        )],
+    );
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let r = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| {
+        let mut s = r.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    let linhas: Vec<String> = global(&rt, "linhas");
+    assert_eq!(linhas, ["um dois", "tres", "quatro"]);
+    let w: f64 = global(&rt, "largura");
+    let a: f64 = global(&rt, "altura");
+    let uma: f64 = global(&rt, "uma");
+    assert_eq!(w, 60.0);
+    assert_eq!(a, uma + 20.0, "três linhas de 10 px");
+    let mesma: f64 = global(&rt, "mesma");
+    assert_eq!(mesma, 24.0, "nn.assets.font(\"pixel\") é a mesma fonte");
+    // Nada passa da largura, e só branco e preto (nítida).
+    let pixels = h.pixels().unwrap();
+    for (i, p) in pixels.chunks(4).enumerate() {
+        assert!(p[0] == 0 || p[0] == 255, "cinza em {i}: {p:?}");
+        if p[0] > 0 {
+            assert!(i % 64 < 60, "passou da largura em {i}");
+        }
+    }
+}
+
+#[test]
 fn nn_fora_da_cena_da_erro_claro() {
     let dir = projeto("fora", &[]);
     let rt = ScriptRuntime::new(&dir).unwrap();

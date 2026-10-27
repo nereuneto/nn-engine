@@ -13,8 +13,8 @@ use eframe::egui_wgpu::{self, wgpu};
 use glam::{UVec2, Vec2};
 use nn_core::Color;
 use nn_render::{
-    Anchor, Blend, Camera2D, EmitArea, FontId, Panel, PanelImage, ParticleConfig, ParticleEmitter,
-    Rect as UvRect, Renderer, Sprite, Text, TextureId, TextureOptions,
+    Align, Anchor, Blend, Camera2D, EmitArea, FontId, Panel, PanelImage, ParticleConfig,
+    ParticleEmitter, Rect as UvRect, Renderer, Sprite, Text, TextureId, TextureOptions,
 };
 
 use crate::scene_data::{Component, Object, Prop, SceneData, Transform};
@@ -1515,6 +1515,9 @@ impl SceneRenderer {
         if path.is_empty() {
             return None;
         }
+        if path == "pixel" {
+            return Some(self.renderer.pixel_font());
+        }
         let renderer = &mut self.renderer;
         *self
             .fonts
@@ -1549,6 +1552,23 @@ impl SceneRenderer {
         font: &str,
         anchor: Anchor,
     ) {
+        self.draw_label_wrapped(root, content, at, size, color, font, anchor, None);
+    }
+
+    /// Como [`Self::draw_label`], quebrando as linhas em `wrap` (largura e
+    /// alinhamento).
+    #[allow(clippy::too_many_arguments)]
+    fn draw_label_wrapped(
+        &mut self,
+        root: &Path,
+        content: &str,
+        at: Vec2,
+        size: f32,
+        color: &str,
+        font: &str,
+        anchor: Anchor,
+        wrap: Option<(f32, Align)>,
+    ) {
         let (content, size, color, font) = self.text_of(root, content, size, color, font);
         let mut t = Text::new(&content)
             .at(at)
@@ -1557,6 +1577,12 @@ impl SceneRenderer {
             .anchor(anchor);
         if let Some(f) = font {
             t = t.font(f);
+        }
+        if let Some((w, align)) = wrap {
+            t = t.align(align);
+            if w > 0.0 {
+                t = t.width(w);
+            }
         }
         self.renderer.draw_text(&t);
     }
@@ -2133,6 +2159,14 @@ impl SceneRenderer {
                         let content = c.str("text").to_string();
                         let size = (c.num("size") * w.scale_y.abs()) as f32;
                         let outline = c.str("outline").to_string();
+                        let wrap = Some((
+                            (c.num("width") * w.scale_x.abs()) as f32,
+                            match c.str("align") {
+                                "center" => Align::Center,
+                                "right" => Align::Right,
+                                _ => Align::Left,
+                            },
+                        ));
                         if !outline.is_empty() {
                             let d = (size / 16.0).max(1.0);
                             for (dx, dy) in [
@@ -2145,7 +2179,7 @@ impl SceneRenderer {
                                 (0.0, 1.0),
                                 (1.0, 1.0),
                             ] {
-                                self.draw_label(
+                                self.draw_label_wrapped(
                                     root,
                                     &content,
                                     pos + Vec2::new(dx, dy) * d,
@@ -2153,10 +2187,11 @@ impl SceneRenderer {
                                     &outline,
                                     c.str("font"),
                                     anchor_of(c.str("anchor")),
+                                    wrap,
                                 );
                             }
                         }
-                        self.draw_label(
+                        self.draw_label_wrapped(
                             root,
                             &content,
                             pos,
@@ -2164,6 +2199,7 @@ impl SceneRenderer {
                             c.str("color"),
                             c.str("font"),
                             anchor_of(c.str("anchor")),
+                            wrap,
                         );
                     }
                     "map" => {

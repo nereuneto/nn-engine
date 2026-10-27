@@ -175,7 +175,13 @@ fn apply_theme(lua: &Lua, t: &Table) -> Result<()> {
         match font {
             Value::Nil => {}
             Value::Boolean(false) => theme.font = None,
-            other => theme.font = Some(expect::<LFont>(&other, "uma fonte (nn.assets.font)")?.0),
+            Value::String(ref s) if s.to_str().is_ok_and(|s| &*s == "pixel") => {
+                theme.font = Some(nn_render::FontId::PIXEL);
+            }
+            other => {
+                theme.font =
+                    Some(expect::<LFont>(&other, "uma fonte (nn.assets.font, ou \"pixel\")")?.0)
+            }
         }
         for (key, target) in [
             ("text_size", &mut theme.text_size),

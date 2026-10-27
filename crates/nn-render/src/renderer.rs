@@ -549,6 +549,28 @@ impl Renderer {
         self.text.default_font()
     }
 
+    /// A fonte de pixel art embutida (Press Start 2P): nítida, em múltiplos
+    /// inteiros do tamanho dela (8 px).
+    pub fn pixel_font(&self) -> FontId {
+        self.text.pixel_font()
+    }
+
+    /// Carrega uma fonte de pixel art: `em` é o tamanho (pixels por em) em que
+    /// cada pixel do desenho dela vira um pixel da tela.
+    pub fn load_pixel_font_bytes(&mut self, bytes: &[u8], em: f32) -> Result<FontId, RenderError> {
+        self.text.load_pixel_font(bytes, em)
+    }
+
+    /// As linhas em que o texto é desenhado (as do `\n` e, com
+    /// [`Text::width`], as quebradas para caber).
+    pub fn text_lines(&self, text: &Text<'_>) -> Vec<String> {
+        let k = self.text_scale();
+        let mut scaled = *text;
+        scaled.size = text.size * k;
+        scaled.width = text.width.map(|w| w * k);
+        self.text.lines(&scaled)
+    }
+
     /// Carrega uma fonte TrueType/OpenType a partir dos bytes do arquivo.
     pub fn load_font_bytes(&mut self, bytes: &[u8]) -> Result<FontId, RenderError> {
         self.text.load_font(bytes)
@@ -568,6 +590,7 @@ impl Renderer {
         }
         let mut scaled = *text;
         scaled.size = text.size * k;
+        scaled.width = text.width.map(|w| w * k);
         self.text.cached_layout(&scaled).size / k
     }
 
@@ -719,6 +742,7 @@ impl Renderer {
         let k = self.text_scale();
         let mut scaled = *text;
         scaled.size = text.size * k;
+        scaled.width = text.width.map(|w| w * k);
         let layout = self.text.cached_layout(&scaled);
         let color = self.gpu_color(text.color).to_array();
         // Canto superior esquerdo da caixa, relativo a `position`, com Y para baixo.

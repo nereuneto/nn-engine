@@ -116,7 +116,12 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.text_size",
         "(texto, opts)",
-        "Largura e altura de um texto, sem desenhar.",
+        "Largura e altura de um texto, sem desenhar (com width, já quebrado nas linhas).",
+    ),
+    d(
+        "nn.text_lines",
+        "(texto, opts)",
+        "As linhas de um texto quebrado em opts.width pixels (a mesma quebra do desenho e dos diálogos): uma lista de strings.",
     ),
     // Desenho
     d(
@@ -147,7 +152,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.draw.text",
         "(texto, x, y, opts)",
-        "Texto no mundo (opts: size, color, alpha, anchor, align, font).",
+        "Texto no mundo (opts: size, color, alpha, anchor, align, font, width). font = \"pixel\": a fonte de pixel art da engine; width: quebra as linhas nessa largura.",
     ),
     d(
         "nn.draw.parallax",
@@ -171,7 +176,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "(x, y, w, h, opts)",
         "Painel na tela, do canto de cima à esquerda (cantos arredondados, borda ou imagem em 9 fatias).",
     ),
-    d("nn.screen.text", "(texto, x, y, opts)", "Texto na tela."),
+    d(
+        "nn.screen.text",
+        "(texto, x, y, opts)",
+        "Texto na tela (as opções de nn.draw.text).",
+    ),
     d(
         "nn.screen.flash",
         "(cor, duracao)",
@@ -342,8 +351,8 @@ pub const API_DOCS: &[ApiDoc] = &[
     ),
     d(
         "nn.assets.font",
-        "(caminho)",
-        "Carrega uma fonte .ttf/.otf.",
+        "(caminho, opts)",
+        "Carrega uma fonte .ttf/.otf (\"pixel\" = a de pixel art da engine). opts.pixel = 8: uma fonte de pixel art desenhada em 8 px, nítida em múltiplos de 8.",
     ),
     d(
         "nn.assets.read",

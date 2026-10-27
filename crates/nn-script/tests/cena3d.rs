@@ -1144,3 +1144,57 @@ fn texto_na_tela_com_contorno() {
     assert_eq!(sem, 0);
     assert!(com > 20, "o contorno em volta: {com}");
 }
+
+/// O componente Texto com a fonte "pixel" e Largura: quebra em linhas que
+/// cabem na largura, nítidas (só branco e preto).
+#[test]
+fn texto_com_fonte_pixel_quebra_na_largura() {
+    let arquivo = |largura: u32| {
+        format!(
+            r##"return {{ format = 1, mode = "3d", script = "cenas/obs.lua",
+  environment = {{ sky = false, fog = false, shadows = false }},
+  objects = {{
+    {{ id = 1, name = "Placar", components = {{ {{ type = "text", text = "um dois tres", size = 8,
+      font = "pixel", color = "#FFFFFF", hud = true, width = {largura} }} }} }}
+  }} }}"##
+        )
+    };
+    // Onde acendeu: (linhas com algo, colunas com algo).
+    let caixa = |largura: u32| -> Option<(usize, usize)> {
+        let dir = projeto(
+            &format!("quebra{largura}"),
+            &[
+                ("cenas/obs.lua", OBSERVA),
+                ("cenas/c.cena", &arquivo(largura)),
+            ],
+        );
+        let (mut h, _rt) = cena(&dir, "cenas/c.cena")?;
+        h.run_frames(2);
+        assert_eq!(h.game.0.error(), None);
+        let p = h.pixels().unwrap();
+        let (mut linhas, mut colunas) = (vec![false; 64], vec![false; 64]);
+        for (i, c) in p.chunks(4).enumerate() {
+            assert!(c[0] == 0 || c[0] == 255, "cinza: {c:?}");
+            if c[0] > 0 {
+                linhas[i / 64] = true;
+                colunas[i % 64] = true;
+            }
+        }
+        let n = |v: &[bool]| {
+            let a = v.iter().position(|b| *b).unwrap_or(0);
+            let b = v.iter().rposition(|b| *b).unwrap_or(0);
+            b + 1 - a
+        };
+        Some((n(&linhas), n(&colunas)))
+    };
+    let Some((alto, largo)) = caixa(40) else {
+        return;
+    };
+    // "um", "dois", "tres": três linhas de 8 px, a mais larga com 4 letras.
+    assert!(largo <= 32, "{largo}");
+    assert!(alto > 16, "três linhas: {alto}");
+    // Sem largura, uma linha só (96 px, mais larga que a tela de 64).
+    let (alto, largo) = caixa(0).unwrap();
+    assert!(alto <= 8, "{alto}");
+    assert!(largo >= 48, "{largo}");
+}

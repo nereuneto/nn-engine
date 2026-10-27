@@ -19,9 +19,22 @@ use crate::{Rect, RenderError};
 /// Fonte padrão: Poppins Regular (SIL Open Font License 1.1).
 const DEFAULT_FONT: &[u8] = include_bytes!("../assets/fonts/Poppins-Regular.ttf");
 
+/// Fonte de pixel art embutida: Press Start 2P (SIL Open Font License 1.1).
+const PIXEL_FONT: &[u8] = include_bytes!("../assets/fonts/PressStart2P-Regular.ttf");
+/// Pixels por em da fonte de pixel art no tamanho 1x (cada pixel do desenho
+/// dela vira um pixel da tela).
+const PIXEL_FONT_EM: f32 = 8.0;
+
 /// Identificador de uma fonte carregada no [`crate::Renderer`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FontId(pub(crate) u32);
+
+impl FontId {
+    /// A fonte padrão (Poppins), em todo renderer.
+    pub const DEFAULT: FontId = FontId(0);
+    /// A fonte de pixel art embutida (Press Start 2P), em todo renderer.
+    pub const PIXEL: FontId = FontId(1);
+}
 
 /// Qual ponto da caixa do texto fica em [`Text::position`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -87,6 +100,9 @@ pub struct Text<'a> {
     pub font: Option<FontId>,
     pub anchor: Anchor,
     pub align: Align,
+    /// Largura máxima: com ela, as linhas quebram nas palavras (e uma
+    /// palavra maior que a largura, nas letras). `None` só quebra no `\n`.
+    pub width: Option<f32>,
 }
 
 impl<'a> Text<'a> {
@@ -99,7 +115,14 @@ impl<'a> Text<'a> {
             font: None,
             anchor: Anchor::TopLeft,
             align: Align::Left,
+            width: None,
         }
+    }
+
+    /// Quebra as linhas para caberem em `width` pixels.
+    pub fn width(mut self, width: f32) -> Self {
+        self.width = (width > 0.0).then_some(width);
+        self
     }
 
     pub fn at(mut self, position: Vec2) -> Self {
@@ -157,8 +180,17 @@ pub(crate) struct TextLayout {
 pub(crate) struct GlyphKey {
     font: u32,
     glyph: u16,
-    /// Tamanho em pixels, arredondado.
+    /// Tamanho em 1/64 de pixel.
     px: u32,
+}
+
+/// Uma fonte carregada.
+#[derive(Debug)]
+struct FontEntry {
+    font: fontdue::Font,
+    /// Fonte de pixel art: os pixels por em no tamanho 1x. O tamanho vira um
+    /// múltiplo disso, as bordas ficam duras e o atlas não suaviza.
+    pixel: Option<f32>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -194,6 +226,8 @@ struct AtlasPage {
     shelf_height: u32,
     /// O último quadro em que um glifo desta página foi desenhado.
     used: u64,
+    /// Página de fontes de pixel art (amostra sem suavizar).
+    nearest: bool,
 }
 
 /// Layouts já feitos, pelo texto, fonte, tamanho e alinhamento. Guarda os do
@@ -211,23 +245,33 @@ struct CachedLayout {
     font: u32,
     px: u32,
     align: Align,
+    /// A largura de quebra, em bits (`f32::to_bits`; 0 = sem quebra).
+    width: u32,
     layout: Rc<TextLayout>,
 }
 
 impl CachedLayout {
-    fn is(&self, content: &str, font: u32, px: u32, align: Align) -> bool {
-        self.font == font && self.px == px && self.align == align && &*self.content == content
+    fn is(&self, content: &str, font: u32, px: u32, align: Align, width: u32) -> bool {
+        self.font == font
+            && self.px == px
+            && self.align == align
+            && self.width == width
+            && &*self.content == content
     }
+}
+
+fn width_bits(text: &Text<'_>) -> u32 {
+    text.width.map_or(0, f32::to_bits)
 }
 
 /// Fontes carregadas e cache de glifos rasterizados.
 #[derive(Debug)]
 pub(crate) struct TextSystem {
-    fonts: Vec<fontdue::Font>,
+    fonts: Vec<FontEntry>,
     glyphs: FxHashMap<GlyphKey, Option<AtlasGlyph>>,
     pages: Vec<AtlasPage>,
-    /// A página onde os glifos novos entram.
-    current: usize,
+    /// A página onde os glifos novos entram (a lisa e a de pixel art).
+    current: [usize; 2],
     layouts: RefCell<LayoutCache>,
     /// Conta os quadros (para saber qual página foi usada há mais tempo).
     frame: std::cell::Cell<u64>,
@@ -246,7 +290,7 @@ impl TextSystem {
             fonts: Vec::new(),
             glyphs: FxHashMap::default(),
             pages: Vec::new(),
-            current: 0,
+            current: [usize::MAX; 2],
             layouts: RefCell::default(),
             frame: std::cell::Cell::new(1),
         };
@@ -254,32 +298,61 @@ impl TextSystem {
             .load_font(DEFAULT_FONT)
             .expect("a fonte padrão embutida é válida");
         system
+            .load_pixel_font(PIXEL_FONT, PIXEL_FONT_EM)
+            .expect("a fonte de pixel art embutida é válida");
+        system
     }
 
     pub fn default_font(&self) -> FontId {
-        FontId(0)
+        FontId::DEFAULT
+    }
+
+    /// A fonte de pixel art embutida.
+    pub fn pixel_font(&self) -> FontId {
+        FontId::PIXEL
     }
 
     pub fn load_font(&mut self, bytes: &[u8]) -> Result<FontId, RenderError> {
+        self.push_font(bytes, None)
+    }
+
+    /// Uma fonte de pixel art: `em` é o tamanho (pixels por em) em que cada
+    /// pixel do desenho dela é um pixel da tela.
+    pub fn load_pixel_font(&mut self, bytes: &[u8], em: f32) -> Result<FontId, RenderError> {
+        self.push_font(bytes, Some(em.max(1.0)))
+    }
+
+    fn push_font(&mut self, bytes: &[u8], pixel: Option<f32>) -> Result<FontId, RenderError> {
         let font = fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default())
             .map_err(|e| RenderError::Font(e.to_string()))?;
-        self.fonts.push(font);
+        self.fonts.push(FontEntry { font, pixel });
         Ok(FontId(self.fonts.len() as u32 - 1))
+    }
+
+    /// O tamanho em que a fonte é desenhada: arredondado, e numa fonte de
+    /// pixel art, o múltiplo inteiro mais perto do tamanho 1x.
+    fn draw_px(&self, font: FontId, size: f32) -> f32 {
+        match self.fonts[font.0 as usize].pixel {
+            Some(em) => (size / em).round().max(1.0) * em,
+            None => size.max(1.0).round(),
+        }
     }
 
     /// Como [`TextSystem::layout`], mas reaproveita o layout de um texto igual
     /// pedido neste quadro ou no anterior.
     pub fn cached_layout(&self, text: &Text<'_>) -> Rc<TextLayout> {
-        let font = text.font.unwrap_or(self.default_font()).0;
-        let px = text.size.max(1.0).round() as u32;
+        let font = text.font.unwrap_or(self.default_font());
+        let px = (self.draw_px(font, text.size) * 64.0).round() as u32;
+        let font = font.0;
+        let width = width_bits(text);
         let mut h = FxHasher::default();
         text.content.hash(&mut h);
-        (font, px, text.align as u8).hash(&mut h);
+        (font, px, text.align as u8, width).hash(&mut h);
         let key = h.finish();
         let mut cache = self.layouts.borrow_mut();
         let found = |list: &Vec<CachedLayout>| {
             list.iter()
-                .position(|c| c.is(text.content, font, px, text.align))
+                .position(|c| c.is(text.content, font, px, text.align, width))
         };
         if let Some(list) = cache.current.get(&key)
             && let Some(i) = found(list)
@@ -297,6 +370,7 @@ impl TextSystem {
                 font,
                 px,
                 align: text.align,
+                width,
                 layout: Rc::new(self.layout(text)),
             },
         };
@@ -314,19 +388,109 @@ impl TextSystem {
         cache.previous = current;
     }
 
+    /// Largura de uma linha (sem quebrar), em pixels.
+    fn line_width(&self, font: &fontdue::Font, px: f32, line: &str) -> f32 {
+        let mut pen = 0.0f32;
+        let mut previous: Option<u16> = None;
+        for ch in line.chars() {
+            if ch == '\r' {
+                continue;
+            }
+            let (ch, repeat) = if ch == '\t' { (' ', 4) } else { (ch, 1) };
+            let glyph = font.lookup_glyph_index(ch);
+            for _ in 0..repeat {
+                if let Some(prev) = previous {
+                    pen += font.horizontal_kern_indexed(prev, glyph, px).unwrap_or(0.0);
+                }
+                pen += font.metrics_indexed(glyph, px).advance_width;
+                previous = Some(glyph);
+            }
+        }
+        pen
+    }
+
+    /// As linhas do texto: as do `\n` e, com [`Text::width`], quebradas nas
+    /// palavras para caber. Como nos diálogos: junta palavra por palavra
+    /// enquanto a linha inteira couber; uma palavra sozinha maior que a
+    /// largura quebra nas letras.
+    pub fn lines(&self, text: &Text<'_>) -> Vec<String> {
+        let font_id = text.font.unwrap_or(self.default_font());
+        let font = &self.fonts[font_id.0 as usize].font;
+        let px = self.draw_px(font_id, text.size);
+        let Some(max) = text.width else {
+            return text.content.split('\n').map(str::to_string).collect();
+        };
+        // A largura pedida está no tamanho do texto; o desenho, em `px`.
+        let max = max * px / text.size.max(1e-3);
+        let fits = |s: &str| self.line_width(font, px, s) <= max + 0.01;
+        let mut out = Vec::new();
+        for para in text.content.split('\n') {
+            let mut line = String::new();
+            for word in para.split_whitespace() {
+                let try_line = if line.is_empty() {
+                    word.to_string()
+                } else {
+                    format!("{line} {word}")
+                };
+                if fits(&try_line) {
+                    line = try_line;
+                    continue;
+                }
+                if !line.is_empty() {
+                    out.push(std::mem::take(&mut line));
+                }
+                if fits(word) {
+                    line = word.to_string();
+                } else {
+                    // Uma palavra maior que a linha: quebra nas letras.
+                    for ch in word.chars() {
+                        let mut t = line.clone();
+                        t.push(ch);
+                        if !line.is_empty() && !fits(&t) {
+                            out.push(std::mem::take(&mut line));
+                            line.push(ch);
+                        } else {
+                            line = t;
+                        }
+                    }
+                }
+            }
+            out.push(line);
+        }
+        out
+    }
+
     /// Posiciona os glifos do texto, sem tocar na GPU.
     pub fn layout(&self, text: &Text<'_>) -> TextLayout {
         let font_id = text.font.unwrap_or(self.default_font());
-        let font = &self.fonts[font_id.0 as usize];
-        let px = text.size.max(1.0).round();
+        let entry = &self.fonts[font_id.0 as usize];
+        let font = &entry.font;
+        let key_px = (self.draw_px(font_id, text.size) * 64.0).round() as u32;
+        // O mesmo tamanho com que o glifo é rasterizado (senão o desenho e as
+        // medidas não batem numa fonte de tamanho quebrado, como 18,67).
+        let px = key_px as f32 / 64.0;
 
         let (ascent, descent, line_step) = match font.horizontal_line_metrics(px) {
             Some(m) => (m.ascent, m.descent, m.new_line_size),
             None => (px * 0.8, -px * 0.2, px * 1.2),
         };
+        // Numa fonte de pixel art, as linhas ficam em pixels inteiros.
+        let (ascent, descent, line_step) = if entry.pixel.is_some() {
+            // Muitas fontes de pixel art não têm espaço entre as linhas (a
+            // linha do tamanho da letra): ganham um quarto dela (2 px na de 8).
+            let step = if line_step <= px + 0.01 {
+                px * 1.25
+            } else {
+                line_step
+            };
+            (ascent.round(), descent.round(), step.round())
+        } else {
+            (ascent, descent, line_step)
+        };
 
+        let source = self.lines(text);
         let mut lines: Vec<(Vec<PlacedGlyph>, f32)> = Vec::new();
-        for (line_index, line) in text.content.split('\n').enumerate() {
+        for (line_index, line) in source.iter().enumerate() {
             let baseline = ascent + line_index as f32 * line_step;
             let mut pen = 0.0f32;
             let mut previous: Option<u16> = None;
@@ -347,7 +511,7 @@ impl TextSystem {
                             key: GlyphKey {
                                 font: font_id.0,
                                 glyph,
-                                px: px as u32,
+                                px: key_px,
                             },
                             top_left: Vec2::new(
                                 (pen + m.xmin as f32).round(),
@@ -363,7 +527,13 @@ impl TextSystem {
             lines.push((placed, pen));
         }
 
-        let width = lines.iter().map(|(_, w)| *w).fold(0.0, f32::max).ceil();
+        let widest = lines.iter().map(|(_, w)| *w).fold(0.0, f32::max).ceil();
+        // Com largura de quebra, a caixa tem essa largura (o alinhamento é
+        // dentro dela).
+        let width = match text.width {
+            Some(w) => (w * px / text.size.max(1e-3)).ceil().max(widest),
+            None => widest,
+        };
         let height = (ascent - descent + (lines.len() - 1) as f32 * line_step).ceil();
 
         let mut glyphs = Vec::new();
@@ -404,19 +574,33 @@ impl TextSystem {
             return *cached;
         }
 
-        let font = &self.fonts[key.font as usize];
-        let (m, coverage) = font.rasterize_indexed(key.glyph, key.px as f32);
+        let entry = &self.fonts[key.font as usize];
+        let pixel = entry.pixel.is_some();
+        let (m, coverage) = entry
+            .font
+            .rasterize_indexed(key.glyph, key.px as f32 / 64.0);
         let size = UVec2::new(m.width as u32, m.height as u32);
         let padded = size + UVec2::splat(Self::PADDING);
 
         let entry = if padded.x > Self::PAGE_SIZE || padded.y > Self::PAGE_SIZE {
-            log::warn!("glifo de {} px grande demais para o atlas", key.px);
+            log::warn!("glifo de {} px grande demais para o atlas", key.px / 64);
             None
         } else {
-            let (page, origin) = self.allocate(padded, device, queue, layout, textures);
+            let (page, origin) = self.allocate(padded, pixel, device, queue, layout, textures);
             let texture = self.pages[page].texture;
             self.pages[page].used = self.frame.get();
-            let rgba: Vec<u8> = coverage.iter().flat_map(|&a| [255, 255, 255, a]).collect();
+            // A pixel art fica com borda dura: o pixel está ou não está.
+            let rgba: Vec<u8> = coverage
+                .iter()
+                .flat_map(|&a| {
+                    let a = if pixel {
+                        if a >= 128 { 255 } else { 0 }
+                    } else {
+                        a
+                    };
+                    [255, 255, 255, a]
+                })
+                .collect();
             textures[texture.0 as usize].write(queue, origin, size, &rgba);
             Some(AtlasGlyph {
                 page,
@@ -438,18 +622,21 @@ impl TextSystem {
     /// Devolve a página e onde, nela. Com [`TextSystem::MAX_PAGES`] cheias,
     /// esvazia a usada há mais tempo (nunca uma usada neste quadro, que pode
     /// estar na fila de desenho).
+    #[allow(clippy::too_many_arguments)]
     fn allocate(
         &mut self,
         size: UVec2,
+        nearest: bool,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         layout: &wgpu::BindGroupLayout,
         textures: &mut Vec<GpuTexture>,
     ) -> (usize, UVec2) {
-        if let Some(page) = self.pages.get_mut(self.current)
+        let kind = usize::from(nearest);
+        if let Some(page) = self.pages.get_mut(self.current[kind])
             && let Some(origin) = page.fit(size)
         {
-            return (self.current, origin);
+            return (self.current[kind], origin);
         }
         let blank = || vec![0u8; (Self::PAGE_SIZE * Self::PAGE_SIZE * 4) as usize];
         let now = self.frame.get();
@@ -457,7 +644,7 @@ impl TextSystem {
             .pages
             .iter()
             .enumerate()
-            .filter(|(_, p)| p.used < now)
+            .filter(|(_, p)| p.used < now && p.nearest == nearest)
             .min_by_key(|(_, p)| p.used)
             .map(|(i, _)| i);
         match oldest {
@@ -475,7 +662,7 @@ impl TextSystem {
                 page.cursor = UVec2::ZERO;
                 page.shelf_height = 0;
                 log::debug!("página {i} do atlas de glifos reaproveitada");
-                self.current = i;
+                self.current[kind] = i;
             }
             _ => {
                 if self.pages.len() >= Self::MAX_PAGES {
@@ -491,7 +678,11 @@ impl TextSystem {
                     layout,
                     UVec2::splat(Self::PAGE_SIZE),
                     &blank(),
-                    TextureOptions::default(),
+                    if nearest {
+                        TextureOptions::PIXEL_ART
+                    } else {
+                        TextureOptions::default()
+                    },
                     Some("nn glyph atlas"),
                 ));
                 log::debug!("nova página do atlas de glifos ({})", self.pages.len() + 1);
@@ -500,14 +691,15 @@ impl TextSystem {
                     cursor: UVec2::ZERO,
                     shelf_height: 0,
                     used: now,
+                    nearest,
                 });
-                self.current = self.pages.len() - 1;
+                self.current[kind] = self.pages.len() - 1;
             }
         }
-        let origin = self.pages[self.current]
+        let origin = self.pages[self.current[kind]]
             .fit(size)
             .expect("cabe numa página vazia (conferido em glyph)");
-        (self.current, origin)
+        (self.current[kind], origin)
     }
 
     /// A textura é de uma página do atlas?

@@ -672,3 +672,83 @@ fn deslocar_a_imagem_repetida() {
     assert_color(img.pixel(8, 48), [0, 0, 255, 255], "deslocada, à esquerda");
     assert_color(img.pixel(56, 48), [255, 0, 0, 255], "deslocada, à direita");
 }
+
+/// A fonte de pixel art: em múltiplos de 8, só a cor do texto e o fundo (sem
+/// cinza nas bordas), e cada pixel do desenho vira um quadrado de 2x2.
+#[test]
+fn fonte_de_pixel_art_fica_nitida() {
+    let Some(mut h) = Harness::new() else { return };
+    let font = h.renderer.pixel_font();
+    h.renderer.screen().draw_text(
+        &Text::new("Ação")
+            .at(Vec2::new(2.0, 2.0))
+            .size(16.0)
+            .font(font),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    let mut acesos = 0;
+    for y in 0..SIZE.y {
+        for x in 0..SIZE.x {
+            let p = img.pixel(x, y);
+            assert!(
+                p[..3] == [0, 0, 0] || p[..3] == [255, 255, 255],
+                "cinza em {x},{y}: {p:?}"
+            );
+            if p[0] == 255 {
+                acesos += 1;
+                // Os pixels do desenho começam em pares (o texto em 2, 2).
+                let (qx, qy) = (x & !1, y & !1);
+                for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                    assert_eq!(img.pixel(qx + dx, qy + dy)[0], 255, "{x},{y}");
+                }
+            }
+        }
+    }
+    assert!(acesos > 100, "acendeu {acesos}");
+    // O tamanho pedido vai para o múltiplo de 8 mais perto: 19 → 16.
+    let a = h
+        .renderer
+        .measure_text(&Text::new("Ação").size(16.0).font(font));
+    let b = h
+        .renderer
+        .measure_text(&Text::new("Ação").size(19.0).font(font));
+    assert_eq!(a, b);
+    assert_eq!(a.x, 4.0 * 16.0, "cada letra tem 8 pixels de largura");
+}
+
+#[test]
+fn quebra_as_linhas_na_largura() {
+    let Some(mut h) = Harness::new() else { return };
+    let font = h.renderer.pixel_font();
+    let text = Text::new("um dois tres quatro").size(8.0).font(font);
+    // 8 px por letra: "um dois" = 56 px cabe em 60, "um dois tres" não.
+    assert_eq!(
+        h.renderer.text_lines(&text.width(60.0)),
+        ["um dois", "tres", "quatro"]
+    );
+    // Sem largura, só quebra onde o texto tem Enter.
+    assert_eq!(h.renderer.text_lines(&text), ["um dois tres quatro"]);
+    // Uma palavra maior que a linha quebra no meio.
+    assert_eq!(
+        h.renderer
+            .text_lines(&Text::new("abcdefghij").size(8.0).font(font).width(32.0)),
+        ["abcd", "efgh", "ij"]
+    );
+    // O tamanho: a largura pedida (as linhas se alinham nela) e 3 linhas.
+    let size = h.renderer.measure_text(&text.width(60.0));
+    assert_eq!(size.x, 60.0);
+    let uma = h.renderer.measure_text(&text);
+    // Mais duas linhas, de 10 px cada (8 da letra e 2 de espaço).
+    assert_eq!(size.y, uma.y + 20.0, "{size} {uma}");
+    // E o desenho fica dentro da largura.
+    h.renderer.screen().draw_text(
+        &Text::new("um dois tres quatro")
+            .at(Vec2::new(0.0, 0.0))
+            .size(8.0)
+            .font(font)
+            .width(60.0),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_eq!(img.lit_in(60, 0, 64, 64), 0, "nada passa da largura");
+    assert!(img.lit_in(0, 16, 60, 40) > 20, "a terceira linha aparece");
+}

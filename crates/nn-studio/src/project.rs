@@ -4596,10 +4596,9 @@ impl Viewer<'_> {
         ui.add_space(14.0);
         vars_editor(ui, &mut self.form.values.vars);
         ui.add_space(14.0);
-        let fonts: Vec<String> = self
-            .files
-            .files_of(FileKind::Font)
-            .map(|e| e.rel.clone())
+        // "pixel": a fonte de pixel art que vem na engine.
+        let fonts: Vec<String> = std::iter::once("pixel".to_string())
+            .chain(self.files.files_of(FileKind::Font).map(|e| e.rel.clone()))
             .collect();
         let sounds: Vec<String> = self
             .files
@@ -4668,7 +4667,7 @@ fn theme_form(ui: &mut egui::Ui, v: &mut ConfigValues, fonts: &[String], sounds:
                     ui.end_row();
                 }
                 for (key, label, list, tip) in [
-                    ("font", "Fonte", fonts, "Arquivo .ttf ou .otf (ponha na pasta assets/fontes). Vazio = a fonte da engine."),
+                    ("font", "Fonte", fonts, "Arquivo .ttf ou .otf (ponha na pasta assets/fontes), ou \"pixel\" (a fonte de pixel art da engine). Vazio = a fonte da engine."),
                     ("sound", "Som dos botões", sounds, "Toca quando um botão é apertado."),
                 ] {
                     ui.label(format!("{label}:")).on_hover_text(tip);
