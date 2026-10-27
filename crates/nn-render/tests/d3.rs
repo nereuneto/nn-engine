@@ -1578,3 +1578,103 @@ fn so_quatro_holofotes_fazem_sombra_os_mais_perto() {
     let s = h.renderer.last_stats3();
     assert_eq!((s.lamps, s.spot_shadows), (6, 4));
 }
+
+// --- Holofotes com sombra no jogo: trocas e luzes paradas (Sprint 78) ------
+
+#[test]
+fn sombra_de_holofote_parado_nao_e_redesenhada() {
+    let Some(mut h) = Harness::new() else { return };
+    let camera = Camera3D::looking_at(Vec3::new(0.0, 10.0, 0.0), Vec3::ZERO);
+    let s = camera
+        .screen_point(Vec3::new(1.65, 0.0, 0.0), SIZE.as_vec2())
+        .unwrap();
+    let (sx, sy) = (s.x as u32, s.y as u32);
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    let quadro = |h: &mut Harness, cubo_x: f32| {
+        h.renderer.set_camera3d(camera);
+        h.renderer.set_light3d(Light3D {
+            sun_color: Color::BLACK,
+            sky: Color::BLACK,
+            ground: Color::BLACK,
+            ..Light3D::default()
+        });
+        h.renderer
+            .draw_mesh(plane, Mat4::from_scale(Vec3::splat(30.0)), Color::WHITE);
+        h.renderer.draw_mesh(
+            cube,
+            Mat4::from_translation(Vec3::new(cubo_x, 1.0, 0.0))
+                * Mat4::from_scale(Vec3::splat(0.6)),
+            Color::WHITE,
+        );
+        let mut lamp = Lamp3D::at(Vec3::new(0.0, 4.0, 0.0));
+        lamp.range = 12.0;
+        lamp.intensity = 2.0;
+        lamp.shadow = true;
+        lamp.cone = Some(Cone3D {
+            direction: Vec3::NEG_Y,
+            angle: 40.0,
+            softness: 0.1,
+        });
+        h.renderer.add_lamp3d(lamp);
+        let img = h.render(Color::BLACK);
+        let st = h.renderer.last_stats3();
+        (pixel(&img, sx, sy), st.spot_shadows, st.spot_redrawn)
+    };
+    let (p1, n1, r1) = quadro(&mut h, 1.0);
+    assert_eq!((n1, r1), (1, 1), "o primeiro quadro desenha a sombra");
+    // Nada mudou: a camada fica como estava, e a sombra continua lá.
+    let (p2, n2, r2) = quadro(&mut h, 1.0);
+    assert_eq!((n2, r2), (1, 0), "parado, não redesenha");
+    assert_color(p2, p1, "a sombra guardada");
+    assert!(brightness(p2) < 150, "na sombra: {p2:?}");
+    // O cubo andou: desenha de novo, e a sombra sai dali.
+    let (p3, _, r3) = quadro(&mut h, -1.0);
+    assert_eq!(r3, 1);
+    assert!(
+        brightness(p3) > brightness(p2) * 3,
+        "sem o cubo, luz: {p3:?}"
+    );
+}
+
+#[test]
+fn holofotes_nao_trocam_a_sombra_por_pouco_e_a_troca_apaga_aos_poucos() {
+    let Some(mut h) = Harness::new() else { return };
+    let plane = h.renderer.create_mesh(&shapes::plane());
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    // Cinco holofotes em fila, de x = 0 a 8; a câmera olha de cima, de
+    // 16 m (vê todos), em cima de um ponto da fila.
+    let quadro = |h: &mut Harness, cam_x: f32| {
+        h.renderer.set_camera3d(Camera3D::looking_at(
+            Vec3::new(cam_x, 16.0, 0.1),
+            Vec3::new(cam_x, 0.0, 0.0),
+        ));
+        h.renderer
+            .draw_mesh(plane, Mat4::from_scale(Vec3::splat(60.0)), Color::WHITE);
+        h.renderer
+            .draw_mesh(cube, Mat4::from_translation(Vec3::Y), Color::WHITE);
+        for i in 0..5 {
+            let mut lamp = Lamp3D::at(Vec3::new(i as f32 * 2.0, 4.0, 0.0));
+            lamp.range = 6.0;
+            lamp.shadow = true;
+            lamp.cone = Some(Cone3D {
+                direction: Vec3::NEG_Y,
+                angle: 30.0,
+                softness: 0.2,
+            });
+            h.renderer.add_lamp3d(lamp);
+        }
+        h.render(Color::BLACK);
+        let s = h.renderer.last_stats3();
+        (s.spot_shadows, s.spot_redrawn)
+    };
+    // Perto do x = 0: valem os quatro primeiros.
+    assert_eq!(quadro(&mut h, 0.0), (4, 4));
+    // Um passo para o lado: o quinto ficou um pouco mais perto que o
+    // primeiro, mas não o bastante para trocar.
+    assert_eq!(quadro(&mut h, 4.5), (4, 0), "não troca por pouco");
+    // Bem para o outro lado: o quinto entra, e o que sai ainda apaga a
+    // sombra numa camada a mais (cinco neste quadro).
+    let (n, r) = quadro(&mut h, 12.0);
+    assert_eq!((n, r), (5, 1), "a troca: o novo desenha, o que sai fica");
+}

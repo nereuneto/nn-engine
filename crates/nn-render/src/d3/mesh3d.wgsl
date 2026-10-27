@@ -35,7 +35,7 @@ struct Lamp {
 
 struct Lamps {
     count: vec4<u32>,
-    shadow_mats: array<mat4x4<f32>, 4>,
+    shadow_mats: array<mat4x4<f32>, 5>,
     items: array<Lamp, 32>,
 };
 
@@ -131,7 +131,9 @@ fn lamp_light_shadowed(world: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
         var part = lamp_part(lamp, world, n);
         if (lamp.cone.z > 0.5 && part.w > 0.0) {
             let d = distance(lamp.pos_range.xyz, world);
-            part = part * spot_lit(u32(lamp.cone.z + 0.5) - 1u, world, n, d, lamp.cone.w);
+            // color.w: quanto da sombra vale (numa troca, acende aos poucos).
+            let lit = spot_lit(u32(lamp.cone.z + 0.5) - 1u, world, n, d, lamp.cone.w);
+            part = part * mix(1.0, lit, lamp.color.w);
         }
         sum = sum + part.rgb;
     }
