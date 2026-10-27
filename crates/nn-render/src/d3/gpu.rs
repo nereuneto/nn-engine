@@ -41,6 +41,10 @@ struct ViewUniform3 {
     cam_up: [f32; 4],
     /// x = segundos (ondas, vento), y = força do vento, zw = direção dele.
     time_wind: [f32; 4],
+    /// As cascatas do sol (com a sombra longe): a câmera da luz de cada uma
+    /// e o tamanho de um texel no mundo.
+    cascades: [[f32; 16]; CASCADES],
+    cascade_texel: [f32; 4],
 }
 
 /// Uma lâmpada como o shader lê.
@@ -182,6 +186,9 @@ struct Draw3 {
 struct ShadowMap {
     resolution: u32,
     view: wgpu::TextureView,
+    /// As cascatas do sol: uma camada para cada.
+    cascade_resolution: u32,
+    cascade_layers: Vec<wgpu::TextureView>,
     /// Os holofotes com sombra: uma camada para cada.
     spot_resolution: u32,
     spot_layers: Vec<wgpu::TextureView>,
@@ -231,6 +238,8 @@ pub(crate) struct Renderer3D {
     /// da luz trocada) e o grupo dela, uma por camada.
     spot_views: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
     spot_memory: Vec<SpotMemory>,
+    /// A vista das cascatas 2 e 3 (a 1 usa a do jogo).
+    cascade_views: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
     /// Quando foi o quadro anterior (para as trocas de sombra).
     last_frame: Option<web_time::Instant>,
     meshes: Vec<GpuMesh>,
@@ -286,6 +295,11 @@ pub struct Stats3 {
 /// As camadas do mapa dos holofotes: os que valem e mais uma, para o que
 /// sai do lugar apagar a sombra aos poucos enquanto o novo acende.
 const SPOT_LAYERS: usize = MAX_SHADOW_SPOTS + 1;
+/// Quantos mapas o sol usa com a sombra longe (perto, meio e longe).
+const CASCADES: usize = 3;
+/// Até essa distância de sombra, um mapa só, em volta do ponto para onde a
+/// câmera olha (como antes); acima, as cascatas.
+const ONE_MAP_DISTANCE: f32 = 30.0;
 /// Quanto tempo a sombra de um holofote leva para acender ou apagar numa
 /// troca (segundos).
 const SPOT_FADE: f32 = 0.3;
@@ -465,6 +479,16 @@ impl Renderer3D {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
         let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -496,6 +520,18 @@ impl Renderer3D {
             })
         };
         let view_group = view_group_of(&view_buffer);
+        let cascade_views = (1..CASCADES)
+            .map(|_| {
+                let b = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("nn 3d cascade view"),
+                    size: size_of::<ViewUniform3>() as wgpu::BufferAddress,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                let g = view_group_of(&b);
+                (b, g)
+            })
+            .collect();
         let spot_views = (0..SPOT_LAYERS)
             .map(|_| {
                 let b = device.create_buffer(&wgpu::BufferDescriptor {
@@ -937,7 +973,7 @@ impl Renderer3D {
             compare: Some(wgpu::CompareFunction::LessEqual),
             ..Default::default()
         });
-        let shadow_map = Self::shadow_map(device, &shadow_layout, &shadow_sampler, 1, 1);
+        let shadow_map = Self::shadow_map(device, &shadow_layout, &shadow_sampler, 1, 1, 1);
         let capacity = 256;
         let instances = Self::instance_buffer(device, capacity);
         let joint_capacity = 4;
@@ -976,6 +1012,7 @@ impl Renderer3D {
             shadow_map,
             spot_views,
             spot_memory: Vec::new(),
+            cascade_views,
             last_frame: None,
             meshes: Vec::new(),
             freed: Default::default(),
@@ -1003,6 +1040,7 @@ impl Renderer3D {
         sampler: &wgpu::Sampler,
         resolution: u32,
         spot_resolution: u32,
+        cascade_resolution: u32,
     ) -> ShadowMap {
         let depth = |label: &str, size: u32, layers: u32| {
             device.create_texture(&wgpu::TextureDescriptor {
@@ -1040,6 +1078,26 @@ impl Renderer3D {
                 })
             })
             .collect();
+        // As cascatas do sol (também com mais de uma camada sempre).
+        let cascades = depth(
+            "nn 3d sun cascades",
+            cascade_resolution,
+            CASCADES.max(2) as u32,
+        );
+        let cascade_array = cascades.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+        let cascade_layers = (0..CASCADES as u32)
+            .map(|layer| {
+                cascades.create_view(&wgpu::TextureViewDescriptor {
+                    dimension: Some(wgpu::TextureViewDimension::D2),
+                    base_array_layer: layer,
+                    array_layer_count: Some(1),
+                    ..Default::default()
+                })
+            })
+            .collect();
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nn 3d shadow map"),
             layout,
@@ -1056,11 +1114,17 @@ impl Renderer3D {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(&spot_array),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(&cascade_array),
+                },
             ],
         });
         ShadowMap {
             resolution,
             view,
+            cascade_resolution,
+            cascade_layers,
             spot_resolution,
             spot_layers,
             group,
@@ -1713,6 +1777,62 @@ impl Renderer3D {
         (proj * view, texel)
     }
 
+    /// As cascatas do sol, com a sombra até `shadows.distance` da câmera:
+    /// cada uma cobre um pedaço do que a câmera vê (perto, meio e longe), num
+    /// quadrado em volta dele visto da luz. Devolve a matriz e o tamanho de um
+    /// texel de cada uma.
+    fn cascade_view_projs(&self, aspect: f32, resolution: u32) -> Vec<(Mat4, f32)> {
+        let d = self.shadows.distance.max(1.0);
+        let splits = [self.camera.near.max(0.01), d * 0.1, d * 0.3, d];
+        let dir = self.light.sun_direction.normalize_or(Vec3::NEG_Y);
+        let up = if dir.cross(Vec3::Y).length() < 1e-3 {
+            Vec3::Z
+        } else {
+            Vec3::Y
+        };
+        let light = glam::camera::rh::view::look_at_mat4(Vec3::ZERO, dir, up);
+        let inv = self.camera.view().inverse();
+        let tan = (self.camera.fov.clamp(1.0, 179.0).to_radians() * 0.5).tan();
+        (0..CASCADES)
+            .map(|k| {
+                // Os oito cantos do pedaço, no mundo.
+                let mut corners = Vec::with_capacity(8);
+                for z in [splits[k], splits[k + 1]] {
+                    let (h, w) = (z * tan, z * tan * aspect.max(1e-4));
+                    for (x, y) in [(-w, -h), (w, -h), (w, h), (-w, h)] {
+                        corners.push(inv.transform_point3(Vec3::new(x, y, -z)));
+                    }
+                }
+                let center = corners.iter().copied().sum::<Vec3>() / 8.0;
+                // O raio em passos de meio metro: não muda a cada quadro
+                // girando a câmera (a sombra não treme).
+                let r = corners
+                    .iter()
+                    .map(|c| c.distance(center))
+                    .fold(0.0, f32::max);
+                let r = (r * 2.0).ceil() / 2.0;
+                let texel = 2.0 * r / resolution.max(1) as f32;
+                let c = light.transform_point3(center);
+                let c = Vec3::new(
+                    (c.x / texel).round() * texel,
+                    (c.y / texel).round() * texel,
+                    c.z,
+                );
+                // Fundo o bastante para o que está entre o sol e o pedaço.
+                let depth = (4.0 * r).max(d);
+                let proj = glam::camera::rh::proj::directx::orthographic(
+                    c.x - r,
+                    c.x + r,
+                    c.y - r,
+                    c.y + r,
+                    -c.z - depth,
+                    -c.z + depth,
+                );
+                (proj * light, texel)
+            })
+            .collect()
+    }
+
     /// Desenha a fila em `target` (a cor já foi limpa) e esvazia a fila.
     /// `area` é o retângulo do jogo dentro do alvo (x, y, largura, altura);
     /// `aspect`, a proporção do jogo.
@@ -1757,6 +1877,19 @@ impl Renderer3D {
         } else {
             1
         };
+        // Com a sombra longe, o sol usa as cascatas (e o mapa de um só fica
+        // pequeno); senão, o mapa de um só, como antes.
+        let cascaded = self.shadows.distance > ONE_MAP_DISTANCE;
+        let (sun_resolution, cascade_resolution) = if !shadows_on {
+            (
+                self.shadow_map.resolution,
+                self.shadow_map.cascade_resolution,
+            )
+        } else if cascaded {
+            (1, resolution)
+        } else {
+            (resolution, 1)
+        };
         // Os holofotes com sombra: metade da resolução do sol. O mapa fica
         // depois que um aparece (não é refeito a cada quadro).
         let wants_spots = any_shadows && self.lamps.iter().any(|l| l.shadow && l.cone.is_some());
@@ -1767,15 +1900,17 @@ impl Renderer3D {
         } else {
             1
         };
-        if self.shadow_map.resolution != resolution
+        if self.shadow_map.resolution != sun_resolution
             || self.shadow_map.spot_resolution != spot_resolution
+            || self.shadow_map.cascade_resolution != cascade_resolution
         {
             self.shadow_map = Self::shadow_map(
                 device,
                 &self.shadow_layout,
                 &self.shadow_sampler,
-                resolution,
+                sun_resolution,
                 spot_resolution,
+                cascade_resolution,
             );
             // Camadas novas: tudo é desenhado de novo.
             for m in &mut self.spot_memory {
@@ -1805,6 +1940,23 @@ impl Renderer3D {
         let cam_right = forward.cross(self.camera.up).normalize_or(Vec3::X);
         let cam_up = cam_right.cross(forward).normalize_or(Vec3::Y);
         let (light_view_proj, texel) = self.light_view_proj();
+        // As cascatas: a primeira vai no lugar da matriz do sol (o passe dela
+        // usa a vista do jogo).
+        let cascades: Vec<(Mat4, f32)> = if shadows_on && cascaded {
+            self.cascade_view_projs(aspect, resolution)
+        } else {
+            Vec::new()
+        };
+        let (light_view_proj, texel) = cascades
+            .first()
+            .copied()
+            .unwrap_or((light_view_proj, texel));
+        let mut cascade_mats = [[0.0; 16]; CASCADES];
+        let mut cascade_texel = [0.0; 4];
+        for (k, (m, t)) in cascades.iter().enumerate() {
+            cascade_mats[k] = m.to_cols_array();
+            cascade_texel[k] = *t;
+        }
         let sky = self.sky.unwrap_or_default();
         let view = ViewUniform3 {
             view_proj: view_proj.to_cols_array(),
@@ -1838,7 +1990,7 @@ impl Renderer3D {
                 if shadows_on { 1.0 } else { 0.0 },
                 texel,
                 self.shadows.strength.clamp(0.0, 1.0),
-                0.0,
+                cascades.len() as f32,
             ],
             cam_right: cam_right.extend(0.0).to_array(),
             cam_up: cam_up.extend(0.0).to_array(),
@@ -1852,8 +2004,17 @@ impl Renderer3D {
                     d.y,
                 ]
             },
+            cascades: cascade_mats,
+            cascade_texel,
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&view));
+        for (k, (m, _)) in cascades.iter().enumerate().skip(1) {
+            let v = ViewUniform3 {
+                light_view_proj: m.to_cols_array(),
+                ..view
+            };
+            queue.write_buffer(&self.cascade_views[k - 1].0, 0, bytemuck::bytes_of(&v));
+        }
         let order = self.lamp_order(&Frustum::of(view_proj));
         let spots = if wants_spots {
             self.pick_spots(&order, dt)
@@ -1901,18 +2062,28 @@ impl Renderer3D {
         // Só o que a câmera vê (e, para as sombras, o que está na caixa do
         // sol) vai para a GPU.
         let camera = Frustum::of(view_proj);
-        let sun = Frustum::of(light_view_proj);
         let seen = |f: &Frustum, d: &Draw3| d.bounds.is_none_or(|b| f.touches(b));
         let visible: Vec<usize> = (0..self.draws.len())
             .filter(|&i| seen(&camera, &self.draws[i]))
             .collect();
-        let shadow: Vec<usize> = if shadows_on {
-            (0..self.draws.len())
-                .filter(|&i| self.draws[i].cast_shadow && seen(&sun, &self.draws[i]))
-                .collect()
-        } else {
+        // O que cada mapa do sol vê (um, ou uma lista por cascata).
+        let sun_mats: Vec<Mat4> = if !shadows_on {
             Vec::new()
+        } else if cascades.is_empty() {
+            vec![light_view_proj]
+        } else {
+            cascades.iter().map(|c| c.0).collect()
         };
+        let sun_lists: Vec<Vec<usize>> = sun_mats
+            .iter()
+            .map(|m| {
+                let f = Frustum::of(*m);
+                (0..self.draws.len())
+                    .filter(|&i| self.draws[i].cast_shadow && seen(&f, &self.draws[i]))
+                    .collect()
+            })
+            .collect();
+        let sun_total: usize = sun_lists.iter().map(Vec::len).sum();
         // O que cada holofote com sombra vê. Se for igual ao do quadro
         // anterior (a luz parada e nada mexendo na frente dela), a camada
         // fica como estava.
@@ -1950,14 +2121,14 @@ impl Renderer3D {
                 .total_cmp(&center(a).distance_squared(eye3))
         });
         // As instâncias: as vistas, as das sombras e as transparentes.
-        let total = visible.len() + shadow.len() + spot_total + self.transparent.len();
+        let total = visible.len() + sun_total + spot_total + self.transparent.len();
         if total > self.capacity {
             self.capacity = total.next_power_of_two();
             self.instances = Self::instance_buffer(device, self.capacity);
         }
         let data: Vec<Instance3> = visible
             .iter()
-            .chain(&shadow)
+            .chain(sun_lists.iter().flatten())
             .chain(spot_lists.iter().flatten())
             .map(|&i| self.draws[i].instance)
             .chain(self.transparent.iter().map(|d| d.instance))
@@ -1985,9 +2156,13 @@ impl Renderer3D {
             (groups, skinned)
         };
         let (groups, skinned) = group(&visible, 0);
-        let (shadow_groups, shadow_skinned) = group(&shadow, visible.len() as u32);
+        let mut sun_groups = Vec::new();
+        let mut base = visible.len() as u32;
+        for list in &sun_lists {
+            sun_groups.push(group(list, base));
+            base += list.len() as u32;
+        }
         let mut spot_groups = Vec::new();
-        let mut base = (visible.len() + shadow.len()) as u32;
         for list in &spot_lists {
             spot_groups.push(group(list, base));
             base += list.len() as u32;
@@ -2038,15 +2213,19 @@ impl Renderer3D {
                 multiview_mask: None,
             })
         }
-        if shadows_on {
-            let mut pass = depth_pass(encoder, &self.shadow_map.view);
-            calls += self.shadow_pass(
-                &mut pass,
-                &self.view_group,
-                &shadow_groups,
-                &shadow_skinned,
-                textures,
-            );
+        for (k, (groups, skinned)) in sun_groups.iter().enumerate() {
+            let (target, view_group) = if cascades.is_empty() {
+                (&self.shadow_map.view, &self.view_group)
+            } else if k == 0 {
+                (&self.shadow_map.cascade_layers[0], &self.view_group)
+            } else {
+                (
+                    &self.shadow_map.cascade_layers[k],
+                    &self.cascade_views[k - 1].1,
+                )
+            };
+            let mut pass = depth_pass(encoder, target);
+            calls += self.shadow_pass(&mut pass, view_group, groups, skinned, textures);
         }
         for (k, (groups, skinned)) in spot_groups.iter().enumerate() {
             if !redraw[k] {
@@ -2162,7 +2341,7 @@ impl Renderer3D {
             if !self.transparent.is_empty() {
                 pass.set_pipeline(&self.transparent_pipeline);
                 pass.set_vertex_buffer(1, self.instances.slice(..));
-                let base = (visible.len() + shadow.len() + spot_total) as u32;
+                let base = (visible.len() + sun_total + spot_total) as u32;
                 for (k, d) in self.transparent.iter().enumerate() {
                     let m = &self.meshes[d.mesh.0 as usize];
                     if m.count > 0 {
@@ -2219,7 +2398,7 @@ impl Renderer3D {
         self.last_stats = Stats3 {
             meshes: self.last_count,
             visible: (visible.len() + self.transparent.len()) as u32,
-            shadow: shadow.len() as u32,
+            shadow: sun_total as u32,
             draw_calls: calls + self.transparent.len() as u32,
             lamps: lamps.count[0],
             halo,

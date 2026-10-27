@@ -1555,7 +1555,7 @@ fn environment_ui(ui: &mut egui::Ui, doc: &mut SceneDoc) {
                     ui.end_row();
 
                     ui.label("Sombras:")
-                        .on_hover_text("Sombra do sol até esta distância da câmera. Para um objeto não fazer sombra, desligue \"Sombra\" no componente dele.");
+                        .on_hover_text("Sombra do sol até esta distância da câmera. Até 30 m, um mapa só; acima, três (perto, meio e longe): a sombra chega longe e continua nítida perto. Desligada, os holofotes com \"Faz sombra\" continuam. Para um objeto não fazer sombra, desligue \"Sombra\" no componente dele.");
                     ui.horizontal(|ui| {
                         if check(ui, doc, "shadows", "") {
                             num(ui, doc, "shadow_distance", 5.0..=200.0, " m");

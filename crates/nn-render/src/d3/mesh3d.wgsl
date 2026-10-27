@@ -21,6 +21,9 @@ struct View {
     cam_right: vec4<f32>,    // direita da câmera (partículas)
     cam_up: vec4<f32>,       // cima da câmera
     time_wind: vec4<f32>,    // x = segundos, y = força do vento, zw = direção dele
+    // As cascatas do sol (shadow.w = quantas; 0 = o mapa de um só).
+    cascades: array<mat4x4<f32>, 3>,
+    cascade_texel: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> view: View;
@@ -45,6 +48,7 @@ struct Lamps {
 @group(2) @binding(0) var shadow_map: texture_depth_2d;
 @group(2) @binding(1) var shadow_samp: sampler_comparison;
 @group(2) @binding(2) var spot_shadow: texture_depth_2d_array;
+@group(2) @binding(3) var sun_cascades: texture_depth_2d_array;
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
@@ -190,6 +194,9 @@ fn sunlit(world: vec3<f32>, n: vec3<f32>) -> f32 {
     if (view.shadow.x < 0.5) {
         return 1.0;
     }
+    if (view.shadow.w > 1.5) {
+        return sunlit_cascades(world, n);
+    }
     // Um pouco para fora da superfície, para ela não sombrear a si mesma.
     let p = view.light_view_proj * vec4<f32>(world + n * view.shadow.y * 1.5, 1.0);
     let ndc = p.xyz / p.w;
@@ -210,6 +217,50 @@ fn sunlit(world: vec3<f32>, n: vec3<f32>) -> f32 {
     let edge = max(abs(ndc.x), abs(ndc.y));
     let fade = clamp((edge - 0.85) / 0.15, 0.0, 1.0);
     return mix(mix(1.0, lit, view.shadow.z), 1.0, fade);
+}
+
+// Uma cascata do sol: x = 1 no sol, 0 na sombra; y = o quanto o ponto está
+// perto da borda dela (0 no meio, 1 na borda; -1 = fora dela).
+fn cascade_sample(i: i32, world: vec3<f32>, n: vec3<f32>) -> vec2<f32> {
+    let p = view.cascades[i] * vec4<f32>(world + n * view.cascade_texel[i] * 1.5, 1.0);
+    let ndc = p.xyz / p.w;
+    let edge = max(abs(ndc.x), abs(ndc.y));
+    if (edge > 1.0 || ndc.z > 1.0 || ndc.z < 0.0) {
+        return vec2<f32>(1.0, -1.0);
+    }
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    let size = vec2<f32>(textureDimensions(sun_cascades).xy);
+    let depth = ndc.z - 0.0004;
+    var lit = 0.0;
+    for (var y = -1; y <= 1; y++) {
+        for (var x = -1; x <= 1; x++) {
+            lit += textureSampleCompareLevel(sun_cascades, shadow_samp, uv + vec2<f32>(f32(x), f32(y)) / size, i, depth);
+        }
+    }
+    return vec2<f32>(lit / 9.0, edge);
+}
+
+// A sombra do sol pelas cascatas: a de perto onde ela chega, passando para
+// a seguinte aos poucos perto da borda; na borda da última, some aos poucos.
+fn sunlit_cascades(world: vec3<f32>, n: vec3<f32>) -> f32 {
+    let count = i32(view.shadow.w + 0.5);
+    for (var i = 0; i < count; i++) {
+        let s = cascade_sample(i, world, n);
+        if (s.y < 0.0) {
+            continue;
+        }
+        var lit = s.x;
+        if (i == count - 1) {
+            lit = mix(lit, 1.0, clamp((s.y - 0.85) / 0.15, 0.0, 1.0));
+        } else if (s.y > 0.9) {
+            let t = cascade_sample(i + 1, world, n);
+            if (t.y >= 0.0) {
+                lit = mix(lit, t.x, (s.y - 0.9) / 0.1);
+            }
+        }
+        return mix(1.0, lit, view.shadow.z);
+    }
+    return 1.0;
 }
 
 // As ondinhas da água: a normal da superfície mexendo com o tempo (somas de
