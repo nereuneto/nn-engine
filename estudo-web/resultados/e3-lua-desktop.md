@@ -54,5 +54,5 @@ FALHA rawget/rawset/rawequal/rawlen: type error, expected function, found nil
 
 ```
 
-bench: 402.2 ms (resultado 163919)
+bench: 424.4 ms (resultado 163919)
 

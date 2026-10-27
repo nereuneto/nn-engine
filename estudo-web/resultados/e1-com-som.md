@@ -1,11 +1,11 @@
 # E1 — prova (com-som)
 
-Compilou em 20 s (sem cache: inclui as dependências).
+Compilou em 22 s (sem cache: inclui as dependências).
 
 | arquivo | tamanho | gzip -9 | brotli 11 |
 |---|---|---|---|
 | wasm (do wasm-bindgen) | 3939 KB | | |
-| wasm (wasm-opt -Oz) | 2557 KB | 1054 KB | 841 KB |
+| wasm (wasm-opt -Oz) | 2557 KB | 1054 KB | 842 KB |
 | js | 147 KB | 22 KB | 19 KB |
 
 Os maiores pedaços do wasm final (twiggy; sem nomes, então só os tamanhos por seção e as maiores funções):
@@ -16,17 +16,17 @@ Os maiores pedaços do wasm final (twiggy; sem nomes, então só os tamanhos por
         129977 ┊     4.96% ┊ data[121]
          88735 ┊     3.39% ┊ code[30]
          84639 ┊     3.23% ┊ data[2]
-         61001 ┊     2.33% ┊ code[4]
-         47531 ┊     1.82% ┊ code[5]
+         61222 ┊     2.34% ┊ code[4]
+         47701 ┊     1.82% ┊ code[5]
          38922 ┊     1.49% ┊ code[1]
          31931 ┊     1.22% ┊ data[90]
          31056 ┊     1.19% ┊ code[0]
          28734 ┊     1.10% ┊ code[150]
          27581 ┊     1.05% ┊ code[8]
          27314 ┊     1.04% ┊ code[2345]
-         27024 ┊     1.03% ┊ data[122]
-       1994144 ┊    76.15% ┊ ... and 7268 more.
-       2618589 ┊   100.00% ┊ Σ [7280 Total Rows]
+         27020 ┊     1.03% ┊ data[122]
+       1994181 ┊    76.14% ┊ ... and 7268 more.
+       2619013 ┊   100.00% ┊ Σ [7280 Total Rows]
 ```
 
 As maiores crates (twiggy no wasm antes do wasm-opt, que ainda tem os nomes):
