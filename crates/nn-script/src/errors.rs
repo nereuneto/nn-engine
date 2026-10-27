@@ -219,6 +219,8 @@ fn translate_message(msg: &str) -> Option<String> {
         let detail = detail.map(|d| {
             if let Some((exp, got)) = d.split_once(" expected, got ") {
                 format!("esperava {}, recebeu {}", type_name(exp), type_name(got))
+            } else if d == "number has no integer representation" {
+                "o número não é inteiro; use math.floor".to_string()
             } else if let Some(conv) = d.strip_prefix("error converting Lua ") {
                 match conv.split_once(" to ") {
                     Some((from, to)) => {
@@ -396,6 +398,12 @@ mod tests {
         assert_eq!(
             translate_error("a.lua:5: bad argument #2 to 'floor' (number expected, got no value)"),
             "a.lua:5: argumento nº 2 inválido em 'floor' (esperava número, recebeu nada)"
+        );
+        assert_eq!(
+            translate_error(
+                "a.lua:3: bad argument #1 to 'format' (number has no integer representation)"
+            ),
+            "a.lua:3: argumento nº 1 inválido em 'format' (o número não é inteiro; use math.floor)"
         );
     }
 

@@ -18,7 +18,7 @@ use crate::{AppConfig, Context, Game};
 /// Erros fatais da aplicação.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
-    #[error("falha no loop de eventos: {0}")]
+    #[error("{}", event_loop_message(.0))]
     EventLoop(#[from] winit::error::EventLoopError),
     #[error("falha ao criar a janela: {0}")]
     Window(#[from] winit::error::OsError),
@@ -28,6 +28,18 @@ pub enum AppError {
     Render(#[from] RenderError),
     #[error("a GPU não suporta desenhar nesta janela")]
     UnsupportedSurface,
+}
+
+/// A mensagem do erro ao abrir a janela, para quem joga.
+fn event_loop_message(e: &winit::error::EventLoopError) -> String {
+    let text = e.to_string();
+    if text.contains("DISPLAY") || text.contains("WAYLAND") {
+        "não achei uma tela para abrir a janela do jogo (sem sessão gráfica: no Linux, \
+         nem DISPLAY nem WAYLAND_DISPLAY estão definidas)"
+            .to_string()
+    } else {
+        format!("não deu para abrir a janela do jogo: {text}")
+    }
 }
 
 /// Abre a janela e roda o jogo até o usuário fechar ou [`Context::exit`] ser chamado.

@@ -1157,7 +1157,16 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
                 _ => match v {
                     Value::Nil => "nil".into(),
                     Value::Boolean(b) => b.to_string(),
-                    other => format!("{}: {:p}", other.type_name(), other.to_pointer()),
+                    // Um erro pego com pcall: a mensagem, em português.
+                    Value::Error(e) => crate::translate_error(&e.to_string()),
+                    // Como o tostring (que respeita o __tostring da tabela).
+                    other => lua
+                        .globals()
+                        .get::<Function>("tostring")
+                        .and_then(|f| f.call::<String>(other.clone()))
+                        .unwrap_or_else(|_| {
+                            format!("{}: {:p}", other.type_name(), other.to_pointer())
+                        }),
                 },
             })
             .collect();

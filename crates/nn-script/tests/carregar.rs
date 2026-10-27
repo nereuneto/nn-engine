@@ -129,7 +129,13 @@ return c
     assert_eq!(atual, "cenas/fase.cena");
     // Os nomes do que carregou (até 16).
     assert_eq!(h.ctx.perf.last_loaded.len(), 16);
-    assert!(h.ctx.perf.last_loaded.iter().all(|f| f.starts_with("imgs/") || f.starts_with("sons/")));
+    assert!(
+        h.ctx
+            .perf
+            .last_loaded
+            .iter()
+            .all(|f| f.starts_with("imgs/") || f.starts_with("sons/"))
+    );
     // Exatamente uma vez cada: o pré-carregamento usa as mesmas opções que
     // a cena (senão a mesma imagem carregaria duas vezes).
     let troca = h.ctx.perf.last.loads;

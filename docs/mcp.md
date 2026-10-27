@@ -102,7 +102,7 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `buscar_documentacao` | A API Lua `nn.*` e os guias (este, o de Lua, o de 3D e o do NN Studio): os trechos que citam as palavras, ou uma seção inteira (`secao`). |
 | `conferir_lua` | A sintaxe de um trecho de Lua, sem gravar. |
 | `rodar_jogo` | Roda o jogo **sem janela**, com teclas e cliques simulados, e mostra os erros (com arquivo e linha), avisos, prints, as regras que dispararam, as trocas de cena, o que mudou nos objetos e variáveis, e **capturas da tela** (com `ver_corpos`, os corpos da física desenhados por cima). Veja [Rodar e ver](#rodar-e-ver). |
-| `rodar_testes` | Roda os [testes de jogo](lua.md#testes-de-jogo) do projeto (`testes/*.lua`) e mostra quem falhou, a linha, os prints e a tela na hora da falha. |
+| `rodar_testes` | Roda os [testes de jogo](lua.md#testes-de-jogo) do projeto (`testes/*.lua`) e mostra quem falhou, a linha, os prints e a tela na hora da falha. Com `prints`, mostra os prints também de quem passou. |
 | `abrir_jogo` | Abre o jogo **numa janela** no seu computador (você vê e pode jogar junto) e liga nele. Veja [O jogo aberto](#o-jogo-aberto). |
 | `ver_jogo_aberto` | Olha o jogo aberto (por `abrir_jogo`, pelo ▶ Jogar do NN Studio ou por `nn .`) enquanto alguém joga: a cena, os erros, prints e regras desde a última olhada, o que mudou e a tela. |
 | `mexer_no_jogo` | Muda o jogo aberto **na hora, sem gravar**: campos de objetos e comportamentos, variáveis, Lua, teclas como se alguém jogasse; pausa, avança quadros e fecha. |
@@ -193,6 +193,11 @@ O que mudou em cenas/fase.cena do começo ao fim:
   moedas (15): text.text "Moedas: 0" → "Moedas: 1"
 Variáveis que mudaram: moedas 0 → 1
 ```
+
+Mais coisas que a resposta traz:
+- **Erros de comportamento:** um comportamento com erro é desligado e o jogo segue. O erro aparece em Erros, uma vez para todas as cópias de um prefab, mas o roteiro continua. Já um erro no script da cena para o jogo, e o roteiro para ali.
+- **Desempenho:** a média por quadro dos passos fixos, da física, do `update` e do `draw` do jogo, o quadro mais pesado e, no fim, as texturas na memória e os objetos da cena. Sem placa de vídeo, nada é desenhado de verdade: o tempo na placa e as chamadas de desenho só aparecem no jogo aberto (F3).
+- **Carregou no meio da cena:** um quadro que carregou uma imagem ou um som fora de uma troca de cena (uma travada para quem joga), com os nomes dos arquivos. Para não travar, ponha o arquivo na lista `preload` da cena ou num componente.
 
 e traz as capturas (a do fim e as pedidas) como imagens. Se um script dá erro, o jogo para ali, e a resposta mostra o erro com o arquivo e a linha. Um laço sem fim (`while true do end`) vira erro depois de 5 segundos, em vez de travar o servidor.
 

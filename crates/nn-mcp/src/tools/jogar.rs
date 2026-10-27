@@ -738,6 +738,7 @@ fn rodar_testes(s: &mut Server, a: &Value) -> Result<Output, String> {
         capture_failures: true,
         ..TestOptions::default()
     };
+    let prints = opt_bool(a, "prints")?.unwrap_or(false);
     let summary = testing::run_tests(&project, &opts, |_| {})?;
     let mut out = String::new();
     if summary.results.is_empty() && summary.file_errors.is_empty() {
@@ -762,10 +763,17 @@ fn rodar_testes(s: &mut Server, a: &Value) -> Result<Output, String> {
     out.push('\n');
     for r in &summary.results {
         match &r.failure {
-            None => out.push_str(&format!(
-                "✓ {} › {} ({:.2} s de jogo)\n",
-                r.case.file, r.case.name, r.time
-            )),
+            None => {
+                out.push_str(&format!(
+                    "✓ {} › {} ({:.2} s de jogo)\n",
+                    r.case.file, r.case.name, r.time
+                ));
+                if prints {
+                    for l in kind_lines(&r.report.lines, LineKind::Print) {
+                        out.push_str(&format!("  print em {:.2} s: {}\n", l.time, l.text));
+                    }
+                }
+            }
             Some(f) => {
                 out.push_str(&format!(
                     "✗ {} › {} (falhou em {:.2} s de jogo):\n  {}\n",
@@ -897,6 +905,13 @@ pub static TOOLS: &[&Tool] = &[
                 (
                     "filtro",
                     s_str("Só os testes cujo nome tem este texto"),
+                    false,
+                ),
+                (
+                    "prints",
+                    s_bool(
+                        "Mostra os prints também dos testes que passaram (para medir alguma coisa)",
+                    ),
                     false,
                 ),
             ]

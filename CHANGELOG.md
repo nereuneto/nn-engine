@@ -2,7 +2,72 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
-## Não lançado
+## 0.9.0
+
+A versão do **desempenho, da robustez e da memória**. Os jogos ficam mais rápidos com muita coisa na tela, um erro não derruba mais o jogo de quem joga, e trocar de cena não enche a memória nem trava no meio:
+- **a física 2D com grade espacial:** 500 corpos caindo, de uns 33 ms para uns 5 ms por quadro;
+- **o limite de quadros** (o jogo sem VSync não ocupa mais um núcleo inteiro) e **a tela de desempenho (F3)**, também em `nn.debug.stats()` e no `rodar_jogo`;
+- **as cenas visuais mais leves:** 2.000 imagens, de 16,4 ms para 3,6 ms por quadro;
+- **no jogo exportado, uma tela simples e um arquivo de erro** quando algo dá errado, e um laço sem fim não trava mais o jogo;
+- **um comportamento com erro desliga só ele**, e o jogo segue; o Lua dos jogos não mexe mais no computador de quem joga;
+- **trocar de cena libera o que não se usa mais e carrega antes o que a cena nova vai usar**, com uma tela de carregamento opcional;
+- **um estudo da versão web:** a engine roda no navegador, e a web segue no plano, para a v0.13 ([o relatório](docs/estudo-web.md)).
+
+### Para quem vem da 0.8
+
+- **Os projetos da 0.8 abrem e rodam.** Conferido com os doze modelos de projeto e jogos da 0.8.0 publicada, entre eles os dois que os agentes fizeram na revisão da 0.8:
+  - abertos e gravados pelo editor, 65 dos 66 arquivos saem iguais, byte a byte. O que mudou é uma linha escrita à mão, com os campos 3D no valor padrão, que o editor da 0.8 também deixa de fora;
+  - rodam no `nn` novo sem erro, e os testes deles passam;
+  - o `conferir_projeto` não aponta nada.
+- **As preferências da 0.8 abrem na 0.9** como estão.
+- **O que muda sem você mexer:**
+  - **Sem VSync, o jogo para em 240 quadros por segundo** (antes, rodava sem parar). `fps_max = 0` no `config.lua` tira o limite.
+  - **Um comportamento com erro não para mais a cena:** só ele é desligado, e o erro aparece numa faixa embaixo, no console e no arquivo de erro.
+  - **O Lua dos jogos ficou sem `io`, `os.execute`, `os.remove`, `os.exit`, `dofile` e `loadfile`.** Um script que usava algum deles recebe um erro dizendo o que usar no lugar (`nn.assets.read`, `nn.save`, `nn.quit`, `require`).
+  - **Um caminho fora da pasta do jogo** (absoluto ou com `../`) **dá erro** em `nn.assets.read` e `nn.assets.exists`, como já acontecia no jogo exportado.
+  - **Ao trocar de cena, o que nenhuma cena usa mais sai da memória.** Pedir de novo carrega outra vez, sem erro; a música que toca em todas as cenas pode ficar com `nn.assets.keep`.
+  - **A cena carrega antes de começar** o que vai usar. A troca demora um pouco mais, mas o jogo não trava no meio, no primeiro uso de uma imagem ou de um som.
+  - **No `rodar_jogo`, o erro de um comportamento não para mais o roteiro** (nos testes de jogo, ele continua sendo uma falha).
+  - **Sem janela** (testes e `rodar_jogo`), `nn.debug.stats().frame_ms` é o trabalho do quadro, não o relógio simulado.
+- **Para quem usa as crates:** o que é novo está nas seções abaixo. Ao montar um `nn_script::SceneError`, há o campo novo `isolated`.
+
+### Revisão (Sprint 68)
+
+- **A prova: dois agentes fizeram jogos que pesam na engine**, sem acesso ao código, medidos com o F3:
+  - **"Enxame"**, um jogo de tiro com hordas, feito em Lua e de novo como cena visual. Com 800 inimigos, uns 90 tiros e até 3.400 partículas, o processador gasta cerca de 1 ms na física, 1 ms no Lua dos inimigos e 1,2 ms no desenho do Lua. As imagens vão para a placa em 10 chamadas de desenho por quadro, qualquer que seja a quantidade.
+  - **"Mundo das Salas"**, com 12 salas (metade cenas visuais, metade em Lua), uma galeria com 12 MB de imagens, pausa por cima, música guardada e as duas telas de carregamento. Numa volta automática de 25 vezes por todas as salas (326 trocas), a memória de cada sala foi a mesma na primeira e na última volta, e nenhuma sala carregou nada depois de começar.
+- **O que os dois encontraram virou os acertos abaixo:**
+  - **Regras "encostar em" em muitas cópias de um prefab:** cada cópia conferia todos os objetos com aquele nome, todos com todos. Com 800 inimigos olhando os tiros, eram 200 ms por quadro; agora uma grade do quadro confere só os de perto, e são 20 ms, com o mesmo resultado no jogo. Vale também para "parar de encostar" e "estiver encostando".
+  - **Pré-carregar nas cenas visuais** inclui o que as regras usam (Tocar som, Música, Mudar imagem, Criar prefab) e os prefabs que um comportamento cria (o do Gerador), com o que está dentro deles.
+  - **Nos testes de jogo e no `rodar_jogo`, a cena que sai deixava a memória uma troca depois**, porque o próprio teste segurava a cena antiga. No jogo de verdade isso não acontecia. Agora sai na troca, como no jogo.
+  - **Uma tela de carregamento própria tirava da memória o que a cena de antes e a nova usavam**, e carregava de novo. Agora quem libera é a cena nova, depois de carregar.
+  - **O `rodar_jogo` diz o que carregou no meio de uma cena**, com o nome dos arquivos, e a memória das texturas e os objetos no fim. `nn.debug.stats()` ganhou `sounds`, `meshes` e `loaded` (os nomes do que carregou no último quadro), e há **`nn.scene.current()`**, o arquivo da cena da frente.
+  - **O mesmo erro em 800 cópias de um prefab aparece uma vez**, e não 800.
+  - **`nn testar --prints`** (e `prints` no `rodar_testes`) mostra os `print` também dos testes que passaram.
+  - **Mensagens:**
+    - o `criar_som` sugere `nn.audio.play(nn.assets.sound(...))`;
+    - o erro "número sem representação inteira" no `string.format` sai em português, com a dica do `math.floor`;
+    - `print` de um erro pego com `pcall` mostra a mensagem;
+    - o jogo exportado sem tela diz isso em português;
+    - o `nn` lista todos os modelos de projeto;
+    - o `escrever_arquivo` não chama mais de comportamento uma cena em Lua.
+  - **Documentação:**
+    - as camadas da física (os dois corpos precisam ter a camada do outro na máscara);
+    - o que se lê de um corpo removido;
+    - o `obj.vx` num objeto com corpo;
+    - o `query_rect` centrado;
+    - a mesma imagem com opções diferentes é outra textura;
+    - o exemplo da tela de carregamento (com `math.floor`).
+  - **`nn.quit()` fecha também o jogo exportado rodando sem janela.**
+  - **Para quem usa as crates:**
+    - `Assets::set_confined` e `AssetError::Outside` (os jogos em Lua ligam) e `nn_app::inside_game`;
+    - `Perf::add_load_file` e `last_loaded`;
+    - `RunOptions::stop_on_behavior_errors`, `SceneError::isolated` e `Report::mid_loads`.
+- **Ideias para depois, do que os agentes sentiram falta:**
+  - camadas e máscaras no componente de corpo das cenas visuais;
+  - uma busca rápida do objeto mais perto por nome;
+  - um `nn.draw.sprite` com quadro, escala e cor sem tabela de opções;
+  - as mensagens do Lua pegas com `pcall` em português.
 
 ### Estudo da versão web (Sprint 67)
 

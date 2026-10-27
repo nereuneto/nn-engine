@@ -2776,7 +2776,7 @@ dependencies = [
 
 [[package]]
 name = "nn-app"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "directories",
  "gilrs",
@@ -2798,7 +2798,7 @@ dependencies = [
 
 [[package]]
 name = "nn-audio"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "glam 0.34.1",
  "kira",
@@ -2808,14 +2808,14 @@ dependencies = [
 
 [[package]]
 name = "nn-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bytemuck",
 ]
 
 [[package]]
 name = "nn-engine"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "env_logger",
  "glam 0.34.1",
@@ -2831,7 +2831,7 @@ dependencies = [
 
 [[package]]
 name = "nn-input"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "glam 0.34.1",
  "winit",
@@ -2839,7 +2839,7 @@ dependencies = [
 
 [[package]]
 name = "nn-mcp"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "glam 0.34.1",
  "image",
@@ -2853,14 +2853,14 @@ dependencies = [
 
 [[package]]
 name = "nn-nav"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "glam 0.34.1",
 ]
 
 [[package]]
 name = "nn-physics"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "glam 0.34.1",
  "nn-nav",
@@ -2868,7 +2868,7 @@ dependencies = [
 
 [[package]]
 name = "nn-physics3d"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "glam 0.34.1",
  "nn-nav",
@@ -2877,7 +2877,7 @@ dependencies = [
 
 [[package]]
 name = "nn-projeto"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "glam 0.34.1",
  "image",
@@ -2892,7 +2892,7 @@ dependencies = [
 
 [[package]]
 name = "nn-render"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bytemuck",
  "fontdue",
@@ -2910,7 +2910,7 @@ dependencies = [
 
 [[package]]
 name = "nn-run"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "env_logger",
  "glam 0.34.1",
@@ -2928,7 +2928,7 @@ dependencies = [
 
 [[package]]
 name = "nn-script"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "glam 0.34.1",
  "image",
@@ -2948,7 +2948,7 @@ dependencies = [
 
 [[package]]
 name = "nn-studio"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "directories",
  "eframe",
@@ -2980,7 +2980,7 @@ dependencies = [
 
 [[package]]
 name = "nn-tilemap"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "glam 0.34.1",
  "image",
