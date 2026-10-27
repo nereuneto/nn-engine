@@ -1128,7 +1128,9 @@ zero.
     (**Tremular**) e o fogo em partículas.
 
   Escolhida, a luz mostra na vista até onde chega (três círculos, ou o
-  cone). Valem as **32** luzes mais perto da câmera, e só o sol faz sombra.
+  cone). Valem as **32** luzes mais perto da câmera. Um holofote com **Faz
+  sombra** projeta a sombra do que está na frente dele (valem 4 ao mesmo
+  tempo, os mais perto da câmera); as lâmpadas não fazem sombra.
   Com **Só à noite**, ela acende sozinha ao anoitecer e apaga ao amanhecer
   (com [Dia e noite](#ambiente)); sem o ciclo, fica acesa num ambiente
   escuro, como a Noite e a Caverna.
@@ -1848,7 +1850,7 @@ mais vivos, a v0.3 trouxe o combate e a v0.2, o 3D. Está tudo no
 
 Ainda não tem, e são ideias para depois:
 
-- sombras das luzes (hoje, só o sol faz sombra);
+- sombras das lâmpadas sem cone (hoje, fazem sombra o sol e os holofotes);
 - no animador: copiar animações de um modelo para outro, e pontos que
   entortam suave nas juntas (pesos), além das peças que seguem um osso;
 - texturas pintadas nas faces do modelador;

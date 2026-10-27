@@ -246,7 +246,7 @@ Os componentes 3D:
 |---|---|
 | `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; as partes que o `.glb` faz brilhar, com `emissiveFactor`, brilham sempre), `glow_night` (false: o brilho, e o do arquivo, só de noite), `sway` (0: quanto balança com o vento; 1 = uma árvore), `cutout` (0: o recorte por transparência, como no `nn.d3.draw`; 0 = o que o arquivo diz), `double_sided` (false: as duas faces, além das que o arquivo já marca) |
 | `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; não ilumina em volta), `glow_night` (false: só de noite), `material` ("normal" ou "agua": ondinhas, o céu refletido e o brilho do sol), `sway` (0: quanto balança com o vento) |
-| `light3d` | Uma luz: `kind` ("point": ilumina em volta; "spot": um holofote, num cone para a frente do objeto, −Z), `color`, `intensity` (1.5), `range` (8 m: até onde chega), `angle` (30°: metade da abertura do holofote), `soft` (0.3: a borda do cone que apaga aos poucos), `flicker` (0 a 1: tremula como fogo), `on` (true), `night` (false: acesa só de noite). Valem as 32 mais perto da câmera; só o sol faz sombra. `obj.light3d.on = false` apaga. |
+| `light3d` | Uma luz: `kind` ("point": ilumina em volta; "spot": um holofote, num cone para a frente do objeto, −Z), `color`, `intensity` (1.5), `range` (8 m: até onde chega), `angle` (30°: metade da abertura do holofote), `soft` (0.3: a borda do cone que apaga aos poucos), `flicker` (0 a 1: tremula como fogo), `on` (true), `night` (false: acesa só de noite), `shadow` (false: o holofote faz sombra; valem 4 ao mesmo tempo, os mais perto da câmera). Valem as 32 mais perto da câmera; as lâmpadas (sem cone) não fazem sombra. `obj.light3d.on = false` apaga. |
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
 | `anim3d` | `animation` ("": nenhuma), `speed` (1), `loop` (true): a animação que o `model` do objeto toca desde o começo |
 | `bone` | `bone` (""): preso a um osso do modelo do pai (uma espada na mão do herói: o osso `mao_d`). O objeto acompanha o osso quando o pai anima; a posição, a rotação e a escala dele contam a partir do osso. Um osso que não existe dá um aviso com a lista dos que existem. |
@@ -1543,7 +1543,7 @@ Os campos `yaw`, `pitch`, `distance`, `shoulder`, `sensitivity` e `invert_y` pod
 
 #### Lâmpadas, holofotes e brilho
 
-Além do sol, até **32 luzes** iluminam o mundo em cada quadro (com mais, valem as mais perto da câmera). Elas não fazem sombra. Peça a luz **a cada quadro**, no `draw`, como os desenhos:
+Além do sol, até **32 luzes** iluminam o mundo em cada quadro (com mais, valem as mais perto da câmera). Um holofote com `shadow = true` faz sombra; as lâmpadas sem direção, não. Peça a luz **a cada quadro**, no `draw`, como os desenhos:
 
 ```lua
 function cena:draw()
@@ -1564,6 +1564,7 @@ end
 | `range` | Até onde a luz chega, em metros (padrão 8): ela some aos poucos até lá. |
 | `direction` | Com uma direção `{x, y, z}`, vira um **holofote**: só ilumina dentro do cone. |
 | `angle`, `soft` | No holofote: metade da abertura, em graus (padrão 30), e quanto da borda apaga aos poucos (0 a 1, padrão 0.25). |
+| `shadow` | No holofote: `true` faz sombra (uma lanterna, um farol, um poste). Valem **4 ao mesmo tempo**, os mais perto da câmera entre os que ela vê; o resto ilumina sem sombra. Cada um desenha a cena mais uma vez, vista dele; `nn.d3.stats().spot_shadows` diz quantos valeram. `nn.d3.shadows(false)` desliga também estas. |
 
 O `glow` do `nn.d3.draw` (de 0 a 1) faz a própria cor brilhar: a malha aparece acesa no escuro, mas não ilumina em volta (para isso, uma lâmpada). Um modelo `.glb` com emissão no material (`emissiveFactor`, e a extensão `KHR_materials_emissive_strength`) brilha sozinho nessas partes, como a chama da `tocha.glb` e os cristais da `cristal.glb`. Numa cena do NN Studio, use o componente `light3d` e o `glow` das formas e dos modelos; `nn.d3.stats().lamps` diz quantas luzes valeram no último quadro.
 
@@ -1614,7 +1615,7 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | Chamada | Descrição |
 |---|---|
 | `nn.d3.shadows(false)` / `nn.d3.shadows(true)` | Desliga ou liga todas as sombras (bom para uma opção "sombras" no menu, para computadores mais fracos). |
-| `nn.d3.shadows({ distance =, quality =, strength = })` | `distance`: até onde há sombra em volta do ponto para onde a câmera olha (padrão 30). `quality`: `"baixa"`, `"media"` (padrão) ou `"alta"`. `strength`: de 0 a 1, quanto a sombra escurece (padrão 1). |
+| `nn.d3.shadows({ distance =, quality =, strength =, sun = })` | `distance`: até onde há sombra em volta do ponto para onde a câmera olha (padrão 30). `quality`: `"baixa"`, `"media"` (padrão) ou `"alta"` (os holofotes usam metade). `strength`: de 0 a 1, quanto a sombra escurece (padrão 1). `sun = false` tira só a sombra do sol: os holofotes com sombra continuam (é o que o `shadows = false` do ambiente de uma cena faz, como na Caverna). |
 
 #### Da tela para o 3D e de volta
 

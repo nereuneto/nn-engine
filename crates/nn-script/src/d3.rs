@@ -753,6 +753,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                     angle: opt::<f32>(o, "angle")?.unwrap_or(30.0).clamp(1.0, 89.0),
                     softness: opt::<f32>(o, "soft")?.unwrap_or(0.25).clamp(0.0, 1.0),
                 });
+                lamp.shadow = opt::<bool>(o, "shadow")?.unwrap_or(false);
             }
             with_ctx(lua, |c| {
                 c.renderer.add_lamp3d(lamp);
@@ -861,6 +862,9 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                     Value::Table(t) => {
                         let o = Some(t);
                         s.enabled = opt::<bool>(o, "enabled")?.unwrap_or(true);
+                        if let Some(sun) = opt::<bool>(o, "sun")? {
+                            s.sun = sun;
+                        }
                         if let Some(d) = opt::<f32>(o, "distance")? {
                             s.distance = d.clamp(1.0, 1000.0);
                         }
@@ -882,7 +886,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                     }
                     other => {
                         return Err(err(format!(
-                            "nn.d3.shadows: use true, false ou {{distance =, quality =, strength =}}, recebeu {}",
+                            "nn.d3.shadows: use true, false ou {{distance =, quality =, strength =, sun =}}, recebeu {}",
                             other.type_name()
                         )));
                     }
@@ -951,6 +955,7 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
             t.set("draw_calls", s.draw_calls)?;
             t.set("lamps", s.lamps)?;
             t.set("halo", s.halo)?;
+            t.set("spot_shadows", s.spot_shadows)?;
             Ok(t)
         })?,
     )?;

@@ -1491,3 +1491,90 @@ fn gltf_traz_o_recorte_a_transparencia_e_as_duas_faces() {
     .unwrap();
     assert!(m.parts[0].cutout == 0.0 && !m.parts[0].blend && !m.parts[0].double_sided);
 }
+
+// --- Sombra dos holofotes (Sprint 77) ---------------------------------------
+
+/// Um holofote a 4 m apontando para baixo e um cubo ao lado, a 1 m do chão:
+/// a sombra do cubo cai no chão do lado de fora dele.
+fn holofote_e_cubo(h: &mut Harness, shadow: bool, cast: bool) -> Vec<u8> {
+    chao_no_escuro(h);
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    h.renderer.draw_mesh_with(
+        cube,
+        Mat4::from_translation(Vec3::new(1.0, 1.0, 0.0)) * Mat4::from_scale(Vec3::splat(0.6)),
+        Color::WHITE,
+        None,
+        cast,
+    );
+    let mut lamp = Lamp3D::at(Vec3::new(0.0, 4.0, 0.0));
+    lamp.range = 12.0;
+    lamp.intensity = 2.0;
+    lamp.shadow = shadow;
+    lamp.cone = Some(Cone3D {
+        direction: Vec3::NEG_Y,
+        angle: 40.0,
+        softness: 0.1,
+    });
+    h.renderer.add_lamp3d(lamp);
+    h.render(Color::BLACK)
+}
+
+#[test]
+fn holofote_com_sombra_escurece_atras_do_cubo() {
+    let Some(mut h) = Harness::new() else { return };
+    let camera = Camera3D::looking_at(Vec3::new(0.0, 10.0, 0.0), Vec3::ZERO);
+    let at = |p: Vec3| {
+        let s = camera.screen_point(p, SIZE.as_vec2()).unwrap();
+        (s.x as u32, s.y as u32)
+    };
+    // No chão, na linha do holofote ao cubo, depois dele; e do outro lado.
+    let (sx, sy) = at(Vec3::new(1.65, 0.0, 0.0));
+    let (lx, ly) = at(Vec3::new(-1.65, 0.0, 0.0));
+    let com = holofote_e_cubo(&mut h, true, true);
+    assert_eq!(h.renderer.last_stats3().spot_shadows, 1);
+    let (sombra, luz) = (pixel(&com, sx, sy), pixel(&com, lx, ly));
+    assert!(
+        brightness(sombra) * 3 < brightness(luz),
+        "atrás do cubo, sombra ({sombra:?}); do outro lado, luz ({luz:?})"
+    );
+    // Sem sombra no holofote, ou com o cubo sem projetar, o chão ali acende.
+    for (shadow, cast) in [(false, true), (true, false)] {
+        let img = holofote_e_cubo(&mut h, shadow, cast);
+        let p = pixel(&img, sx, sy);
+        assert!(
+            brightness(p) * 4 > brightness(luz) * 3,
+            "sombra {shadow}, projeta {cast}: {p:?} (luz {luz:?})"
+        );
+    }
+    assert_eq!(h.renderer.last_stats3().spot_shadows, 1);
+    // Sombras desligadas: nada de mapa.
+    h.renderer.set_shadows3d(Shadows {
+        enabled: false,
+        ..Shadows::default()
+    });
+    let img = holofote_e_cubo(&mut h, true, true);
+    assert!(brightness(pixel(&img, sx, sy)) * 4 > brightness(luz) * 3);
+    assert_eq!(h.renderer.last_stats3().spot_shadows, 0);
+}
+
+#[test]
+fn so_quatro_holofotes_fazem_sombra_os_mais_perto() {
+    let Some(mut h) = Harness::new() else { return };
+    chao_no_escuro(&mut h);
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    h.renderer
+        .draw_mesh(cube, Mat4::from_translation(Vec3::Y), Color::WHITE);
+    for i in 0..6 {
+        let mut lamp = Lamp3D::at(Vec3::new(i as f32 - 3.0, 4.0, 0.0));
+        lamp.shadow = true;
+        lamp.cone = Some(Cone3D {
+            direction: Vec3::NEG_Y,
+            angle: 30.0,
+            softness: 0.2,
+        });
+        h.renderer.add_lamp3d(lamp);
+    }
+    h.render(Color::BLACK);
+    let s = h.renderer.last_stats3();
+    assert_eq!((s.lamps, s.spot_shadows), (6, 4));
+}

@@ -1180,6 +1180,10 @@ const LIGHT3D_FIELDS: &[F] = &[
         ),
         "Faz a luz oscilar como fogo (0 = parada; 0,5 para uma tocha).",
     ),
+    help(
+        f("shadow", "Faz sombra", W::Bool),
+        "Holofote: o que está na frente da luz faz sombra (uma lanterna, um farol, um poste). Valem até 4 ao mesmo tempo, os mais perto da câmera. As lâmpadas (sem cone) não fazem sombra.",
+    ),
 ];
 
 const CAMERA3D_FIELDS: &[F] = &[help(

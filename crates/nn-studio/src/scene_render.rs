@@ -55,6 +55,7 @@ pub fn lamp_of(c: &Component, m: glam::Mat4) -> Option<nn_render::d3::Lamp3D> {
             angle: (c.num("angle") as f32).clamp(1.0, 89.0),
             softness: (c.num("soft") as f32).clamp(0.0, 1.0),
         });
+        lamp.shadow = c.bool("shadow");
     }
     Some(lamp)
 }
@@ -1089,8 +1090,10 @@ impl SceneRenderer {
                 far: num("fog_far"),
             }),
         });
+        // O "Sombras" do ambiente é a do sol; os holofotes com sombra valem
+        // mesmo sem ela (uma lanterna numa caverna).
         self.renderer.set_shadows3d(Shadows {
-            enabled: on("shadows"),
+            sun: on("shadows"),
             distance: num("shadow_distance").max(1.0),
             ..Shadows::default()
         });

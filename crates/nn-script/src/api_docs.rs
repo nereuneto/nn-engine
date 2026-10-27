@@ -699,7 +699,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.lamp",
         "(opts)",
-        "Uma lâmpada só neste quadro (chame no draw): x, y, z, color, intensity = 1, range = 8 (metros). Com direction = {x, y, z}, vira um holofote (angle = 30, meia abertura em graus; soft = 0.25, a borda que apaga aos poucos). Valem as 32 mais perto da câmera; não fazem sombra.",
+        "Uma lâmpada só neste quadro (chame no draw): x, y, z, color, intensity = 1, range = 8 (metros). Com direction = {x, y, z}, vira um holofote (angle = 30, meia abertura em graus; soft = 0.25, a borda que apaga aos poucos; shadow = true faz sombra, até 4 holofotes ao mesmo tempo, os mais perto da câmera). Valem as 32 mais perto da câmera; as lâmpadas sem direção não fazem sombra.",
     ),
     d(
         "nn.d3.bloom",
@@ -719,7 +719,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.shadows",
         "(opts)",
-        "Sombras do sol: true, false ou { distance, quality = \"baixa\"/\"media\"/\"alta\", strength }.",
+        "Sombras: true, false (todas, também as dos holofotes) ou { distance, quality = \"baixa\"/\"media\"/\"alta\", strength, sun = false: sem a do sol, mas com as dos holofotes }.",
     ),
     d(
         "nn.d3.to_screen",

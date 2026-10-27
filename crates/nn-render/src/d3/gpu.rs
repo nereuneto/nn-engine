@@ -4,8 +4,8 @@ use glam::{Mat3, Mat4, UVec2, Vec3, Vec4};
 use nn_core::Color;
 
 use super::{
-    Camera3D, Glow, Lamp3D, Light3D, MAX_JOINTS, MAX_LAMPS, Material3D, MeshId, Shadows,
-    SkinVertex, Sky3D, Vertex3, Wind3D,
+    Camera3D, Glow, Lamp3D, Light3D, MAX_JOINTS, MAX_LAMPS, MAX_SHADOW_SPOTS, Material3D, MeshId,
+    Shadows, SkinVertex, Sky3D, Vertex3, Wind3D,
 };
 use crate::TextureId;
 use crate::texture::GpuTexture;
@@ -53,7 +53,9 @@ struct LampGpu {
     color: [f32; 4],
     /// Direção do holofote e o cosseno da borda de fora.
     dir_cos: [f32; 4],
-    /// x = cosseno de onde começa a apagar, y = 1 num holofote.
+    /// x = cosseno de onde começa a apagar, y = 1 num holofote, z = a
+    /// camada da sombra + 1 (0 = sem sombra), w = 2 × tan(meia abertura) da
+    /// câmera da sombra (o tamanho de um texel por metro de distância).
     cone: [f32; 4],
 }
 
@@ -61,6 +63,8 @@ struct LampGpu {
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct LampsUniform {
     count: [u32; 4],
+    /// A câmera de cada holofote com sombra (a camada do mapa).
+    shadow_mats: [[f32; 16]; MAX_SHADOW_SPOTS],
     items: [LampGpu; MAX_LAMPS],
 }
 
@@ -178,6 +182,9 @@ struct Draw3 {
 struct ShadowMap {
     resolution: u32,
     view: wgpu::TextureView,
+    /// Os holofotes com sombra: uma camada para cada.
+    spot_resolution: u32,
+    spot_layers: Vec<wgpu::TextureView>,
     group: wgpu::BindGroup,
 }
 
@@ -220,6 +227,9 @@ pub(crate) struct Renderer3D {
     shadow_layout: wgpu::BindGroupLayout,
     shadow_sampler: wgpu::Sampler,
     shadow_map: ShadowMap,
+    /// A vista de cada holofote com sombra (a mesma do jogo, com a matriz
+    /// da luz trocada) e o grupo dela.
+    spot_views: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
     meshes: Vec<GpuMesh>,
     /// Malhas liberadas: o lugar é reaproveitado pela próxima criada.
     freed: std::collections::BTreeSet<u32>,
@@ -261,6 +271,31 @@ pub struct Stats3 {
     /// Se o halo do brilho foi desenhado (ligado e com algo brilhando na
     /// tela: sem nada brilhando, o passe do halo é pulado).
     pub halo: bool,
+    /// Mapas de sombra dos holofotes desenhados (até
+    /// [`MAX_SHADOW_SPOTS`](super::MAX_SHADOW_SPOTS)).
+    pub spot_shadows: u32,
+}
+
+/// Um grupo de desenhos seguidos com a mesma malha, textura, sombra, duas
+/// faces e recorte, e onde estão as instâncias deles.
+type Group = ((MeshId, TextureId, bool, bool, bool), std::ops::Range<u32>);
+
+/// A câmera de um holofote para o mapa de sombras: da posição dele, olhando
+/// para onde ele aponta, com a abertura do cone (e uma folga) e até o
+/// alcance. Devolve também 2 × tan(meia abertura).
+fn spot_view_proj(position: Vec3, range: f32, cone: super::Cone3D) -> (Mat4, f32) {
+    let dir = cone.direction.normalize_or(Vec3::NEG_Y);
+    let up = if dir.cross(Vec3::Y).length() < 1e-3 {
+        Vec3::Z
+    } else {
+        Vec3::Y
+    };
+    let view = glam::camera::rh::view::look_at_mat4(position, position + dir, up);
+    let fov = (cone.angle.clamp(1.0, 89.0).to_radians() * 2.0 + 0.1).min(3.0);
+    let far = range.max(0.2);
+    let near = (far * 0.01).clamp(0.02, 0.5);
+    let proj = glam::camera::rh::proj::directx::perspective(fov, 1.0, near, far);
+    (proj * view, 2.0 * (fov * 0.5).tan())
 }
 
 /// Os seis planos de uma câmera (ou da luz): x · n + d ≥ 0 é dentro.
@@ -375,6 +410,16 @@ impl Renderer3D {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
             ],
         });
         let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -389,20 +434,35 @@ impl Renderer3D {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let view_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("nn 3d view"),
-            layout: &view_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: view_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: lamp_buffer.as_entire_binding(),
-                },
-            ],
-        });
+        let view_group_of = |buffer: &wgpu::Buffer| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("nn 3d view"),
+                layout: &view_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: lamp_buffer.as_entire_binding(),
+                    },
+                ],
+            })
+        };
+        let view_group = view_group_of(&view_buffer);
+        let spot_views = (0..MAX_SHADOW_SPOTS)
+            .map(|_| {
+                let b = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("nn 3d spot view"),
+                    size: size_of::<ViewUniform3>() as wgpu::BufferAddress,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                let g = view_group_of(&b);
+                (b, g)
+            })
+            .collect();
 
         let vertex_attrs = wgpu::vertex_attr_array![
             0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x2
@@ -832,7 +892,7 @@ impl Renderer3D {
             compare: Some(wgpu::CompareFunction::LessEqual),
             ..Default::default()
         });
-        let shadow_map = Self::shadow_map(device, &shadow_layout, &shadow_sampler, 1);
+        let shadow_map = Self::shadow_map(device, &shadow_layout, &shadow_sampler, 1, 1);
         let capacity = 256;
         let instances = Self::instance_buffer(device, capacity);
         let joint_capacity = 4;
@@ -869,6 +929,7 @@ impl Renderer3D {
             shadow_layout,
             shadow_sampler,
             shadow_map,
+            spot_views,
             meshes: Vec::new(),
             freed: Default::default(),
             last_stats: Stats3::default(),
@@ -894,22 +955,48 @@ impl Renderer3D {
         layout: &wgpu::BindGroupLayout,
         sampler: &wgpu::Sampler,
         resolution: u32,
+        spot_resolution: u32,
     ) -> ShadowMap {
-        let tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("nn 3d shadow map"),
-            size: wgpu::Extent3d {
-                width: resolution,
-                height: resolution,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: DEPTH_FORMAT,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        });
+        let depth = |label: &str, size: u32, layers: u32| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: size,
+                    height: size,
+                    depth_or_array_layers: layers,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: DEPTH_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        };
+        let tex = depth("nn 3d shadow map", resolution, 1);
         let view = tex.create_view(&Default::default());
+        // Os holofotes: mais de uma camada sempre (no WebGL, uma textura de
+        // uma camada só não vira um conjunto de camadas).
+        let spots = depth(
+            "nn 3d spot shadows",
+            spot_resolution,
+            MAX_SHADOW_SPOTS as u32,
+        );
+        let spot_array = spots.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            ..Default::default()
+        });
+        let spot_layers = (0..MAX_SHADOW_SPOTS as u32)
+            .map(|layer| {
+                spots.create_view(&wgpu::TextureViewDescriptor {
+                    dimension: Some(wgpu::TextureViewDimension::D2),
+                    base_array_layer: layer,
+                    array_layer_count: Some(1),
+                    ..Default::default()
+                })
+            })
+            .collect();
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("nn 3d shadow map"),
             layout,
@@ -922,11 +1009,17 @@ impl Renderer3D {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&spot_array),
+                },
             ],
         });
         ShadowMap {
             resolution,
             view,
+            spot_resolution,
+            spot_layers,
             group,
         }
     }
@@ -1231,7 +1324,15 @@ impl Renderer3D {
 
     /// As lâmpadas que vão para a GPU: as que a câmera pode ver (a esfera
     /// do alcance encosta no que ela vê), as mais perto primeiro.
-    fn lamps_uniform(&self, camera: &Frustum, srgb: bool) -> LampsUniform {
+    /// Os holofotes com sombra (`spot_shadows`: quantos podem) ganham uma
+    /// camada do mapa, os mais perto primeiro; devolve também a câmera de
+    /// cada um.
+    fn lamps_uniform(
+        &self,
+        camera: &Frustum,
+        srgb: bool,
+        spot_shadows: usize,
+    ) -> (LampsUniform, Vec<Mat4>) {
         let eye = self.camera.position;
         let mut list: Vec<(f32, &Lamp3D)> = self
             .lamps
@@ -1242,8 +1343,10 @@ impl Renderer3D {
         list.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut out = LampsUniform {
             count: [0; 4],
+            shadow_mats: [[0.0; 16]; MAX_SHADOW_SPOTS],
             items: [LampGpu::default(); MAX_LAMPS],
         };
+        let mut mats = Vec::new();
         for (slot, (_, l)) in out.items.iter_mut().zip(list.iter()) {
             let c = if srgb { l.color.to_linear() } else { l.color };
             let k = l.intensity.max(0.0);
@@ -1260,15 +1363,101 @@ impl Renderer3D {
                 }
                 None => (Vec3::NEG_Y, -1.0, -1.0, 0.0),
             };
+            let (mut layer, mut texel) = (0.0, 0.0);
+            if let Some(cone) = l.cone
+                && l.shadow
+                && mats.len() < spot_shadows
+            {
+                let (m, k) = spot_view_proj(l.position, l.range, cone);
+                out.shadow_mats[mats.len()] = m.to_cols_array();
+                mats.push(m);
+                layer = mats.len() as f32;
+                texel = k;
+            }
             *slot = LampGpu {
                 pos_range: l.position.extend(l.range.max(0.01)).to_array(),
                 color: [c.r * k, c.g * k, c.b * k, 1.0],
                 dir_cos: dir.extend(cos_out).to_array(),
-                cone: [cos_in, spot, 0.0, 0.0],
+                cone: [cos_in, spot, layer, texel],
             };
         }
         out.count[0] = list.len().min(MAX_LAMPS) as u32;
-        out
+        (out, mats)
+    }
+
+    /// Desenha um mapa de sombras: os grupos e, um por chamada, os com ossos.
+    /// Devolve quantas chamadas fez.
+    fn shadow_pass(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        view_group: &wgpu::BindGroup,
+        groups: &[Group],
+        skinned: &[(usize, u32)],
+        textures: &[GpuTexture],
+    ) -> u32 {
+        let mut calls = 0;
+        pass.set_pipeline(&self.shadow_pipeline);
+        pass.set_bind_group(0, view_group, &[]);
+        pass.set_vertex_buffer(1, self.instances.slice(..));
+        let mut cut_on = false;
+        for ((mesh, tex, _, two, cut), range) in groups {
+            let m = &self.meshes[mesh.0 as usize];
+            // Recorte ou duas faces: a sombra lê a imagem.
+            let special = *two || *cut;
+            if special != cut_on {
+                cut_on = special;
+                pass.set_pipeline(if special {
+                    &self.shadow_cut_pipeline
+                } else {
+                    &self.shadow_pipeline
+                });
+            }
+            if special {
+                pass.set_bind_group(1, &textures[tex.0 as usize].bind_group, &[]);
+            }
+            if m.count > 0 {
+                pass.set_vertex_buffer(0, m.vertices.slice(..));
+                pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..m.count, 0, range.clone());
+                calls += 1;
+            }
+        }
+        if skinned.is_empty() {
+            return calls;
+        }
+        pass.set_pipeline(&self.skinned_shadow_pipeline);
+        pass.set_bind_group(1, &self.empty_group, &[]);
+        pass.set_bind_group(2, &self.empty_group, &[]);
+        let mut cut_on = false;
+        for &(i, at) in skinned {
+            let d = &self.draws[i];
+            let m = &self.meshes[d.mesh.0 as usize];
+            let special = d.two_sided || d.cutout;
+            if special != cut_on {
+                cut_on = special;
+                if special {
+                    pass.set_pipeline(&self.skinned_shadow_cut_pipeline);
+                } else {
+                    pass.set_pipeline(&self.skinned_shadow_pipeline);
+                    pass.set_bind_group(1, &self.empty_group, &[]);
+                }
+            }
+            if special {
+                pass.set_bind_group(1, &textures[d.texture.0 as usize].bind_group, &[]);
+            }
+            if let (Some(slot), Some(skin)) = (d.joints, &m.skin)
+                && m.count > 0
+            {
+                let offset = (slot as u64 * JOINT_SLOT) as u32;
+                pass.set_bind_group(3, &self.joint_group, &[offset]);
+                pass.set_vertex_buffer(0, m.vertices.slice(..));
+                pass.set_vertex_buffer(2, skin.slice(..));
+                pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..m.count, 0, at..at + 1);
+                calls += 1;
+            }
+        }
+        calls
     }
 
     /// Joga fora o que foi pedido neste quadro sem desenhar.
@@ -1352,18 +1541,32 @@ impl Renderer3D {
         }
 
         let casters = self.draws.iter().any(|d| d.cast_shadow);
-        let shadows_on = self.shadows.enabled && casters;
+        let any_shadows = self.shadows.enabled && casters;
+        let shadows_on = any_shadows && self.shadows.sun;
         let resolution = if self.shadows.enabled {
             self.shadows.resolution.clamp(256, 8192)
         } else {
             1
         };
-        if self.shadow_map.resolution != resolution {
+        // Os holofotes com sombra: metade da resolução do sol. O mapa fica
+        // depois que um aparece (não é refeito a cada quadro).
+        let wants_spots = any_shadows && self.lamps.iter().any(|l| l.shadow && l.cone.is_some());
+        let spot_resolution = if wants_spots {
+            (resolution / 2).clamp(256, 4096)
+        } else if self.shadows.enabled {
+            self.shadow_map.spot_resolution
+        } else {
+            1
+        };
+        if self.shadow_map.resolution != resolution
+            || self.shadow_map.spot_resolution != spot_resolution
+        {
             self.shadow_map = Self::shadow_map(
                 device,
                 &self.shadow_layout,
                 &self.shadow_sampler,
                 resolution,
+                spot_resolution,
             );
         }
 
@@ -1433,8 +1636,20 @@ impl Renderer3D {
             },
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&view));
-        let lamps = self.lamps_uniform(&Frustum::of(view_proj), srgb);
+        let (lamps, spot_mats) = self.lamps_uniform(
+            &Frustum::of(view_proj),
+            srgb,
+            if wants_spots { MAX_SHADOW_SPOTS } else { 0 },
+        );
         queue.write_buffer(&self.lamp_buffer, 0, bytemuck::bytes_of(&lamps));
+        // A vista de cada holofote: a do jogo, com a câmera da luz.
+        for (m, (buffer, _)) in spot_mats.iter().zip(&self.spot_views) {
+            let v = ViewUniform3 {
+                light_view_proj: m.to_cols_array(),
+                ..view
+            };
+            queue.write_buffer(buffer, 0, bytemuck::bytes_of(&v));
+        }
 
         // Agrupa por malha, textura e sombra (uma chamada por grupo); os com
         // ossos vão no fim, um por chamada.
@@ -1477,6 +1692,17 @@ impl Renderer3D {
         } else {
             Vec::new()
         };
+        // O que cada holofote com sombra vê.
+        let spot_lists: Vec<Vec<usize>> = spot_mats
+            .iter()
+            .map(|m| {
+                let f = Frustum::of(*m);
+                (0..self.draws.len())
+                    .filter(|&i| self.draws[i].cast_shadow && seen(&f, &self.draws[i]))
+                    .collect()
+            })
+            .collect();
+        let spot_total: usize = spot_lists.iter().map(Vec::len).sum();
         // As transparentes vão depois de todas, de trás para a frente.
         let eye3 = self.camera.position;
         let center = |d: &Draw3| {
@@ -1496,7 +1722,7 @@ impl Renderer3D {
                 .total_cmp(&center(a).distance_squared(eye3))
         });
         // As instâncias: as vistas, as das sombras e as transparentes.
-        let total = visible.len() + shadow.len() + self.transparent.len();
+        let total = visible.len() + shadow.len() + spot_total + self.transparent.len();
         if total > self.capacity {
             self.capacity = total.next_power_of_two();
             self.instances = Self::instance_buffer(device, self.capacity);
@@ -1504,6 +1730,7 @@ impl Renderer3D {
         let data: Vec<Instance3> = visible
             .iter()
             .chain(&shadow)
+            .chain(spot_lists.iter().flatten())
             .map(|&i| self.draws[i].instance)
             .chain(self.transparent.iter().map(|d| d.instance))
             .collect();
@@ -1511,8 +1738,6 @@ impl Renderer3D {
         // Grupos (malha, textura, sombra) seguidos numa lista; `base` é onde
         // a lista começa nas instâncias. Os com ossos ficam de fora (um por
         // chamada).
-        // A chave: malha, textura, sombra, as duas faces e o recorte.
-        type Group = ((MeshId, TextureId, bool, bool, bool), std::ops::Range<u32>);
         let group = |list: &[usize], base: u32| -> (Vec<Group>, Vec<(usize, u32)>) {
             let mut groups: Vec<Group> = Vec::new();
             let mut skinned = Vec::new();
@@ -1533,6 +1758,12 @@ impl Renderer3D {
         };
         let (groups, skinned) = group(&visible, 0);
         let (shadow_groups, shadow_skinned) = group(&shadow, visible.len() as u32);
+        let mut spot_groups = Vec::new();
+        let mut base = (visible.len() + shadow.len()) as u32;
+        for list in &spot_lists {
+            spot_groups.push(group(list, base));
+            base += list.len() as u32;
+        }
         let mut calls = 0u32;
 
         // As partículas: as transparentes de trás para a frente, depois as
@@ -1558,13 +1789,16 @@ impl Renderer3D {
             queue.write_buffer(&self.billboard_buffer, 0, bytemuck::cast_slice(&data));
         }
 
-        // 1. O mapa de sombras, visto do sol.
-        if shadows_on {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        // 1. O mapa de sombras, visto do sol, e o de cada holofote.
+        fn depth_pass<'a>(
+            encoder: &'a mut wgpu::CommandEncoder,
+            view: &'a wgpu::TextureView,
+        ) -> wgpu::RenderPass<'a> {
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("nn 3d shadow pass"),
                 color_attachments: &[],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.shadow_map.view,
+                    view,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: wgpu::StoreOp::Store,
@@ -1574,65 +1808,21 @@ impl Renderer3D {
                 timestamp_writes: None,
                 occlusion_query_set: None,
                 multiview_mask: None,
-            });
-            pass.set_pipeline(&self.shadow_pipeline);
-            pass.set_bind_group(0, &self.view_group, &[]);
-            pass.set_vertex_buffer(1, self.instances.slice(..));
-            let mut cut_on = false;
-            for ((mesh, tex, _, two, cut), range) in &shadow_groups {
-                let m = &self.meshes[mesh.0 as usize];
-                // Recorte ou duas faces: a sombra lê a imagem.
-                let special = *two || *cut;
-                if special != cut_on {
-                    cut_on = special;
-                    pass.set_pipeline(if special {
-                        &self.shadow_cut_pipeline
-                    } else {
-                        &self.shadow_pipeline
-                    });
-                }
-                if special {
-                    pass.set_bind_group(1, &textures[tex.0 as usize].bind_group, &[]);
-                }
-                if m.count > 0 {
-                    pass.set_vertex_buffer(0, m.vertices.slice(..));
-                    pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..m.count, 0, range.clone());
-                    calls += 1;
-                }
-            }
-            pass.set_pipeline(&self.skinned_shadow_pipeline);
-            pass.set_bind_group(1, &self.empty_group, &[]);
-            pass.set_bind_group(2, &self.empty_group, &[]);
-            let mut cut_on = false;
-            for &(i, at) in &shadow_skinned {
-                let d = &self.draws[i];
-                let m = &self.meshes[d.mesh.0 as usize];
-                let special = d.two_sided || d.cutout;
-                if special != cut_on {
-                    cut_on = special;
-                    if special {
-                        pass.set_pipeline(&self.skinned_shadow_cut_pipeline);
-                    } else {
-                        pass.set_pipeline(&self.skinned_shadow_pipeline);
-                        pass.set_bind_group(1, &self.empty_group, &[]);
-                    }
-                }
-                if special {
-                    pass.set_bind_group(1, &textures[d.texture.0 as usize].bind_group, &[]);
-                }
-                if let (Some(slot), Some(skin)) = (d.joints, &m.skin)
-                    && m.count > 0
-                {
-                    let offset = (slot as u64 * JOINT_SLOT) as u32;
-                    pass.set_bind_group(3, &self.joint_group, &[offset]);
-                    pass.set_vertex_buffer(0, m.vertices.slice(..));
-                    pass.set_vertex_buffer(2, skin.slice(..));
-                    pass.set_index_buffer(m.indices.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..m.count, 0, at..at + 1);
-                    calls += 1;
-                }
-            }
+            })
+        }
+        if shadows_on {
+            let mut pass = depth_pass(encoder, &self.shadow_map.view);
+            calls += self.shadow_pass(
+                &mut pass,
+                &self.view_group,
+                &shadow_groups,
+                &shadow_skinned,
+                textures,
+            );
+        }
+        for (k, (groups, skinned)) in spot_groups.iter().enumerate() {
+            let mut pass = depth_pass(encoder, &self.shadow_map.spot_layers[k]);
+            calls += self.shadow_pass(&mut pass, &self.spot_views[k].1, groups, skinned, textures);
         }
 
         // 2. O céu e as malhas (e, no segundo alvo, o que brilha).
@@ -1734,7 +1924,7 @@ impl Renderer3D {
             if !self.transparent.is_empty() {
                 pass.set_pipeline(&self.transparent_pipeline);
                 pass.set_vertex_buffer(1, self.instances.slice(..));
-                let base = (visible.len() + shadow.len()) as u32;
+                let base = (visible.len() + shadow.len() + spot_total) as u32;
                 for (k, d) in self.transparent.iter().enumerate() {
                     let m = &self.meshes[d.mesh.0 as usize];
                     if m.count > 0 {
@@ -1795,6 +1985,7 @@ impl Renderer3D {
             draw_calls: calls + self.transparent.len() as u32,
             lamps: lamps.count[0],
             halo,
+            spot_shadows: spot_mats.len() as u32,
         };
         self.draws.clear();
         self.joint_data.clear();
