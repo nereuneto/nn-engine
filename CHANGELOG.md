@@ -2,7 +2,60 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
-## Não lançado
+## 0.10.0
+
+A versão do **render 2D**. O que se desenha num jogo 2D ganhou o que faltava para uma interface caprichada e para efeitos de arcade:
+- **formas:** linhas, polilinhas, polígonos (também côncavos) e contornos, suaves e num lote só;
+- **texto:** a fonte de pixel art na engine, quebra de linha numa largura e contorno nas letras;
+- **recortes e listas que rolam** no `nn.ui` e nos painéis das cenas visuais, e **ordenar por y** nas camadas de um jogo visto de cima;
+- **canvas:** desenhar numa imagem (um minimapa, rastros, um jogo em 320x180 ampliado);
+- **efeitos:** seis shaders prontos e os seus em WGSL, que recarregam ao salvar;
+- **mipmaps** nas imagens reduzidas, e o render conferido no navegador (WebGL2) a cada mudança.
+
+### Para quem vem da 0.9
+
+- **Os projetos da 0.9 abrem e rodam.** Conferido com os modelos de projeto e os jogos da 0.9, e com os dois jogos que os agentes fizeram na revisão da 0.9:
+  - abertos e gravados pelo editor, 96 dos 102 arquivos saem iguais, byte a byte, como na 0.9. Os outros seis já saíam assim na 0.9: três mapas e tilesets do Tiled, que o editor regrava no formato dele, e três linhas escritas à mão, que o editor completa com os campos no valor padrão;
+  - os testes dos modelos e dos jogos passam no `nn` novo. Falha só um teste da revisão da 0.9, que conferia um contorno para um problema que a própria 0.9 resolveu;
+  - as fotos dos 13 jogos e modelos não mudaram.
+- **As preferências da 0.9 abrem na 0.10** como estão.
+- **O que muda sem você mexer:**
+  - **As imagens reduzidas usam mipmaps:** uma imagem lisa desenhada bem menor que o arquivo não serrilha. Custa um terço a mais de memória por imagem; `nn.assets.texture(caminho, { mipmaps = false })` volta ao de antes. A pixel art segue igual.
+  - **Um erro pego com `pcall` vem em português e limpo** (sem o "runtime error" e sem o caminho das chamadas), como na tela de erro. Quem comparava o texto da mensagem em inglês precisa ajustar.
+  - **`debug` existe, só com `debug.traceback`** (antes, não havia `debug`).
+  - **Os painéis do `nn.ui` usam o `theme` do `config.lua`** (fonte, cores e sons) quando o jogo não chama `nn.ui.theme`.
+  - **Numa camada com `sort_y`, o pé de um objeto com corpo é a base do corpo**, e não a da imagem.
+- **Para quem usa as crates:** o que é novo está nas seções abaixo. `SpriteInstance` ganhou o campo `flags`.
+
+### Revisão (Sprint 75)
+
+- **A prova: dois agentes fizeram jogos que usam o render 2D novo,** sem acesso ao código:
+  - **"Vale do Pixel"**, um RPG visto de cima em pixel art: vila com ordem por y, diálogos, loja e inventário em listas que rolam, minimapa num canvas e um efeito de noite em WGSL;
+  - **"Asteroides Neon"**, um arcade cheio de efeitos: o jogo num canvas de 320x180, rastros, brilho, CRT e efeitos seus.
+- **O que os dois encontraram virou os acertos abaixo:**
+  - **Canvas com cores translúcidas** (um rastro, um brilho) ficavam com a borda escura ao desenhar o canvas por cima do jogo. Agora o canvas guarda a cor já multiplicada pela transparência e desfaz isso ao ser desenhado.
+  - **Efeitos:**
+    - um efeito com erro mantém os parâmetros: o jogo pode mudá-los sem quebrar, e a imagem aparece sem o efeito até o arquivo ser consertado;
+    - um nome que não é de um efeito pronto nem um `.wgsl` dá erro, com a lista dos prontos;
+    - parâmetros de cor no WGSL: `// parâmetros: cor = #FFD166` vira `params.cor_r`, `cor_g`, `cor_b` e `cor_a`; ler `e.cor` devolve a cor em `"#RRGGBBAA"`;
+    - as mensagens dos erros de tipo do WGSL em português, e sem o registro interno do compilador no console;
+    - o `brilho` mais suave, sem as cópias da imagem aparecendo;
+    - na tela de erro do jogo, o efeito da tela inteira sai, para o erro ficar legível.
+  - **Linhas com cantos muito fechados** ganhavam um bico solto; agora o canto fica cortado, com a linha inteira.
+  - **Ordenar por y** usa a base do corpo da física (com o deslocamento dele), no jogo e no editor.
+  - **Painéis quadrados com borda grossa** ficavam com um furo no meio.
+  - **Diálogos com texto comprido** passam de página: a caixa mostra o que cabe, com o indicador, e o Confirmar vai para a próxima parte.
+  - **Erros em português também no `pcall`:** a mensagem limpa, e "o arquivo x não existe" num asset que falta. Um número errado num argumento diz o que veio ("esperava um número, recebeu um texto").
+  - **`debug.traceback`** para um `xpcall`.
+  - **Texto com contorno:** `{ outline = "#000000" }`.
+  - **Um canvas no componente Sprite** e a imagem trocada pelo script numa cena visual.
+  - **Os painéis do `nn.ui` usam o tema do `config.lua`.**
+  - **Um aviso** quando o componente Efeito está "no objeto" e o objeto não tem imagem.
+  - **No agente:** `ordenar_por_y` no `criar_cena` e no `mudar_cena`, e a ação `rolar` (a roda do mouse) no `rodar_jogo`; nos testes, `t:scroll(linhas, x, y)`.
+  - **Documentação:** os rastros com `clear = false` (com transparência baixa, fica uma sombra fraca), o `nn.screen` por cima do `nn.draw` dentro de um canvas, o canvas liso sem mipmaps e o que separa o lote das formas.
+- **Ideias para depois, do que os agentes sentiram falta:**
+  - mais fontes de pixel art prontas (na Press Start 2P, as maiúsculas com acento são achatadas para caber em 8 pixels);
+  - rastros que somem de todo com transparência baixa.
 
 ### Efeitos: shaders prontos e os seus (Sprint 74)
 
@@ -35,7 +88,7 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 - **Linhas:** `nn.draw.line(x1, y1, x2, y2, cor, espessura)` e `nn.draw.polyline(pontos, cor, espessura, fechada)`, com a borda suave e as juntas em ponta (cortadas nos ângulos muito fechados).
 - **Polígonos preenchidos,** também côncavos (um L, uma estrela): `nn.draw.polygon(pontos, cor)`. Os pontos vêm numa lista de números `{ x1, y1, x2, y2, ... }` ou de pares `{ {x, y}, ... }`.
 - **Contornos:** um número no fim de `rect`, `circle` e `polygon` desenha só a borda, com essa espessura (por dentro da forma, como a borda de um painel): `nn.screen.rect(10, 10, 200, 40, "#FFFFFF", 2)`.
-- **No mesmo lote das imagens:** linhas, retângulos e polígonos seguidos vão para a placa de vídeo numa chamada só; mil linhas por quadro custam uma chamada.
+- **Num lote só:** linhas, retângulos, círculos e polígonos seguidos vão para a placa de vídeo numa chamada só; mil linhas por quadro custam uma chamada. Uma imagem ou um texto no meio separa o lote.
 - **`nn.draw.sprite` sem tabela de opções:** `nn.draw.sprite(img, x, y, quadro, escala, cor)`. Não cria uma tabela a cada quadro (nem lixo no Lua).
 - Tudo também em `nn.screen`. As fotos dos 13 jogos e modelos não mudaram.
 - **Para quem usa as crates:** `Renderer::draw_line`, `draw_polyline`, `draw_polygon`, `draw_rect_outline` e `draw_circle_outline`, também no `ScreenPainter`.

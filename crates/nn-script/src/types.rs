@@ -19,6 +19,8 @@ pub(crate) struct LEffect(
 
 impl LEffect {
     /// Muda um parâmetro: um número, ou uma cor para `nome_r`... `nome_a`.
+    /// Com o arquivo do efeito com erro, não reclama (o jogo segue sem o
+    /// efeito).
     pub(crate) fn set(
         lua: &Lua,
         id: nn_render::effects::EffectId,
@@ -29,28 +31,45 @@ impl LEffect {
             Value::Integer(_) | Value::Number(_) => {
                 let v: f32 = lua.unpack(value.clone())?;
                 with_ctx(lua, |c| {
-                    if c.renderer.set_effect_param(id, name, v) {
+                    if c.renderer.set_effect_param(id, name, v) || c.effect_error(id).is_some() {
                         Ok(())
                     } else {
                         Err(err(no_param(c, id, name)))
                     }
                 })
             }
-            other => {
-                let col = crate::convert::color(other).map_err(|_| {
+            Value::String(_) | Value::Table(_) => {
+                let col = crate::convert::color(value).map_err(|_| {
+                    let shown = lua
+                        .coerce_string(value.clone())
+                        .ok()
+                        .flatten()
+                        .map(|s| s.to_string_lossy())
+                        .unwrap_or_else(|| "uma tabela".into());
                     err(format!(
-                        "o parâmetro \"{name}\" do efeito precisa ser um número (ou uma cor), recebeu {}",
-                        other.type_name()
+                        "cor inválida para \"{name}\": \"{shown}\" (use \"#RRGGBB\" ou \"#RRGGBBAA\")"
                     ))
                 })?;
                 with_ctx(lua, |c| {
-                    if c.renderer.set_effect_color(id, name, col) {
+                    if c.renderer.set_effect_color(id, name, col) || c.effect_error(id).is_some() {
                         Ok(())
                     } else {
-                        Err(err(no_param(c, id, &format!("{name}_r"))))
+                        let colors = c.renderer.effect_colors(id);
+                        Err(err(if colors.is_empty() {
+                            format!("o efeito não tem a cor \"{name}\" (ele não tem cores)")
+                        } else {
+                            format!(
+                                "o efeito não tem a cor \"{name}\" (tem: {})",
+                                colors.join(", ")
+                            )
+                        }))
                     }
                 })
             }
+            other => Err(err(format!(
+                "o parâmetro \"{name}\" do efeito precisa ser um número ou uma cor, recebeu {}",
+                other.type_name()
+            ))),
         }
     }
 }
@@ -90,8 +109,25 @@ impl UserData for LEffect {
                         .collect::<Vec<_>>())
                 })
                 .and_then(|v| lua.pack(v)),
-                name => with_ctx(lua, |c| Ok(c.renderer.effect_param(id, name)))
-                    .and_then(|v| lua.pack(v)),
+                // Um número, ou uma cor ("#RRGGBBAA") para nome_r... nome_a.
+                name => with_ctx(lua, |c| {
+                    if let Some(v) = c.renderer.effect_param(id, name) {
+                        return Ok(Value::Number(f64::from(v)));
+                    }
+                    Ok(match c.renderer.effect_color(id, name) {
+                        Some(col) => {
+                            let b = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
+                            Value::String(lua.create_string(format!(
+                                "#{:02X}{:02X}{:02X}{:02X}",
+                                b(col.r),
+                                b(col.g),
+                                b(col.b),
+                                b(col.a)
+                            ))?)
+                        }
+                        None => Value::Nil,
+                    })
+                }),
             }
         });
         m.add_meta_method(

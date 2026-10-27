@@ -232,11 +232,43 @@ fn apply_theme(lua: &Lua, t: &Table) -> Result<()> {
     })
 }
 
+/// O tema do config.lua já foi para o nn.ui (ou o jogo pôs o dele).
+struct ThemeFromConfig;
+
+/// No primeiro painel, o tema do config.lua (`theme`) vale também para o
+/// nn.ui: a fonte, as cores e o som que o jogo escolheu lá.
+const CONFIG_THEME: &str = r#"
+local t = rawget(nn, "theme")
+if type(t) ~= "table" then return end
+local u, any = {}, false
+local function set(k, v) u[k] = v; any = true end
+if t.font and t.font ~= "" then
+  if t.font == "pixel" then
+    set("font", "pixel")
+  else
+    local ok, f = pcall(nn.assets.font, t.font)
+    if ok then set("font", f) end
+  end
+end
+for from, to in pairs({ text = "text_color", panel = "panel_color", hover = "focus_color", accent = "accent_color" }) do
+  if t[from] and t[from] ~= "" then set(to, t[from]) end
+end
+if t.sound and t.sound ~= "" then
+  local ok, snd = pcall(nn.assets.sound, t.sound)
+  if ok then set("confirm_sound", snd) end
+end
+if any then nn.ui.theme(u) end
+"#;
+
 pub(crate) fn table(lua: &Lua) -> Result<Table> {
     let ui = lua.create_table()?;
     ui.set(
         "panel",
         lua.create_function(|lua, (id, opts): (String, Option<Table>)| {
+            if lua.app_data_ref::<ThemeFromConfig>().is_none() {
+                lua.set_app_data(ThemeFromConfig);
+                lua.load(CONFIG_THEME).set_name("=nn/tema").exec()?;
+            }
             let options = panel_options(opts.as_ref())?;
             with_ctx(lua, |c| {
                 c.panel(id.clone(), options);
@@ -246,7 +278,11 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
     )?;
     ui.set(
         "theme",
-        lua.create_function(|lua, t: Table| apply_theme(lua, &t))?,
+        lua.create_function(|lua, t: Table| {
+            // O jogo pôs o tema dele: o do config.lua não passa por cima.
+            lua.set_app_data(ThemeFromConfig);
+            apply_theme(lua, &t)
+        })?,
     )?;
     ui.set(
         "set_focus",

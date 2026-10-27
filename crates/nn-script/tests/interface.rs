@@ -633,3 +633,32 @@ fn componente_efeito_no_objeto_na_camada_e_na_tela() {
         }
     }
 }
+
+/// Ordenar por y com o corpo deslocado (oy): o pé da árvore é a base do
+/// tronco, não a da copa.
+#[test]
+fn ordenar_por_y_usa_o_pe_do_corpo() {
+    let dir = projeto(
+        "ordem-oy",
+        &[
+            ("config.lua", CONFIG),
+            (
+                "fase.cena",
+                r##"return { format = 1, background = "#000000", gravity = 0, sort_y = { 1 }, objects = {
+                  { id = 1, name = "arvore", x = 0, y = 0, layer = 1,
+                    components = { { type = "shape", w = 40, h = 100, color = "#FF0000" },
+                                   { type = "body", body = "static", w = 20, h = 10, oy = -45 } } },
+                  { id = 2, name = "heroi", x = 0, y = -30, layer = 1,
+                    components = { { type = "shape", w = 20, h = 20, color = "#00FF00" } } },
+                } }"##,
+            ),
+        ],
+    );
+    let Some((mut h, _rt)) = cena(&dir, "fase.cena") else {
+        return;
+    };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    // O pé do herói (-40) está acima da base do tronco (-50): atrás da árvore.
+    assert_eq!(pixel(&h, tela(0.0, -30.0))[..3], [255, 0, 0]);
+}

@@ -133,6 +133,9 @@ pub struct Assets {
 struct EffectFile {
     modified: Option<SystemTime>,
     shader: Result<EffectShader, String>,
+    /// O que fica no lugar enquanto há erro: não muda nada, mas tem os
+    /// parâmetros do arquivo (o jogo segue mudando-os sem erro).
+    fallback: Option<EffectShader>,
 }
 
 impl Assets {
@@ -572,22 +575,40 @@ impl Context {
             Some(s) if name != "nenhum" => (s, None),
             _ => {
                 let key = normalize(Path::new(name));
-                let shader = match self.assets.effect_files.get(&key) {
-                    Some(f) => f.shader.clone(),
-                    None => {
+                if !self.assets.effect_files.contains_key(&key) {
+                    let file = if key.ends_with(".wgsl") {
                         let modified = self.assets.source.modified(Path::new(&key));
-                        let shader = self.compile_effect_file(&key);
-                        self.assets.effect_files.insert(
-                            key.clone(),
-                            EffectFile {
-                                modified,
-                                shader: shader.clone(),
-                            },
+                        let (shader, fallback) = self.compile_effect_file(&key, None);
+                        EffectFile {
+                            modified,
+                            shader,
+                            fallback,
+                        }
+                    } else {
+                        // Nem um pronto, nem um arquivo .wgsl.
+                        let names: Vec<&str> = nn_render::effects::BUILTIN
+                            .iter()
+                            .map(|(n, _)| *n)
+                            .collect();
+                        let msg = format!(
+                            "efeito \"{name}\" não existe (os prontos: {}; um efeito seu é um arquivo .wgsl)",
+                            names.join(", ")
                         );
-                        shader
-                    }
+                        log::warn!("{msg}");
+                        EffectFile {
+                            modified: None,
+                            shader: Err(msg),
+                            fallback: None,
+                        }
+                    };
+                    self.assets.effect_files.insert(key.clone(), file);
+                }
+                let f = &self.assets.effect_files[&key];
+                let shader = match (&f.shader, f.fallback) {
+                    (Ok(s), _) => *s,
+                    (Err(_), Some(fb)) => fb,
+                    (Err(_), None) => self.passthrough_effect(),
                 };
-                let shader = shader.unwrap_or_else(|_| self.passthrough_effect());
                 (shader, Some(key))
             }
         };
@@ -617,14 +638,41 @@ impl Context {
             .expect("o efeito que não muda nada")
     }
 
-    fn compile_effect_file(&mut self, key: &str) -> Result<EffectShader, String> {
-        let bytes = self.assets.read(key).map_err(|e| e.to_string())?;
-        let source = String::from_utf8_lossy(&bytes);
-        self.renderer.compile_effect(&source).map_err(|e| {
-            let msg = format!("efeito {key}, {e}");
-            log::warn!("{msg}");
-            msg
-        })
+    /// Compila o arquivo do efeito. Com erro, devolve também o que fica no
+    /// lugar (com os parâmetros do arquivo, ou os de `previous`).
+    fn compile_effect_file(
+        &mut self,
+        key: &str,
+        previous: Option<EffectShader>,
+    ) -> (Result<EffectShader, String>, Option<EffectShader>) {
+        let bytes = match self.assets.read(key) {
+            Ok(b) => b,
+            Err(e) => {
+                let msg = match e {
+                    AssetError::NotFound(_) => format!("efeito {key}: o arquivo não existe"),
+                    other => format!("efeito {key}: {other}"),
+                };
+                log::warn!("{msg}");
+                return (Err(msg), previous);
+            }
+        };
+        let source = String::from_utf8_lossy(&bytes).into_owned();
+        match self.renderer.compile_effect(&source) {
+            Ok(s) => (Ok(s), None),
+            Err(e) => {
+                let msg = format!("efeito {key}, {e}");
+                log::warn!("{msg}");
+                // Os parâmetros do arquivo, se der para ler; senão, os de antes.
+                let fallback = if nn_render::effects::parse_params(&source).is_ok() {
+                    self.renderer
+                        .compile_effect(&nn_render::effects::passthrough_for(&source))
+                        .ok()
+                } else {
+                    None
+                };
+                (Err(msg), fallback.or(previous))
+            }
+        }
     }
 
     /// Recarrega os arquivos de efeito que mudaram.
@@ -641,14 +689,16 @@ impl Context {
             if current.is_none() || current == modified {
                 continue;
             }
-            let shader = self.compile_effect_file(&key);
-            let use_shader = match &shader {
-                Ok(s) => {
+            let (shader, fallback) = self.compile_effect_file(&key, None);
+            let use_shader = match (&shader, fallback) {
+                (Ok(s), _) => {
                     log::info!("recarregado: {key}");
-                    *s
+                    Some(*s)
                 }
-                // Com erro, o jogo segue sem o efeito.
-                Err(_) => self.passthrough_effect(),
+                // Com erro, o jogo segue sem o efeito, com os parâmetros dele.
+                (Err(_), Some(fb)) => Some(fb),
+                // Nem os parâmetros deu para ler: fica como estava.
+                (Err(_), None) => None,
             };
             let users: Vec<EffectId> = self
                 .assets
@@ -657,14 +707,17 @@ impl Context {
                 .filter(|(_, _, f)| f.as_deref() == Some(key.as_str()))
                 .map(|(id, _, _)| *id)
                 .collect();
-            for id in users {
-                self.renderer.replace_effect_shader(id, use_shader);
+            if let Some(use_shader) = use_shader {
+                for id in users {
+                    self.renderer.replace_effect_shader(id, use_shader);
+                }
             }
             self.assets.effect_files.insert(
                 key.clone(),
                 EffectFile {
                     modified: current,
                     shader,
+                    fallback,
                 },
             );
             self.assets.reloaded.push(PathBuf::from(key));

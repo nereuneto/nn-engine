@@ -198,6 +198,8 @@ pub enum ActionKind {
         x: f32,
         y: f32,
     },
+    /// Gira a roda do mouse (linhas; positivo sobe a lista, negativo desce).
+    Scroll(f32),
     /// Escreve um texto.
     Type(String),
     /// Captura a tela.
@@ -928,6 +930,10 @@ fn plan_table(lua: &mlua::Lua, plan: &Plan) -> mlua::Result<Table> {
                 x.set("x", *px)?;
                 x.set("y", *py)?;
             }
+            ActionKind::Scroll(lines) => {
+                x.set("op", "scroll")?;
+                x.set("lines", *lines)?;
+            }
             ActionKind::Type(text) => {
                 x.set("op", "type")?;
                 x.set("text", text.as_str())?;
@@ -982,6 +988,15 @@ pub(crate) fn install_driver(runtime: &ScriptRuntime) -> mlua::Result<Table> {
                 } else {
                     c.input.release_mouse(b);
                 }
+                Ok(())
+            })
+        })?,
+    )?;
+    driver.set(
+        "scroll",
+        lua.create_function(|lua, lines: f32| {
+            crate::api::with_ctx(lua, |c| {
+                c.input.add_scroll(glam::Vec2::new(0.0, lines));
                 Ok(())
             })
         })?,

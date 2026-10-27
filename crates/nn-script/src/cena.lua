@@ -2485,6 +2485,9 @@ prepare_effect = function(scene, o, c)
     return
   end
   if fx.error then M.warn(("objeto \"%s\" (Efeito): %s"):format(o.name, fx.error)) end
+  if c.on == "objeto" and not o:component("sprite") then
+    M.warn(("objeto \"%s\" (Efeito): \"no objeto\" vale para as imagens dele, e ele não tem um componente Imagem; use \"camada\" ou \"tela\""):format(o.name))
+  end
   c._fx = fx
   o._has_fx = true
   scene._effects = scene._effects or {}
@@ -2526,6 +2529,12 @@ function M.prepare(scene, o, c, live)
   local t = c.type
   if t == "sprite" then
     c._img, c._sheet = nil, false
+    c._img_path = c.image
+    -- Uma imagem pronta (um canvas, nn.assets.texture...) no lugar do caminho.
+    if type(c.image) == "userdata" then
+      c._img = c.image
+      return
+    end
     c._anims = M.load_anims(scene, c.image)
     if c._anims and c.frame_w <= 0 and c.frame_h <= 0 and c._anims.frame_w > 0 then
       -- Sem tamanho de quadro no componente: o do .anim.
@@ -3154,6 +3163,12 @@ local function sort_by_y(scene, list)
         while root.parent do root = root.parent end
         local _, y = root:world_transform()
         local _, hh = root:bounds()
+        -- Com corpo, o pé é a base da caixa de colisão (com o deslocamento
+        -- oy: a árvore com o tronco embaixo).
+        local b = root.body
+        if b and b.alive and b.width then
+          y = y + (root._boy or 0)
+        end
         key[o] = { y - hh, k, root }
       end
       -- Ordena o trecho da camada (inserção: quase sempre já está em ordem).
@@ -3836,6 +3851,10 @@ local function draw_object(o, alpha, W, H)
     local t = c.type
     local hud = c.hud or overlay
     if hud and not hx then hx, hy = screen_pos_in(o, x, y, W, H) end
+    -- A imagem mudou pelo script (obj.sprite.image = ...): carrega a nova.
+    if t == "sprite" and c.image ~= c._img_path and o.scene then
+      M.prepare(o.scene, o, c, true)
+    end
     if t == "sprite" and c._img then
       -- Sem tabela de opções: um sprite por objeto, todo quadro. Repetir:
       -- cada cópia tem o tamanho do componente; a escala do objeto diz

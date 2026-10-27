@@ -192,7 +192,7 @@ return {
 }
 ```
 
-Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), `scale_x`, `scale_y`, `visible`, `locked` (só para o editor), `layer` (camada maior é desenhada por cima; numa camada de `sort_y`, quem tem o pé mais embaixo fica na frente, como numa vista de cima: o herói passa atrás e na frente da árvore conforme anda, e os filhos vão junto com o objeto da raiz), `anchor` (num objeto da raiz que fica na tela: o ponto da tela de onde a posição conta: "top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom" ou "bottom_right"; veja "Preso na tela" abaixo), `components` e `children`. Campos que faltam usam o valor padrão. Os componentes:
+Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), `scale_x`, `scale_y`, `visible`, `locked` (só para o editor), `layer` (camada maior é desenhada por cima; numa camada de `sort_y`, quem tem o pé mais embaixo fica na frente (o pé é a base do corpo da física, se houver; senão, a base da imagem), como numa vista de cima: o herói passa atrás e na frente da árvore conforme anda, e os filhos vão junto com o objeto da raiz), `anchor` (num objeto da raiz que fica na tela: o ponto da tela de onde a posição conta: "top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom" ou "bottom_right"; veja "Preso na tela" abaixo), `components` e `children`. Campos que faltam usam o valor padrão. Os componentes:
 
 | `type` | Campos (padrão) |
 |---|---|
@@ -748,6 +748,7 @@ O `t` de cada teste:
 | `t:click(x, y, botão)` | Clica num ponto da tela (pixels, y para baixo, como `nn.input.mouse()`). |
 | `t:click(objeto)`, `t:click("nome")` | Clica no objeto (um botão do menu, um objeto do mundo). |
 | `t:mouse(x, y)` | Põe o mouse no ponto, sem clicar. |
+| `t:scroll(linhas, x, y)` | Gira a roda do mouse (positivo para cima), com o mouse no ponto se `x, y` vierem: rola uma lista do `nn.ui`, muda o zoom. |
 | `t:type(texto)` | Escreve um texto (num campo de texto). |
 | `t:open(cena, args)` | Troca para a cena (como `nn.scene.switch`) e espera ela rodar o primeiro quadro. |
 | `t:scene()` | O `self` da cena da frente (e o caminho, como segundo valor). Numa cena em código, os campos dela (`t:scene().pontos`). |
@@ -804,7 +805,7 @@ Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`
 
 **Recorte.** `nn.screen.clip(20, 60, 200, 120, function() ... end)` desenha o que a função desenhar, mas só dentro do retângulo: uma lista que rola, uma janela de diálogo com texto comprido, um minimapa. Cada recorte custa no máximo uma chamada a mais à placa de vídeo.
 
-**Linhas e polígonos.** Os pontos vêm numa lista de números, `{ x1, y1, x2, y2, ... }`, ou de pares, `{ {x1, y1}, {x2, y2}, ... }` (também `{ {x = 1, y = 2}, ... }`). As linhas e as bordas dos polígonos são suaves (sem serrilhado); nas juntas de uma linha, os cantos ficam em ponta, e cortados quando o ângulo é muito fechado. O contorno de um retângulo ou de um círculo fica por dentro dele, como a borda de um painel. Linhas, retângulos e polígonos seguidos são desenhados juntos, numa chamada só para a placa de vídeo: mil linhas por quadro custam como uma.
+**Linhas e polígonos.** Os pontos vêm numa lista de números, `{ x1, y1, x2, y2, ... }`, ou de pares, `{ {x1, y1}, {x2, y2}, ... }` (também `{ {x = 1, y = 2}, ... }`). As linhas e as bordas dos polígonos são suaves (sem serrilhado); nas juntas de uma linha, os cantos ficam em ponta, e cortados quando o ângulo é muito fechado. O contorno de um retângulo ou de um círculo fica por dentro dele, como a borda de um painel. Linhas, retângulos, círculos e polígonos seguidos são desenhados juntos, numa chamada só para a placa de vídeo: mil linhas por quadro custam como uma. Uma imagem, um texto ou um painel no meio deles separa o lote; para juntar, desenhe as formas em seguida.
 
 ```lua
 nn.draw.line(0, 0, 100, 50, "#FFFFFF", 2)
@@ -813,7 +814,7 @@ nn.screen.rect(10, 10, 200, 40, "#FFFFFF", 2)                                -- 
 nn.screen.polyline({ {10, 100}, {60, 140}, {110, 100} }, "#7BC86C", 4)
 ```
 
-Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `font`, `width`.
+Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `font`, `width`, `outline` (a cor de um contorno em volta das letras, para ler o texto em cima de qualquer fundo: `{ outline = "#000000" }`).
 `anchor` diz qual ponto do texto fica em `x, y`: `topleft` (padrão), `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright` (também com sublinhado, como a âncora do objeto: `top_left`).
 `align` alinha as linhas de um texto com `\n` (ou quebrado com `width`): `left`, `center`, `right`.
 `width` quebra o texto em linhas que cabem nessa largura, entre as palavras (uma palavra maior que a linha quebra no meio). O texto fica numa caixa dessa largura, e `align` alinha as linhas dentro dela: `nn.screen.text(fala, 20, 300, { width = 600 })`.
@@ -855,6 +856,17 @@ end
 
 Opções de `draw`: `clear` (a cor para limpar antes; padrão transparente; `false` mantém o que já estava, para rastros), `x`, `y` e `zoom` (a câmera do mundo dentro do canvas; padrão, a do jogo). Ampliado, o canvas fica nítido como pixel art; `nn.canvas(w, h, { smooth = true })` deixa liso (bom para um minimapa reduzido). Um canvas que a cena solta sai da memória na troca de cena, como as imagens. O 3D não vai para o canvas.
 
+Dentro do `c:draw`, o que vai por `nn.screen` fica por cima do que vai por `nn.draw`, como na tela. Um canvas liso (`smooth`) reduzido não tem mipmaps: bem menor que o tamanho dele, pode tremer; desenhe-o perto do tamanho de verdade. Cores translúcidas num canvas ficam certas ao desenhá-lo por cima do jogo (sem borda escura).
+
+**Rastros.** Com `clear = false`, um retângulo translúcido por cima a cada quadro apaga o que já estava aos poucos. Com uma transparência muito baixa (menos de uns 10%), o rastro não some de todo: fica uma sombra fraca, porque cada pixel guarda a cor em 256 degraus. Para um rastro que some, use uma transparência maior, ou guarde as últimas posições e desenhe-as com o canvas limpo:
+
+```lua
+rastro:draw(function()
+  nn.screen.rect(0, 0, 320, 180, "#00000033")   -- 20%: some em poucos quadros
+  nn.screen.circle(bola.x, bola.y, 4, "#FFD166")
+end, { clear = false })
+```
+
 #### Efeitos (shaders)
 
 Um efeito muda como uma imagem aparece. Os prontos:
@@ -877,7 +889,7 @@ function cena:draw()
 end
 ```
 
-Os parâmetros são campos: `borda.espessura = 3`, `borda.cor = "#FF0000"` (uma cor muda `cor_r`, `cor_g`, `cor_b` e `cor_a`). Dois sprites com o mesmo efeito usam os mesmos valores; para valores diferentes, crie outro com `nn.effect`. O contorno fica dentro da imagem: deixe uma margem transparente em volta.
+Os parâmetros são campos: `borda.espessura = 3`, `borda.cor = "#FF0000"` (ler `borda.cor` devolve `"#FF0000FF"`). Um nome que não é de um efeito pronto nem um arquivo `.wgsl` dá erro: `efeito "cinsa" não existe (os prontos: ...)`. Dois sprites com o mesmo efeito usam os mesmos valores; para valores diferentes, crie outro com `nn.effect`. O contorno fica dentro da imagem: deixe uma margem transparente em volta.
 
 **Um efeito seu** é um arquivo `.wgsl` (a linguagem de shaders do wgpu, que vira GLSL sozinha no navegador) com a função `efeito`, que diz a cor de cada ponto `uv` da imagem (0 a 1, com 0, 0 no canto de cima à esquerda). Ela lê a imagem com `amostra(uv)` (fora dela, transparente), o tamanho em pixels com `tamanho()`, o tempo em segundos com `tempo()` e os parâmetros em `params.nome`, declarados num comentário com os valores padrão:
 
@@ -890,7 +902,9 @@ fn efeito(uv: vec2<f32>) -> vec4<f32> {
 }
 ```
 
-`nn.effect("efeitos/pisca.wgsl")` carrega; ao salvar o arquivo, o efeito recarrega com o jogo aberto. Com erro, o jogo segue sem o efeito, e o erro aparece no console em português, com a linha (também em `e.error`): `efeito efeitos/pisca.wgsl, linha 4: "pisxa" não existe aqui`. Nas cenas visuais, o componente **Efeito** põe um efeito nas imagens do objeto, na camada dele ou na tela inteira.
+Um parâmetro de cor se declara com `#`, e no shader vira quatro números, de 0 a 1, em cor linear (a mesma conta das outras cores do shader): `// parâmetros: cor = #FFD166` dá `params.cor_r`, `params.cor_g`, `params.cor_b` e `params.cor_a`.
+
+`nn.effect("efeitos/pisca.wgsl")` carrega; ao salvar o arquivo, o efeito recarrega com o jogo aberto. Com erro, a imagem aparece sem o efeito, os parâmetros continuam valendo (o jogo pode mudá-los sem quebrar), e o erro aparece no console em português, com a linha (também em `e.error`): `efeito efeitos/pisca.wgsl, linha 4: "pisxa" não existe aqui`. Na tela de erro do jogo, o efeito da tela inteira sai, para o erro ficar legível. Nas cenas visuais, o componente **Efeito** põe um efeito nas imagens do objeto, na camada dele ou na tela inteira.
 
 ### nn.input
 
@@ -1831,7 +1845,7 @@ Detalhes que já vêm resolvidos:
 - **Trocar de cena num botão** (`nn.scene.*` dentro do `draw`) acontece no frame seguinte.
 - **Escala:** a interface acompanha a altura da janela (pensada para 720 pixels), então fica do mesmo tamanho relativo em tela cheia.
 
-`nn.ui.theme(opts)` muda a aparência de todos os painéis. Opções: `font`, `text_size`, `title_size`, cores `text_color`, `label_color`, `panel_color`, `button_color`, `focus_color`, `focus_text_color`, `accent_color` (barras), medidas `width`, `padding`, `spacing`, `row_height`, `scale` (número ou `"auto"`), textos `on_text`, `off_text` e sons `move_sound` (mudar foco ou valor) e `confirm_sound` (`false` remove).
+`nn.ui.theme(opts)` muda a aparência de todos os painéis. Opções: `font`, `text_size`, `title_size`, cores `text_color`, `label_color`, `panel_color`, `button_color`, `focus_color`, `focus_text_color`, `accent_color` (barras), medidas `width`, `padding`, `spacing`, `row_height`, `scale` (número ou `"auto"`), textos `on_text`, `off_text` e sons `move_sound` (mudar foco ou valor) e `confirm_sound` (`false` remove). Sem `nn.ui.theme`, os painéis usam o `theme` do `config.lua` (fonte, cores e sons, os mesmos dos menus prontos e dos diálogos); chamar `nn.ui.theme` vale por cima dele.
 
 `nn.ui.set_focus(nome, n)` põe o foco no item `n` de um painel (ex.: "Continuar" ao abrir a pausa); `nn.ui.reset(nome)` esquece o foco.
 
@@ -1973,6 +1987,8 @@ Os scripts rodam num Lua 5.4 sem o que mexe no computador de quem joga:
 - **o `load` só aceita texto:** um trecho já compilado (`string.dump`) poderia quebrar a memória do Lua.
 
 Quem usar o que saiu recebe um erro que diz o que usar no lugar. O `config.lua` também roda assim.
+
+Do `debug`, fica só `debug.traceback` (o caminho das chamadas até o erro, para um `xpcall`). Um erro pego com `pcall` vem em português e limpo, como na tela de erro: `pcall(nn.assets.image, "x.png")` devolve `false, "o arquivo x.png não existe"`; com `xpcall(f, debug.traceback)`, a mensagem vem traduzida e seguida do caminho.
 
 ### Desempenho (nn.debug)
 

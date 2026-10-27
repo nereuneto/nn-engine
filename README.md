@@ -234,6 +234,11 @@ Regra prática para entrada: `key_down` (segurando) funciona em qualquer lugar; 
 - Sprites consecutivos com a mesma textura viram uma única chamada de desenho (instancing). `ctx.renderer.last_stats()` mostra quantas chamadas foram feitas.
 - Cores e texturas em sRGB; a mistura de transparência é feita em espaço linear.
 - `TextureOptions::PIXEL_ART` deixa a textura nítida ao ampliar.
+- `TextureOptions::SMOOTH` gera mipmaps: a imagem reduzida não serrilha.
+- Linhas, contornos e polígonos (também côncavos): `draw_line`, `draw_polyline`, `draw_polygon`, `draw_rect_outline`, `draw_circle_outline`, no mesmo lote das imagens, com a borda suave.
+- Recorte: `set_clip(Some(ClipRect::new(a, b)))` desenha só dentro do retângulo.
+- Canvas: `create_canvas`, `begin_canvas` e `end_canvas` desenham numa imagem que depois vale como qualquer textura.
+- Efeitos (shaders): os prontos (`builtin_effect("crt")`) ou os seus em WGSL (`compile_effect`), num sprite (`Sprite::effect`) ou na tela inteira (`set_screen_effect`). O que entra no render roda também no navegador (WebGL2), conferido no CI.
 
 ### Mundo e tela
 

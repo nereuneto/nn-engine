@@ -67,7 +67,7 @@ use nn_render::Text;
 
 use crate::api::{SceneRequest, Shared};
 
-pub use errors::translate_error;
+pub use errors::{clean_error, translate_error};
 
 /// Código Lua que roda as cenas visuais (`.cena`). Também traz a lista de
 /// componentes e seus campos padrão (`FIELDS`), que o NN Studio usa.
@@ -1290,6 +1290,8 @@ impl LuaScene {
     }
 
     fn draw_error(&self, ctx: &mut Context, message: &str) {
+        // Sem o efeito da tela: o erro precisa ser lido.
+        ctx.renderer.skip_screen_effect_this_frame();
         let view = ctx.viewport().as_vec2();
         let mut screen = ctx.renderer.screen();
         screen.draw_rect(Vec2::ZERO, view, Color::hex(0x1A0D10).with_alpha(0.92));

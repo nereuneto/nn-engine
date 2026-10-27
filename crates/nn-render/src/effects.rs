@@ -94,17 +94,26 @@ fn efeito(uv: vec2<f32>) -> vec4<f32> {
 fn efeito(uv: vec2<f32>) -> vec4<f32> {
     let c = amostra(uv);
     let d = max(params.raio, 0.0) / tamanho();
+    // A luz em volta: um disco de amostras, as de perto pesando mais.
     var soma = vec3<f32>(0.0);
-    for (var i = 0; i < 12; i = i + 1) {
-        let ang = f32(i) * 0.52359878;
-        let dir = vec2<f32>(cos(ang), sin(ang)) * d;
-        let a = amostra(uv + dir * 0.5);
-        let b = amostra(uv + dir);
-        soma = soma + a.rgb * a.a + b.rgb * b.a;
+    var peso = 0.0;
+    for (var i = 0; i < 16; i = i + 1) {
+        let ang = f32(i) * 0.39269908 + f32(i % 2) * 0.19634954;
+        let dir = vec2<f32>(cos(ang), sin(ang));
+        for (var k = 1; k <= 3; k = k + 1) {
+            let r = f32(k) / 3.0;
+            let w = 1.0 - r * 0.6;
+            let a = amostra(uv + dir * d * r);
+            soma = soma + a.rgb * a.a * w;
+            peso = peso + w;
+        }
     }
-    let brilho = soma / 24.0 * params.forca;
-    let extra = clamp(dot(brilho, vec3<f32>(0.3333)), 0.0, 1.0);
-    return vec4<f32>(c.rgb * c.a + brilho, max(c.a, extra));
+    let brilho = soma / peso * params.forca;
+    // Por cima da imagem (com o alpha multiplicado), e de volta ao normal.
+    let luz = clamp(max(brilho.r, max(brilho.g, brilho.b)), 0.0, 1.0);
+    let a = c.a + luz * (1.0 - c.a);
+    let rgb = c.rgb * c.a + brilho;
+    return vec4<f32>(rgb / max(a, 0.0039), a);
 }
 ",
     ),
@@ -180,10 +189,38 @@ pub fn parse_params(source: &str) -> Result<Vec<(String, f32)>, EffectError> {
                     ),
                 });
             }
+            // Uma cor (#RRGGBB ou #RRGGBBAA) vira quatro: nome_r, nome_g,
+            // nome_b e nome_a, em cor linear (como o shader trabalha).
+            if let Some(hex) = value.and_then(|v| v.strip_prefix('#')) {
+                let rgba = parse_hex(hex).ok_or_else(|| EffectError {
+                    line: Some(i + 1),
+                    message: format!(
+                        "a cor de \"{name}\" precisa ser #RRGGBB ou #RRGGBBAA (veio \"#{hex}\")"
+                    ),
+                })?;
+                for (k, suffix) in ["r", "g", "b", "a"].iter().enumerate() {
+                    let full = format!("{name}_{suffix}");
+                    if out.iter().any(|(n, _)| *n == full) {
+                        return Err(EffectError {
+                            line: Some(i + 1),
+                            message: format!("o parâmetro \"{full}\" aparece duas vezes"),
+                        });
+                    }
+                    let v = if k < 3 {
+                        srgb_to_linear(rgba[k])
+                    } else {
+                        rgba[k]
+                    };
+                    out.push((full, v));
+                }
+                continue;
+            }
             let value = match value {
                 Some(v) => v.parse::<f32>().map_err(|_| EffectError {
                     line: Some(i + 1),
-                    message: format!("o valor de \"{name}\" precisa ser um número (veio \"{v}\")"),
+                    message: format!(
+                        "o valor de \"{name}\" precisa ser um número ou uma cor #RRGGBB (veio \"{v}\")"
+                    ),
                 })?,
                 None => 0.0,
             };
@@ -206,6 +243,44 @@ pub fn parse_params(source: &str) -> Result<Vec<(String, f32)>, EffectError> {
         });
     }
     Ok(out)
+}
+
+/// "RRGGBB" ou "RRGGBBAA" em 0 a 1.
+fn parse_hex(hex: &str) -> Option<[f32; 4]> {
+    if !(hex.len() == 6 || hex.len() == 8) || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |i: usize| {
+        u8::from_str_radix(&hex[i..i + 2], 16)
+            .ok()
+            .map(|b| f32::from(b) / 255.0)
+    };
+    Some([
+        byte(0)?,
+        byte(2)?,
+        byte(4)?,
+        if hex.len() == 8 { byte(6)? } else { 1.0 },
+    ])
+}
+
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// Um efeito que não muda nada, com os parâmetros de `source` (o que fica no
+/// lugar de um efeito com erro: o jogo continua mudando os parâmetros dele).
+pub fn passthrough_for(source: &str) -> String {
+    match parse_params(source) {
+        Ok(params) if !params.is_empty() => {
+            let list: Vec<String> = params.iter().map(|(n, v)| format!("{n} = {v}")).collect();
+            format!("// parâmetros: {}\n{PASSTHROUGH}", list.join(", "))
+        }
+        _ => PASSTHROUGH.to_string(),
+    }
 }
 
 /// O shader inteiro: o dos sprites, o que o efeito usa e o efeito. Devolve
@@ -232,6 +307,7 @@ struct NnParametros {{
 @group(2) @binding(0) var<uniform> nn_tempo: NnTempo;
 @group(2) @binding(1) var<uniform> params: NnParametros;
 var<private> nn_regiao: vec4<f32>;
+var<private> nn_canvas: bool;
 fn tempo() -> f32 {{
     return nn_tempo.segundos;
 }}
@@ -241,7 +317,9 @@ fn tamanho() -> vec2<f32> {{
 fn amostra(uv: vec2<f32>) -> vec4<f32> {{
     let dentro = all(uv >= vec2<f32>(0.0)) && all(uv <= vec2<f32>(1.0));
     let c = textureSampleLevel(sprite_texture, sprite_sampler, nn_regiao.xy + clamp(uv, vec2<f32>(0.0), vec2<f32>(1.0)) * nn_regiao.zw, 0.0);
-    return select(vec4<f32>(0.0), c, dentro);
+    // Um canvas guarda a cor com o alpha já multiplicado: volta ao normal.
+    let normal = select(c, vec4<f32>(c.rgb / max(c.a, 0.0039), c.a), nn_canvas);
+    return select(vec4<f32>(0.0), normal, dentro);
 }}
 ",
         sprite = include_str!("sprite.wgsl"),
@@ -252,6 +330,7 @@ fn amostra(uv: vec2<f32>) -> vec4<f32> {{
 @fragment
 fn fs_efeito(in: VertexOut) -> @location(0) vec4<f32> {{
     nn_regiao = in.region;
+    nn_canvas = in.flags > 0.5;
     return efeito(in.local) * in.color;
 }}
 "
@@ -260,14 +339,39 @@ fn fs_efeito(in: VertexOut) -> @location(0) vec4<f32> {{
 }
 
 /// Algumas mensagens do naga, em português.
-fn translate(message: &str) -> String {
+fn translate(message: &str, params: &[(String, f32)]) -> String {
     let m = message.trim();
+    // "Function [3] 'efeito' is invalid: ..." conta só o que importa.
+    let m = match m.split_once(" is invalid: ") {
+        Some((head, rest)) if head.starts_with("Function ") => rest,
+        _ => m,
+    };
     let quoted = |s: &str| {
         s.split('`')
             .nth(1)
             .map(|x| x.to_string())
             .unwrap_or_default()
     };
+    if m.starts_with("invalid field accessor") {
+        let field = quoted(m);
+        let names: Vec<&str> = params
+            .iter()
+            .map(|(n, _)| n.as_str())
+            .filter(|n| !n.starts_with("nn_livre_"))
+            .collect();
+        return if names.is_empty() {
+            format!("\"{field}\" não existe aqui (o efeito não tem parâmetros)")
+        } else {
+            format!(
+                "\"{field}\" não existe aqui (os parâmetros são: {})",
+                names.join(", ")
+            )
+        };
+    }
+    if m.contains("does not match the declared return type") {
+        return "o return não devolve o tipo que a função promete (o efeito devolve vec4<f32>)"
+            .into();
+    }
     if m.starts_with("no definition in scope for identifier") {
         return format!("\"{}\" não existe aqui", quoted(m));
     }
@@ -317,7 +421,7 @@ pub(crate) fn check(source: &str) -> Result<(String, Vec<(String, f32)>), Effect
             .or_else(|| line_of(e.location(&full)));
         EffectError {
             line,
-            message: translate(e.message()),
+            message: translate(e.message(), &params),
         }
     })?;
     let info = naga::valid::Validator::new(
@@ -332,9 +436,15 @@ pub(crate) fn check(source: &str) -> Result<(String, Vec<(String, f32)>), Effect
             message = format!("{message}: {s}");
             source_err = s.source();
         }
+        // A marca mais de dentro (a última) que cai no código do efeito.
+        let line = e
+            .spans()
+            .filter_map(|(span, _)| line_of(Some(span.location(&full))))
+            .last()
+            .or_else(|| line_of(e.location(&full)));
         EffectError {
-            line: line_of(e.location(&full)),
-            message: translate(&message),
+            line,
+            message: translate(&message, &params),
         }
     })?;
     // O navegador (WebGL2) recebe o shader em GLSL ES 3.0.
@@ -387,6 +497,8 @@ pub struct EffectId(pub(crate) u32);
 pub(crate) struct ShaderData {
     pub alpha: wgpu::RenderPipeline,
     pub add: wgpu::RenderPipeline,
+    pub canvas_alpha: wgpu::RenderPipeline,
+    pub canvas_add: wgpu::RenderPipeline,
     pub params: Vec<(String, f32)>,
 }
 
@@ -453,7 +565,7 @@ impl EffectGpu {
         view_layout: &wgpu::BindGroupLayout,
         texture_layout: &wgpu::BindGroupLayout,
         vertex: wgpu::VertexBufferLayout<'static>,
-        blends: [wgpu::BlendState; 2],
+        blends: [wgpu::BlendState; 4],
     ) -> Result<EffectShader, EffectError> {
         let (full, params) = check(source)?;
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -499,6 +611,8 @@ impl EffectGpu {
         self.shaders.push(ShaderData {
             alpha: make(blends[0]),
             add: make(blends[1]),
+            canvas_alpha: make(blends[2]),
+            canvas_add: make(blends[3]),
             params,
         });
         Ok(EffectShader(self.shaders.len() as u32 - 1))
@@ -668,6 +782,38 @@ mod tests {
         assert!(parse_params("// params: força = 1").is_err());
         assert!(parse_params("// params: a = b").is_err());
         assert!(parse_params("// params: a, a").is_err());
+    }
+
+    #[test]
+    fn cor_nos_parametros() {
+        let p = parse_params("// parâmetros: fundo = #FF0000, forca = 2").unwrap();
+        let names: Vec<&str> = p.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["fundo_r", "fundo_g", "fundo_b", "fundo_a", "forca"]);
+        assert_eq!(p[0].1, 1.0);
+        assert_eq!(p[1].1, 0.0);
+        assert_eq!(p[3].1, 1.0);
+        assert!(parse_params("// parâmetros: fundo = #FF00").is_err());
+        // O que não muda nada, com os mesmos parâmetros.
+        let fake = passthrough_for("// parâmetros: a = 1, cor = #FFFFFF\nnada");
+        let (_, params) = check(&fake).unwrap();
+        assert_eq!(params.len(), 5);
+    }
+
+    #[test]
+    fn mensagens_dos_erros_de_tipo() {
+        let e = check(
+            "// parâmetros: forca = 1\nfn efeito(uv: vec2<f32>) -> vec4<f32> {\n    let c = amostra(uv);\n    return c * params.forsa;\n}\n",
+        )
+        .unwrap_err();
+        assert!(
+            e.message
+                .contains("\"forsa\" não existe aqui (os parâmetros são: forca)"),
+            "{e}"
+        );
+        assert_eq!(e.line, Some(4), "{e}");
+        let e = check("fn efeito(uv: vec2<f32>) -> vec4<f32> {\n    let x = 1.0;\n    return vec3<f32>(x);\n}\n").unwrap_err();
+        assert!(e.message.contains("o return não devolve o tipo"), "{e}");
+        assert_eq!(e.line, Some(3), "{e}");
     }
 
     #[test]
