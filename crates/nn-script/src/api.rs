@@ -212,12 +212,85 @@ enum Space {
     Screen,
 }
 
+/// As opções de `nn.draw.sprite`: da tabela, ou do jeito curto
+/// `(img, x, y, quadro, escala, cor)` (sem criar uma tabela a cada quadro).
+#[derive(Default)]
+struct SpriteOpts {
+    frame: Option<i64>,
+    scale: Option<f32>,
+    w: Option<f32>,
+    h: Option<f32>,
+    tile_w: Option<f32>,
+    tile_h: Option<f32>,
+    offset_x: Option<f32>,
+    offset_y: Option<f32>,
+    flip_x: bool,
+    flip_y: bool,
+    color: Option<nn_core::Color>,
+    alpha: Option<f32>,
+    origin_x: Option<f32>,
+    origin_y: Option<f32>,
+    rotation: Option<f32>,
+}
+
+impl SpriteOpts {
+    fn from_table(o: Option<&Table>) -> Result<Self> {
+        Ok(Self {
+            frame: opt(o, "frame")?,
+            scale: opt(o, "scale")?,
+            w: opt(o, "w")?,
+            h: opt(o, "h")?,
+            tile_w: opt(o, "tile_w")?,
+            tile_h: opt(o, "tile_h")?,
+            offset_x: opt(o, "offset_x")?,
+            offset_y: opt(o, "offset_y")?,
+            flip_x: opt::<bool>(o, "flip_x")?.unwrap_or(false),
+            flip_y: opt::<bool>(o, "flip_y")?.unwrap_or(false),
+            color: opt_color(o, "color")?,
+            alpha: opt(o, "alpha")?,
+            origin_x: opt(o, "origin_x")?,
+            origin_y: opt(o, "origin_y")?,
+            rotation: opt(o, "rotation")?,
+        })
+    }
+
+    /// O 4º argumento em diante: uma tabela de opções, ou quadro, escala e
+    /// cor.
+    fn from_args(args: &[Value]) -> Result<Self> {
+        match args.first() {
+            Some(Value::Table(t)) => Self::from_table(Some(t)),
+            _ => {
+                let num = |i: usize, name: &str| -> Result<Option<f64>> {
+                    match args.get(i) {
+                        None | Some(Value::Nil) => Ok(None),
+                        Some(Value::Integer(n)) => Ok(Some(*n as f64)),
+                        Some(Value::Number(n)) => Ok(Some(*n)),
+                        Some(other) => Err(err(format!(
+                            "{name}: esperava um número, recebeu {}",
+                            other.type_name()
+                        ))),
+                    }
+                };
+                Ok(Self {
+                    frame: num(0, "quadro (4º argumento)")?.map(|f| f as i64),
+                    scale: num(1, "escala (5º argumento)")?.map(|f| f as f32),
+                    color: match args.get(2) {
+                        None | Some(Value::Nil) => None,
+                        Some(v) => Some(color(v)?),
+                    },
+                    ..Self::default()
+                })
+            }
+        }
+    }
+}
+
 fn build_sprite(
     ctx: &Context,
     target: &Value,
     x: f32,
     y: f32,
-    opts: Option<&Table>,
+    o: &SpriteOpts,
     space: Space,
 ) -> Result<Sprite> {
     let (mut sprite, natural) = match target {
@@ -227,7 +300,7 @@ fn build_sprite(
         }
         Value::UserData(ud) if ud.is::<LSheet>() => {
             let sheet = ud.borrow::<LSheet>()?.0;
-            let frame = opt::<i64>(opts, "frame")?.unwrap_or(1);
+            let frame = o.frame.unwrap_or(1);
             if frame < 1 || frame as u32 > sheet.frame_count() {
                 return Err(err(format!(
                     "quadro {frame} não existe (a spritesheet tem {} quadros, de 1 a {})",
@@ -245,14 +318,14 @@ fn build_sprite(
         }
     };
 
-    let scale = opt::<f32>(opts, "scale")?.unwrap_or(1.0);
+    let scale = o.scale.unwrap_or(1.0);
     let mut size = Vec2::new(
-        opt::<f32>(opts, "w")?.unwrap_or(natural.x * scale),
-        opt::<f32>(opts, "h")?.unwrap_or(natural.y * scale),
+        o.w.unwrap_or(natural.x * scale),
+        o.h.unwrap_or(natural.y * scale),
     );
     // Repetir em vez de esticar: cada cópia tem `tile_w` × `tile_h`.
-    let tile_w = opt::<f32>(opts, "tile_w")?.filter(|v| *v > 0.0);
-    let tile_h = opt::<f32>(opts, "tile_h")?.filter(|v| *v > 0.0);
+    let tile_w = o.tile_w.filter(|v| *v > 0.0);
+    let tile_h = o.tile_h.filter(|v| *v > 0.0);
     let repeat = Vec2::new(
         tile_w.map_or(1.0, |t| size.x.abs() / t),
         tile_h.map_or(1.0, |t| size.y.abs() / t),
@@ -265,10 +338,7 @@ fn build_sprite(
         tile_h.unwrap_or(size.y.abs()),
     )
     .max(Vec2::splat(1e-3));
-    let shift = Vec2::new(
-        opt::<f32>(opts, "offset_x")?.unwrap_or(0.0),
-        opt::<f32>(opts, "offset_y")?.unwrap_or(0.0),
-    );
+    let shift = Vec2::new(o.offset_x.unwrap_or(0.0), o.offset_y.unwrap_or(0.0));
     let offset = Vec2::new(
         -shift.x / tile.x,
         match space {
@@ -276,28 +346,28 @@ fn build_sprite(
             Space::Screen => -shift.y / tile.y,
         },
     );
-    if opt::<bool>(opts, "flip_x")?.unwrap_or(false) {
+    if o.flip_x {
         size.x = -size.x;
     }
-    if opt::<bool>(opts, "flip_y")?.unwrap_or(false) {
+    if o.flip_y {
         size.y = -size.y;
     }
     let default_origin = match space {
         Space::World => 0.5,
         Space::Screen => 0.0,
     };
-    let mut tint = opt_color(opts, "color")?.unwrap_or(nn_core::Color::WHITE);
-    if let Some(a) = opt::<f32>(opts, "alpha")? {
+    let mut tint = o.color.unwrap_or(nn_core::Color::WHITE);
+    if let Some(a) = o.alpha {
         tint.a *= a;
     }
     sprite = sprite
         .at(Vec2::new(x, y))
         .size(size)
         .origin(Vec2::new(
-            opt::<f32>(opts, "origin_x")?.unwrap_or(default_origin),
-            opt::<f32>(opts, "origin_y")?.unwrap_or(default_origin),
+            o.origin_x.unwrap_or(default_origin),
+            o.origin_y.unwrap_or(default_origin),
         ))
-        .rotation(opt::<f32>(opts, "rotation")?.unwrap_or(0.0))
+        .rotation(o.rotation.unwrap_or(0.0))
         .color(tint)
         .repeat(repeat)
         .offset(offset);
@@ -432,9 +502,10 @@ fn draw_table(lua: &Lua, space: Space) -> Result<Table> {
     t.set(
         "sprite",
         lua.create_function(
-            move |lua, (target, x, y, opts): (Value, f32, f32, Option<Table>)| {
+            move |lua, (target, x, y, a, b, c): (Value, f32, f32, Value, Value, Value)| {
+                let o = SpriteOpts::from_args(&[a, b, c])?;
                 with_ctx(lua, |c| {
-                    let sprite = build_sprite(c, &target, x, y, opts.as_ref(), space)?;
+                    let sprite = build_sprite(c, &target, x, y, &o, space)?;
                     match space {
                         Space::World => c.renderer.draw(&sprite),
                         Space::Screen => {
@@ -449,20 +520,26 @@ fn draw_table(lua: &Lua, space: Space) -> Result<Table> {
 
     t.set(
         "rect",
-        lua.create_function(move |lua, (x, y, w, h, col): (f32, f32, f32, f32, Value)| {
-            let col = color(&col)?;
-            with_ctx(lua, |c| {
-                match space {
-                    Space::World => c.renderer.draw_rect(Vec2::new(x, y), Vec2::new(w, h), col),
-                    Space::Screen => {
-                        c.renderer
-                            .screen()
-                            .draw_rect(Vec2::new(x, y), Vec2::new(w, h), col);
+        lua.create_function(
+            move |lua, (x, y, w, h, col, line): (f32, f32, f32, f32, Value, Option<f32>)| {
+                let col = color(&col)?;
+                let (at, size) = (Vec2::new(x, y), Vec2::new(w, h));
+                with_ctx(lua, |c| {
+                    // Um número no fim: só o contorno, com essa espessura.
+                    match (space, line) {
+                        (Space::World, None) => c.renderer.draw_rect(at, size, col),
+                        (Space::World, Some(l)) => c.renderer.draw_rect_outline(at, size, l, col),
+                        (Space::Screen, None) => {
+                            c.renderer.screen().draw_rect(at, size, col);
+                        }
+                        (Space::Screen, Some(l)) => {
+                            c.renderer.screen().draw_rect_outline(at, size, l, col);
+                        }
                     }
-                }
-                Ok(())
-            })
-        })?,
+                    Ok(())
+                })
+            },
+        )?,
     )?;
 
     t.set(
@@ -550,21 +627,149 @@ fn draw_table(lua: &Lua, space: Space) -> Result<Table> {
 
     t.set(
         "circle",
-        lua.create_function(move |lua, (x, y, r, col): (f32, f32, f32, Value)| {
+        lua.create_function(
+            move |lua, (x, y, r, col, line): (f32, f32, f32, Value, Option<f32>)| {
+                let col = color(&col)?;
+                let at = Vec2::new(x, y);
+                with_ctx(lua, |c| {
+                    match (space, line) {
+                        (Space::World, None) => c.renderer.draw_circle(at, r, col),
+                        (Space::World, Some(l)) => c.renderer.draw_circle_outline(at, r, l, col),
+                        (Space::Screen, None) => {
+                            c.renderer.screen().draw_circle(at, r, col);
+                        }
+                        (Space::Screen, Some(l)) => {
+                            c.renderer.screen().draw_circle_outline(at, r, l, col);
+                        }
+                    }
+                    Ok(())
+                })
+            },
+        )?,
+    )?;
+
+    t.set(
+        "line",
+        lua.create_function(
+            move |lua, (x1, y1, x2, y2, col, width): (f32, f32, f32, f32, Value, Option<f32>)| {
+                let col = color(&col)?;
+                let (a, b, w) = (Vec2::new(x1, y1), Vec2::new(x2, y2), width.unwrap_or(1.0));
+                with_ctx(lua, |c| {
+                    match space {
+                        Space::World => c.renderer.draw_line(a, b, w, col),
+                        Space::Screen => {
+                            c.renderer.screen().draw_line(a, b, w, col);
+                        }
+                    }
+                    Ok(())
+                })
+            },
+        )?,
+    )?;
+
+    t.set(
+        "polyline",
+        lua.create_function(
+            move |lua, (pts, col, width, closed): (Table, Value, Option<f32>, Option<bool>)| {
+                let col = color(&col)?;
+                let w = width.unwrap_or(1.0);
+                let closed = closed.unwrap_or(false);
+                with_ctx(lua, |c| {
+                    let pts = points(lua, &pts)?;
+                    match space {
+                        Space::World => c.renderer.draw_polyline(&pts, w, closed, col),
+                        Space::Screen => {
+                            c.renderer.screen().draw_polyline(&pts, w, closed, col);
+                        }
+                    }
+                    put_points(lua, pts);
+                    Ok(())
+                })
+            },
+        )?,
+    )?;
+
+    t.set(
+        "polygon",
+        lua.create_function(move |lua, (pts, col, line): (Table, Value, Option<f32>)| {
             let col = color(&col)?;
             with_ctx(lua, |c| {
-                match space {
-                    Space::World => c.renderer.draw_circle(Vec2::new(x, y), r, col),
-                    Space::Screen => {
-                        c.renderer.screen().draw_circle(Vec2::new(x, y), r, col);
+                let pts = points(lua, &pts)?;
+                match (space, line) {
+                    (Space::World, None) => c.renderer.draw_polygon(&pts, col),
+                    (Space::World, Some(l)) => c.renderer.draw_polyline(&pts, l, true, col),
+                    (Space::Screen, None) => {
+                        c.renderer.screen().draw_polygon(&pts, col);
+                    }
+                    (Space::Screen, Some(l)) => {
+                        c.renderer.screen().draw_polyline(&pts, l, true, col);
                     }
                 }
+                put_points(lua, pts);
                 Ok(())
             })
         })?,
     )?;
 
     Ok(t)
+}
+
+/// Um vetor de pontos reaproveitado entre as chamadas (sem alocar a cada
+/// linha desenhada).
+#[derive(Default)]
+struct PointBuf(Vec<Vec2>);
+
+/// Os pontos de uma lista: `{ x1, y1, x2, y2, ... }` ou `{ {x, y}, ... }`
+/// (também `{ {x = 1, y = 2}, ... }`).
+fn points(lua: &Lua, t: &Table) -> Result<Vec<Vec2>> {
+    let mut out = lua
+        .app_data_mut::<PointBuf>()
+        .map(|mut b| std::mem::take(&mut b.0))
+        .unwrap_or_default();
+    out.clear();
+    let n = t.raw_len();
+    match t.raw_get::<Value>(1)? {
+        Value::Table(_) => {
+            for i in 1..=n {
+                let p: Table = t
+                    .raw_get(i)
+                    .map_err(|_| err(format!("ponto {i}: esperava {{x, y}}")))?;
+                let x = match p.raw_get::<Option<f32>>(1)? {
+                    Some(x) => x,
+                    None => p
+                        .raw_get::<Option<f32>>("x")?
+                        .ok_or_else(|| err(format!("ponto {i}: falta o x")))?,
+                };
+                let y = match p.raw_get::<Option<f32>>(2)? {
+                    Some(y) => y,
+                    None => p
+                        .raw_get::<Option<f32>>("y")?
+                        .ok_or_else(|| err(format!("ponto {i}: falta o y")))?,
+                };
+                out.push(Vec2::new(x, y));
+            }
+        }
+        Value::Nil => {}
+        _ => {
+            if !n.is_multiple_of(2) {
+                return Err(err(format!(
+                    "os pontos vêm aos pares (x, y): a lista tem {n} números"
+                )));
+            }
+            for i in (1..=n).step_by(2) {
+                out.push(Vec2::new(t.raw_get(i)?, t.raw_get(i + 1)?));
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn put_points(lua: &Lua, pts: Vec<Vec2>) {
+    if let Some(mut b) = lua.app_data_mut::<PointBuf>() {
+        b.0 = pts;
+    } else {
+        lua.set_app_data(PointBuf(pts));
+    }
 }
 
 // ----------------------------------------------------------------------

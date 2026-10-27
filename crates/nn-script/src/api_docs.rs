@@ -132,17 +132,32 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.draw.sprite",
         "(img, x, y, opts)",
-        "Desenha uma imagem ou quadro (opts: frame, w, h, scale, rotation, color, alpha, flip_x, flip_y, tile_w, tile_h).",
+        "Desenha uma imagem ou quadro (opts: frame, w, h, scale, rotation, color, alpha, flip_x, flip_y, tile_w, tile_h, offset_x, offset_y). O jeito curto, sem tabela: (img, x, y, quadro, escala, cor).",
     ),
     d(
         "nn.draw.rect",
-        "(x, y, w, h, cor)",
-        "Retângulo de cor sólida (x, y é o centro).",
+        "(x, y, w, h, cor, contorno)",
+        "Retângulo de cor sólida (x, y é o centro). Com um número no fim, só o contorno, com essa espessura (por dentro).",
     ),
     d(
         "nn.draw.circle",
-        "(x, y, raio, cor)",
-        "Círculo de cor sólida.",
+        "(x, y, raio, cor, contorno)",
+        "Círculo de cor sólida. Com um número no fim, só o contorno, com essa espessura (por dentro).",
+    ),
+    d(
+        "nn.draw.line",
+        "(x1, y1, x2, y2, cor, espessura)",
+        "Linha de um ponto a outro (espessura 1 se faltar), com a borda suave.",
+    ),
+    d(
+        "nn.draw.polyline",
+        "(pontos, cor, espessura, fechada)",
+        "Linha passando pelos pontos ({x1, y1, x2, y2, ...} ou {{x, y}, ...}); fechada = true volta ao primeiro. As juntas ficam em ponta.",
+    ),
+    d(
+        "nn.draw.polygon",
+        "(pontos, cor, contorno)",
+        "Polígono preenchido (também côncavo) com os pontos ({x1, y1, ...} ou {{x, y}, ...}). Com um número no fim, só o contorno.",
     ),
     d(
         "nn.draw.panel",
@@ -164,13 +179,36 @@ pub const API_DOCS: &[ApiDoc] = &[
         "",
         "Desenho na tela, por cima do mundo (HUD, menus). Origem no canto superior esquerdo.",
     ),
-    d("nn.screen.sprite", "(img, x, y, opts)", "Imagem na tela."),
+    d(
+        "nn.screen.sprite",
+        "(img, x, y, opts)",
+        "Imagem na tela (as opções de nn.draw.sprite, ou o jeito curto: quadro, escala, cor).",
+    ),
     d(
         "nn.screen.rect",
-        "(x, y, w, h, cor)",
-        "Retângulo na tela (x, y é o canto superior esquerdo).",
+        "(x, y, w, h, cor, contorno)",
+        "Retângulo na tela (x, y é o canto superior esquerdo). Com um número no fim, só o contorno.",
     ),
-    d("nn.screen.circle", "(x, y, raio, cor)", "Círculo na tela."),
+    d(
+        "nn.screen.circle",
+        "(x, y, raio, cor, contorno)",
+        "Círculo na tela. Com um número no fim, só o contorno.",
+    ),
+    d(
+        "nn.screen.line",
+        "(x1, y1, x2, y2, cor, espessura)",
+        "Linha na tela.",
+    ),
+    d(
+        "nn.screen.polyline",
+        "(pontos, cor, espessura, fechada)",
+        "Linha passando pelos pontos, na tela.",
+    ),
+    d(
+        "nn.screen.polygon",
+        "(pontos, cor, contorno)",
+        "Polígono preenchido na tela (também côncavo).",
+    ),
     d(
         "nn.screen.panel",
         "(x, y, w, h, opts)",

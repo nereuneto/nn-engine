@@ -153,6 +153,8 @@ pub struct Renderer {
     /// com uma de 1×1 transparente e é reaproveitado pela próxima criada.
     freed: std::collections::BTreeSet<u32>,
     white: TextureId,
+    /// Os triângulos de uma forma, reaproveitados de uma para outra.
+    tri_buf: Vec<crate::shapes2d::Tri>,
     /// Para montar os sprites de um painel sem alocar a cada um.
     panel_buf: Vec<Sprite>,
     /// A última cor convertida para a GPU (veja `gpu_color`).
@@ -338,6 +340,7 @@ impl Renderer {
             texture_layout,
             textures: Vec::new(),
             white: TextureId(0),
+            tri_buf: Vec::new(),
             panel_buf: Vec::new(),
             freed: Default::default(),
             last_color: std::cell::Cell::new((color_bits(Color::WHITE), Color::WHITE)),
@@ -644,6 +647,122 @@ impl Renderer {
             .size(Vec2::splat(radius * 2.0))
             .color(color);
         self.push_sprite(Space::World, &sprite);
+    }
+
+    /// Linha de `a` até `b`, com `width` de espessura, no espaço do mundo.
+    pub fn draw_line(&mut self, a: Vec2, b: Vec2, width: f32, color: Color) {
+        self.push_polyline(Space::World, &[a, b], width, false, color);
+    }
+
+    /// Linha passando pelos pontos (`closed`: volta ao primeiro), no espaço do
+    /// mundo. As juntas ficam em ponta, ou cortadas nos ângulos fechados.
+    pub fn draw_polyline(&mut self, points: &[Vec2], width: f32, closed: bool, color: Color) {
+        self.push_polyline(Space::World, points, width, closed, color);
+    }
+
+    /// Polígono preenchido (também côncavo), no espaço do mundo.
+    pub fn draw_polygon(&mut self, points: &[Vec2], color: Color) {
+        self.push_polygon(Space::World, points, color);
+    }
+
+    /// Contorno de um retângulo centrado em `center`, por dentro dele, no
+    /// espaço do mundo.
+    pub fn draw_rect_outline(&mut self, center: Vec2, size: Vec2, width: f32, color: Color) {
+        self.push_rect_outline(Space::World, center - size.abs() / 2.0, size, width, color);
+    }
+
+    fn push_rect_outline(&mut self, space: Space, min: Vec2, size: Vec2, width: f32, color: Color) {
+        let size = size.abs();
+        if width <= 0.0 || size.min_element() <= 0.0 {
+            return;
+        }
+        // Mais grosso que o retângulo: fica cheio.
+        let pts = if width * 2.0 >= size.min_element() {
+            [
+                min,
+                Vec2::new(min.x + size.x, min.y),
+                min + size,
+                Vec2::new(min.x, min.y + size.y),
+            ]
+        } else {
+            let h = Vec2::splat(width / 2.0);
+            let (a, b) = (min + h, min + size - h);
+            return self.push_polyline(
+                space,
+                &[a, Vec2::new(b.x, a.y), b, Vec2::new(a.x, b.y)],
+                width,
+                true,
+                color,
+            );
+        };
+        self.push_polygon(space, &pts, color);
+    }
+
+    /// Contorno de um círculo, por dentro dele, no espaço do mundo.
+    pub fn draw_circle_outline(&mut self, center: Vec2, radius: f32, width: f32, color: Color) {
+        self.push_circle_outline(Space::World, center, radius, width, color);
+    }
+
+    fn push_polyline(
+        &mut self,
+        space: Space,
+        points: &[Vec2],
+        width: f32,
+        closed: bool,
+        color: Color,
+    ) {
+        let mut tris = std::mem::take(&mut self.tri_buf);
+        tris.clear();
+        crate::shapes2d::polyline(points, width, closed, &mut tris);
+        self.push_tris(space, &tris, color);
+        self.tri_buf = tris;
+    }
+
+    fn push_polygon(&mut self, space: Space, points: &[Vec2], color: Color) {
+        let mut tris = std::mem::take(&mut self.tri_buf);
+        tris.clear();
+        crate::shapes2d::polygon(points, &mut tris);
+        self.push_tris(space, &tris, color);
+        self.tri_buf = tris;
+    }
+
+    fn push_circle_outline(
+        &mut self,
+        space: Space,
+        center: Vec2,
+        radius: f32,
+        width: f32,
+        color: Color,
+    ) {
+        // A linha fica por dentro do círculo, como a borda de um painel.
+        let r = (radius.abs() - width / 2.0).max(width / 4.0);
+        let pts = crate::shapes2d::circle_points(center, r, self.text_scale());
+        self.push_polyline(space, &pts, width.min(radius.abs() * 2.0), true, color);
+    }
+
+    /// Os triângulos de uma forma, na mesma fila das imagens (com a textura
+    /// branca: linhas e retângulos seguidos ficam numa chamada só).
+    fn push_tris(&mut self, space: Space, tris: &[crate::shapes2d::Tri], color: Color) {
+        let color = self.gpu_color(color).to_array();
+        let white = self.white;
+        let queue = self.queue_mut(space);
+        for t in tris {
+            let [p0, p1, p2] = t.points;
+            queue.push(
+                white,
+                Blend::Alpha,
+                SpriteInstance {
+                    position: p0.to_array(),
+                    size: p1.to_array(),
+                    origin: p2.to_array(),
+                    rotation: 0.0,
+                    region: [0.0, 0.0, 1.0, 1.0],
+                    color,
+                    repeat: [-1.0, f32::from(t.edges)],
+                    offset: [0.0, 0.0],
+                },
+            );
+        }
     }
 
     /// Painel (retângulo arredondado com borda, ou imagem em 9 fatias) no
@@ -1723,6 +1842,59 @@ impl ScreenPainter<'_> {
     /// Painel com centro em `panel.center` (pixels da tela, Y para baixo).
     pub fn draw_panel(&mut self, panel: &crate::Panel) -> &mut Self {
         self.renderer.push_panel(Space::Screen, panel, false);
+        self
+    }
+
+    /// Linha de `a` até `b`, com `width` de espessura.
+    pub fn draw_line(&mut self, a: Vec2, b: Vec2, width: f32, color: Color) -> &mut Self {
+        self.renderer
+            .push_polyline(Space::Screen, &[a, b], width, false, color);
+        self
+    }
+
+    /// Linha passando pelos pontos (`closed`: volta ao primeiro).
+    pub fn draw_polyline(
+        &mut self,
+        points: &[Vec2],
+        width: f32,
+        closed: bool,
+        color: Color,
+    ) -> &mut Self {
+        self.renderer
+            .push_polyline(Space::Screen, points, width, closed, color);
+        self
+    }
+
+    /// Polígono preenchido (também côncavo).
+    pub fn draw_polygon(&mut self, points: &[Vec2], color: Color) -> &mut Self {
+        self.renderer.push_polygon(Space::Screen, points, color);
+        self
+    }
+
+    /// Contorno de um retângulo a partir do canto superior esquerdo, por
+    /// dentro dele.
+    pub fn draw_rect_outline(
+        &mut self,
+        top_left: Vec2,
+        size: Vec2,
+        width: f32,
+        color: Color,
+    ) -> &mut Self {
+        self.renderer
+            .push_rect_outline(Space::Screen, top_left, size, width, color);
+        self
+    }
+
+    /// Contorno de um círculo, por dentro dele.
+    pub fn draw_circle_outline(
+        &mut self,
+        center: Vec2,
+        radius: f32,
+        width: f32,
+        color: Color,
+    ) -> &mut Self {
+        self.renderer
+            .push_circle_outline(Space::Screen, center, radius, width, color);
         self
     }
 }

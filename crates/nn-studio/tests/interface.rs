@@ -1074,7 +1074,7 @@ fn autocompletar_no_editor_de_codigo() {
     h.run();
     assert_eq!(texto(&h), "nn.draw.rect(");
     // A dica mostra os parâmetros enquanto se digita os argumentos.
-    h.get_by_label_contains("nn.draw.rect(x, y, w, h, cor)");
+    h.get_by_label_contains("nn.draw.rect(x, y, w, h, cor, contorno)");
     digitar(&mut h, "0, 0, 8, 8)\n");
 
     // Objetos da cena que usa este script.

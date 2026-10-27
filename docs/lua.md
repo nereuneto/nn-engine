@@ -786,13 +786,25 @@ As duas tabelas têm as mesmas funções; muda só o espaço.
 
 | Função | Descrição |
 |---|---|
-| `sprite(img, x, y, opts)` | Desenha uma imagem ou um quadro de spritesheet. |
-| `rect(x, y, w, h, cor)` | Retângulo de cor sólida. |
+| `sprite(img, x, y, opts)` | Desenha uma imagem ou um quadro de spritesheet. O jeito curto, sem tabela de opções: `sprite(img, x, y, quadro, escala, cor)` (qualquer um pode faltar). |
+| `rect(x, y, w, h, cor, contorno)` | Retângulo de cor sólida. Com `contorno` (um número), só a borda, com essa espessura. |
 | `text(texto, x, y, opts)` | Texto. |
-| `circle(x, y, raio, cor)` | Círculo de cor sólida (`x, y` é o centro nos dois espaços). |
+| `circle(x, y, raio, cor, contorno)` | Círculo de cor sólida (`x, y` é o centro nos dois espaços). Com `contorno`, só a borda. |
+| `line(x1, y1, x2, y2, cor, espessura)` | Linha de um ponto a outro (espessura 1 se faltar). |
+| `polyline(pontos, cor, espessura, fechada)` | Linha passando pelos pontos; `fechada = true` volta ao primeiro. |
+| `polygon(pontos, cor, contorno)` | Polígono preenchido, também côncavo (um L, uma estrela). Com `contorno`, só a borda. |
 | `panel(x, y, w, h, opts)` | Painel: retângulo com cantos arredondados e borda, ou uma imagem em 9 fatias. |
 
 Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`, `tile_w`, `tile_h` (repetir em vez de esticar: o tamanho de cada cópia; `{ w = 640, h = 32, tile_w = 32, tile_h = 32 }` desenha 20 blocos), `offset_x`, `offset_y` (desloca a imagem dentro do sprite, em pixels, para +x e +y; somar um pouco a cada quadro faz um fundo ou uma esteira rolar: `{ w = 640, h = 360, tile_w = 64, tile_h = 64, offset_x = nn.time.elapsed() * 30 }`).
+
+**Linhas e polígonos.** Os pontos vêm numa lista de números, `{ x1, y1, x2, y2, ... }`, ou de pares, `{ {x1, y1}, {x2, y2}, ... }` (também `{ {x = 1, y = 2}, ... }`). As linhas e as bordas dos polígonos são suaves (sem serrilhado); nas juntas de uma linha, os cantos ficam em ponta, e cortados quando o ângulo é muito fechado. O contorno de um retângulo ou de um círculo fica por dentro dele, como a borda de um painel. Linhas, retângulos e polígonos seguidos são desenhados juntos, numa chamada só para a placa de vídeo: mil linhas por quadro custam como uma.
+
+```lua
+nn.draw.line(0, 0, 100, 50, "#FFFFFF", 2)
+nn.draw.polygon({ 0, 0, 40, 0, 40, 10, 10, 10, 10, 40, 0, 40 }, "#E5A84D")  -- um L
+nn.screen.rect(10, 10, 200, 40, "#FFFFFF", 2)                                -- só a borda
+nn.screen.polyline({ {10, 100}, {60, 140}, {110, 100} }, "#7BC86C", 4)
+```
 
 Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `font`, `width`.
 `anchor` diz qual ponto do texto fica em `x, y`: `topleft` (padrão), `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright` (também com sublinhado, como a âncora do objeto: `top_left`).
