@@ -85,6 +85,21 @@ pub fn diff(before: &SceneData, after: &SceneData) -> Vec<LiveChange> {
             json: Some(serde_json::Value::Object(env)),
         });
     }
+    if before.sort_y != after.sort_y {
+        out.push(LiveChange {
+            id: 0,
+            component: None,
+            field: "sort_y".into(),
+            value: Prop::Bool(false),
+            json: Some(serde_json::Value::Array(
+                after
+                    .sort_y
+                    .iter()
+                    .map(|l| serde_json::Value::from(*l))
+                    .collect(),
+            )),
+        });
+    }
     scene_data::visit(&after.objects, &mut |o| {
         let Some(b) = before.find(o.id) else { return };
         if b.events != o.events {

@@ -658,6 +658,10 @@ const PANEL_FIELDS: &[F] = &[
     SLICE,
     SLICE_SCALE,
     UI_HUD,
+    help(
+        f("scroll", "Rolar (lista)", W::Bool),
+        "Com mais filhos do que cabem no painel, vira uma lista que rola: com a roda do mouse, arrastando ou com o foco do teclado. Só aparece o que está dentro do painel (aqui no editor, os filhos aparecem todos, para editar). Junte um Grupo em coluna para arrumar os filhos.",
+    ),
 ];
 
 const BUTTON_ACTIONS: &[(&str, &str)] = &[
@@ -2659,7 +2663,29 @@ impl Inspector {
                             "Objetos de camada maior são desenhados por cima.",
                             d[3],
                         );
-                        ui.add(egui::DragValue::new(&mut t.5).speed(0.1));
+                        ui.horizontal(|ui| {
+                            ui.add(egui::DragValue::new(&mut t.5).speed(0.1));
+                            // A camada inteira: quem está mais embaixo na
+                            // frente (vista de cima, de lado com perspectiva).
+                            let layer = o.layer;
+                            let mut sorted = doc.data.sort_y.contains(&layer);
+                            if ui
+                                .checkbox(&mut sorted, "ordenar por y")
+                                .on_hover_text(format!(
+                                    "Na camada {layer}, quem está mais embaixo (o pé) fica na frente: o herói passa atrás e na frente da árvore conforme anda. Vale para todos os objetos da camada."
+                                ))
+                                .changed()
+                            {
+                                doc.record(None);
+                                if sorted {
+                                    doc.data.sort_y.push(layer);
+                                    doc.data.sort_y.sort_unstable();
+                                    doc.data.sort_y.dedup();
+                                } else {
+                                    doc.data.sort_y.retain(|l| *l != layer);
+                                }
+                            }
+                        });
                         ui.end_row();
                         // Na tela (HUD ou cena por cima), os objetos da raiz
                         // ficam presos a um ponto da tela.

@@ -92,6 +92,10 @@ pub struct PanelOptions {
     pub anchor: Option<Anchor>,
     /// Fundo deste painel, no lugar do [`Theme::panel_color`].
     pub background: Option<Color>,
+    /// Altura máxima (na escala do tema). Com mais itens do que cabem, a
+    /// lista rola: com a roda do mouse, arrastando ou com o foco (teclado e
+    /// controle). Só os itens que aparecem são desenhados.
+    pub height: Option<f32>,
 }
 
 impl PanelOptions {
@@ -123,6 +127,11 @@ impl PanelOptions {
         self.background = Some(color);
         self
     }
+
+    pub fn height(mut self, height: f32) -> Self {
+        self.height = Some(height);
+        self
+    }
 }
 
 /// Retângulo em pixels (canto superior esquerdo e tamanho).
@@ -150,6 +159,25 @@ impl Area {
             ..self
         }
     }
+
+    /// O pedaço entre `top` e `bottom` (na altura); vazio se ficou fora.
+    fn clip_y(self, top: f32, bottom: f32) -> Self {
+        let y0 = self.pos.y.max(top);
+        let y1 = (self.pos.y + self.size.y).min(bottom);
+        Self {
+            pos: Vec2::new(self.pos.x, y0),
+            size: Vec2::new(self.size.x, (y1 - y0).max(0.0)),
+        }
+    }
+}
+
+/// Um aperto do mouse num painel que rola: vira clique ao soltar, se não
+/// arrastou.
+#[derive(Debug, Clone, Copy)]
+struct Press {
+    start: Vec2,
+    scroll: f32,
+    item: Option<usize>,
 }
 
 /// O que cada painel lembra entre um frame e outro.
@@ -160,6 +188,14 @@ struct Memory {
     items: Vec<Area>,
     last_frame: Option<u64>,
     dragging: Option<usize>,
+    /// O painel na tela no último frame.
+    rect: Option<Area>,
+    /// Quanto a lista rolou (pixels) e se ela não coube no último frame.
+    scroll: f32,
+    overflow: bool,
+    press: Option<Press>,
+    /// Arrastando para rolar (o aperto já não é um clique).
+    scrolling: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -223,6 +259,13 @@ struct Open {
     drag: Option<(usize, Vec2)>,
     /// Item que começou a ser arrastado neste frame.
     start_drag: Option<usize>,
+    /// Onde começa a parte que rola (depois do título) e as operações dela.
+    content_top: f32,
+    content_ops: usize,
+    scroll: f32,
+    /// O foco andou pelo teclado ou controle neste frame (a lista rola até
+    /// ele).
+    moved_focus: bool,
 }
 
 impl Open {
@@ -384,14 +427,62 @@ impl Context {
         let mut clicked = None;
         let mut drag = None;
         let mut moved = false;
+        // Uma lista que não coube: a roda e o arrastar rolam, e o clique vale
+        // ao soltar (para arrastar sem apertar o que estava embaixo).
+        let scrolls = options.height.is_some() && mem.overflow;
+        if !scrolls {
+            mem.press = None;
+            mem.scrolling = false;
+        }
         if interactive {
             let cursor = self.input.cursor_position();
             let hit = cursor.and_then(|c| mem.items.iter().position(|a| a.contains(c)));
+            let over = cursor.zip(mem.rect).is_some_and(|(c, r)| r.contains(c));
+            if scrolls {
+                let row = self.ui.theme.row_height * scale;
+                if over {
+                    mem.scroll -= self.input.scroll().y * row;
+                }
+                if let Some(c) = cursor {
+                    if self.input.mouse_pressed(MouseButton::Left) && over {
+                        mem.press = Some(Press {
+                            start: c,
+                            scroll: mem.scroll,
+                            item: hit,
+                        });
+                        mem.scrolling = false;
+                    }
+                    if let Some(p) = mem.press {
+                        let dy = c.y - p.start.y;
+                        if !mem.scrolling && dy.abs() > 8.0 * scale {
+                            mem.scrolling = true;
+                        }
+                        if mem.scrolling {
+                            mem.scroll = p.scroll - dy;
+                        }
+                        if self.input.mouse_released(MouseButton::Left) {
+                            if !mem.scrolling
+                                && let Some(j) = p.item.filter(|j| Some(*j) == hit)
+                            {
+                                clicked = Some((j, c));
+                            }
+                            mem.press = None;
+                            mem.scrolling = false;
+                        }
+                    }
+                }
+                if !self.input.mouse_down(MouseButton::Left)
+                    && !self.input.mouse_released(MouseButton::Left)
+                {
+                    mem.press = None;
+                    mem.scrolling = false;
+                }
+            }
             if let (Some(j), Some(c)) = (hit, cursor) {
-                if self.input.last_device() == Device::Mouse {
+                if self.input.last_device() == Device::Mouse && !mem.scrolling {
                     mem.focus = j;
                 }
-                if self.input.mouse_pressed(MouseButton::Left) {
+                if !scrolls && self.input.mouse_pressed(MouseButton::Left) {
                     clicked = Some((j, c));
                 }
             }
@@ -411,6 +502,7 @@ impl Context {
             mem.focus = mem.focus.min(count - 1);
         }
         let focus = mem.focus;
+        let scroll = mem.scroll;
         let prev_items = std::mem::take(&mut mem.items);
 
         let padding = self.ui.theme.padding * scale;
@@ -434,6 +526,10 @@ impl Context {
             clicked,
             drag,
             start_drag: None,
+            content_top: padding,
+            content_ops: 0,
+            scroll,
+            moved_focus: moved,
             options,
         };
         if let Some(title) = open.options.title.clone() {
@@ -448,6 +544,8 @@ impl Context {
             );
             open.trailing = self.ui.theme.spacing * scale;
             open.y += size * 1.3 + open.trailing;
+            open.content_top = open.y;
+            open.content_ops = open.ops.len();
         }
         self.ui.open = Some(open);
         if moved {
@@ -474,7 +572,35 @@ impl Context {
         };
         let theme = &self.ui.theme;
         let padding = theme.padding * open.scale;
-        let height = open.y - open.trailing + padding;
+        let full = open.y - open.trailing + padding;
+        // Com altura máxima, o que passa dela rola.
+        let max = open.options.height.map(|h| h * open.scale);
+        let overflow = max.is_some_and(|m| full > m + 0.5);
+        let height = if overflow { max.unwrap_or(full) } else { full };
+        let view_top = open.content_top;
+        let view_bottom = (height - padding).max(view_top);
+        let content_bottom = open.y - open.trailing;
+        let mut scroll = if overflow {
+            let view = view_bottom - view_top;
+            let mut scroll = open.scroll;
+            // O foco andou pelo teclado: a lista rola até ele.
+            if open.moved_focus
+                && let Some(item) = open.items.get(open.focus)
+            {
+                if item.pos.y - scroll < view_top {
+                    scroll = item.pos.y - view_top;
+                }
+                if item.pos.y + item.size.y - scroll > view_bottom {
+                    scroll = item.pos.y + item.size.y - view_bottom;
+                }
+            }
+            scroll.clamp(0.0, (content_bottom - view_top - view).max(0.0))
+        } else {
+            0.0
+        };
+        if !scroll.is_finite() {
+            scroll = 0.0;
+        }
         let size = Vec2::new(open.width, height);
         let position = open
             .options
@@ -489,7 +615,35 @@ impl Context {
         if background.a > 0.0 {
             screen.draw_rect(origin, size, background);
         }
-        for op in &open.ops {
+        let outer_clip = screen.clip();
+        for (i, op) in open.ops.iter().enumerate() {
+            let scrolled = overflow && i >= open.content_ops;
+            if overflow && i == open.content_ops {
+                // A parte que rola, recortada na área dela.
+                let area = nn_render::ClipRect::new(
+                    origin + Vec2::new(0.0, view_top),
+                    origin + Vec2::new(open.width, view_bottom),
+                );
+                screen.set_clip(Some(outer_clip.map_or(area, |c| c.intersect(area))));
+            }
+            let shift = if scrolled {
+                Vec2::new(0.0, -scroll)
+            } else {
+                Vec2::ZERO
+            };
+            if scrolled {
+                // Fora da vista: nem desenha (uma lista longa custa só o
+                // que aparece).
+                let (top, bottom) = match op {
+                    Op::Rect { area, .. } => (area.pos.y, area.pos.y + area.size.y),
+                    Op::Circle { center, radius, .. } => (center.y - radius, center.y + radius),
+                    Op::Text { pos, size, .. } => (pos.y - size * 1.5, pos.y + size * 1.5),
+                };
+                if bottom - scroll < view_top || top - scroll > view_bottom {
+                    continue;
+                }
+            }
+            let origin = origin + shift;
             match op {
                 Op::Rect { area, color } => {
                     screen.draw_rect(origin + area.pos, area.size, *color);
@@ -520,9 +674,47 @@ impl Context {
                 }
             }
         }
+        if overflow {
+            screen.set_clip(outer_clip);
+            // A barra de rolagem, na borda da direita.
+            let view = view_bottom - view_top;
+            let content = (content_bottom - view_top).max(view);
+            let s = open.scale;
+            let track = Area {
+                pos: Vec2::new(open.width - 6.0 * s, view_top),
+                size: Vec2::new(3.0 * s, view),
+            };
+            let bar_h = (view * view / content).max(16.0 * s).min(view);
+            let bar_y = view_top + (view - bar_h) * (scroll / (content - view).max(1.0));
+            screen.draw_rect(
+                origin + track.pos,
+                track.size,
+                theme.text_color.with_alpha(0.15),
+            );
+            screen.draw_rect(
+                origin + Vec2::new(track.pos.x, bar_y),
+                Vec2::new(track.size.x, bar_h),
+                theme.accent_color,
+            );
+        }
 
         let mem = self.ui.memory.entry(open.id).or_default();
-        mem.items = open.items.iter().map(|a| a.offset(origin)).collect();
+        mem.items = open
+            .items
+            .iter()
+            .map(|a| {
+                if overflow {
+                    a.offset(Vec2::new(0.0, -scroll))
+                        .clip_y(view_top, view_bottom)
+                        .offset(origin)
+                } else {
+                    a.offset(origin)
+                }
+            })
+            .collect();
+        mem.rect = Some(Area { pos: origin, size });
+        mem.scroll = scroll;
+        mem.overflow = overflow;
         if open.start_drag.is_some() {
             mem.dragging = open.start_drag;
         }

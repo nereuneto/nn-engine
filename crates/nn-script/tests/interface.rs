@@ -435,3 +435,154 @@ fn cena_por_cima_pausa_o_jogo_e_fecha() {
     h.run_frames(3);
     assert_eq!(h.game.len(), 1);
 }
+
+fn pixel(h: &Headless<impl Game>, p: Vec2) -> [u8; 4] {
+    let px = h.pixels().unwrap();
+    let i = ((p.y as u32 * W as u32 + p.x as u32) * 4) as usize;
+    [px[i], px[i + 1], px[i + 2], px[i + 3]]
+}
+
+/// Um Painel com Rolar e dez botões: vira uma lista que rola.
+#[test]
+fn painel_que_rola_mostra_so_o_que_cabe() {
+    let mut botoes = String::new();
+    for i in 1..=10 {
+        botoes.push_str(&format!(
+            r##"{{ id = {}, name = "b{i}", components = {{ {{ type = "button", text = "B{i}", w = 160, h = 40, color = "#3060C0" }} }},
+               events = {{ {{ when = {{ {{ cond = "clicar", quem = "@este" }} }},
+                 actions = {{ {{ act = "variavel", var = "apertos", op = "somar", valor = {i} }} }} }} }} }},
+"##,
+            i + 1
+        ));
+    }
+    let cena_txt = format!(
+        r##"return {{ format = 1, background = "#000000", objects = {{
+          {{ id = 1, name = "lista", x = 0, y = 0,
+            components = {{ {{ type = "panel", w = 200, h = 120, color = "#202020", scroll = true }},
+                            {{ type = "layout", arrange = "vertical", spacing = 8 }} }},
+            children = {{ {botoes} }} }},
+        }} }}"##
+    );
+    let dir = projeto(
+        "rolar",
+        &[("config.lua", CONFIG), ("lista.cena", &cena_txt)],
+    );
+    let Some((mut h, rt)) = cena(&dir, "lista.cena") else {
+        return;
+    };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    let y = |rt: &ScriptRuntime, n: &str| {
+        lua::<f64>(
+            rt,
+            &format!("select(2, cena.objects.{n}:world_transform())"),
+        )
+    };
+    // O primeiro encosta no alto do painel (60 - 8 de margem - 20).
+    assert_eq!(y(&rt, "b1"), 32.0);
+    // Dentro do painel, os botões; fora dele, nada (o b4 estaria em -100).
+    assert_eq!(pixel(&h, tela(-60.0, 30.0))[..3], [0x30, 0x60, 0xC0]);
+    assert_eq!(pixel(&h, tela(0.0, -100.0))[..3], [0, 0, 0]);
+    assert_eq!(
+        pixel(&h, tela(0.0, 58.0))[..3],
+        [0x20, 0x20, 0x20],
+        "a margem de cima"
+    );
+
+    // O teclado leva o foco para baixo e a lista rola até ele.
+    for _ in 0..6 {
+        apertar(&mut h, KeyCode::ArrowDown);
+    }
+    assert_eq!(foco(&rt), "b6");
+    let y6 = y(&rt, "b6");
+    assert!(y6 - 20.0 >= -52.5 && y6 + 20.0 <= 52.5, "b6 aparece: {y6}");
+
+    // Escondido não responde ao mouse: em -100 estaria um botão.
+    clicar(&mut h, tela(0.0, -100.0));
+    assert_eq!(lua::<i64>(&rt, "nn.vars.apertos"), 0);
+
+    // A roda rola 40 por linha.
+    let antes = y(&rt, "b1");
+    mouse(&mut h, tela(0.0, 0.0));
+    h.ctx.input.add_scroll(Vec2::new(0.0, 1.0));
+    h.run_frames(1);
+    assert_eq!(y(&rt, "b1"), antes - 40.0);
+
+    // Arrastar rola e não aperta o botão.
+    let antes = y(&rt, "b1");
+    h.ctx.input.press_mouse(MouseButton::Left);
+    h.run_frames(1);
+    for k in 1..=5 {
+        h.ctx.input.set_cursor(Some(tela(0.0, k as f32 * 6.0)));
+        h.run_frames(1);
+    }
+    h.ctx.input.release_mouse(MouseButton::Left);
+    h.run_frames(2);
+    assert_eq!(y(&rt, "b1"), antes + 30.0, "a lista anda com o mouse");
+    assert_eq!(
+        lua::<i64>(&rt, "nn.vars.apertos"),
+        0,
+        "arrastar não é clique"
+    );
+
+    // Um clique de verdade aperta o botão embaixo do mouse.
+    clicar(&mut h, tela(0.0, 0.0));
+    assert!(lua::<i64>(&rt, "nn.vars.apertos") > 0);
+
+    // Sem Rolar, nada muda: os filhos ficam onde o Grupo pôs.
+    rt.lua()
+        .load("cena.objects.lista.panel.scroll = false")
+        .exec()
+        .unwrap();
+    h.run_frames(1);
+    assert_eq!(y(&rt, "b1"), 216.0);
+    assert_eq!(h.game.0.error(), None);
+}
+
+/// A camada com "ordenar por y": quem está mais embaixo fica na frente.
+#[test]
+fn camada_ordenada_por_y() {
+    let dir = projeto(
+        "ordem",
+        &[
+            ("config.lua", CONFIG),
+            (
+                "fase.cena",
+                r##"return { format = 1, background = "#000000", sort_y = { 1 }, objects = {
+                  { id = 1, name = "heroi", x = 0, y = -20, layer = 1,
+                    components = { { type = "shape", w = 20, h = 20, color = "#00FF00" } } },
+                  { id = 2, name = "arvore", x = 0, y = 0, layer = 1,
+                    components = { { type = "shape", w = 40, h = 100, color = "#FF0000" } } },
+                  { id = 3, name = "chao", x = 0, y = -20, layer = 0,
+                    components = { { type = "shape", w = 300, h = 10, color = "#0000FF" } } },
+                } }"##,
+            ),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "fase.cena") else {
+        return;
+    };
+    h.run_frames(2);
+    assert_eq!(h.game.0.error(), None);
+    // O pé da árvore (-50) está mais embaixo que o do herói (-30): ela na
+    // frente.
+    assert_eq!(pixel(&h, tela(0.0, -20.0))[..3], [255, 0, 0]);
+    // O herói desce (pé em -70): agora ele fica na frente.
+    rt.lua().load("cena.objects.heroi.y = -60").exec().unwrap();
+    h.run_frames(1);
+    assert_eq!(pixel(&h, tela(0.0, -55.0))[..3], [0, 255, 0]);
+    // A camada 0 continua embaixo de tudo.
+    assert_eq!(pixel(&h, tela(100.0, -20.0))[..3], [0, 0, 255]);
+    // Sem ordenar, vale a ordem do arquivo: a árvore vem depois, por cima.
+    rt.lua().load("cena.objects.heroi.y = -40").exec().unwrap();
+    h.run_frames(1);
+    assert_eq!(pixel(&h, tela(0.0, -45.0))[..3], [0, 255, 0], "ordenada");
+    rt.lua().load("cena._sort_y = nil").exec().unwrap();
+    h.run_frames(1);
+    assert_eq!(
+        pixel(&h, tela(0.0, -45.0))[..3],
+        [255, 0, 0],
+        "na ordem do arquivo"
+    );
+    assert_eq!(h.game.0.error(), None);
+}

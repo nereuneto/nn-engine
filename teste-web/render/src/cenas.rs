@@ -4,7 +4,7 @@
 use glam::{Mat4, UVec2, Vec2, Vec3};
 use nn_core::Color;
 use nn_render::d3::{Camera3D, MeshId, Sky3D, shapes};
-use nn_render::{Align, Panel, Renderer, Sprite, Text, TextureId, TextureOptions};
+use nn_render::{Align, ClipRect, Panel, Renderer, Sprite, Text, TextureId, TextureOptions};
 
 /// Tamanho da tela das cenas.
 pub const SIZE: UVec2 = UVec2::new(320, 180);
@@ -21,6 +21,7 @@ pub const CENAS: &[&str] = &[
     "fonte-pixel",
     "quebra",
     "linhas",
+    "recorte",
 ];
 
 /// A cor de fundo de cada cena.
@@ -311,6 +312,44 @@ pub fn desenhar(cena: usize, r: &mut Renderer, rec: &Recursos) {
             );
             s.draw_circle_outline(Vec2::new(260.0, 135.0), 30.0, 4.0, Color::hex(0xE5A84D));
         }
+        10 => {
+            let mut s = r.screen();
+            // Uma lista recortada: as linhas de cima e de baixo aparecem
+            // pela metade.
+            s.draw_rect(
+                Vec2::new(20.0, 20.0),
+                Vec2::new(140.0, 140.0),
+                Color::hex(0x2A3446),
+            );
+            s.set_clip(Some(ClipRect::new(
+                Vec2::new(28.0, 28.0),
+                Vec2::new(152.0, 152.0),
+            )));
+            for i in 0..8 {
+                let y = 12.0 + i as f32 * 22.0;
+                s.draw_rect(
+                    Vec2::new(28.0, y),
+                    Vec2::new(124.0, 18.0),
+                    Color::hex(0x4D9BE5),
+                );
+                s.draw_text(
+                    &Text::new(&format!("Item {}", i + 1))
+                        .at(Vec2::new(34.0, y + 2.0))
+                        .size(12.0)
+                        .color(Color::WHITE),
+                );
+            }
+            s.set_clip(None);
+        }
         _ => {}
+    }
+    // O mundo recortado: um círculo grande, só um quadrado dele.
+    if cena == 10 {
+        r.set_clip(Some(ClipRect::new(
+            Vec2::new(40.0, -40.0),
+            Vec2::new(120.0, 40.0),
+        )));
+        r.draw_circle(Vec2::new(80.0, 0.0), 70.0, Color::hex(0xE5A84D));
+        r.set_clip(None);
     }
 }

@@ -145,6 +145,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Círculo de cor sólida. Com um número no fim, só o contorno, com essa espessura (por dentro).",
     ),
     d(
+        "nn.draw.clip",
+        "(x, y, w, h, função)",
+        "Chama a função desenhando só dentro do retângulo (x, y é o centro). Um recorte dentro de outro fica com o pedaço em comum.",
+    ),
+    d(
         "nn.draw.line",
         "(x1, y1, x2, y2, cor, espessura)",
         "Linha de um ponto a outro (espessura 1 se faltar), com a borda suave.",
@@ -193,6 +198,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "nn.screen.circle",
         "(x, y, raio, cor, contorno)",
         "Círculo na tela. Com um número no fim, só o contorno.",
+    ),
+    d(
+        "nn.screen.clip",
+        "(x, y, w, h, função)",
+        "Chama a função desenhando só dentro do retângulo da tela (x, y é o canto de cima à esquerda).",
     ),
     d(
         "nn.screen.line",
@@ -586,7 +596,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.ui.panel",
         "(nome, opts)",
-        "Abre um painel (dentro do draw): ui:button(texto), ui:slider(...), ui:finish().",
+        "Abre um painel (dentro do draw): ui:button(texto), ui:slider(...), ui:finish(). opts.height: altura máxima (a lista rola).",
     ),
     d(
         "nn.ui.theme",

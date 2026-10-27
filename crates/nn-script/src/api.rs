@@ -649,6 +649,50 @@ fn draw_table(lua: &Lua, space: Space) -> Result<Table> {
     )?;
 
     t.set(
+        "clip",
+        lua.create_function(
+            move |lua, (x, y, w, h, f): (f32, f32, f32, f32, mlua::Function)| {
+                // No mundo, x, y é o centro; na tela, o canto de cima à
+                // esquerda (como o rect).
+                let (a, b) = match space {
+                    Space::World => (
+                        Vec2::new(x - w.abs() / 2.0, y - h.abs() / 2.0),
+                        Vec2::new(x + w.abs() / 2.0, y + h.abs() / 2.0),
+                    ),
+                    Space::Screen => (Vec2::new(x, y), Vec2::new(x + w, y + h)),
+                };
+                let rect = nn_render::ClipRect::new(a, b);
+                let before = with_ctx(lua, |c| {
+                    let before = match space {
+                        Space::World => c.renderer.clip(),
+                        Space::Screen => c.renderer.screen().clip(),
+                    };
+                    // Um recorte dentro do outro: só o pedaço em comum.
+                    let clip = Some(before.map_or(rect, |b| b.intersect(rect)));
+                    match space {
+                        Space::World => c.renderer.set_clip(clip),
+                        Space::Screen => {
+                            c.renderer.screen().set_clip(clip);
+                        }
+                    }
+                    Ok(before)
+                })?;
+                let result = f.call::<mlua::MultiValue>(());
+                with_ctx(lua, |c| {
+                    match space {
+                        Space::World => c.renderer.set_clip(before),
+                        Space::Screen => {
+                            c.renderer.screen().set_clip(before);
+                        }
+                    }
+                    Ok(())
+                })?;
+                result
+            },
+        )?,
+    )?;
+
+    t.set(
         "line",
         lua.create_function(
             move |lua, (x1, y1, x2, y2, col, width): (f32, f32, f32, f32, Value, Option<f32>)| {
@@ -843,6 +887,37 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     )?;
     nn.set("screen", screen)?;
     nn.set("_sprite", lua.create_function(component_sprite)?)?;
+    // O recorte das cenas visuais (as listas que rolam): `_clip(tela, x0,
+    // y0, x1, y1)` põe, `_clip(tela)` tira.
+    nn.set(
+        "_clip",
+        lua.create_function(
+            |lua,
+             (screen, x0, y0, x1, y1): (
+                bool,
+                Option<f32>,
+                Option<f32>,
+                Option<f32>,
+                Option<f32>,
+            )| {
+                let clip = match (x0, y0, x1, y1) {
+                    (Some(x0), Some(y0), Some(x1), Some(y1)) => Some(nn_render::ClipRect::new(
+                        Vec2::new(x0, y0),
+                        Vec2::new(x1, y1),
+                    )),
+                    _ => None,
+                };
+                with_ctx(lua, |c| {
+                    if screen {
+                        c.renderer.screen().set_clip(clip);
+                    } else {
+                        c.renderer.set_clip(clip);
+                    }
+                    Ok(())
+                })
+            },
+        )?,
+    )?;
 
     nn.set(
         "text_lines",

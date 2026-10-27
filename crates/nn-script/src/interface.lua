@@ -98,6 +98,8 @@ local function mouse_on(item)
     mx, my = nn.input.mouse_world()
   end
   if not mx then return false end
+  -- Numa lista que rola, o que ficou escondido não responde.
+  if cena.scrolled_out(item.obj, mx, my) then return false end
   return math.abs(mx - x) <= hw and math.abs(my - y) <= hh
 end
 
@@ -194,8 +196,10 @@ function U.update(scene, dt)
   for _, it in ipairs(list) do
     if mouse_on(it) then hovered = it end
   end
+  local hovered_focus = false
   if moved and hovered and not (typing and hovered.kind ~= "textfield" and focus == s.pressing) then
     focus = hovered
+    hovered_focus = true
   end
   if nn.input.mouse_pressed("left") then
     if hovered then
@@ -216,6 +220,8 @@ function U.update(scene, dt)
     if it == hovered and not it.drag and usable(it) then U.activate(scene, it) end
   end
 
+  -- O foco andou: numa lista que rola, ela rola até ele.
+  if focus and focus ~= s.focus and not hovered_focus then cena.scroll_into_view(focus.obj) end
   s.focus = focus
   typing = focus and focus.kind == "textfield"
   if typing then

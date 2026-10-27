@@ -70,7 +70,7 @@ M.FIELDS = {
   panel = {
     { "w", 320 }, { "h", 220 }, { "color", "" }, { "radius", 12 }, { "border", 0 },
     { "border_color", "" }, { "image", "" }, { "slice", 4 }, { "slice_scale", 4 },
-    { "hud", true },
+    { "hud", true }, { "scroll", false },
   },
   button = {
     { "text", "Botão" }, { "size", 28 }, { "w", 240 }, { "h", 60 }, { "color", "" },
@@ -557,7 +557,8 @@ function Object:world_transform()
     return self.x, self.y, self.rotation, self.scale_x, self.scale_y
   end
   local px, py, pr, psx, psy = p:world_transform()
-  local lx, ly = self.x * psx, self.y * psy
+  -- Dentro de um painel que rola, os filhos andam junto com a lista.
+  local lx, ly = self.x * psx, (self.y + (p._scroll_y or 0)) * psy
   local a = pr * DEG
   local c, s = math.cos(a), math.sin(a)
   return px + lx * c - ly * s, py + lx * s + ly * c, pr + self.rotation,
@@ -2234,9 +2235,158 @@ local function prepare_ui(scene, o, c)
   if t == "panel" or t == "button" then
     c._img = ui_image(c, c.image)
   end
+  if t == "panel" then
+    scene._scroll_panels = scene._scroll_panels or {}
+    scene._scroll_panels[o] = c
+  end
   if t == "button" then c._icon = ui_image(c, c.icon) end
   if t == "icons" then c._img = ui_image(c, c.image, c.frame_w, c.frame_h) end
   register_ui(scene, o, c)
+end
+
+-- Painel que rola ------------------------------------------------------------
+--
+-- Um Painel com "Rolar" e mais filhos do que cabem nele vira uma lista: os
+-- filhos andam juntos (com a roda do mouse, arrastando ou com o foco do
+-- teclado) e só aparece o que está dentro do painel.
+
+local SCROLL_PAD = 8
+
+-- A margem de dentro do painel.
+local function scroll_pad(c)
+  return SCROLL_PAD + math.max(0, c.border or 0)
+end
+
+-- Onde estão os filhos (em cima e embaixo, no espaço do painel, sem rolar).
+local function children_span(o)
+  local top, bottom
+  for _, ch in ipairs(o.children) do
+    if ch.alive and ch.visible then
+      local h = 0
+      for _, c in ipairs(ch.components) do
+        local _, chh = M.component_size(c)
+        if chh then h = math.max(h, chh) end
+      end
+      local hh = h * math.abs(ch.scale_y) / 2
+      top = math.max(top or -math.huge, ch.y + hh)
+      bottom = math.min(bottom or math.huge, ch.y - hh)
+    end
+  end
+  return top, bottom
+end
+
+-- Recalcula quanto os filhos do painel andam (o._scroll_y), com o._scroll
+-- (pixels rolados) dentro do que dá.
+local function apply_scroll(o, c)
+  local top, bottom = children_span(o)
+  local half = c.h / 2 - scroll_pad(c)
+  if not top or not c.scroll or (top - bottom) <= 2 * half then
+    o._scroll_y, o._scroll, o._scroll_max = nil, 0, 0
+    return
+  end
+  local max = (top - bottom) - 2 * half
+  local s = math.max(0, math.min(max, o._scroll or 0))
+  o._scroll, o._scroll_max = s, max
+  -- Com 0, o primeiro filho encosta no alto do painel.
+  o._scroll_y = (half - top) + s
+end
+
+-- O painel que rola em volta do objeto (o mais perto), se a lista não coube.
+local function scroll_parent(o)
+  local p = o.parent
+  while p do
+    if p._scroll_y then return p end
+    p = p.parent
+  end
+  return nil
+end
+
+-- O retângulo de dentro do painel: (x0, y0, x1, y1) e se é na tela. Na tela,
+-- y para baixo; no mundo, y para cima.
+local function scroll_rect(p)
+  local c = p:component("panel")
+  local x, y, _, sx, sy = p:world_transform()
+  local pad = scroll_pad(c)
+  local hw, hh = (c.w / 2 - pad) * math.abs(sx), (c.h / 2 - pad) * math.abs(sy)
+  if M.is_hud(p) then
+    local hx, hy = M.screen_pos(p, x, y)
+    return hx - hw, hy - hh, hx + hw, hy + hh, true
+  end
+  return x - hw, y - hh, x + hw, y + hh, false
+end
+M.scroll_rect = scroll_rect
+
+--- O objeto está dentro de um painel que rola, mas fora da parte que
+--- aparece no ponto (mx, my) (da tela, ou do mundo)? Os itens escondidos não
+--- respondem ao mouse.
+function M.scrolled_out(o, mx, my)
+  local p = scroll_parent(o)
+  if not p then return false end
+  local x0, y0, x1, y1 = scroll_rect(p)
+  return mx < x0 or mx > x1 or my < y0 or my > y1
+end
+
+--- Rola o painel em volta do objeto até ele aparecer inteiro.
+function M.scroll_into_view(o)
+  local p = scroll_parent(o)
+  if not p then return end
+  -- O filho direto do painel que contém o objeto.
+  local ch = o
+  while ch.parent ~= p do ch = ch.parent end
+  local c = p:component("panel")
+  local _, hh = ch:bounds()
+  hh = hh / math.max(1e-6, math.abs(select(5, p:world_transform())))
+  local half = c.h / 2 - scroll_pad(c)
+  local y = ch.y + p._scroll_y
+  if y + hh > half then
+    p._scroll = p._scroll - (y + hh - half)
+  elseif y - hh < -half then
+    p._scroll = p._scroll + (-half - (y - hh))
+  end
+  apply_scroll(p, c)
+end
+
+-- Um quadro dos painéis que rolam: a roda e o arrastar.
+local function update_scroll(scene)
+  local panels = scene._scroll_panels
+  if not panels then return end
+  for o, c in pairs(panels) do
+    if not o.alive then
+      panels[o] = nil
+    elseif c.scroll then
+      apply_scroll(o, c)
+      if o._scroll_y and o:shown() then
+        local x0, y0, x1, y1, hud = scroll_rect(o)
+        local mx, my
+        if hud then mx, my = nn.input.mouse() else mx, my = nn.input.mouse_world() end
+        local over = mx and mx >= x0 and mx <= x1 and my >= y0 and my <= y1
+        if over then
+          local _, wy = nn.input.scroll()
+          if wy ~= 0 then o._scroll = o._scroll - wy * 40 end
+          if nn.input.mouse_pressed("left") then
+            o._press = { my = my, scroll = o._scroll }
+            o._dragging = false
+          end
+        end
+        local press = o._press
+        if press and mx and nn.input.mouse_down("left") then
+          -- Na tela, arrastar para cima (y diminui) rola para baixo.
+          local dy = hud and (press.my - my) or (my - press.my)
+          if not o._dragging and math.abs(dy) > 8 then
+            o._dragging = true
+            -- Arrastou: o aperto não é mais um clique num botão.
+            if scene._ui then scene._ui.pressing = nil end
+          end
+          if o._dragging then o._scroll = press.scroll + dy end
+        elseif press and not nn.input.mouse_down("left") then
+          o._press, o._dragging = nil, false
+        end
+        apply_scroll(o, c)
+      end
+    elseif o._scroll_y then
+      o._scroll_y, o._scroll = nil, 0
+    end
+  end
 end
 
 -- Grupo: põe os filhos em coluna, em linha ou em grade, em volta do objeto.
@@ -2919,6 +3069,52 @@ end
 
 -- Cena ----------------------------------------------------------------------
 
+-- As camadas com "ordenar por y": quem está mais embaixo (o pé, a base da
+-- caixa) fica na frente. Os filhos vão junto com o objeto da raiz.
+local function sort_by_y(scene, list)
+  local layers = scene._sort_y
+  local key = scene._ykey or {}
+  scene._ykey = key
+  local n = #list
+  local a = 1
+  while a <= n do
+    local layer = list[a].layer
+    local b = a
+    while b < n and list[b + 1].layer == layer do b = b + 1 end
+    if layers[layer] and b > a then
+      for k = a, b do
+        local o = list[k]
+        local root = o
+        while root.parent do root = root.parent end
+        local _, y = root:world_transform()
+        local _, hh = root:bounds()
+        key[o] = { y - hh, k, root }
+      end
+      -- Ordena o trecho da camada (inserção: quase sempre já está em ordem).
+      for k = a + 1, b do
+        local o = list[k]
+        local ko = key[o]
+        local j = k - 1
+        while j >= a do
+          local kj = key[list[j]]
+          local before
+          if kj[3] == ko[3] then
+            before = kj[2] < ko[2]
+          else
+            before = kj[1] > ko[1] or (kj[1] == ko[1] and kj[2] < ko[2])
+          end
+          if before then break end
+          list[j + 1] = list[j]
+          j = j - 1
+        end
+        list[j + 1] = o
+      end
+      for k = a, b do key[list[k]] = nil end
+    end
+    a = b + 1
+  end
+end
+
 local function sort_objects(scene)
   local order = {}
   for i, o in ipairs(scene.object_list) do order[o] = i end
@@ -3014,6 +3210,7 @@ function M.setup(scene, data, path)
   if M.ui then M.ui.setup(scene) end
   M.events.setup(scene, data, path)
   scene.background = (data.background ~= nil and data.background ~= "") and data.background or nil
+  M.set_sort_y(scene, data.sort_y)
 
   for _, od in ipairs(data.objects or {}) do build_object(scene, od, nil) end
   -- Física só se algum objeto precisar.
@@ -3217,6 +3414,7 @@ function M.update(scene, dt)
   update_day(scene, dt)
   update_numbers(scene, dt)
   refresh_list(scene)
+  update_scroll(scene)
   if M.ui then M.ui.update(scene, dt) end
   -- Interações: o escolhido no quadro anterior responde à tecla neste.
   scene._ia_last, scene._ia, scene._ia_used = scene._ia, nil, false
@@ -3643,12 +3841,39 @@ function M.draw(scene)
   end
   local W, H = nn.window.size()
   local list = scene._draw_list or {}
+  if scene._sort_y then
+    sort_by_y(scene, list)
+    scene._y_reordered = true
+  elseif scene._y_reordered then
+    -- Deixou de ordenar por y: volta à ordem do arquivo.
+    scene._y_reordered = nil
+    sort_objects(scene)
+    list = scene._draw_list or {}
+  end
+  local clipped = scene._scroll_panels and next(scene._scroll_panels) and true
+  local clip = nil
   local i, o = 1, list[1]
   while o do
-    if o.alive and o:shown() then draw_object(o, alpha, W, H) end
+    if o.alive and o:shown() then
+      if clipped then
+        -- Dentro de um painel que rola: só aparece o que está nele.
+        local p = scroll_parent(o)
+        if p ~= clip then
+          if clip then nn._clip(clip._clip_hud) end
+          if p then
+            local x0, y0, x1, y1, hud = scroll_rect(p)
+            p._clip_hud = hud
+            nn._clip(hud, x0, y0, x1, y1)
+          end
+          clip = p
+        end
+      end
+      draw_object(o, alpha, W, H)
+    end
     i = i + 1
     o = list[i]
   end
+  if clip then nn._clip(clip._clip_hud) end
   for _, fx in pairs(scene._fx or {}) do fx:draw() end
   -- Os corpos da física por cima (rodar_jogo com ver_corpos).
   if M.show_bodies then
@@ -3662,8 +3887,24 @@ function M.draw(scene)
   if M.dialogue then M.dialogue.draw(scene) end
 end
 
+--- As camadas em que quem está mais embaixo fica na frente (uma lista de
+--- números de camada).
+function M.set_sort_y(scene, layers)
+  local set = nil
+  for _, l in ipairs(layers or {}) do
+    set = set or {}
+    set[math.floor(tonumber(l) or 0)] = true
+  end
+  scene._sort_y = set
+end
+
 --- Ajuste ao vivo vindo do editor: muda um campo de um objeto ou componente.
 function M.live(scene, msg)
+  if msg.field == "sort_y" then
+    if scene._data then scene._data.sort_y = msg.value end
+    M.set_sort_y(scene, msg.value)
+    return
+  end
   if msg.field == "environment" then
     -- O Ambiente de uma cena 3D (a tabela inteira).
     if scene._3d then

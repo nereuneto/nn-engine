@@ -65,14 +65,49 @@ struct ViewUniform {
 struct Batch {
     texture: TextureId,
     blend: Blend,
+    /// O recorte (no espaço da fila), se houver.
+    clip: Option<ClipRect>,
     start: u32,
     end: u32,
+}
+
+/// Um retângulo de recorte: os cantos de menor e de maior x e y, no espaço
+/// em que se desenha (mundo ou tela).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClipRect {
+    pub min: Vec2,
+    pub max: Vec2,
+}
+
+impl ClipRect {
+    /// O retângulo com um canto em `a` e o oposto em `b` (em qualquer ordem).
+    pub fn new(a: Vec2, b: Vec2) -> Self {
+        Self {
+            min: a.min(b),
+            max: a.max(b),
+        }
+    }
+
+    /// O pedaço em comum com `other` (pode ficar vazio).
+    pub fn intersect(self, other: ClipRect) -> ClipRect {
+        let min = self.min.max(other.min);
+        Self {
+            min,
+            max: self.max.max(min).min(other.max).max(min),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.max.x <= self.min.x || self.max.y <= self.min.y
+    }
 }
 
 #[derive(Debug, Default)]
 struct DrawQueue {
     instances: Vec<SpriteInstance>,
     batches: Vec<Batch>,
+    /// O recorte do que entra agora.
+    clip: Option<ClipRect>,
 }
 
 impl DrawQueue {
@@ -80,12 +115,15 @@ impl DrawQueue {
         let index = self.instances.len() as u32;
         self.instances.push(instance);
         match self.batches.last_mut() {
-            Some(batch) if batch.texture == texture && batch.blend == blend => {
+            Some(batch)
+                if batch.texture == texture && batch.blend == blend && batch.clip == self.clip =>
+            {
                 batch.end = index + 1;
             }
             _ => self.batches.push(Batch {
                 texture,
                 blend,
+                clip: self.clip,
                 start: index,
                 end: index + 1,
             }),
@@ -95,6 +133,7 @@ impl DrawQueue {
     fn clear(&mut self) {
         self.instances.clear();
         self.batches.clear();
+        self.clip = None;
     }
 }
 
@@ -649,6 +688,18 @@ impl Renderer {
         self.push_sprite(Space::World, &sprite);
     }
 
+    /// O recorte do desenho no mundo: o que vier depois só aparece dentro
+    /// dele (`None`: sem recorte). Cada mudança custa uma chamada de desenho a
+    /// mais, no máximo.
+    pub fn set_clip(&mut self, clip: Option<ClipRect>) {
+        self.world.clip = clip;
+    }
+
+    /// O recorte do desenho no mundo agora.
+    pub fn clip(&self) -> Option<ClipRect> {
+        self.world.clip
+    }
+
     /// Linha de `a` até `b`, com `width` de espessura, no espaço do mundo.
     pub fn draw_line(&mut self, a: Vec2, b: Vec2, width: f32, color: Color) {
         self.push_polyline(Space::World, &[a, b], width, false, color);
@@ -1114,16 +1165,47 @@ impl Renderer {
                 }
             }
 
+            // O recorte de fora (a área do jogo, com tamanho fixo) e onde o
+            // jogo fica no alvo, para levar os recortes do desenho a pixels.
+            let base_scissor = match present {
+                Some(p) => scissor(p, viewport),
+                None => Some((0, 0, viewport.x.max(1), viewport.y.max(1))),
+            };
+            let (vp_origin, vp_size) = match present {
+                Some(p) => (p.origin, p.size),
+                None => (Vec2::ZERO, viewport.as_vec2()),
+            };
+            let world_matrix = Mat4::from_cols_array(&world.view_proj);
+            let screen_matrix = Mat4::from_cols_array(&screen.view_proj);
+            // O recorte que está valendo no passo de desenho.
+            let mut current = base_scissor;
             let passes = [
-                (&self.world_view, &self.world, 0u32),
-                (&self.screen_view, &self.screen, world_count as u32),
+                (&self.world_view, &self.world, 0u32, world_matrix),
+                (
+                    &self.screen_view,
+                    &self.screen,
+                    world_count as u32,
+                    screen_matrix,
+                ),
             ];
-            for (view, queue, base) in passes {
+            for (view, queue, base, matrix) in passes {
                 if queue.batches.is_empty() {
                     continue;
                 }
                 pass.set_bind_group(0, &view.bind_group, &[]);
                 for batch in &queue.batches {
+                    let rect = match batch.clip {
+                        None => base_scissor,
+                        Some(c) => clip_scissor(c, matrix, vp_origin, vp_size, base_scissor),
+                    };
+                    // Recortado até sumir: não desenha.
+                    let Some((x, y, w, h)) = rect else {
+                        continue;
+                    };
+                    if rect != current {
+                        pass.set_scissor_rect(x, y, w, h);
+                        current = rect;
+                    }
                     if current_blend != Some(batch.blend) {
                         pass.set_pipeline(match batch.blend {
                             Blend::Alpha => &self.pipeline,
@@ -1845,6 +1927,17 @@ impl ScreenPainter<'_> {
         self
     }
 
+    /// O recorte do desenho na tela (pixels do jogo, Y para baixo).
+    pub fn set_clip(&mut self, clip: Option<ClipRect>) -> &mut Self {
+        self.renderer.screen.clip = clip;
+        self
+    }
+
+    /// O recorte do desenho na tela agora.
+    pub fn clip(&self) -> Option<ClipRect> {
+        self.renderer.screen.clip
+    }
+
     /// Linha de `a` até `b`, com `width` de espessura.
     pub fn draw_line(&mut self, a: Vec2, b: Vec2, width: f32, color: Color) -> &mut Self {
         self.renderer
@@ -1897,6 +1990,47 @@ impl ScreenPainter<'_> {
             .push_circle_outline(Space::Screen, center, radius, width, color);
         self
     }
+}
+
+/// Um recorte do desenho em pixels do alvo, dentro de `base` (ou `None` se
+/// ficou sem área). Com a câmera girada, fica a caixa em volta.
+fn clip_scissor(
+    clip: ClipRect,
+    matrix: Mat4,
+    vp_origin: Vec2,
+    vp_size: Vec2,
+    base: Option<(u32, u32, u32, u32)>,
+) -> Option<(u32, u32, u32, u32)> {
+    let (bx, by, bw, bh) = base?;
+    let to_px = |p: Vec2| {
+        let ndc = matrix.project_point3(p.extend(0.0));
+        vp_origin + Vec2::new((ndc.x + 1.0) * 0.5, (1.0 - ndc.y) * 0.5) * vp_size
+    };
+    let corners = [
+        to_px(clip.min),
+        to_px(clip.max),
+        to_px(Vec2::new(clip.min.x, clip.max.y)),
+        to_px(Vec2::new(clip.max.x, clip.min.y)),
+    ];
+    let min = corners
+        .iter()
+        .fold(Vec2::INFINITY, |a, c| a.min(*c))
+        .round();
+    let max = corners
+        .iter()
+        .fold(Vec2::NEG_INFINITY, |a, c| a.max(*c))
+        .round();
+    let lo = min.max(Vec2::new(bx as f32, by as f32));
+    let hi = max.min(Vec2::new((bx + bw) as f32, (by + bh) as f32));
+    if !(hi.x > lo.x && hi.y > lo.y) {
+        return None;
+    }
+    Some((
+        lo.x as u32,
+        lo.y as u32,
+        (hi.x - lo.x) as u32,
+        (hi.y - lo.y) as u32,
+    ))
 }
 
 /// O retângulo do jogo dentro do alvo, em pixels inteiros (ou `None` se ficou

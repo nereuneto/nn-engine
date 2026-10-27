@@ -283,6 +283,13 @@ impl Input {
         self.last_device = Device::Mouse;
     }
 
+    /// Soma uma rolagem da roda do mouse, em "linhas" (Y positivo = para
+    /// cima). Normalmente chamado pela engine.
+    pub fn add_scroll(&mut self, delta: Vec2) {
+        self.scroll += delta;
+        self.last_device = Device::Mouse;
+    }
+
     /// Registra a soltura de um botão do mouse. Normalmente chamado pela engine.
     pub fn release_mouse(&mut self, button: MouseButton) {
         self.mouse.release(button);

@@ -4,6 +4,15 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Recorte, listas que rolam e ordenar por y (Sprint 72)
+
+- **Recorte:** `nn.draw.clip(x, y, w, h, função)` e `nn.screen.clip(...)` desenham o que a função desenhar só dentro do retângulo (uma lista, uma janela com texto comprido, um minimapa). Um recorte dentro de outro fica com o pedaço em comum, e cada recorte custa no máximo uma chamada a mais à placa de vídeo.
+- **Listas que rolam no `nn.ui`:** `nn.ui.panel(nome, { height = 300 })` limita a altura; com mais itens do que cabem, a lista rola com a roda do mouse, arrastando ou com o foco do teclado e do controle, ganha uma barra de rolagem e só desenha os itens que aparecem (200 itens custam como 5). Numa lista que rola, o clique vale ao soltar, para arrastar sem apertar o item embaixo.
+- **No componente Painel, "Rolar (lista)":** com mais filhos do que cabem, o painel vira uma lista que rola do mesmo jeito; o que fica fora não aparece e não responde ao mouse.
+- **Ordenar por y:** numa camada marcada (no Inspetor, ao lado da Camada; `sort_y = { 1 }` no arquivo da cena), quem tem o pé mais embaixo fica na frente: o herói passa atrás e na frente da árvore conforme anda. Os filhos vão junto com o objeto da raiz. O editor mostra na mesma ordem.
+- Os campos novos não vão para o arquivo no valor padrão: os projetos da 0.9 gravam igual.
+- **Para quem usa as crates:** `ClipRect`, `Renderer::set_clip` e `ScreenPainter::set_clip`; `PanelOptions::height`; `Input::add_scroll`; `SceneData::sort_y`.
+
 ### Linhas, polígonos e contornos (Sprint 71)
 
 - **Linhas:** `nn.draw.line(x1, y1, x2, y2, cor, espessura)` e `nn.draw.polyline(pontos, cor, espessura, fechada)`, com a borda suave e as juntas em ponta (cortadas nos ângulos muito fechados).
