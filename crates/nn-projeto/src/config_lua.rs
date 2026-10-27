@@ -15,6 +15,9 @@ pub struct ConfigValues {
     pub fullscreen: bool,
     pub resizable: bool,
     pub vsync: bool,
+    /// Antisserrilhado e tonemap no 3D.
+    pub antialias: bool,
+    pub tonemap: bool,
     /// Limite de quadros por segundo (`fps_max`): `None` = o automático
     /// (sem limite com VSync, 240 sem), `Some(0)` = sem limite.
     pub fps_max: Option<u32>,
@@ -69,6 +72,8 @@ impl Default for ConfigValues {
             fullscreen: false,
             resizable: true,
             vsync: true,
+            antialias: false,
+            tonemap: false,
             fps_max: None,
             hot_reload: true,
             fixed_hz: 60,
@@ -209,6 +214,8 @@ pub fn read(text: &str, default_title: &str) -> Result<ConfigValues, String> {
         ("resizable", &mut v.resizable),
         ("vsync", &mut v.vsync),
         ("hot_reload", &mut v.hot_reload),
+        ("antialias", &mut v.antialias),
+        ("tonemap", &mut v.tonemap),
     ] {
         if let Some(b) = get(key).as_boolean() {
             *field = b;
@@ -257,6 +264,8 @@ pub fn changes(old: &ConfigValues, new: &ConfigValues) -> Vec<(&'static str, Lua
     b("resizable", old.resizable, new.resizable);
     b("vsync", old.vsync, new.vsync);
     b("hot_reload", old.hot_reload, new.hot_reload);
+    b("antialias", old.antialias, new.antialias);
+    b("tonemap", old.tonemap, new.tonemap);
     if old.vars != new.vars {
         out.push(("vars", LuaValue::Raw(vars_lua(&new.vars))));
     }
@@ -348,6 +357,8 @@ fn value_of(v: &ConfigValues, key: &str) -> Option<LuaValue> {
         "resizable" => LuaValue::Bool(v.resizable),
         "vsync" => LuaValue::Bool(v.vsync),
         "hot_reload" => LuaValue::Bool(v.hot_reload),
+        "antialias" => LuaValue::Bool(v.antialias),
+        "tonemap" => LuaValue::Bool(v.tonemap),
         "vars" => LuaValue::Raw(vars_lua(&v.vars)),
         "theme" => LuaValue::Raw(theme_lua(&v.theme)),
         "resolution" => resolution_lua(v.resolution),
@@ -387,6 +398,12 @@ pub fn generate(v: &ConfigValues) -> String {
     }
     if v.hot_reload != d.hot_reload {
         line("hot_reload", LuaValue::Bool(v.hot_reload));
+    }
+    if v.antialias != d.antialias {
+        line("antialias", LuaValue::Bool(v.antialias));
+    }
+    if v.tonemap != d.tonemap {
+        line("tonemap", LuaValue::Bool(v.tonemap));
     }
     if v.fixed_hz != d.fixed_hz {
         line("fixed_hz", LuaValue::Int(v.fixed_hz as i64));

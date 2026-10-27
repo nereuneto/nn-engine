@@ -197,25 +197,34 @@ struct ShadowMap {
 
 /// A parte 3D do renderer.
 pub(crate) struct Renderer3D {
-    pipeline: wgpu::RenderPipeline,
-    /// As duas faces (folhas, panos).
-    two_sided_pipeline: wgpu::RenderPipeline,
+    /// Os pipelines do passe das malhas, sem e com antisserrilhado (este
+    /// só criado quando ligado).
+    main: MainPipelines,
+    main_msaa: Option<MainPipelines>,
+    /// O que é preciso para criar os pipelines do passe das malhas.
+    kit: PipelineKit,
+    /// Antisserrilhado (MSAA 4x) pedido, e se a placa consegue.
+    pub antialias: bool,
+    msaa_ok: bool,
+    /// Os alvos com 4 amostras e a imagem resolvida (para juntar ao alvo).
+    msaa: Option<MsaaTargets>,
+    /// Junta a imagem resolvida do 3D ao alvo (por cima do fundo).
+    compose_pipeline: wgpu::RenderPipeline,
+    compose_layout: wgpu::BindGroupLayout,
+    /// O tonemap: as cores acima do branco são comprimidas em vez de
+    /// estourar.
+    pub tonemap: bool,
     shadow_pipeline: wgpu::RenderPipeline,
     /// A sombra com recorte ou com as duas faces (lê a imagem).
     shadow_cut_pipeline: wgpu::RenderPipeline,
-    skinned_pipeline: wgpu::RenderPipeline,
-    skinned_two_sided_pipeline: wgpu::RenderPipeline,
     skinned_shadow_pipeline: wgpu::RenderPipeline,
     skinned_shadow_cut_pipeline: wgpu::RenderPipeline,
     /// Grupo vazio para as posições 1 e 2 da sombra com ossos (navegadores
     /// que não aceitam buracos na lista de grupos).
     empty_group: wgpu::BindGroup,
-    billboard_pipeline: wgpu::RenderPipeline,
     /// Malhas meio transparentes (água, vidro): depois das outras, de trás
     /// para a frente, sem escrever a profundidade.
-    transparent_pipeline: wgpu::RenderPipeline,
     transparent: Vec<Draw3>,
-    billboard_add_pipeline: wgpu::RenderPipeline,
     billboards: Vec<BillboardDraw>,
     billboard_buffer: wgpu::Buffer,
     billboard_capacity: usize,
@@ -225,7 +234,6 @@ pub(crate) struct Renderer3D {
     joint_buffer: wgpu::Buffer,
     joint_group: wgpu::BindGroup,
     joint_capacity: u64,
-    sky_pipeline: wgpu::RenderPipeline,
     view_buffer: wgpu::Buffer,
     lamp_buffer: wgpu::Buffer,
     view_group: wgpu::BindGroup,
@@ -410,12 +418,299 @@ impl std::fmt::Debug for Renderer3D {
     }
 }
 
+/// Os atributos dos vértices e das instâncias das malhas.
+const VERTEX_ATTRS: [wgpu::VertexAttribute; 4] = wgpu::vertex_attr_array![
+    0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x2
+];
+const INSTANCE_ATTRS: [wgpu::VertexAttribute; 10] = wgpu::vertex_attr_array![
+    4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4,
+    8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4,
+    14 => Float32x4, 15 => Float32x4
+];
+const SKIN_ATTRS: [wgpu::VertexAttribute; 2] =
+    wgpu::vertex_attr_array![12 => Uint32x4, 13 => Float32x4];
+const BILLBOARD_ATTRS: [wgpu::VertexAttribute; 6] = wgpu::vertex_attr_array![
+    0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4,
+    4 => Float32x4, 5 => Float32x4
+];
+
+fn mesh_buffers() -> [Option<wgpu::VertexBufferLayout<'static>>; 2] {
+    [
+        Some(wgpu::VertexBufferLayout {
+            array_stride: size_of::<Vertex3>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &VERTEX_ATTRS,
+        }),
+        Some(wgpu::VertexBufferLayout {
+            array_stride: size_of::<Instance3>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &INSTANCE_ATTRS,
+        }),
+    ]
+}
+
+/// Malhas com ossos: mais um buffer com os ossos de cada vértice.
+fn skinned_buffers() -> [Option<wgpu::VertexBufferLayout<'static>>; 3] {
+    let [a, b] = mesh_buffers();
+    [
+        a,
+        b,
+        Some(wgpu::VertexBufferLayout {
+            array_stride: size_of::<SkinVertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &SKIN_ATTRS,
+        }),
+    ]
+}
+
+/// Os alvos do passe das malhas com antisserrilhado.
+struct MsaaTargets {
+    size: UVec2,
+    color: wgpu::TextureView,
+    glow: wgpu::TextureView,
+    depth: wgpu::TextureView,
+    /// A cor resolvida (uma amostra) e o grupo para juntar ao alvo.
+    resolved: wgpu::TextureView,
+    resolved_group: wgpu::BindGroup,
+}
+
+/// Junta a imagem do 3D (já com a transparência multiplicada) ao alvo.
+const COMPOSE_WGSL: &str = r#"
+@group(0) @binding(0) var img: texture_2d<f32>;
+
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+    let p = vec2<f32>(f32((i << 1u) & 2u), f32(i & 2u));
+    return vec4<f32>(p * 2.0 - 1.0, 0.0, 1.0);
+}
+
+@fragment
+fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    return textureLoad(img, vec2<i32>(pos.xy), 0);
+}
+"#;
+
+/// O que é preciso para criar os pipelines do passe das malhas.
+struct PipelineKit {
+    shader: wgpu::ShaderModule,
+    format: wgpu::TextureFormat,
+    glow_blend: Option<wgpu::BlendState>,
+    layout: wgpu::PipelineLayout,
+    skinned_layout: wgpu::PipelineLayout,
+    billboard_layout: wgpu::PipelineLayout,
+    view_only: wgpu::PipelineLayout,
+}
+
+/// Os pipelines do passe das malhas (o céu, as malhas, as transparentes e
+/// as partículas), com `samples` amostras por pixel.
+struct MainPipelines {
+    mesh: wgpu::RenderPipeline,
+    /// As duas faces (folhas, panos).
+    two_sided: wgpu::RenderPipeline,
+    skinned: wgpu::RenderPipeline,
+    skinned_two_sided: wgpu::RenderPipeline,
+    transparent: wgpu::RenderPipeline,
+    billboard: wgpu::RenderPipeline,
+    billboard_add: wgpu::RenderPipeline,
+    sky: wgpu::RenderPipeline,
+}
+
+impl MainPipelines {
+    fn new(device: &wgpu::Device, kit: &PipelineKit, samples: u32) -> Self {
+        let shader = &kit.shader;
+        let multisample = wgpu::MultisampleState {
+            count: samples,
+            ..Default::default()
+        };
+        let targets = |color: Option<wgpu::BlendState>, glow: Option<wgpu::BlendState>| {
+            [
+                Some(wgpu::ColorTargetState {
+                    format: kit.format,
+                    blend: color,
+                    write_mask: wgpu::ColorWrites::ALL,
+                }),
+                // O que brilha (para o halo).
+                Some(wgpu::ColorTargetState {
+                    format: GLOW_FORMAT,
+                    blend: glow,
+                    write_mask: wgpu::ColorWrites::ALL,
+                }),
+            ]
+        };
+        let depth = |write: bool, compare: wgpu::CompareFunction| {
+            Some(wgpu::DepthStencilState {
+                format: DEPTH_FORMAT,
+                depth_write_enabled: Some(write),
+                depth_compare: Some(compare),
+                stencil: Default::default(),
+                bias: Default::default(),
+            })
+        };
+        let mesh_buffers = mesh_buffers();
+        let skinned_buffers = skinned_buffers();
+        let alpha = Some(wgpu::BlendState::ALPHA_BLENDING);
+        let mesh = |label: &str,
+                    layout: &wgpu::PipelineLayout,
+                    vs: &str,
+                    buffers: &[Option<wgpu::VertexBufferLayout>],
+                    cull: Option<wgpu::Face>,
+                    write: bool,
+                    glow: Option<wgpu::BlendState>| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(layout),
+                vertex: wgpu::VertexState {
+                    module: shader,
+                    entry_point: Some(vs),
+                    compilation_options: Default::default(),
+                    buffers,
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: cull,
+                    ..Default::default()
+                },
+                depth_stencil: depth(write, wgpu::CompareFunction::Less),
+                multisample,
+                fragment: Some(wgpu::FragmentState {
+                    module: shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: Default::default(),
+                    targets: &targets(alpha, glow),
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let back = Some(wgpu::Face::Back);
+        let glow = kit.glow_blend;
+        let billboard = |label: &str, fs: &str, blend: wgpu::BlendState| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&kit.billboard_layout),
+                vertex: wgpu::VertexState {
+                    module: shader,
+                    entry_point: Some("vs_particle"),
+                    compilation_options: Default::default(),
+                    buffers: &[Some(wgpu::VertexBufferLayout {
+                        array_stride: size_of::<Billboard3>() as wgpu::BufferAddress,
+                        step_mode: wgpu::VertexStepMode::Instance,
+                        attributes: &BILLBOARD_ATTRS,
+                    })],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: depth(false, wgpu::CompareFunction::Less),
+                multisample,
+                fragment: Some(wgpu::FragmentState {
+                    module: shader,
+                    entry_point: Some(fs),
+                    compilation_options: Default::default(),
+                    targets: &targets(Some(blend), Some(blend)),
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        Self {
+            mesh: mesh(
+                "nn 3d",
+                &kit.layout,
+                "vs_main",
+                &mesh_buffers,
+                back,
+                true,
+                glow,
+            ),
+            two_sided: mesh(
+                "nn 3d two sided",
+                &kit.layout,
+                "vs_main",
+                &mesh_buffers,
+                None,
+                true,
+                glow,
+            ),
+            skinned: mesh(
+                "nn 3d skinned",
+                &kit.skinned_layout,
+                "vs_skinned",
+                &skinned_buffers,
+                back,
+                true,
+                glow,
+            ),
+            skinned_two_sided: mesh(
+                "nn 3d skinned two sided",
+                &kit.skinned_layout,
+                "vs_skinned",
+                &skinned_buffers,
+                None,
+                true,
+                glow,
+            ),
+            transparent: mesh(
+                "nn 3d transparent",
+                &kit.layout,
+                "vs_main",
+                &mesh_buffers,
+                None,
+                false,
+                alpha,
+            ),
+            billboard: billboard(
+                "nn 3d particles",
+                "fs_particle",
+                wgpu::BlendState::ALPHA_BLENDING,
+            ),
+            billboard_add: billboard(
+                "nn 3d particles additive",
+                "fs_particle_add",
+                wgpu::BlendState {
+                    color: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::SrcAlpha,
+                        dst_factor: wgpu::BlendFactor::One,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                    alpha: wgpu::BlendComponent {
+                        src_factor: wgpu::BlendFactor::Zero,
+                        dst_factor: wgpu::BlendFactor::One,
+                        operation: wgpu::BlendOperation::Add,
+                    },
+                },
+            ),
+            sky: device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("nn 3d sky"),
+                layout: Some(&kit.view_only),
+                vertex: wgpu::VertexState {
+                    module: shader,
+                    entry_point: Some("vs_sky"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: depth(false, wgpu::CompareFunction::Always),
+                multisample,
+                fragment: Some(wgpu::FragmentState {
+                    module: shader,
+                    entry_point: Some("fs_sky"),
+                    compilation_options: Default::default(),
+                    targets: &targets(None, None),
+                }),
+                multiview_mask: None,
+                cache: None,
+            }),
+        }
+    }
+}
+
 impl Renderer3D {
     pub(crate) fn new(
         device: &wgpu::Device,
         format: wgpu::TextureFormat,
         texture_layout: &wgpu::BindGroupLayout,
         independent_blend: bool,
+        msaa_ok: bool,
     ) -> Self {
         // O brilho é escrito sem mistura; onde a placa não deixa misturar cada
         // alvo de um jeito, ele mistura igual à cor.
@@ -545,44 +840,14 @@ impl Renderer3D {
             })
             .collect();
 
-        let vertex_attrs = wgpu::vertex_attr_array![
-            0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x2
-        ];
-        let instance_attrs = wgpu::vertex_attr_array![
-            4 => Float32x4, 5 => Float32x4, 6 => Float32x4, 7 => Float32x4,
-            8 => Float32x4, 9 => Float32x4, 10 => Float32x4, 11 => Float32x4,
-            14 => Float32x4, 15 => Float32x4
-        ];
-        let buffers = [
-            Some(wgpu::VertexBufferLayout {
-                array_stride: size_of::<Vertex3>() as wgpu::BufferAddress,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &vertex_attrs,
-            }),
-            Some(wgpu::VertexBufferLayout {
-                array_stride: size_of::<Instance3>() as wgpu::BufferAddress,
-                step_mode: wgpu::VertexStepMode::Instance,
-                attributes: &instance_attrs,
-            }),
-        ];
+        let buffers = mesh_buffers();
+        let skinned_buffers = skinned_buffers();
         let primitive = wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,
             front_face: wgpu::FrontFace::Ccw,
             cull_mode: Some(wgpu::Face::Back),
             ..Default::default()
         };
-        // Malhas com ossos: mais um buffer com os ossos de cada vértice e as
-        // matrizes dos ossos num uniform (um pedaço por desenho).
-        let skin_attrs = wgpu::vertex_attr_array![12 => Uint32x4, 13 => Float32x4];
-        let skinned_buffers = [
-            buffers[0].clone(),
-            buffers[1].clone(),
-            Some(wgpu::VertexBufferLayout {
-                array_stride: size_of::<SkinVertex>() as wgpu::BufferAddress,
-                step_mode: wgpu::VertexStepMode::Vertex,
-                attributes: &skin_attrs,
-            }),
-        ];
         let joint_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("nn 3d joints"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -606,55 +871,26 @@ impl Renderer3D {
             ],
             immediate_size: 0,
         });
-        // As malhas opacas: `cull` = None desenha as duas faces.
-        let mesh_pipeline = |label: &str,
-                             layout: &wgpu::PipelineLayout,
-                             vs: &str,
-                             buffers: &[Option<wgpu::VertexBufferLayout>],
-                             cull: Option<wgpu::Face>| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(label),
-                layout: Some(layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some(vs),
-                    compilation_options: Default::default(),
-                    buffers,
-                },
-                primitive: wgpu::PrimitiveState {
-                    cull_mode: cull,
-                    ..primitive
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::Less),
-                    stencil: Default::default(),
-                    bias: Default::default(),
-                }),
-                multisample: wgpu::MultisampleState::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some("fs_main"),
-                    compilation_options: Default::default(),
-                    targets: &[
-                        Some(wgpu::ColorTargetState {
-                            format,
-                            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }),
-                        // O que brilha (para o halo).
-                        Some(wgpu::ColorTargetState {
-                            format: GLOW_FORMAT,
-                            blend: glow_blend,
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }),
-                    ],
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
-        };
+        let skinned_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("nn 3d skinned"),
+            bind_group_layouts: &[
+                Some(&view_layout),
+                Some(texture_layout),
+                Some(&shadow_layout),
+                Some(&joint_layout),
+            ],
+            immediate_size: 0,
+        });
+        let billboard_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("nn 3d particles"),
+            bind_group_layouts: &[Some(&view_layout), Some(texture_layout)],
+            immediate_size: 0,
+        });
+        let view_only = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("nn 3d view only"),
+            bind_group_layouts: &[Some(&view_layout)],
+            immediate_size: 0,
+        });
         // O mapa de sombras: só a profundidade. Com `fs` (o recorte), a
         // transparência da imagem decide o que faz sombra.
         let shadow_pipeline_with = |label: &str,
@@ -698,21 +934,6 @@ impl Renderer3D {
                 cache: None,
             })
         };
-        let pipeline = mesh_pipeline(
-            "nn 3d",
-            &layout,
-            "vs_main",
-            &buffers,
-            Some(wgpu::Face::Back),
-        );
-        let two_sided_pipeline =
-            mesh_pipeline("nn 3d two sided", &layout, "vs_main", &buffers, None);
-
-        let view_only = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("nn 3d view only"),
-            bind_group_layouts: &[Some(&view_layout)],
-            immediate_size: 0,
-        });
         let shadow_pipeline = shadow_pipeline_with(
             "nn 3d shadow",
             &view_only,
@@ -734,72 +955,6 @@ impl Renderer3D {
             &buffers,
             None,
             Some("fs_shadow_cut"),
-        );
-        let transparent_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nn 3d transparent"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &buffers,
-            },
-            primitive: wgpu::PrimitiveState {
-                cull_mode: None,
-                ..primitive
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::Less),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[
-                    Some(wgpu::ColorTargetState {
-                        format,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }),
-                    // O que brilha (para o halo).
-                    Some(wgpu::ColorTargetState {
-                        format: GLOW_FORMAT,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }),
-                ],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let skinned_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("nn 3d skinned"),
-            bind_group_layouts: &[
-                Some(&view_layout),
-                Some(texture_layout),
-                Some(&shadow_layout),
-                Some(&joint_layout),
-            ],
-            immediate_size: 0,
-        });
-        let skinned_pipeline = mesh_pipeline(
-            "nn 3d skinned",
-            &skinned_layout,
-            "vs_skinned",
-            &skinned_buffers,
-            Some(wgpu::Face::Back),
-        );
-        let skinned_two_sided_pipeline = mesh_pipeline(
-            "nn 3d skinned two sided",
-            &skinned_layout,
-            "vs_skinned",
-            &skinned_buffers,
-            None,
         );
         // A sombra com ossos só usa os grupos 0 e 3; no meio vão grupos vazios
         // (o WebGPU de alguns navegadores não aceita buracos na lista).
@@ -849,118 +1004,60 @@ impl Renderer3D {
             None,
             Some("fs_shadow_cut"),
         );
-        // Partículas: quadrados virados para a câmera, sem escrever a
-        // profundidade (as de trás aparecem pelas da frente).
-        let billboard_attrs = wgpu::vertex_attr_array![
-            0 => Float32x4, 1 => Float32x4, 2 => Float32x4, 3 => Float32x4,
-            4 => Float32x4, 5 => Float32x4
-        ];
-        let billboard_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("nn 3d particles"),
-            bind_group_layouts: &[Some(&view_layout), Some(texture_layout)],
-            immediate_size: 0,
-        });
-        let make_billboard = |label: &str, fs: &str, blend: wgpu::BlendState| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(label),
-                layout: Some(&billboard_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some("vs_particle"),
-                    compilation_options: Default::default(),
-                    buffers: &[Some(wgpu::VertexBufferLayout {
-                        array_stride: size_of::<Billboard3>() as wgpu::BufferAddress,
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &billboard_attrs,
-                    })],
-                },
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: DEPTH_FORMAT,
-                    depth_write_enabled: Some(false),
-                    depth_compare: Some(wgpu::CompareFunction::Less),
-                    stencil: Default::default(),
-                    bias: Default::default(),
-                }),
-                multisample: wgpu::MultisampleState::default(),
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some(fs),
-                    compilation_options: Default::default(),
-                    targets: &[
-                        Some(wgpu::ColorTargetState {
-                            format,
-                            blend: Some(blend),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }),
-                        // O que brilha (para o halo).
-                        Some(wgpu::ColorTargetState {
-                            format: GLOW_FORMAT,
-                            blend: Some(blend),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        }),
-                    ],
-                }),
-                multiview_mask: None,
-                cache: None,
-            })
+        let kit = PipelineKit {
+            shader,
+            format,
+            glow_blend,
+            layout,
+            skinned_layout,
+            billboard_layout,
+            view_only,
         };
-        let billboard_pipeline = make_billboard(
-            "nn 3d particles",
-            "fs_particle",
-            wgpu::BlendState::ALPHA_BLENDING,
-        );
-        let billboard_add_pipeline = make_billboard(
-            "nn 3d particles additive",
-            "fs_particle_add",
-            wgpu::BlendState {
-                color: wgpu::BlendComponent {
-                    src_factor: wgpu::BlendFactor::SrcAlpha,
-                    dst_factor: wgpu::BlendFactor::One,
-                    operation: wgpu::BlendOperation::Add,
+        let main = MainPipelines::new(device, &kit, 1);
+        let compose_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("nn 3d compose"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
                 },
-                alpha: wgpu::BlendComponent {
-                    src_factor: wgpu::BlendFactor::Zero,
-                    dst_factor: wgpu::BlendFactor::One,
-                    operation: wgpu::BlendOperation::Add,
-                },
-            },
-        );
-        let sky_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("nn 3d sky"),
-            layout: Some(&view_only),
+                count: None,
+            }],
+        });
+        let compose_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("nn 3d compose"),
+            source: wgpu::ShaderSource::Wgsl(COMPOSE_WGSL.into()),
+        });
+        let compose_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("nn 3d compose"),
+                bind_group_layouts: &[Some(&compose_layout)],
+                immediate_size: 0,
+            });
+        let compose_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("nn 3d compose"),
+            layout: Some(&compose_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_sky"),
+                module: &compose_shader,
+                entry_point: Some("vs"),
                 compilation_options: Default::default(),
                 buffers: &[],
             },
             primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH_FORMAT,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::Always),
-                stencil: Default::default(),
-                bias: Default::default(),
-            }),
+            depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_sky"),
+                module: &compose_shader,
+                entry_point: Some("fs"),
                 compilation_options: Default::default(),
-                targets: &[
-                    Some(wgpu::ColorTargetState {
-                        format,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }),
-                    // O que brilha (para o halo).
-                    Some(wgpu::ColorTargetState {
-                        format: GLOW_FORMAT,
-                        blend: None,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    }),
-                ],
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
             }),
             multiview_mask: None,
             cache: None,
@@ -981,18 +1078,20 @@ impl Renderer3D {
         let billboard_capacity = 256;
         let billboard_buffer = Self::billboard_buffer(device, billboard_capacity);
         Self {
-            pipeline,
-            two_sided_pipeline,
+            main,
+            main_msaa: None,
+            kit,
+            antialias: false,
+            msaa_ok,
+            msaa: None,
+            compose_pipeline,
+            compose_layout,
+            tonemap: false,
             shadow_pipeline,
             shadow_cut_pipeline,
-            skinned_pipeline,
-            skinned_two_sided_pipeline,
             skinned_shadow_pipeline,
             skinned_shadow_cut_pipeline,
             empty_group,
-            billboard_pipeline,
-            billboard_add_pipeline,
-            transparent_pipeline,
             transparent: Vec::new(),
             billboards: Vec::new(),
             billboard_buffer,
@@ -1002,7 +1101,6 @@ impl Renderer3D {
             joint_buffer,
             joint_group,
             joint_capacity,
-            sky_pipeline,
             view_buffer,
             lamp_buffer,
             view_group,
@@ -1658,6 +1756,50 @@ impl Renderer3D {
         Some(h.finish())
     }
 
+    /// Os alvos com 4 amostras do tamanho `size`.
+    fn msaa_targets(&self, device: &wgpu::Device, size: UVec2) -> MsaaTargets {
+        let make = |label: &str, format: wgpu::TextureFormat, samples: u32, binding: bool| {
+            device
+                .create_texture(&wgpu::TextureDescriptor {
+                    label: Some(label),
+                    size: wgpu::Extent3d {
+                        width: size.x,
+                        height: size.y,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: samples,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage: if binding {
+                        wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING
+                    } else {
+                        wgpu::TextureUsages::RENDER_ATTACHMENT
+                    },
+                    view_formats: &[],
+                })
+                .create_view(&Default::default())
+        };
+        let resolved = make("nn 3d msaa resolved", self.kit.format, 1, true);
+        let resolved_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nn 3d compose"),
+            layout: &self.compose_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&resolved),
+            }],
+        });
+        MsaaTargets {
+            size,
+            color: make("nn 3d msaa color", self.kit.format, 4, false),
+            glow: make("nn 3d msaa glow", GLOW_FORMAT, 4, false),
+            depth: make("nn 3d msaa depth", DEPTH_FORMAT, 4, false),
+            resolved,
+            resolved_group,
+        }
+    }
+
     /// Desenha um mapa de sombras: os grupos e, um por chamada, os com ossos.
     /// Devolve quantas chamadas fez.
     fn shadow_pass(
@@ -1984,7 +2126,7 @@ impl Renderer3D {
                 },
                 if self.sky.is_some() { 1.0 } else { 0.0 },
                 sky.stars.clamp(0.0, 1.0),
-                0.0,
+                if self.tonemap { 1.0 } else { 0.0 },
             ],
             shadow: [
                 if shadows_on { 1.0 } else { 0.0 },
@@ -2244,31 +2386,69 @@ impl Renderer3D {
 
         // 2. O céu e as malhas (e, no segundo alvo, o que brilha).
         self.bloom_pass.resize(device, size);
+        // Com antisserrilhado: 4 amostras por pixel num alvo à parte, que
+        // começa transparente e depois é juntado ao alvo (por cima do fundo).
+        let msaa = self.antialias && self.msaa_ok;
+        if msaa {
+            if self.main_msaa.is_none() {
+                self.main_msaa = Some(MainPipelines::new(device, &self.kit, 4));
+            }
+            if self.msaa.as_ref().is_none_or(|m| m.size != size) {
+                self.msaa = Some(self.msaa_targets(device, size));
+            }
+        } else {
+            self.msaa = None;
+        }
+        let p = match (&self.main_msaa, msaa) {
+            (Some(p), true) => p,
+            _ => &self.main,
+        };
         let depth = &self.depth.as_ref().expect("profundidade").1;
+        let glow = self.bloom_pass.glow_view();
+        let (color_view, color_resolve, color_load, glow_view, glow_resolve, depth_view) =
+            match (&self.msaa, msaa) {
+                (Some(m), true) => (
+                    &m.color,
+                    Some(&m.resolved),
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    &m.glow,
+                    Some(glow),
+                    &m.depth,
+                ),
+                _ => (target, None, wgpu::LoadOp::Load, glow, None, depth),
+            };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("nn 3d pass"),
             color_attachments: &[
                 Some(wgpu::RenderPassColorAttachment {
-                    view: target,
+                    view: color_view,
                     depth_slice: None,
-                    resolve_target: None,
+                    resolve_target: color_resolve,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
-                        store: wgpu::StoreOp::Store,
+                        load: color_load,
+                        store: if msaa {
+                            wgpu::StoreOp::Discard
+                        } else {
+                            wgpu::StoreOp::Store
+                        },
                     },
                 }),
                 Some(wgpu::RenderPassColorAttachment {
-                    view: self.bloom_pass.glow_view(),
+                    view: glow_view,
                     depth_slice: None,
-                    resolve_target: None,
+                    resolve_target: glow_resolve,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                        store: wgpu::StoreOp::Store,
+                        store: if msaa {
+                            wgpu::StoreOp::Discard
+                        } else {
+                            wgpu::StoreOp::Store
+                        },
                     },
                 }),
             ],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth,
+                view: depth_view,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(1.0),
                     store: wgpu::StoreOp::Discard,
@@ -2284,10 +2464,10 @@ impl Renderer3D {
             pass.set_viewport(x, y, w, h, 0.0, 1.0);
             pass.set_bind_group(0, &self.view_group, &[]);
             if self.sky.is_some() {
-                pass.set_pipeline(&self.sky_pipeline);
+                pass.set_pipeline(&p.sky);
                 pass.draw(0..3, 0..1);
             }
-            pass.set_pipeline(&self.pipeline);
+            pass.set_pipeline(&p.mesh);
             pass.set_bind_group(2, &self.shadow_map.group, &[]);
             pass.set_vertex_buffer(1, self.instances.slice(..));
             let mut two_on = false;
@@ -2295,11 +2475,7 @@ impl Renderer3D {
                 let m = &self.meshes[mesh.0 as usize];
                 if *two != two_on {
                     two_on = *two;
-                    pass.set_pipeline(if two_on {
-                        &self.two_sided_pipeline
-                    } else {
-                        &self.pipeline
-                    });
+                    pass.set_pipeline(if two_on { &p.two_sided } else { &p.mesh });
                 }
                 if m.count > 0 {
                     pass.set_bind_group(1, &textures[tex.0 as usize].bind_group, &[]);
@@ -2310,7 +2486,7 @@ impl Renderer3D {
                 }
             }
             if !skinned.is_empty() {
-                pass.set_pipeline(&self.skinned_pipeline);
+                pass.set_pipeline(&p.skinned);
                 let mut two_on = false;
                 for &(i, at) in &skinned {
                     let d = &self.draws[i];
@@ -2318,9 +2494,9 @@ impl Renderer3D {
                     if d.two_sided != two_on {
                         two_on = d.two_sided;
                         pass.set_pipeline(if two_on {
-                            &self.skinned_two_sided_pipeline
+                            &p.skinned_two_sided
                         } else {
-                            &self.skinned_pipeline
+                            &p.skinned
                         });
                     }
                     if let (Some(slot), Some(skin)) = (d.joints, &m.skin)
@@ -2339,7 +2515,7 @@ impl Renderer3D {
             }
             // 3. As transparentes (água, vidro).
             if !self.transparent.is_empty() {
-                pass.set_pipeline(&self.transparent_pipeline);
+                pass.set_pipeline(&p.transparent);
                 pass.set_vertex_buffer(1, self.instances.slice(..));
                 let base = (visible.len() + sun_total + spot_total) as u32;
                 for (k, d) in self.transparent.iter().enumerate() {
@@ -2364,11 +2540,7 @@ impl Renderer3D {
                 {
                     j += 1;
                 }
-                pass.set_pipeline(if add {
-                    &self.billboard_add_pipeline
-                } else {
-                    &self.billboard_pipeline
-                });
+                pass.set_pipeline(if add { &p.billboard_add } else { &p.billboard });
                 pass.set_bind_group(1, &textures[tex.0 as usize].bind_group, &[]);
                 pass.set_vertex_buffer(0, self.billboard_buffer.slice(..));
                 pass.draw(0..6, i as u32..j as u32);
@@ -2376,6 +2548,32 @@ impl Renderer3D {
             }
         }
         drop(pass);
+        // O 3D com antisserrilhado vai para o alvo, por cima do que já estava.
+        if let (Some(m), true) = (&self.msaa, msaa)
+            && w >= 1.0
+            && h >= 1.0
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("nn 3d compose"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_viewport(x, y, w, h, 0.0, 1.0);
+            pass.set_pipeline(&self.compose_pipeline);
+            pass.set_bind_group(0, &m.resolved_group, &[]);
+            pass.draw(0..3, 0..1);
+        }
         // 5. O halo do brilho, por cima: só se algo na tela brilha (o
         // brilho das malhas, a água, o fogo, o disco do sol ou da lua).
         let glows = |i: &Instance3| i.glow.iter().any(|&g| g > 0.0) || i.material[0] > 0.5;

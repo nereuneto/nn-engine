@@ -329,7 +329,18 @@ impl Renderer {
             .get_downlevel_capabilities()
             .flags
             .contains(wgpu::DownlevelFlags::INDEPENDENT_BLEND);
-        Self::build(&gpu.device, &gpu.queue, format, independent_blend)
+        // O antisserrilhado do 3D: 4 amostras na cor, no brilho e na
+        // profundidade, e resolver as duas cores.
+        let msaa = |f: wgpu::TextureFormat, resolve: bool| {
+            let flags = gpu.adapter.get_texture_format_features(f).flags;
+            flags.sample_count_supported(4)
+                && (!resolve
+                    || flags.contains(wgpu::TextureFormatFeatureFlags::MULTISAMPLE_RESOLVE))
+        };
+        let msaa_ok = msaa(format, true)
+            && msaa(crate::d3::GLOW_FORMAT, true)
+            && msaa(crate::d3::DEPTH_FORMAT, false);
+        Self::build(&gpu.device, &gpu.queue, format, independent_blend, msaa_ok)
     }
 
     /// Cria o renderer sobre um dispositivo que já existe (por exemplo, o de
@@ -339,7 +350,7 @@ impl Renderer {
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
     ) -> Self {
-        Self::build(device, queue, format, true)
+        Self::build(device, queue, format, true, true)
     }
 
     /// `independent_blend`: a placa mistura cada alvo de um jeito (o WebGL2
@@ -349,6 +360,7 @@ impl Renderer {
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
         independent_blend: bool,
+        msaa_ok: bool,
     ) -> Self {
         let device = device.clone();
         let queue = queue.clone();
@@ -458,7 +470,13 @@ impl Renderer {
 
         let instance_buffer = Self::create_instance_buffer(&device, Self::INITIAL_CAPACITY);
 
-        let d3 = crate::d3::Renderer3D::new(&device, format, &texture_layout, independent_blend);
+        let d3 = crate::d3::Renderer3D::new(
+            &device,
+            format,
+            &texture_layout,
+            independent_blend,
+            msaa_ok,
+        );
         let effects = EffectGpu::new(&device);
         let mut renderer = Self {
             device,
@@ -2246,6 +2264,27 @@ impl Renderer {
 
     pub fn sky3d(&self) -> Option<crate::d3::Sky3D> {
         self.d3.sky
+    }
+
+    /// Antisserrilhado no 3D (MSAA 4x): as bordas das malhas ficam lisas.
+    /// Custa mais memória e tempo da placa; numa placa que não consegue, não
+    /// faz nada.
+    pub fn set_antialias3d(&mut self, on: bool) {
+        self.d3.antialias = on;
+    }
+
+    pub fn antialias3d(&self) -> bool {
+        self.d3.antialias
+    }
+
+    /// Tonemap no 3D: as cores acima do branco (uma luz forte, o sol na
+    /// água) são comprimidas em vez de estourar; as do meio quase não mudam.
+    pub fn set_tonemap3d(&mut self, on: bool) {
+        self.d3.tonemap = on;
+    }
+
+    pub fn tonemap3d(&self) -> bool {
+        self.d3.tonemap
     }
 
     /// As sombras do sol.

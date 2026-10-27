@@ -8,5 +8,9 @@ return {
   width = 1280,
   height = 720,
   clear_color = "#BFE3F2",
+  -- O 3D com as bordas lisas (antisserrilhado) e sem a luz forte estourar
+  -- em branco (tonemap). Em Configurações do projeto.
+  antialias = true,
+  tonemap = true,
   start = "cenas/titulo.lua",
 }

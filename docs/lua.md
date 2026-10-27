@@ -64,6 +64,8 @@ return {
   fixed_hz = 60,          -- passos de fixed_update por segundo
   resizable = true,
   hot_reload = true,      -- recarregar ao salvar
+  antialias = true,       -- 3D com as bordas lisas (veja abaixo)
+  tonemap = true,         -- 3D sem a luz forte estourar em branco
   vars = {                -- variáveis do jogo (nn.vars)
     moedas = 0,
     vidas = 3,
@@ -82,6 +84,8 @@ Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#vari�
 **Tamanho fixo do jogo** (`resolution`): sem ele, o jogo enxerga o tamanho da janela (janela maior mostra mais coisa). Com `resolution = { largura, altura }`, a câmera, `nn.screen`, `nn.window.size()`, `nn.camera.view()` e o mouse usam sempre esse tamanho, e a imagem se ajusta à janela conforme `scale`: `"fit"` (padrão) aumenta ou diminui mantendo a proporção, com faixas pretas quando a janela tem outra proporção; `"stretch"` ocupa a janela toda, mesmo distorcendo; `"pixel"` só aumenta em números inteiros (2×, 3×...), para pixel art nítida. O texto é desenhado no tamanho real da tela, então continua nítido. Os modelos visuais vêm com `resolution = { 1280, 720 }`. Rodando da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), o jogo recarrega ao salvar, a não ser que o `config.lua` diga `hot_reload = false`; o jogo exportado não recarrega. O NN Studio também edita estas opções num formulário (**Editar > Configurações do projeto**), sem mexer nos comentários do arquivo.
 
 **Limite de quadros** (`fps_max`): sem ele, o jogo segue o monitor com `vsync = true` e fica em até 240 quadros por segundo com `vsync = false`. Um número limita (60, 120...), o que poupa a bateria e o processador; `0` tira o limite (o jogo roda o mais rápido que der e ocupa um núcleo inteiro). Com a janela minimizada, o jogo para de simular e de desenhar (a música continua) e segue de onde estava quando ela volta.
+
+**O 3D mais bonito** (`antialias` e `tonemap`, os dois desligados por padrão; os modelos de projeto 3D novos já vêm com os dois ligados). `antialias = true` deixa as bordas das malhas lisas, sem os degraus (MSAA: 4 amostras por pixel). Pesa um pouco mais na placa de vídeo e na memória; numa placa que não consegue, não faz nada. `tonemap = true` comprime as cores acima do branco: uma lâmpada forte, o sol na água ou muitas luzes juntas não estouram num branco chapado, e as cores do meio quase não mudam (é o *PBR Neutral* da Khronos). Os dois mudam também pelo código: `nn.d3.antialias(false)` (uma opção "gráficos" no menu) e `nn.d3.tonemap(true)`.
 
 **Desempenho (F3).** No jogo aberto da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), F3 abre uma tela no canto com os quadros por segundo, o tempo dos passos fixos, da física, do `update` e do desenho, os sprites e as chamadas de desenho, a memória das texturas e do Lua, os objetos da cena e quantos arquivos o jogo já carregou (com o último quadro que carregou alguma coisa: um quadro que carrega no meio do jogo é uma travada). No jogo exportado, F3 não faz nada. Os mesmos números estão em [`nn.debug.stats()`](#desempenho-nndebug).
 
@@ -1594,6 +1598,7 @@ end
 | Função | Descrição |
 |---|---|
 | `nn.d3.wind(opts)` | `strength` (0 = parado, 1 = brisa, 3 = ventania), `turn` (para onde sopra, em graus: 0 = para -Z, 90 = para +X) ou `direction` (`{x, y, z}`). Sem `opts`, só lê. Devolve `{ strength =, x =, z = }`. |
+| `nn.d3.antialias(ligado)`, `nn.d3.tonemap(ligado)` | Antisserrilhado e tonemap do 3D (veja [config.lua](#configlua)). Sem argumento, dizem se estão ligados. |
 | `nn.d3.bloom(v)` | `false` desliga o halo, `true` liga; `{ strength =, enabled = }` muda a força (0 a 4, padrão 1). Devolve se está ligado. Bom para uma opção no menu: sem placa de vídeo, o halo pesa. |
 | `emissor:set_wind(x, y, z)` | O vento que leva as partículas de um emissor 3D, em m/s (nas cenas do NN Studio, vem do ambiente). |
 

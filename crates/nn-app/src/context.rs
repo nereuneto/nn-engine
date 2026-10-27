@@ -100,6 +100,8 @@ impl Context {
             screenshot: None,
         };
         ctx.set_window_size(viewport);
+        ctx.renderer.set_antialias3d(config.antialias);
+        ctx.renderer.set_tonemap3d(config.tonemap);
         ctx
     }
 

@@ -263,6 +263,33 @@ fn sunlit_cascades(world: vec3<f32>, n: vec3<f32>) -> f32 {
     return 1.0;
 }
 
+// O tonemap (o "PBR Neutral" da Khronos): as cores até perto do branco
+// quase não mudam; as acima são comprimidas, sem estourar em branco puro.
+fn pbr_neutral(color: vec3<f32>) -> vec3<f32> {
+    let start = 0.8 - 0.04;
+    let desaturation = 0.15;
+    let x = min(color.r, min(color.g, color.b));
+    let offset = select(0.04, x - 6.25 * x * x, x < 0.08);
+    var c = color - offset;
+    let peak = max(c.r, max(c.g, c.b));
+    if (peak < start) {
+        return c;
+    }
+    let d = 1.0 - start;
+    let new_peak = 1.0 - d * d / (peak + d - start);
+    c = c * (new_peak / peak);
+    let g = 1.0 - 1.0 / (desaturation * (peak - new_peak) + 1.0);
+    return mix(c, vec3<f32>(new_peak), g);
+}
+
+// A cor que vai para a tela: com o tonemap, se ligado (sky_params.w).
+fn finish(rgb: vec3<f32>) -> vec3<f32> {
+    if (view.sky_params.w > 0.5) {
+        return pbr_neutral(max(rgb, vec3<f32>(0.0)));
+    }
+    return rgb;
+}
+
 // As ondinhas da água: a normal da superfície mexendo com o tempo (somas de
 // senos em direções diferentes).
 fn wave(p: vec2<f32>, t: f32, dir: vec2<f32>, freq: f32, speed: f32, amp: f32) -> vec2<f32> {
@@ -315,7 +342,7 @@ fn fs_main(in: VertexOut, @builtin(front_facing) front: bool) -> FragOut {
     var out: FragOut;
     if (f > 0.995) {
         // Toda na névoa: nem acende (o mar e o chão lá longe).
-        out.color = vec4<f32>(view.fog.rgb, albedo.a);
+        out.color = vec4<f32>(finish(view.fog.rgb), albedo.a);
         out.glow = vec4<f32>(0.0, 0.0, 0.0, albedo.a);
         return out;
     }
@@ -330,7 +357,7 @@ fn fs_main(in: VertexOut, @builtin(front_facing) front: bool) -> FragOut {
     let own = albedo.rgb * in.glow.a + in.glow.rgb;
     rgb = rgb + own;
     rgb = mix(rgb, view.fog.rgb, f);
-    out.color = vec4<f32>(rgb, albedo.a);
+    out.color = vec4<f32>(finish(rgb), albedo.a);
     out.glow = vec4<f32>(min(own, vec3<f32>(1.0)) * (1.0 - f), albedo.a);
     return out;
 }
@@ -341,7 +368,7 @@ fn water(in: VertexOut, albedo: vec4<f32>) -> FragOut {
     let f = fog_amount(in.world);
     var out: FragOut;
     if (f > 0.995) {
-        out.color = vec4<f32>(view.fog.rgb, 1.0);
+        out.color = vec4<f32>(finish(view.fog.rgb), 1.0);
         out.glow = vec4<f32>(0.0, 0.0, 0.0, 1.0);
         return out;
     }
@@ -369,7 +396,7 @@ fn water(in: VertexOut, albedo: vec4<f32>) -> FragOut {
     var alpha = mix(albedo.a, 1.0, fresnel * 0.6);
     rgb = mix(rgb, view.fog.rgb, f);
     alpha = mix(alpha, 1.0, f);
-    out.color = vec4<f32>(rgb, alpha);
+    out.color = vec4<f32>(finish(rgb), alpha);
     // O brilho do sol nas ondas também ganha halo.
     out.glow = vec4<f32>(min(own + sparkle * 0.5, vec3<f32>(1.0)) * (1.0 - f), alpha);
     return out;
@@ -526,7 +553,7 @@ fn fs_sky(in: SkyOut) -> FragOut {
         halo = sol * disk * 0.8 * (1.0 - fog_amount(view.camera.xyz + dir * 1000.0));
     }
     var out: FragOut;
-    out.color = vec4<f32>(c, 1.0);
+    out.color = vec4<f32>(finish(c), 1.0);
     out.glow = vec4<f32>(halo, 1.0);
     return out;
 }
@@ -595,7 +622,7 @@ fn fs_particle(in: ParticleOut) -> FragOut {
     let luz = view.sky.rgb + view.sun_color.rgb + lamp_light(in.world, vec3<f32>(0.0, 1.0, 0.0));
     let k = mix(vec3<f32>(1.0), clamp(luz, vec3<f32>(0.18), vec3<f32>(1.0)), in.lit);
     var out: FragOut;
-    out.color = vec4<f32>(mix(c.rgb * k, view.fog.rgb, particle_fog(in.world)), c.a);
+    out.color = vec4<f32>(finish(mix(c.rgb * k, view.fog.rgb, particle_fog(in.world))), c.a);
     out.glow = vec4<f32>(0.0, 0.0, 0.0, c.a);
     return out;
 }

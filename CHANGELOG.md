@@ -4,6 +4,14 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Antisserrilhado e tonemap (Sprint 80)
+
+- **Bordas lisas no 3D:** `antialias = true` no `config.lua` (ou "Antisserrilhado" nas Configurações do projeto, ou `nn.d3.antialias(true)`): 4 amostras por pixel no céu, nas malhas, nas transparentes e nas partículas. O 3D é desenhado num alvo à parte e juntado por cima do fundo do jogo. Numa placa que não consegue, não faz nada.
+- **A luz forte não estoura:** `tonemap = true` (ou `nn.d3.tonemap(true)`) comprime as cores acima do branco (o *PBR Neutral* da Khronos): uma lâmpada forte ou o sol na água ficam claros com a cor deles, e as cores do meio quase não mudam. Feito no próprio shader, sem uma imagem de cor alta, que o WebGL2 nem sempre tem.
+- **Desligados por padrão nos projetos que já existem,** e ligados nos modelos de projeto 3D novos (3D, Vale 3D, Visual 3D e 3D vazio). O NN Studio mostra a cena com os do projeto.
+- Uma cena nova no teste do navegador, "antisserrilhado", confere os dois no Chromium (WebGL2). As fotos dos 13 jogos e modelos não mudaram.
+- **Para quem usa as crates:** `Renderer::set_antialias3d` e `set_tonemap3d`; `AppConfig::antialias` e `tonemap`.
+
 ### Sol em cascatas (Sprint 79)
 
 - **A sombra do sol chega longe:** com a distância da sombra acima de 30 m (`nn.d3.shadows({ distance = 120 })` ou "Sombras" no ambiente da cena), o sol usa três mapas, perto, meio e longe da câmera, e a sombra chega a 100 m ou mais sem perder a nitidez de perto. Perto da borda de um mapa, a sombra passa para o seguinte aos poucos, e na borda do último some aos poucos.

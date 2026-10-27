@@ -49,6 +49,10 @@ pub struct AppConfig {
     pub resolution: Option<(u32, u32)>,
     /// Como o tamanho fixo se ajusta à janela.
     pub scale_mode: nn_render::ScaleMode,
+    /// Antisserrilhado no 3D (MSAA 4x).
+    pub antialias: bool,
+    /// Tonemap no 3D: a luz forte não estoura em branco.
+    pub tonemap: bool,
 }
 
 impl Default for AppConfig {
@@ -70,6 +74,8 @@ impl Default for AppConfig {
             asset_source: None,
             resolution: None,
             scale_mode: nn_render::ScaleMode::Fit,
+            antialias: false,
+            tonemap: false,
         }
     }
 }

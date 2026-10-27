@@ -9,6 +9,10 @@ return {
   height = 720,
   resolution = { 1280, 720 },
   clear_color = "#BFE3F2",
+  -- O 3D com as bordas lisas (antisserrilhado) e sem a luz forte estourar
+  -- em branco (tonemap). Em Configurações do projeto.
+  antialias = true,
+  tonemap = true,
   start = "cenas/mundo.cena",
   -- Variáveis do jogo (nn.vars): crie em Configurações do projeto.
   vars = { estrelas = 0, moedas = 0, vidas = 3 },

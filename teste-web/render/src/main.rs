@@ -20,10 +20,12 @@ mod desktop {
     pub fn referencias(dir: &Path) -> Result<(), String> {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         let gpu = pollster::block_on(GpuContext::new_headless()).map_err(|e| e.to_string())?;
-        let mut renderer = Renderer::new(&gpu, OffscreenTarget::FORMAT);
-        let rec = Recursos::new(&mut renderer);
         let target = OffscreenTarget::new(&gpu, SIZE);
         for (i, nome) in CENAS.iter().enumerate() {
+            // Um renderer novo por cena, como no navegador (uma página por
+            // cena): o que uma cena liga não vale na seguinte.
+            let mut renderer = Renderer::new(&gpu, OffscreenTarget::FORMAT);
+            let rec = Recursos::new(&mut renderer);
             cenas::desenhar(i, &mut renderer, &rec);
             renderer.render(
                 target.view(),
