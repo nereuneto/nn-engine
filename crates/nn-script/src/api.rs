@@ -920,6 +920,30 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     )?;
 
     nn.set(
+        "canvas",
+        lua.create_function(|lua, (w, h, opts): (u32, u32, Option<Table>)| {
+            if w == 0 || h == 0 || w > 8192 || h > 8192 {
+                return Err(err(format!(
+                    "nn.canvas: o tamanho precisa ser de 1 a 8192 pixels (pediu {w} x {h})"
+                )));
+            }
+            // Nítido ampliado (pixel art), a não ser que peça smooth.
+            let smooth = opt::<bool>(opts.as_ref(), "smooth")?.unwrap_or(false);
+            let options = if smooth {
+                nn_render::TextureOptions {
+                    filter: nn_render::Filter::Linear,
+                    mipmaps: false,
+                }
+            } else {
+                nn_render::TextureOptions::PIXEL_ART
+            };
+            with_ctx(lua, |c| {
+                let (id, handle) = c.create_canvas(glam::UVec2::new(w, h), options);
+                Ok(LTexture(id, Some(handle)))
+            })
+        })?,
+    )?;
+    nn.set(
         "text_lines",
         lua.create_function(|lua, (content, opts): (String, Option<Table>)| {
             let text = build_text(&content, 0.0, 0.0, opts.as_ref())?;

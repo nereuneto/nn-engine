@@ -329,3 +329,52 @@ end)
     assert_eq!(summary.results.len(), 1);
     assert!(summary.ok(), "{:?}", summary.results[0].failure);
 }
+
+/// Criar canvas e trocar de cena não aumenta a memória: o canvas que a cena
+/// soltou sai na troca, como as imagens.
+#[test]
+fn canvas_da_cena_que_saiu_sai_da_memoria() {
+    let script = |next: &str| {
+        format!(
+            r##"local c = {{}}
+function c:enter()
+  self.tela = nn.canvas(32, 32)
+  self.outro = nn.canvas(16, 8, {{ smooth = true }})
+end
+function c:draw()
+  self.tela:draw(function() nn.screen.rect(0, 0, 8, 8, "#FF0000") end)
+  nn.screen.sprite(self.tela, 0, 0)
+end
+function c:update()
+  trocas = (trocas or 0) + 1
+  nn.scene.switch("{next}")
+end
+return c
+"##
+        )
+        .into_bytes()
+    };
+    let dir = projeto(
+        "canvas",
+        &[
+            ("cenas/a.lua", script("cenas/b.lua")),
+            ("cenas/b.lua", script("cenas/a.lua")),
+        ],
+    );
+    let Some((mut h, rt)) = pilha(&dir, "cenas/a.lua") else {
+        return;
+    };
+    let medida = |h: &Headless<SceneStack>| {
+        (
+            h.ctx.renderer.texture_bytes(),
+            h.ctx.renderer.texture_count(),
+        )
+    };
+    h.run_frames(4);
+    let antes = medida(&h);
+    h.run_frames(200);
+    let trocas: i64 = rt.lua().load("return trocas").eval().unwrap();
+    assert!(trocas >= 200, "{trocas}");
+    assert!(rt.take_errors().is_empty());
+    assert_eq!(medida(&h), antes, "(bytes, texturas)");
+}

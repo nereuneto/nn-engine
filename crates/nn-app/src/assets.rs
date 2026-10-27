@@ -118,6 +118,9 @@ pub struct Assets {
     reloaded: Vec<PathBuf>,
     /// Só caminhos dentro da pasta do jogo (veja [`Assets::set_confined`]).
     confined: bool,
+    /// Os canvas criados, com quem ainda os usa (descarregam como as
+    /// imagens).
+    canvases: Vec<(TextureId, Weak<()>)>,
 }
 
 impl Assets {
@@ -131,6 +134,7 @@ impl Assets {
             source,
             hot_reload,
             textures: HashMap::new(),
+            canvases: Vec::new(),
             sounds: HashMap::new(),
             fonts: HashMap::new(),
             models: HashMap::new(),
@@ -530,6 +534,20 @@ impl Context {
         }
     }
 
+    /// Um canvas de `size` pixels (veja [`nn_render::Renderer::create_canvas`]).
+    /// Some da memória quando o último [`AssetHandle`] dele cai, na próxima
+    /// troca de cena, como as imagens.
+    pub fn create_canvas(
+        &mut self,
+        size: glam::UVec2,
+        options: TextureOptions,
+    ) -> (TextureId, AssetHandle) {
+        let id = self.renderer.create_canvas(size, options);
+        let rc = Rc::new(());
+        self.assets.canvases.push((id, Rc::downgrade(&rc)));
+        (id, AssetHandle(rc))
+    }
+
     /// Descarrega as texturas, os sons e os modelos que ninguém usa mais:
     /// pedidos só com um [`AssetHandle`], sem nenhum vivo, e não guardados.
     /// Pedir de novo carrega outra vez. A engine chama isto ao trocar de
@@ -548,6 +566,15 @@ impl Context {
             self.assets.textures.remove(&key);
             out.textures += 1;
         }
+        let renderer = &mut self.renderer;
+        self.assets.canvases.retain(|(id, users)| {
+            if users.strong_count() > 0 {
+                return true;
+            }
+            renderer.free_texture(*id);
+            out.textures += 1;
+            false
+        });
         let sounds: Vec<_> = self
             .assets
             .sounds

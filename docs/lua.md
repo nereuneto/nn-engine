@@ -838,6 +838,22 @@ nn.screen.panel(20, 160, 300, 120, { image = moldura, slice = 6, slice_scale = 4
 
 `nn.screen.flash(cor, duração)` pinta a tela inteira com a cor, sumindo aos poucos (padrão 0,3 s). Use uma cor com transparência para um efeito mais leve: `nn.screen.flash("#FF000066", 0.25)` ao levar dano.
 
+#### Canvas: desenhar numa imagem
+
+`nn.canvas(largura, altura)` cria uma imagem em que se desenha. `c:draw(função)` desenha nela o que a função desenhar (com `nn.draw` e `nn.screen`, em pixels do canvas), e depois o canvas vale como qualquer imagem: num sprite, num painel, numa partícula. Serve para um minimapa, uma transição, rastros, ou um jogo inteiro em 320x180 ampliado:
+
+```lua
+local tela = nn.canvas(320, 180)
+function cena:draw()
+  tela:draw(function()
+    -- o jogo, em 320x180
+  end, { clear = "#000000" })
+  nn.screen.sprite(tela, 0, 0, nil, 4)    -- 4 vezes maior, nítido
+end
+```
+
+Opções de `draw`: `clear` (a cor para limpar antes; padrão transparente; `false` mantém o que já estava, para rastros), `x`, `y` e `zoom` (a câmera do mundo dentro do canvas; padrão, a do jogo). Ampliado, o canvas fica nítido como pixel art; `nn.canvas(w, h, { smooth = true })` deixa liso (bom para um minimapa reduzido). Um canvas que a cena solta sai da memória na troca de cena, como as imagens. O 3D não vai para o canvas.
+
 ### nn.input
 
 | Função | Descrição |

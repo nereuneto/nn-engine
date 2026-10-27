@@ -22,6 +22,7 @@ pub const CENAS: &[&str] = &[
     "quebra",
     "linhas",
     "recorte",
+    "canvas",
 ];
 
 /// A cor de fundo de cada cena.
@@ -39,6 +40,7 @@ pub struct Recursos {
     xadrez: TextureId,
     listras: TextureId,
     cubo: MeshId,
+    canvas: TextureId,
 }
 
 /// Um personagem de 8x8 em pixel art.
@@ -84,7 +86,9 @@ impl Recursos {
             .collect();
         let listras = r.create_texture(UVec2::splat(16), &listras, TextureOptions::PIXEL_ART);
         let cubo = r.create_mesh(&shapes::cube());
+        let canvas = r.create_canvas(UVec2::new(80, 45), TextureOptions::PIXEL_ART);
         Self {
+            canvas,
             pixel,
             xadrez,
             listras,
@@ -342,6 +346,37 @@ pub fn desenhar(cena: usize, r: &mut Renderer, rec: &Recursos) {
             s.set_clip(None);
         }
         _ => {}
+    }
+    if cena == 11 {
+        // Um jogo em 80x45 ampliado 4 vezes: o pixel art do herói, um
+        // círculo, texto e uma linha, tudo nítido.
+        r.begin_canvas(rec.canvas);
+        r.draw_circle(Vec2::new(-20.0, 0.0), 12.0, Color::hex(0x7BC86C));
+        r.draw(
+            &Sprite::new(rec.pixel)
+                .at(Vec2::new(14.0, 2.0))
+                .size(Vec2::splat(16.0)),
+        );
+        r.screen()
+            .draw_text(
+                &Text::new("80x45")
+                    .at(Vec2::new(2.0, 2.0))
+                    .size(8.0)
+                    .font(nn_render::FontId::PIXEL),
+            )
+            .draw_line(
+                Vec2::new(2.0, 40.0),
+                Vec2::new(78.0, 34.0),
+                1.0,
+                Color::hex(0xE5A84D),
+            );
+        r.end_canvas(&nn_render::Camera2D::default(), Some(Color::hex(0x2A3446)));
+        r.screen().draw(
+            &Sprite::new(rec.canvas)
+                .at(Vec2::ZERO)
+                .origin(Vec2::ZERO)
+                .size(Vec2::new(320.0, 180.0)),
+        );
     }
     // O mundo recortado: um círculo grande, só um quadrado dele.
     if cena == 10 {

@@ -119,6 +119,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Largura e altura de um texto, sem desenhar (com width, já quebrado nas linhas).",
     ),
     d(
+        "nn.canvas",
+        "(largura, altura, opts)",
+        "Uma imagem em que se desenha: c:draw(função, { clear, x, y, zoom }) e depois use c como qualquer imagem (nn.screen.sprite(c, 0, 0, nil, 4)). Nítida ampliada; opts.smooth = true deixa lisa.",
+    ),
+    d(
         "nn.text_lines",
         "(texto, opts)",
         "As linhas de um texto quebrado em opts.width pixels (a mesma quebra do desenho e dos diálogos): uma lista de strings.",
