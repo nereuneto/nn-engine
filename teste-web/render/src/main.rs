@@ -71,12 +71,35 @@ mod desktop {
                 (Ok(a), Ok(b)) => {
                     let mut soma = 0u64;
                     let mut diferentes = 0usize;
-                    for (p, q) in a.iter().zip(&b) {
+                    // Onde ficam os pixels diferentes (para achar a causa).
+                    let (mut x0, mut y0, mut x1, mut y1) = (u32::MAX, u32::MAX, 0, 0);
+                    let mut linhas = vec![0u32; SIZE.y as usize];
+                    let mut colunas = vec![0u32; SIZE.x as usize];
+                    for (i, (p, q)) in a.iter().zip(&b).enumerate() {
                         let d = (0..3).map(|c| p[c].abs_diff(q[c])).max().unwrap_or(0);
                         soma += (0..3).map(|c| u64::from(p[c].abs_diff(q[c]))).sum::<u64>();
                         if d > PIXEL_DIFERENTE {
                             diferentes += 1;
+                            let (x, y) = (i as u32 % SIZE.x, i as u32 / SIZE.x);
+                            (x0, y0, x1, y1) = (x0.min(x), y0.min(y), x1.max(x), y1.max(y));
+                            linhas[y as usize] += 1;
+                            colunas[x as usize] += 1;
                         }
+                    }
+                    if diferentes > 0 {
+                        let cheias = |v: &[u32], n: u32| {
+                            v.iter()
+                                .enumerate()
+                                .filter(|(_, c)| **c * 2 > n)
+                                .map(|(i, _)| i.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" ")
+                        };
+                        println!(
+                            "      diferentes em x {x0}..{x1}, y {y0}..{y1}; linhas quase todas diferentes: [{}]; colunas: [{}]",
+                            cheias(&linhas, SIZE.x),
+                            cheias(&colunas, SIZE.y)
+                        );
                     }
                     let media = soma as f64 / (a.len() * 3) as f64;
                     let fracao = diferentes as f64 / a.len() as f64;

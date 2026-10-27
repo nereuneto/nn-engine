@@ -54,7 +54,11 @@ impl Recursos {
         let n = 128u32;
         let xadrez: Vec<u8> = (0..n * n)
             .flat_map(|i| {
-                let v = if (i % n + i / n).is_multiple_of(2) { 255 } else { 0 };
+                let v = if (i % n + i / n).is_multiple_of(2) {
+                    255
+                } else {
+                    0
+                };
                 [v, v, v, 255]
             })
             .collect();
