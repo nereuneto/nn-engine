@@ -24,10 +24,12 @@ struct SpriteInstance {
     color: [f32; 4],
     /// Quantas vezes a região se repete em cada eixo (1 = uma vez, esticada).
     repeat: [f32; 2],
+    /// O deslocamento dentro das repetições.
+    offset: [f32; 2],
 }
 
 impl SpriteInstance {
-    const ATTRIBUTES: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
+    const ATTRIBUTES: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
         0 => Float32x2,
         1 => Float32x2,
         2 => Float32x2,
@@ -35,6 +37,7 @@ impl SpriteInstance {
         4 => Float32x4,
         5 => Float32x4,
         6 => Float32x2,
+        7 => Float32x2,
     ];
 
     fn layout() -> wgpu::VertexBufferLayout<'static> {
@@ -704,6 +707,7 @@ impl Renderer {
             region: sprite.region.to_array(),
             color: self.gpu_color(sprite.color).to_array(),
             repeat: sprite.repeat.max(Vec2::splat(0.001)).to_array(),
+            offset: sprite.offset.to_array(),
         };
         self.queue_mut(space)
             .push(sprite.texture, sprite.blend, instance);
@@ -747,6 +751,7 @@ impl Renderer {
                 region: glyph.region.to_array(),
                 color,
                 repeat: [1.0, 1.0],
+                offset: [0.0, 0.0],
             };
             self.queue_mut(space)
                 .push(glyph.texture, Blend::Alpha, instance);
@@ -820,6 +825,7 @@ impl Renderer {
                 region: crate::Rect::FULL.to_array(),
                 color: self.gpu_color(c).to_array(),
                 repeat: [1.0, 1.0],
+                offset: [0.0, 0.0],
             }),
             _ => None,
         };
@@ -1607,7 +1613,7 @@ impl Renderer {
             .iter()
             .enumerate()
             .filter(|(i, _)| !self.freed.contains(&(*i as u32)))
-            .map(|(_, t)| u64::from(t.size.x) * u64::from(t.size.y) * 4)
+            .map(|(_, t)| crate::texture::texture_bytes(t.size, t.levels))
             .sum()
     }
 

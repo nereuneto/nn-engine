@@ -2,6 +2,16 @@
 
 As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). Antes da 1.0, uma versão nova pode mudar coisas de um jeito que pede ajustes nos projetos; quando isso acontecer, está escrito aqui.
 
+## Não lançado
+
+### Mipmaps e o render conferido no navegador (Sprint 69)
+
+- **Uma imagem desenhada menor que o tamanho dela não serrilha mais.** As imagens lisas (as que não são pixel art) ganham mipmaps ao carregar: versões menores, feitas com a média em cor linear e o alpha pesando, para a borda de uma imagem transparente não escurecer. Custa um terço a mais de memória por imagem; `nn.assets.texture(caminho, { mipmaps = false })` tira. A pixel art segue nítida e sem mipmaps, e uma imagem no tamanho dela sai igual a antes: as fotos dos 13 jogos e modelos não mudaram.
+- **O editor desenha as imagens como o jogo**, com os mesmos mipmaps.
+- **Deslocar a imagem repetida:** `offset_x` e `offset_y` no `nn.draw.sprite` andam a imagem dentro do sprite, em pixels. Somando um pouco a cada quadro, um fundo ou uma esteira rola sem mexer no sprite.
+- **O render conferido no navegador.** Um job novo do CI, "Render no navegador (WebGL2)", desenha as cenas de teste do render (`teste-web/`) no desktop e no Chromium sem tela, em WebGL2, e falha se as imagens não baterem. É a regra da v0.10: o que entra no render tem de rodar na web. O WebGPU também é fotografado, por enquanto só como aviso.
+- **Para quem usa as crates:** `TextureOptions` ganhou o campo `mipmaps` (padrão `false` no Rust) e a constante `TextureOptions::SMOOTH`; `Sprite::offset`. `texture_bytes` conta os mipmaps.
+
 ## 0.9.0
 
 A versão do **desempenho, da robustez e da memória**. Os jogos ficam mais rápidos com muita coisa na tela, um erro não derruba mais o jogo de quem joga, e trocar de cena não enche a memória nem trava no meio:

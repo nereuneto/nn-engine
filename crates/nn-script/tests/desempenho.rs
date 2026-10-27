@@ -16,7 +16,10 @@ const CORPOS: usize = 50;
 const OBJETOS: usize = IMAGENS + FORMAS + TEXTOS + CORPOS;
 
 fn projeto() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("nn-desempenho-{}", std::process::id()));
+    // Uma pasta por chamada: os testes rodam ao mesmo tempo.
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("nn-desempenho-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("cenas")).unwrap();
     std::fs::create_dir_all(dir.join("assets")).unwrap();

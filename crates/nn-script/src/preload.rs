@@ -22,7 +22,7 @@ use crate::api::{LoadingScreen, Shared};
 /// Uma coisa para carregar antes.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Preload {
-    Texture(String, bool),
+    Texture(String, TextureOptions),
     Sound(String),
     Model(String, bool),
     Font(String),
@@ -33,8 +33,8 @@ impl Preload {
     /// Um item da lista: um caminho (o tipo vem da extensão) ou uma tabela
     /// `{ "caminho", pixel_art = true }` / `{ kind = ..., path = ... }`.
     fn from_value(v: &Value) -> Option<Self> {
-        let (path, kind, pixel_art, flat) = match v {
-            Value::String(s) => (s.to_str().ok()?.to_string(), None, false, false),
+        let (path, kind, pixel_art, flat, mipmaps) = match v {
+            Value::String(s) => (s.to_str().ok()?.to_string(), None, false, false, true),
             Value::Table(t) => {
                 let path: Option<String> = t
                     .get::<Option<String>>("path")
@@ -52,6 +52,10 @@ impl Preload {
                         .ok()
                         .flatten()
                         .unwrap_or(false),
+                    t.get::<Option<bool>>("mipmaps")
+                        .ok()
+                        .flatten()
+                        .unwrap_or(true),
                 )
             }
             _ => return None,
@@ -75,7 +79,7 @@ impl Preload {
             .to_string()
         });
         Some(match kind.as_str() {
-            "texture" => Self::Texture(path, pixel_art),
+            "texture" => Self::Texture(path, crate::api::image_options(pixel_art, mipmaps)),
             "sound" => Self::Sound(path),
             "model" => Self::Model(path, flat),
             "font" => Self::Font(path),
@@ -93,13 +97,8 @@ impl Preload {
     fn load(&self, ctx: &mut Context) -> Result<Vec<AssetHandle>, String> {
         let e = |e: nn_app::AssetError| e.to_string();
         Ok(match self {
-            Self::Texture(path, pixel_art) => {
-                let options = if *pixel_art {
-                    TextureOptions::PIXEL_ART
-                } else {
-                    TextureOptions::default()
-                };
-                vec![ctx.texture_handle(path, options).map_err(e)?.1]
+            Self::Texture(path, options) => {
+                vec![ctx.texture_handle(path, *options).map_err(e)?.1]
             }
             Self::Sound(path) => vec![ctx.sound_handle(path).map_err(e)?.1],
             Self::Model(path, flat) => vec![ctx.model_handle(path, *flat).map_err(e)?.1],

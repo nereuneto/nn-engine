@@ -792,7 +792,7 @@ As duas tabelas têm as mesmas funções; muda só o espaço.
 | `circle(x, y, raio, cor)` | Círculo de cor sólida (`x, y` é o centro nos dois espaços). |
 | `panel(x, y, w, h, opts)` | Painel: retângulo com cantos arredondados e borda, ou uma imagem em 9 fatias. |
 
-Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`, `tile_w`, `tile_h` (repetir em vez de esticar: o tamanho de cada cópia; `{ w = 640, h = 32, tile_w = 32, tile_h = 32 }` desenha 20 blocos).
+Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`, `tile_w`, `tile_h` (repetir em vez de esticar: o tamanho de cada cópia; `{ w = 640, h = 32, tile_w = 32, tile_h = 32 }` desenha 20 blocos), `offset_x`, `offset_y` (desloca a imagem dentro do sprite, em pixels, para +x e +y; somar um pouco a cada quadro faz um fundo ou uma esteira rolar: `{ w = 640, h = 360, tile_w = 64, tile_h = 64, offset_x = nn.time.elapsed() * 30 }`).
 
 Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `font`.
 `anchor` diz qual ponto do texto fica em `x, y`: `topleft` (padrão), `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright` (também com sublinhado, como a âncora do objeto: `top_left`).
@@ -883,7 +883,7 @@ Usar uma ação que não foi criada com `bind` é um erro (para pegar erros de d
 
 | Função | Devolve |
 |---|---|
-| `texture(caminho, { pixel_art = true })` | Imagem PNG, com campos `width` e `height`. |
+| `texture(caminho, { pixel_art = true })` | Imagem PNG, com campos `width` e `height`. Sem `pixel_art`, a imagem é lisa e tem mipmaps: desenhada menor que o tamanho dela, não serrilha (custa um terço a mais de memória; `mipmaps = false` tira). |
 | `sheet(caminho_ou_imagem, largura_quadro, altura_quadro, opts)` | Spritesheet, com `count`, `columns`, `rows`. Opções: `margin`, `spacing`, `pixel_art`. |
 | `sound(caminho)` | Som (WAV, OGG Vorbis, MP3), com `duration` e `:play(opts)`. |
 | `font(caminho)` | Fonte .ttf/.otf, para a opção `font` do texto. |

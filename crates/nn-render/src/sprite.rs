@@ -89,6 +89,9 @@ pub struct Sprite {
     /// 1×1: a região estica no tamanho do sprite). Valores quebrados mostram
     /// um pedaço da última repetição.
     pub repeat: Vec2,
+    /// Desloca a imagem dentro das repetições, em repetições (0,5 = meia
+    /// imagem): um fundo que rola mudando só isto.
+    pub offset: Vec2,
 }
 
 impl Sprite {
@@ -103,6 +106,7 @@ impl Sprite {
             region: Rect::FULL,
             blend: Blend::Alpha,
             repeat: Vec2::ONE,
+            offset: Vec2::ZERO,
         }
     }
 
@@ -145,6 +149,13 @@ impl Sprite {
     /// mostra a região 4 vezes na horizontal, dentro do tamanho do sprite.
     pub fn repeat(mut self, times: Vec2) -> Self {
         self.repeat = times;
+        self
+    }
+
+    /// Desloca a imagem repetida (em repetições): `Vec2::new(0.25, 0.0)`
+    /// anda um quarto de imagem para a direita.
+    pub fn offset(mut self, offset: Vec2) -> Self {
+        self.offset = offset;
         self
     }
 }
