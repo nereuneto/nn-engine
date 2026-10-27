@@ -270,7 +270,7 @@ ctx.renderer.draw_text(&Text::new("Baú").at(posicao_do_bau).anchor(Anchor::Bott
 let tamanho = ctx.renderer.measure_text(&Text::new("Pausado").size(48.0));
 ```
 
-A fonte padrão é a Poppins (licença SIL OFL 1.1, em `crates/nn-render/assets/fonts`). Outras fontes .ttf/.otf podem ser carregadas com `ctx.renderer.load_font(caminho)`. Cada letra é rasterizada uma vez por tamanho e reaproveitada, então texto que muda todo frame (como um placar) é barato.
+A fonte padrão é a Poppins, e a de pixel art (`renderer.pixel_font()`) é a Press Start 2P (as duas com a licença SIL OFL 1.1, em `crates/nn-render/assets/fonts`). Outras fontes .ttf/.otf podem ser carregadas com `ctx.renderer.load_font(caminho)`. Cada letra é rasterizada uma vez por tamanho e reaproveitada, então texto que muda todo frame (como um placar) é barato.
 
 ## Cenas
 

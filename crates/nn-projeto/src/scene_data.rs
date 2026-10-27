@@ -1262,8 +1262,15 @@ pub fn write(scene: &SceneData) -> String {
 
 /// Campos que vieram depois da 0.7: no valor padrão, não vão para o
 /// arquivo. Assim um projeto da 0.7 aberto e gravado sai igual, e o arquivo
-/// continua abrindo no `nn` da 0.7.
-const LATE_FIELDS: &[(&str, &str)] = &[("body", "ox"), ("body", "oy"), ("particles", "pixel")];
+/// continua abrindo no `nn` da 0.7. (A largura e o alinhamento do texto
+/// vieram na 0.10.)
+const LATE_FIELDS: &[(&str, &str)] = &[
+    ("body", "ox"),
+    ("body", "oy"),
+    ("particles", "pixel"),
+    ("text", "width"),
+    ("text", "align"),
+];
 
 fn late_default(kind: &str, key: &str, v: &Prop) -> bool {
     LATE_FIELDS.contains(&(kind, key)) && schema().default_of(kind, key) == Some(v)

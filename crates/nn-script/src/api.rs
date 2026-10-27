@@ -326,8 +326,18 @@ pub(crate) fn build_text<'a>(
     if let Some(name) = opt::<String>(opts, "align")? {
         text = text.align(align(&name)?);
     }
-    if let Some(font) = opt::<Value>(opts, "font")? {
-        text = text.font(expect::<LFont>(&font, "uma fonte (nn.assets.font)")?.0);
+    match opt::<Value>(opts, "font")? {
+        None => {}
+        // A fonte de pixel art embutida.
+        Some(Value::String(s)) if s.to_str().is_ok_and(|s| &*s == "pixel") => {
+            text = text.font(nn_render::FontId::PIXEL);
+        }
+        Some(font) => {
+            text = text.font(expect::<LFont>(&font, "uma fonte (nn.assets.font, ou \"pixel\")")?.0);
+        }
+    }
+    if let Some(w) = opt::<f32>(opts, "width")? {
+        text = text.width(w);
     }
     Ok(text)
 }
@@ -629,6 +639,13 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     nn.set("screen", screen)?;
     nn.set("_sprite", lua.create_function(component_sprite)?)?;
 
+    nn.set(
+        "text_lines",
+        lua.create_function(|lua, (content, opts): (String, Option<Table>)| {
+            let text = build_text(&content, 0.0, 0.0, opts.as_ref())?;
+            with_ctx(lua, |c| Ok(c.renderer.text_lines(&text)))
+        })?,
+    )?;
     nn.set(
         "text_size",
         lua.create_function(|lua, (content, opts): (String, Option<Table>)| {
@@ -976,11 +993,16 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     )?;
     assets.set(
         "font",
-        lua.create_function(|lua, path: String| {
+        lua.create_function(|lua, (path, opts): (String, Option<Table>)| {
+            // `{ pixel = 8 }`: uma fonte de pixel art, nítida em múltiplos de 8.
+            let pixel = opt::<f32>(opts.as_ref(), "pixel")?.filter(|v| *v > 0.0);
             with_ctx(lua, |c| {
-                c.load_font(&path)
-                    .map(LFont)
-                    .map_err(|e| err(e.to_string()))
+                match pixel {
+                    Some(em) => c.load_pixel_font(&path, em),
+                    None => c.load_font(&path),
+                }
+                .map(LFont)
+                .map_err(|e| err(e.to_string()))
             })
         })?,
     )?;

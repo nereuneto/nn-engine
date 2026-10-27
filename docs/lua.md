@@ -77,7 +77,7 @@ return {
 
 Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#variáveis-do-jogo-nnvars).
 
-**Tema da interface** (`theme`): as cores que os [componentes de interface](#interface-menus-e-hud) usam quando a cor deles está vazia: `text` (#FFFFFF), `button` (#3FA7D6), `hover` (#5BC0EB, botão com foco), `press` (#2E86AB, apertado), `disabled` (#5B6472), `panel` (#1E2A3AE6), `border` (#FFFFFF40) e `accent` (#FFD166, barras e marcas), além de `font` (um `.ttf` ou `.otf`; vazio = a fonte da engine) e `sound` (som dos botões). Só o que você muda precisa estar no arquivo. No código, o tema completo fica em `nn.theme`.
+**Tema da interface** (`theme`): as cores que os [componentes de interface](#interface-menus-e-hud) usam quando a cor deles está vazia: `text` (#FFFFFF), `button` (#3FA7D6), `hover` (#5BC0EB, botão com foco), `press` (#2E86AB, apertado), `disabled` (#5B6472), `panel` (#1E2A3AE6), `border` (#FFFFFF40) e `accent` (#FFD166, barras e marcas), além de `font` (um `.ttf` ou `.otf`, ou `"pixel"` para a [fonte de pixel art](#fonte-de-pixel-art); vazio = a fonte da engine) e `sound` (som dos botões). Só o que você muda precisa estar no arquivo. No código, o tema completo fica em `nn.theme`.
 
 **Tamanho fixo do jogo** (`resolution`): sem ele, o jogo enxerga o tamanho da janela (janela maior mostra mais coisa). Com `resolution = { largura, altura }`, a câmera, `nn.screen`, `nn.window.size()`, `nn.camera.view()` e o mouse usam sempre esse tamanho, e a imagem se ajusta à janela conforme `scale`: `"fit"` (padrão) aumenta ou diminui mantendo a proporção, com faixas pretas quando a janela tem outra proporção; `"stretch"` ocupa a janela toda, mesmo distorcendo; `"pixel"` só aumenta em números inteiros (2×, 3×...), para pixel art nítida. O texto é desenhado no tamanho real da tela, então continua nítido. Os modelos visuais vêm com `resolution = { 1280, 720 }`. Rodando da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), o jogo recarrega ao salvar, a não ser que o `config.lua` diga `hot_reload = false`; o jogo exportado não recarrega. O NN Studio também edita estas opções num formulário (**Editar > Configurações do projeto**), sem mexer nos comentários do arquivo.
 
@@ -196,7 +196,7 @@ Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), 
 | `type` | Campos (padrão) |
 |---|---|
 | `sprite` | `image`, `frame_w`, `frame_h` (0 = imagem inteira, ou o tamanho do `.anim` da imagem), `frame` (1), `w`, `h` (0 = tamanho da imagem), `color` ("#FFFFFF"), `flip_x`, `flip_y`, `pixel_art` (true), `fill` ("stretch" ou "repeat": repete a imagem lado a lado; `w` e `h` são o tamanho de cada cópia e a escala do objeto diz quantas cabem), `animation` ("": uma [animação](#animações-anim) da imagem para tocar desde o começo) |
-| `text` | `text`, `size` (32), `color`, `anchor` ("center", "left", "right"...), `font` ("": a do tema), `outline` ("": uma cor para a borda em volta das letras, que deixa o texto legível em cima de qualquer fundo) |
+| `text` | `text`, `size` (32), `color`, `anchor` ("center", "left", "right"...), `font` ("": a do tema; "pixel": a de pixel art), `outline` ("": uma cor para a borda em volta das letras, que deixa o texto legível em cima de qualquer fundo), `width` (0: as linhas quebram nessa largura; 0 = sem quebra), `align` ("left", "center", "right": as linhas entre si) |
 | `shape` | `shape` ("rect" ou "circle"), `w`, `h` (64), `radius` (32), `color` |
 | `body` | `body` ("dynamic", "static" ou "kinematic"), `shape` ("box" ou "circle"), `w`, `h` (32), `radius` (16): como o `w` e o `h` do sprite, também multiplicados pela escala do objeto (para cobrir um sprite repetido, use o mesmo `w` e `h` dele), `ox`, `oy` (0: desloca a colisão em relação ao objeto, na escala dele; `oy` positivo sobe; para a caixa ficar nos pés de um sprite com espaço vazio), `sensor`, `one_way`, `bounce` (0), `gravity_scale` (1), `tag` (padrão: o nome do objeto) |
 | `map` | `map` (arquivo .tmj), `scale` (1), `collision` (true) |
@@ -794,9 +794,20 @@ As duas tabelas têm as mesmas funções; muda só o espaço.
 
 Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`, `tile_w`, `tile_h` (repetir em vez de esticar: o tamanho de cada cópia; `{ w = 640, h = 32, tile_w = 32, tile_h = 32 }` desenha 20 blocos), `offset_x`, `offset_y` (desloca a imagem dentro do sprite, em pixels, para +x e +y; somar um pouco a cada quadro faz um fundo ou uma esteira rolar: `{ w = 640, h = 360, tile_w = 64, tile_h = 64, offset_x = nn.time.elapsed() * 30 }`).
 
-Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `font`.
+Opções de `text`: `size` (padrão 20), `color`, `alpha`, `anchor`, `align`, `font`, `width`.
 `anchor` diz qual ponto do texto fica em `x, y`: `topleft` (padrão), `top`, `topright`, `left`, `center`, `right`, `bottomleft`, `bottom`, `bottomright` (também com sublinhado, como a âncora do objeto: `top_left`).
-`align` alinha as linhas de um texto com `\n`: `left`, `center`, `right`.
+`align` alinha as linhas de um texto com `\n` (ou quebrado com `width`): `left`, `center`, `right`.
+`width` quebra o texto em linhas que cabem nessa largura, entre as palavras (uma palavra maior que a linha quebra no meio). O texto fica numa caixa dessa largura, e `align` alinha as linhas dentro dela: `nn.screen.text(fala, 20, 300, { width = 600 })`.
+
+#### Fonte de pixel art
+
+`font = "pixel"` usa a fonte de pixel art que vem na engine (a [Press Start 2P](https://fonts.google.com/specimen/Press+Start+2P), com os acentos do português). Ela é desenhada em 8 px: em 8, 16, 24, 32... cada pixel dela vira um quadrado de pixels da tela, sem borrar; um `size` no meio vai para o múltiplo de 8 mais perto (20 vira 24). As linhas ganham 2 px de espaço a cada 8.
+
+```lua
+nn.screen.text("VIDAS 3", 8, 8, { font = "pixel", size = 16 })
+```
+
+O nome `"pixel"` também vale no componente Texto, no tema (`theme = { font = "pixel" }` no `config.lua`, para os menus e os diálogos) e em `nn.ui.theme`. Para uma fonte de pixel art sua, carregue com o tamanho em que ela foi desenhada: `nn.assets.font("assets/fontes/minha.ttf", { pixel = 11 })`.
 
 Opções de `panel`: `color`, `radius` (cantos), `border` (largura) e `border_color`, ou `image` (uma imagem, ou uma spritesheet com `frame`) com `slice` (pixels de cada canto que não esticam) e `slice_scale` (quanto cada pixel do canto cresce; 3 ou 4 para pixel art). No mundo, `x, y` é o centro; na tela, o canto de cima à esquerda. Cores com transparência ficam certas, sem a borda escurecer o fundo.
 
@@ -805,7 +816,7 @@ nn.screen.panel(20, 20, 300, 120, { color = "#1E2A3AE6", radius = 12, border = 2
 nn.screen.panel(20, 160, 300, 120, { image = moldura, slice = 6, slice_scale = 4 })
 ```
 
-`nn.text_size(texto, opts)` devolve `largura, altura` sem desenhar.
+`nn.text_size(texto, opts)` devolve `largura, altura` sem desenhar (com `width`, a altura de todas as linhas). `nn.text_lines(texto, opts)` devolve as linhas do texto quebrado em `opts.width`, numa lista: a mesma quebra do desenho e das caixas de fala.
 
 `nn.screen.flash(cor, duração)` pinta a tela inteira com a cor, sumindo aos poucos (padrão 0,3 s). Use uma cor com transparência para um efeito mais leve: `nn.screen.flash("#FF000066", 0.25)` ao levar dano.
 
@@ -886,7 +897,7 @@ Usar uma ação que não foi criada com `bind` é um erro (para pegar erros de d
 | `texture(caminho, { pixel_art = true })` | Imagem PNG, com campos `width` e `height`. Sem `pixel_art`, a imagem é lisa e tem mipmaps: desenhada menor que o tamanho dela, não serrilha (custa um terço a mais de memória; `mipmaps = false` tira). |
 | `sheet(caminho_ou_imagem, largura_quadro, altura_quadro, opts)` | Spritesheet, com `count`, `columns`, `rows`. Opções: `margin`, `spacing`, `pixel_art`. |
 | `sound(caminho)` | Som (WAV, OGG Vorbis, MP3), com `duration` e `:play(opts)`. |
-| `font(caminho)` | Fonte .ttf/.otf, para a opção `font` do texto. |
+| `font(caminho, opts)` | Fonte .ttf/.otf, para a opção `font` do texto. `"pixel"` é a [fonte de pixel art](#fonte-de-pixel-art) que vem na engine; `{ pixel = 8 }` carrega uma fonte de pixel art sua, desenhada em 8 px (fica nítida em 8, 16, 24...). |
 | `read(caminho)` | Conteúdo de um arquivo de texto. |
 | `exists(caminho)` | O arquivo existe? |
 | `animations(imagem)` | As [animações](#animações-anim) do `.anim` da imagem, por nome: `nn.assets.animations("assets/imagens/heroi.png").andar` (prontas para `nn.animator`). |

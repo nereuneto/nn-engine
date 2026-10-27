@@ -4,6 +4,15 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Fonte de pixel art e quebra de linha (Sprint 70)
+
+- **Uma fonte de pixel art na engine.** `font = "pixel"` (no `nn.draw.text`, no componente Texto, no tema do projeto e em `nn.ui.theme`) usa a Press Start 2P, com os acentos do português. Ela fica nítida, sem borrar, em 8, 16, 24... px: cada pixel dela vira um quadrado de pixels da tela, e um tamanho no meio vai para o múltiplo de 8 mais perto. As linhas ganham 2 px de espaço a cada 8.
+- **Uma fonte de pixel art sua:** `nn.assets.font(caminho, { pixel = 11 })`, com o tamanho em que ela foi desenhada.
+- **Quebra de linha:** `width` no `nn.draw.text` e no `nn.screen.text` quebra o texto entre as palavras para caber nessa largura, e `align` alinha as linhas dentro dela. `nn.text_size` mede o texto quebrado, e `nn.text_lines(texto, opts)` devolve as linhas. As caixas de fala usam a mesma quebra (e saem iguais a antes).
+- **No componente Texto,** os campos novos **Largura (quebra)** e **Alinhamento**, no jogo e no editor; a Fonte lista `pixel`.
+- **Para quem usa as crates:** `Text::width`, `FontId::DEFAULT` e `FontId::PIXEL`, `Renderer::pixel_font`, `Renderer::load_pixel_font_bytes` e `Renderer::text_lines`; no nn-app, `Context::load_font("pixel")` e `Context::load_pixel_font`.
+- A fonte Press Start 2P (dos autores do projeto Press Start 2P) vem sem mudanças, com a licença dela (SIL Open Font License 1.1) em `crates/nn-render/assets/fonts/OFL-PressStart2P.txt`.
+
 ### Mipmaps e o render conferido no navegador (Sprint 69)
 
 - **Uma imagem desenhada menor que o tamanho dela não serrilha mais.** As imagens lisas (as que não são pixel art) ganham mipmaps ao carregar: versões menores, feitas com a média em cor linear e o alpha pesando, para a borda de uma imagem transparente não escurecer. Custa um terço a mais de memória por imagem; `nn.assets.texture(caminho, { mipmaps = false })` tira. A pixel art segue nítida e sem mipmaps, e uma imagem no tamanho dela sai igual a antes: as fotos dos 13 jogos e modelos não mudaram.

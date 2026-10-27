@@ -579,6 +579,10 @@ impl Context {
     /// Carrega uma fonte (.ttf, .otf) dos assets, com cache.
     pub fn load_font(&mut self, path: impl AsRef<Path>) -> Result<FontId, AssetError> {
         let key = normalize(path.as_ref());
+        // A fonte de pixel art embutida.
+        if key == "pixel" {
+            return Ok(self.renderer.pixel_font());
+        }
         if let Some(id) = self.assets.fonts.get(&key) {
             return Ok(*id);
         }
@@ -593,6 +597,32 @@ impl Context {
             })?;
         self.perf.add_load_file(t.elapsed(), &key);
         self.assets.fonts.insert(key, id);
+        Ok(id)
+    }
+
+    /// Carrega uma fonte de pixel art: `em` é o tamanho em que cada pixel do
+    /// desenho dela vira um pixel da tela (o texto fica em múltiplos dele).
+    pub fn load_pixel_font(
+        &mut self,
+        path: impl AsRef<Path>,
+        em: f32,
+    ) -> Result<FontId, AssetError> {
+        let key = normalize(path.as_ref());
+        let cache = format!("{key}#pixel{em}");
+        if let Some(id) = self.assets.fonts.get(&cache) {
+            return Ok(*id);
+        }
+        let t = Instant::now();
+        let bytes = self.assets.read(&key)?;
+        let id = self
+            .renderer
+            .load_pixel_font_bytes(&bytes, em)
+            .map_err(|source| AssetError::Render {
+                path: self.assets.resolve(&key),
+                source,
+            })?;
+        self.perf.add_load_file(t.elapsed(), &key);
+        self.assets.fonts.insert(cache, id);
         Ok(id)
     }
 

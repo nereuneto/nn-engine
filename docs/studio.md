@@ -781,6 +781,11 @@ Um texto em cima do céu ou de um chão claro pode sumir: no Inspetor do Texto,
 **Contorno** põe uma borda em volta das letras (o placar dos modelos 3D usa
 preto meio transparente).
 
+No Texto também: **Largura (quebra)** quebra as linhas entre as palavras
+para caber nessa largura (0 = sem quebra), e **Alinhamento** alinha as linhas
+entre si. Na **Fonte**, `pixel` é a fonte de pixel art que vem na engine,
+nítida em 8, 16, 24... (também no tema do projeto, em Configurações do projeto > Tema da interface).
+
 Para criar: **➕ Objeto > Na tela (HUD)** tem **Texto na tela** e os
 componentes de interface (painel, botão, barra, ícones e o menu com botões).
 O mesmo menu está no **➕** da Hierarquia.

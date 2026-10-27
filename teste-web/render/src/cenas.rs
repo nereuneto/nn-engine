@@ -4,14 +4,22 @@
 use glam::{Mat4, UVec2, Vec2, Vec3};
 use nn_core::Color;
 use nn_render::d3::{Camera3D, MeshId, Sky3D, shapes};
-use nn_render::{Panel, Renderer, Sprite, Text, TextureId, TextureOptions};
+use nn_render::{Align, Panel, Renderer, Sprite, Text, TextureId, TextureOptions};
 
 /// Tamanho da tela das cenas.
 pub const SIZE: UVec2 = UVec2::new(320, 180);
 
 /// Os nomes, na ordem (o número da cena é a posição aqui).
 pub const CENAS: &[&str] = &[
-    "formas", "imagens", "mipmaps", "repetir", "texto", "painel", "3d",
+    "formas",
+    "imagens",
+    "mipmaps",
+    "repetir",
+    "texto",
+    "painel",
+    "3d",
+    "fonte-pixel",
+    "quebra",
 ];
 
 /// A cor de fundo de cada cena.
@@ -197,6 +205,58 @@ pub fn desenhar(cena: usize, r: &mut Renderer, rec: &Recursos) {
                     * Mat4::from_scale(Vec3::new(8.0, 0.2, 8.0)),
                 Color::hex(0x7BC86C),
             );
+        }
+        7 => {
+            let pixel = r.pixel_font();
+            let mut s = r.screen();
+            for (y, size, cor) in [
+                (8.0, 8.0, 0xFFFFFF),
+                (24.0, 16.0, 0xE5A84D),
+                (48.0, 24.0, 0x7BC86C),
+            ] {
+                s.draw_text(
+                    &Text::new("Ação, coração: 0123")
+                        .at(Vec2::new(8.0, y))
+                        .size(size)
+                        .font(pixel)
+                        .color(Color::hex(cor)),
+                );
+            }
+            s.draw_text(
+                &Text::new("nítida em todo múltiplo de 8 px")
+                    .at(Vec2::new(8.0, 150.0))
+                    .size(8.0)
+                    .font(pixel)
+                    .color(Color::hex(0xC8D0E0)),
+            );
+        }
+        8 => {
+            let pixel = r.pixel_font();
+            let mut s = r.screen();
+            let texto = "Era uma vez um herói que andava pelo mundo procurando a chave da porta.";
+            for (x, align, font) in [
+                (8.0, Align::Left, Some(pixel)),
+                (112.0, Align::Center, Some(pixel)),
+                (216.0, Align::Right, None),
+            ] {
+                s.draw_rect(
+                    Vec2::new(x, 8.0),
+                    Vec2::new(96.0, 164.0),
+                    Color::hex(0x2A3446),
+                );
+                let mut t = Text::new(texto)
+                    .at(Vec2::new(x, 8.0))
+                    .size(8.0)
+                    .width(96.0)
+                    .align(align)
+                    .color(Color::WHITE);
+                if let Some(f) = font {
+                    t = t.font(f);
+                } else {
+                    t = t.size(12.0);
+                }
+                s.draw_text(&t);
+            }
         }
         _ => {}
     }

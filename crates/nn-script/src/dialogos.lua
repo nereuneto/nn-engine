@@ -205,23 +205,13 @@ function D.update(scene, dt)
   end
 end
 
--- Quebra o texto em linhas que cabem em `w` pixels.
+-- Quebra o texto em linhas que cabem em `w` pixels (a mesma quebra da
+-- opção `width` do texto).
 local function wrap(text, w, opts)
-  local lines = {}
-  for para in (text .. "\n"):gmatch("(.-)\n") do
-    local line = ""
-    for word in para:gmatch("%S+") do
-      local try = line == "" and word or (line .. " " .. word)
-      if line ~= "" and nn.text_size(try, opts) > w then
-        table.insert(lines, line)
-        line = word
-      else
-        line = try
-      end
-    end
-    table.insert(lines, line)
-  end
-  return lines
+  local o = {}
+  for k, v in pairs(opts or {}) do o[k] = v end
+  o.width = w
+  return nn.text_lines(text, o)
 end
 
 local images = {}
