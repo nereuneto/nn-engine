@@ -6,14 +6,14 @@
 | nn-input | **não compila** | 0 s |
 | nn-render | compila | 4 s |
 | nn-audio | compila | 0 s |
-| nn-physics | compila | 2 s |
+| nn-physics | compila | 1 s |
 | nn-physics3d | compila | 1 s |
 | nn-nav | compila | 0 s |
 | nn-tilemap | compila | 4 s |
 | nn-script | **não compila** | 4 s |
-| nn-app | **não compila** | 14 s |
+| nn-app | **não compila** | 12 s |
 | nn-projeto | **não compila** | 1 s |
-| nn-run | **não compila** | 4 s |
+| nn-run | **não compila** | 19 s |
 
 ## nn-input
 

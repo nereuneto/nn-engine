@@ -1,11 +1,11 @@
 # E1 — prova (sem-som)
 
-Compilou em 21 s (sem cache: inclui as dependências).
+Compilou em 19 s (sem cache: inclui as dependências).
 
 | arquivo | tamanho | gzip -9 | brotli 11 |
 |---|---|---|---|
-| wasm (do wasm-bindgen) | 3821 KB | | |
-| wasm (wasm-opt -Oz) | 2491 KB | 1023 KB | 818 KB |
+| wasm (do wasm-bindgen) | 3829 KB | | |
+| wasm (wasm-opt -Oz) | 2498 KB | 1027 KB | 820 KB |
 | js | 140 KB | 20 KB | 17 KB |
 
 Os maiores pedaços do wasm final (twiggy; sem nomes, então só os tamanhos por seção e as maiores funções):
@@ -13,44 +13,44 @@ Os maiores pedaços do wasm final (twiggy; sem nomes, então só os tamanhos por
 ```
  Shallow Bytes │ Shallow % │ Item
 ───────────────┼───────────┼─────────────────────
-        129977 ┊     5.09% ┊ data[112]
-         88735 ┊     3.48% ┊ code[29]
-         82299 ┊     3.23% ┊ data[2]
-         61287 ┊     2.40% ┊ code[4]
-         38924 ┊     1.53% ┊ code[1]
-         36360 ┊     1.42% ┊ code[28]
-         31655 ┊     1.24% ┊ data[81]
-         31056 ┊     1.22% ┊ code[0]
-         28734 ┊     1.13% ┊ code[147]
+        129977 ┊     5.08% ┊ data[115]
+         88735 ┊     3.47% ┊ code[29]
+         82299 ┊     3.22% ┊ data[2]
+         64068 ┊     2.50% ┊ code[3]
+         38924 ┊     1.52% ┊ code[1]
+         38637 ┊     1.51% ┊ code[14]
+         31655 ┊     1.24% ┊ data[83]
+         31056 ┊     1.21% ┊ code[0]
+         28734 ┊     1.12% ┊ code[147]
          27581 ┊     1.08% ┊ code[7]
-         27314 ┊     1.07% ┊ code[2246]
-         27020 ┊     1.06% ┊ data[113]
-       1940689 ┊    76.06% ┊ ... and 6947 more.
-       2551631 ┊   100.00% ┊ Σ [6959 Total Rows]
+         27314 ┊     1.07% ┊ code[2253]
+         27020 ┊     1.06% ┊ data[116]
+       1942454 ┊    75.92% ┊ ... and 6962 more.
+       2558454 ┊   100.00% ┊ Σ [6974 Total Rows]
 ```
 
 As maiores crates (twiggy no wasm antes do wasm-opt, que ainda tem os nomes):
 
 ```
-     1144 KB  (seção) "function names" subsection
+     1146 KB  (seção) "function names" subsection
       709 KB  (seção) custom section '__wasm_bindgen_unstable'
       611 KB  naga
-      540 KB  (seção) data segment ".rodata"
+      541 KB  (seção) data segment ".rodata"
       345 KB  wgpu_core
       255 KB  core
       143 KB  wgpu
       123 KB  wgpu_hal
       113 KB  zune_jpeg
-       98 KB  alloc
-       85 KB  winit
+       99 KB  alloc
+       87 KB  winit
        74 KB  hashbrown
-       52 KB  (outros)
-       48 KB  nn_render
+       53 KB  (outros)
+       49 KB  nn_render
        46 KB  png
        33 KB  fontdue
+       33 KB  prova
        32 KB  wgpu_types
        32 KB  compiler_builtins
-       30 KB  prova
        25 KB  image
        23 KB  ttf_parser
        22 KB  js_sys

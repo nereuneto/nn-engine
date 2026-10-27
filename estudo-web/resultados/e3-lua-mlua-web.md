@@ -48,5 +48,5 @@ ok    <close> (sintaxe 5.4, via load)
 ok    rawget/rawset/rawequal/rawlen
 ```
 
-bench: 124.1 ms (resultado 163919)
+bench: 123.7 ms (resultado 163919)
 
