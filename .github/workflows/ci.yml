@@ -106,8 +106,13 @@ jobs:
           mkdir -p fotos/navegador
           CENAS=$(cargo run --release --color never -q -- cenas)
           N=$(echo "$CENAS" | tr ',' '\n' | wc -l)
-          node fotos.mjs http://localhost:8000 "$N" fotos/navegador webgl "$CENAS" | tee webgl.txt
-          node fotos.mjs http://localhost:8000 "$N" fotos/navegador webgpu "$CENAS" | tee webgpu.txt || echo "::warning title=WebGPU::$(grep FALHA webgpu.txt | head -3)"
+          node fotos.mjs http://localhost:8000 "$N" fotos/navegador webgl "$CENAS" > webgl.txt 2>&1 || {
+            cat webgl.txt
+            echo "::error title=WebGL2::$(head -c 3000 webgl.txt | sed ':a;N;$!ba;s/\n/%0A/g')"
+            exit 1
+          }
+          cat webgl.txt
+          node fotos.mjs http://localhost:8000 "$N" fotos/navegador webgpu "$CENAS" > webgpu.txt 2>&1 || echo "::warning title=WebGPU::$(head -c 2000 webgpu.txt | sed ':a;N;$!ba;s/\n/%0A/g')"
       - name: Comparar
         working-directory: teste-web
         shell: bash
