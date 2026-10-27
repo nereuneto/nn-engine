@@ -21,6 +21,7 @@ mod parallax;
 mod particles;
 mod present;
 mod renderer;
+mod shapes2d;
 mod sprite;
 mod text;
 mod texture;

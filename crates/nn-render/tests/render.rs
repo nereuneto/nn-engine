@@ -752,3 +752,129 @@ fn quebra_as_linhas_na_largura() {
     assert_eq!(img.lit_in(60, 0, 64, 64), 0, "nada passa da largura");
     assert!(img.lit_in(0, 16, 60, 40) > 20, "a terceira linha aparece");
 }
+
+/// Um L (côncavo) preenchido: o canto de fora do L fica vazio.
+#[test]
+fn poligono_concavo_preenchido_certo() {
+    let Some(mut h) = Harness::new() else { return };
+    // Na tela (Y para baixo): um L de 48x48, sem o quadrado de cima à direita.
+    let l = [
+        Vec2::new(8.0, 8.0),
+        Vec2::new(24.0, 8.0),
+        Vec2::new(24.0, 40.0),
+        Vec2::new(56.0, 40.0),
+        Vec2::new(56.0, 56.0),
+        Vec2::new(8.0, 56.0),
+    ];
+    h.renderer.screen().draw_polygon(&l, Color::WHITE);
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    for (x, y, aceso) in [
+        (16, 16, true),
+        (16, 48, true),
+        (48, 48, true),
+        (40, 24, false),
+        (50, 12, false),
+        (4, 4, false),
+        (60, 60, false),
+    ] {
+        let p = img.pixel(x, y);
+        assert_eq!(p[0] == 255, aceso, "{x},{y}: {p:?}");
+    }
+    // A borda é suave: no lado diagonal de um triângulo há meios-tons.
+    h.renderer.screen().draw_polygon(
+        &[
+            Vec2::new(4.0, 4.0),
+            Vec2::new(60.0, 10.0),
+            Vec2::new(10.0, 60.0),
+        ],
+        Color::WHITE,
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    let meios = img.0.chunks(4).filter(|p| p[0] > 20 && p[0] < 235).count();
+    assert!(meios > 30, "borda suave: {meios}");
+    // Uma estrela: o meio todo cheio (sem os cortes de dentro aparecerem).
+    let estrela: Vec<Vec2> = (0..10)
+        .map(|i| {
+            let a = i as f32 * std::f32::consts::PI / 5.0 - std::f32::consts::FRAC_PI_2;
+            let r = if i % 2 == 0 { 30.0 } else { 12.0 };
+            Vec2::new(32.0, 34.0) + Vec2::new(a.cos(), a.sin()) * r
+        })
+        .collect();
+    h.renderer.screen().draw_polygon(&estrela, Color::WHITE);
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    for y in 0..64 {
+        for x in 0..64 {
+            let d = Vec2::new(x as f32 + 0.5, y as f32 + 0.5).distance(Vec2::new(32.0, 34.0));
+            if d < 10.0 {
+                assert_eq!(img.pixel(x, y)[0], 255, "{x},{y}");
+            }
+        }
+    }
+}
+
+#[test]
+fn mil_linhas_numa_chamada_so() {
+    let Some(mut h) = Harness::new() else { return };
+    for i in 0..1000 {
+        let y = (i % 60) as f32 + 2.0;
+        h.renderer.screen().draw_line(
+            Vec2::new(2.0, y),
+            Vec2::new(62.0, 64.0 - y),
+            1.0,
+            Color::WHITE,
+        );
+    }
+    // Os retângulos também usam a textura branca: entram no mesmo lote.
+    h.renderer
+        .screen()
+        .draw_rect(Vec2::ZERO, Vec2::splat(4.0), Color::WHITE);
+    h.render(&Camera2D::default(), Color::BLACK);
+    assert_eq!(h.renderer.last_stats().draw_calls, 1);
+}
+
+#[test]
+fn linha_e_contornos_acendem_onde_deviam() {
+    let Some(mut h) = Harness::new() else { return };
+    let verde = Color::rgb(0.0, 1.0, 0.0);
+    {
+        let mut s = h.renderer.screen();
+        s.draw_line(Vec2::new(4.0, 4.5), Vec2::new(60.0, 4.5), 3.0, Color::WHITE);
+        s.draw_rect_outline(Vec2::new(8.0, 16.0), Vec2::new(24.0, 24.0), 2.0, verde);
+        s.draw_circle_outline(Vec2::new(48.0, 40.0), 12.0, 2.0, verde);
+    }
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    // A linha: 3 px de altura, em y 3..6.
+    assert_eq!(img.pixel(30, 4)[0], 255);
+    assert_eq!(img.pixel(30, 8)[0], 0);
+    // O contorno do retângulo por dentro: a borda acende, o meio não.
+    assert_eq!(img.pixel(8, 20)[1], 255);
+    assert_eq!(img.pixel(31, 30)[1], 255);
+    assert_eq!(img.pixel(20, 28)[1], 0);
+    assert_eq!(
+        img.pixel(32, 30)[1],
+        0,
+        "por dentro, não passa do retângulo"
+    );
+    // O do círculo: o anel acende, o centro não.
+    assert!(img.pixel(48, 29)[1] > 200, "{:?}", img.pixel(48, 29));
+    assert_eq!(img.pixel(48, 40)[1], 0);
+    assert_eq!(img.pixel(48, 26)[1], 0, "por dentro do raio");
+}
+
+/// As formas no mundo seguem a câmera (Y para cima).
+#[test]
+fn formas_no_mundo_com_y_para_cima() {
+    let Some(mut h) = Harness::new() else { return };
+    // Um triângulo na metade de cima da tela (y > 0 no mundo).
+    h.renderer.draw_polygon(
+        &[
+            Vec2::new(-20.0, 4.0),
+            Vec2::new(20.0, 4.0),
+            Vec2::new(0.0, 28.0),
+        ],
+        Color::WHITE,
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_eq!(img.pixel(32, 20)[0], 255);
+    assert_eq!(img.pixel(32, 44)[0], 0);
+}

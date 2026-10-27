@@ -517,6 +517,111 @@ fn fonte_de_pixel_art_e_quebra_de_linha() {
 }
 
 #[test]
+fn linhas_poligonos_e_contornos_pelo_lua() {
+    let dir = projeto(
+        "formas",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:draw()
+              -- Um L côncavo (lista de números) e um com pares.
+              nn.screen.polygon({ 4, 4, 20, 4, 20, 36, 44, 36, 44, 52, 4, 52 }, "#FFFFFF")
+              nn.screen.polygon({ {48, 4}, {60, 4}, {60, 16} }, "#00FF00")
+              nn.screen.line(0, 60.5, 64, 60.5, "#FF0000", 3)
+              nn.screen.rect(40, 18, 20, 14, "#0000FF", 2)
+              nn.screen.polyline({ {x = 2, y = 2}, {x = 2, y = 3} }, "#FFFFFF")
+              ok, erro = pcall(nn.screen.polygon, { 1, 2, 3 }, "#FFFFFF")
+              erro = tostring(erro)
+            end
+            return c
+            "##,
+        )],
+    );
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let r = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| {
+        let mut s = r.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    // O L: o pé e a perna acesos, o canto de fora vazio.
+    assert_eq!(pixel(&h, 10, 40)[..3], [255, 255, 255]);
+    assert_eq!(pixel(&h, 36, 46)[..3], [255, 255, 255]);
+    assert_eq!(pixel(&h, 32, 30)[..3], [0, 0, 0]);
+    assert_eq!(pixel(&h, 58, 6)[..3], [0, 255, 0]);
+    assert_eq!(pixel(&h, 30, 60)[..3], [255, 0, 0]);
+    // O contorno do retângulo: a borda azul, o meio não.
+    assert_eq!(pixel(&h, 41, 25)[..3], [0, 0, 255]);
+    assert_eq!(pixel(&h, 50, 25)[..3], [0, 0, 0]);
+    let ok: bool = global(&rt, "ok");
+    let erro: String = global(&rt, "erro");
+    assert!(!ok);
+    assert!(erro.contains("aos pares"), "{erro}");
+}
+
+/// `nn.draw.sprite(img, x, y, quadro, escala, cor)`: sem tabela de opções,
+/// não cria lixo no Lua.
+#[test]
+fn sprite_sem_tabela_nao_cria_lixo() {
+    let dir = projeto(
+        "sprite-curto",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:draw()
+              local img = nn.assets.texture("bloco.png")
+              collectgarbage("stop")
+              local antes = collectgarbage("count")
+              for i = 1, 2000 do
+                nn.screen.sprite(img, 0, 0, 1, 4, "#FF0000")
+              end
+              curto = (collectgarbage("count") - antes) * 1024
+              antes = collectgarbage("count")
+              for i = 1, 2000 do
+                nn.screen.sprite(img, 0, 0, { scale = 4, color = "#FF0000" })
+              end
+              tabela = (collectgarbage("count") - antes) * 1024
+              collectgarbage("restart")
+              nn.screen.sprite(img, 8, 8, nil, 2)
+              ok, erro = pcall(nn.screen.sprite, img, 0, 0, "um")
+              erro = tostring(erro)
+            end
+            return c
+            "##,
+        )],
+    );
+    let png = nn_script::game_run::encode_png(4, 4, vec![255; 4 * 4 * 4]).unwrap();
+    std::fs::write(dir.join("bloco.png"), png).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let r = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| {
+        let mut s = r.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    let curto: f64 = global(&rt, "curto");
+    let tabela: f64 = global(&rt, "tabela");
+    assert!(curto < 512.0, "o jeito curto criou {curto} bytes");
+    assert!(tabela > 50_000.0, "a tabela cria: {tabela}");
+    // O vermelho de 16x16 no canto, e o branco 8x8 (escala 2) em 8, 8.
+    assert_eq!(pixel(&h, 2, 2)[..3], [255, 0, 0]);
+    assert_eq!(pixel(&h, 12, 12)[..3], [255, 255, 255]);
+    assert_eq!(pixel(&h, 17, 17)[..3], [0, 0, 0]);
+    let erro: String = global(&rt, "erro");
+    assert!(erro.contains("quadro (4º argumento)"), "{erro}");
+}
+
+#[test]
 fn nn_fora_da_cena_da_erro_claro() {
     let dir = projeto("fora", &[]);
     let rt = ScriptRuntime::new(&dir).unwrap();

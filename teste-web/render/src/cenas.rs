@@ -20,6 +20,7 @@ pub const CENAS: &[&str] = &[
     "3d",
     "fonte-pixel",
     "quebra",
+    "linhas",
 ];
 
 /// A cor de fundo de cada cena.
@@ -257,6 +258,58 @@ pub fn desenhar(cena: usize, r: &mut Renderer, rec: &Recursos) {
                 }
                 s.draw_text(&t);
             }
+        }
+        9 => {
+            let mut s = r.screen();
+            // Um L côncavo, uma estrela, linhas finas e grossas, contornos.
+            s.draw_polygon(
+                &[
+                    Vec2::new(10.0, 10.0),
+                    Vec2::new(40.0, 10.0),
+                    Vec2::new(40.0, 60.0),
+                    Vec2::new(90.0, 60.0),
+                    Vec2::new(90.0, 90.0),
+                    Vec2::new(10.0, 90.0),
+                ],
+                Color::hex(0xE5A84D),
+            );
+            let estrela: Vec<Vec2> = (0..10)
+                .map(|i| {
+                    let a = i as f32 * std::f32::consts::PI / 5.0 - std::f32::consts::FRAC_PI_2;
+                    let r = if i % 2 == 0 { 40.0 } else { 16.0 };
+                    Vec2::new(150.0, 55.0) + Vec2::new(a.cos(), a.sin()) * r
+                })
+                .collect();
+            s.draw_polygon(&estrela, Color::hex(0x7BC86C));
+            s.draw_polyline(&estrela, 2.0, true, Color::WHITE);
+            for i in 0..12 {
+                let a = i as f32 * std::f32::consts::PI / 12.0;
+                let c = Vec2::new(250.0, 55.0);
+                s.draw_line(
+                    c,
+                    c + Vec2::new(a.cos(), -a.sin()) * 45.0,
+                    1.0 + (i % 3) as f32,
+                    Color::hex(0x4D9BE5),
+                );
+            }
+            s.draw_polyline(
+                &[
+                    Vec2::new(20.0, 150.0),
+                    Vec2::new(60.0, 110.0),
+                    Vec2::new(100.0, 160.0),
+                    Vec2::new(105.0, 110.0),
+                ],
+                6.0,
+                false,
+                Color::hex(0xC0405A).with_alpha(0.8),
+            );
+            s.draw_rect_outline(
+                Vec2::new(130.0, 110.0),
+                Vec2::new(80.0, 50.0),
+                3.0,
+                Color::WHITE,
+            );
+            s.draw_circle_outline(Vec2::new(260.0, 135.0), 30.0, 4.0, Color::hex(0xE5A84D));
         }
         _ => {}
     }

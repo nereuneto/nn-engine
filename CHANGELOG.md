@@ -4,6 +4,16 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Linhas, polígonos e contornos (Sprint 71)
+
+- **Linhas:** `nn.draw.line(x1, y1, x2, y2, cor, espessura)` e `nn.draw.polyline(pontos, cor, espessura, fechada)`, com a borda suave e as juntas em ponta (cortadas nos ângulos muito fechados).
+- **Polígonos preenchidos,** também côncavos (um L, uma estrela): `nn.draw.polygon(pontos, cor)`. Os pontos vêm numa lista de números `{ x1, y1, x2, y2, ... }` ou de pares `{ {x, y}, ... }`.
+- **Contornos:** um número no fim de `rect`, `circle` e `polygon` desenha só a borda, com essa espessura (por dentro da forma, como a borda de um painel): `nn.screen.rect(10, 10, 200, 40, "#FFFFFF", 2)`.
+- **No mesmo lote das imagens:** linhas, retângulos e polígonos seguidos vão para a placa de vídeo numa chamada só; mil linhas por quadro custam uma chamada.
+- **`nn.draw.sprite` sem tabela de opções:** `nn.draw.sprite(img, x, y, quadro, escala, cor)`. Não cria uma tabela a cada quadro (nem lixo no Lua).
+- Tudo também em `nn.screen`. As fotos dos 13 jogos e modelos não mudaram.
+- **Para quem usa as crates:** `Renderer::draw_line`, `draw_polyline`, `draw_polygon`, `draw_rect_outline` e `draw_circle_outline`, também no `ScreenPainter`.
+
 ### Fonte de pixel art e quebra de linha (Sprint 70)
 
 - **Uma fonte de pixel art na engine.** `font = "pixel"` (no `nn.draw.text`, no componente Texto, no tema do projeto e em `nn.ui.theme`) usa a Press Start 2P, com os acentos do português. Ela fica nítida, sem borrar, em 8, 16, 24... px: cada pixel dela vira um quadrado de pixels da tela, e um tamanho no meio vai para o múltiplo de 8 mais perto. As linhas ganham 2 px de espaço a cada 8.
