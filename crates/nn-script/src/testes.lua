@@ -394,7 +394,20 @@ function T:mouse(x, y)
   driver.mouse_move(x, y)
 end
 
---- Gira a roda do mouse: `linhas` positivas sobem (a lista volta),
+--- Move o mouse preso `dx, dy` pixels (a câmera do Jogador 3D gira), aos
+-- poucos por `s` segundos (sem `s`, num quadro só).
+function T:mouse_motion(dx, dy, s)
+  if type(dx) ~= "number" or type(dy) ~= "number" then
+    error("t:mouse_motion precisa de dx e dy (os pixels que o mouse anda)", 2)
+  end
+  local n = math.max(1, math.floor((s or 0) * 60 + 0.5))
+  for _ = 1, n do
+    driver.mouse_motion(dx / n, dy / n)
+    self:frames(1)
+  end
+end
+
+-- Gira a roda do mouse: `linhas` positivas sobem (a lista volta),
 --- negativas descem. Com x, y, põe o mouse ali antes.
 function T:scroll(linhas, x, y)
   if type(linhas) ~= "number" then error("t:scroll precisa das linhas (um número)", 2) end
@@ -594,6 +607,8 @@ function D.plan(t, plan)
       t:mouse(a.x, a.y)
     elseif op == "scroll" then
       t:scroll(a.lines)
+    elseif op == "mouse_motion" then
+      t:mouse_motion(a.x, a.y, a.dur)
     elseif op == "type" then
       t:type(a.text)
     elseif op == "capture" then

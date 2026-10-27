@@ -669,7 +669,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.d3.draw",
         "(malha, opts)",
-        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator(), glow = 0 a 1: a própria cor brilha, mesmo no escuro; emissive = false apaga o brilho que o modelo traz no arquivo, material = \"water\": ondinhas e o céu refletido, sway = 0 a 1: balança com o vento).",
+        "Desenha uma malha ou modelo (opts: x, y, z, rx, ry, rz em graus, scale, sx, sy, sz, matrix, color, image, shadow = false, animator = modelo:animator(), glow = 0 a 1: a própria cor brilha, mesmo no escuro; emissive = false apaga o brilho que o modelo traz no arquivo, material = \"water\": ondinhas e o céu refletido, sway = 0 a 1: balança com o vento, cutout = 0 a 1 ou true: a imagem some onde a transparência é menor, como folhas e grades, também na sombra; double_sided = true: as duas faces).",
     ),
     d(
         "nn.d3.text",

@@ -168,7 +168,8 @@ O jogador é simulado com **ações**, cada uma no seu tempo (`em`, em segundos 
 | `"clicar": [x, y]` | Clica num ponto da tela (pixels, y para baixo). Com `"botao": "right"`, o botão direito. |
 | `"clicar": "jogar"` | Clica no objeto com esse nome (um botão do menu, por exemplo). |
 | `"mouse": [x, y]` | Põe o mouse num ponto, sem clicar. |
-| `"rolar": 3` | Gira a roda do mouse, em linhas (negativo desce uma lista). Com `"mouse": [x, y]` na mesma ação, no ponto. |
+| `"rolar": 3` | Gira a roda do mouse, em linhas (negativo desce uma lista). Para rolar uma lista, ponha o mouse em cima dela antes, com `"mouse"`. |
+| `"girar_mouse": [300, 0], "por": 0.5` | Move o mouse preso, em pixels (x para a direita, y para baixo), aos poucos por `por` segundos (sem `por`, num quadro): gira a câmera do Jogador 3D. |
 | `"digitar": "Nereu"` | Escreve num campo de texto. |
 | `"capturar": true` ou `"capturar": "nome"` | Guarda uma captura da tela agora. |
 | `"lua": "self.objects.heroi:move_to(0, 0)"` | Roda código com `self` = a cena da frente: para preparar a situação (levar o herói até a porta, mudar uma variável). |

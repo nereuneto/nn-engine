@@ -24,11 +24,12 @@ pub const CENAS: &[&str] = &[
     "recorte",
     "canvas",
     "efeitos",
+    "folhagem",
 ];
 
 /// A cor de fundo de cada cena.
 pub fn fundo(cena: usize) -> Color {
-    if cena == 6 {
+    if cena == 6 || cena == 13 {
         Color::hex(0x87A9D6)
     } else {
         Color::hex(0x1B2233)
@@ -41,6 +42,9 @@ pub struct Recursos {
     xadrez: TextureId,
     listras: TextureId,
     cubo: MeshId,
+    /// Um plano e uma folha com buracos (o recorte por transparência).
+    plano: MeshId,
+    folha: TextureId,
     canvas: TextureId,
     /// Os efeitos prontos, na ordem de nn_render::effects::BUILTIN.
     efeitos: Vec<nn_render::effects::EffectId>,
@@ -89,6 +93,18 @@ impl Recursos {
             .collect();
         let listras = r.create_texture(UVec2::splat(16), &listras, TextureOptions::PIXEL_ART);
         let cubo = r.create_mesh(&shapes::cube());
+        let plano = r.create_mesh(&shapes::plane());
+        // Uma folha redonda de 16x16, com buracos em xadrez de 4 px.
+        let folha: Vec<u8> = (0u32..16 * 16)
+            .flat_map(|i| {
+                let (x, y) = (i % 16, i / 16);
+                let (dx, dy) = (x as f32 - 7.5, y as f32 - 7.5);
+                let dentro = dx * dx + dy * dy < 56.0 && !(x / 4 + y / 4).is_multiple_of(2)
+                    || dx.abs() < 1.0;
+                [60, 160, 90, if dentro { 255 } else { 0 }]
+            })
+            .collect();
+        let folha = r.create_texture(UVec2::splat(16), &folha, TextureOptions::PIXEL_ART);
         let canvas = r.create_canvas(UVec2::new(80, 45), TextureOptions::PIXEL_ART);
         let efeitos = nn_render::effects::BUILTIN
             .iter()
@@ -104,6 +120,8 @@ impl Recursos {
             xadrez,
             listras,
             cubo,
+            plano,
+            folha,
         }
     }
 }
@@ -355,6 +373,32 @@ pub fn desenhar(cena: usize, r: &mut Renderer, rec: &Recursos) {
                 );
             }
             s.set_clip(None);
+        }
+        13 => {
+            // Folhas recortadas, com as duas faces e a sombra com os buracos.
+            r.set_camera3d(Camera3D::looking_at(
+                Vec3::new(2.5, 2.2, 3.5),
+                Vec3::new(0.0, 0.6, 0.0),
+            ));
+            r.set_sky3d(Some(Sky3D::default()));
+            r.draw_mesh(
+                rec.cubo,
+                Mat4::from_translation(Vec3::new(0.0, -0.1, 0.0))
+                    * Mat4::from_scale(Vec3::new(8.0, 0.2, 8.0)),
+                Color::hex(0xD8C9A0),
+            );
+            let folha = nn_render::d3::Material3D {
+                cutout: 0.5,
+                double_sided: true,
+                ..Default::default()
+            };
+            for (x, giro) in [(-1.2_f32, 0.4_f32), (0.0, 2.8), (1.2, -0.9)] {
+                let m = Mat4::from_translation(Vec3::new(x, 0.9, 0.0))
+                    * Mat4::from_rotation_y(giro)
+                    * Mat4::from_rotation_x(std::f32::consts::FRAC_PI_2)
+                    * Mat4::from_scale(Vec3::splat(1.4));
+                r.draw_mesh_material(rec.plano, m, Color::WHITE, Some(rec.folha), true, folha);
+            }
         }
         _ => {}
     }

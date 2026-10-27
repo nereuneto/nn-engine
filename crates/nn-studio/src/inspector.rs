@@ -1023,6 +1023,23 @@ const MODEL_FIELDS: &[F] = &[
         ),
         "Com Vento (☀ Ambiente): embaixo fica parado e em cima balança (1 = uma árvore; 0 = nada). Bom para árvores, grama, bandeiras.",
     ),
+    help(
+        f(
+            "cutout",
+            "Recorte (folhas)",
+            W::Num {
+                speed: 0.01,
+                min: 0.0,
+                max: 1.0,
+                suffix: "",
+            },
+        ),
+        "Onde a imagem é mais transparente que isso, o modelo some (também na sombra): folhas, grades, cercas. 0 = o que o arquivo diz (no Blender, o modo Alpha Clip do material).",
+    ),
+    help(
+        f("double_sided", "Duas faces", W::Bool),
+        "Desenha as faces dos dois lados: uma folha ou um pano feito de um plano só. O arquivo pode já marcar (no Blender, sem Backface Culling).",
+    ),
 ];
 
 const SHAPE3D_FIELDS: &[F] = &[

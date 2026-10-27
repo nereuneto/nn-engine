@@ -1719,10 +1719,10 @@ impl Renderer {
     /// Libera um modelo (as malhas e as texturas dele). Clones do modelo
     /// param de desenhar.
     pub fn free_model(&mut self, model: &crate::d3::Model) {
-        for (mesh, texture, _) in &model.parts {
-            self.free_mesh(*mesh);
-            if let Some(t) = texture {
-                self.free_texture(*t);
+        for part in &model.parts {
+            self.free_mesh(part.mesh);
+            if let Some(t) = part.texture {
+                self.free_texture(t);
             }
         }
     }
@@ -2088,11 +2088,14 @@ impl Renderer {
                 } else {
                     self.create_mesh(&p.mesh)
                 };
-                (
+                crate::d3::GpuPart {
                     mesh,
-                    p.image.and_then(|i| textures.get(i).copied()),
-                    p.emissive,
-                )
+                    texture: p.image.and_then(|i| textures.get(i).copied()),
+                    emissive: p.emissive,
+                    cutout: p.cutout,
+                    blend: p.blend,
+                    double_sided: p.double_sided,
+                }
             })
             .collect();
         let skeleton = data.skeleton.clone().map(std::sync::Arc::new);
@@ -2160,8 +2163,23 @@ impl Renderer {
         // O brilho do arquivo também pega a cor do objeto (tingir um modelo
         // que brilha muda a cor do brilho).
         let k = material.glow.color;
-        for &(mesh, texture, emissive) in &model.parts {
+        for part in &model.parts {
+            let (mesh, texture, emissive) = (part.mesh, part.texture, part.emissive);
+            // O recorte e as duas faces: o do arquivo, ou o que o jogo pedir.
+            let cutout = if material.cutout > 0.0 {
+                material.cutout
+            } else {
+                part.cutout
+            };
+            // Meio transparente no arquivo (BLEND): vai com as transparentes.
+            let color = if part.blend && cutout <= 0.0 {
+                Color::rgba(color.r, color.g, color.b, color.a.min(0.998))
+            } else {
+                color
+            };
             let m = crate::d3::Material3D {
+                cutout,
+                double_sided: material.double_sided || part.double_sided,
                 glow: crate::d3::Glow {
                     amount: material.glow.amount,
                     color: Color::rgba(

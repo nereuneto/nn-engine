@@ -1245,6 +1245,8 @@ impl SceneRenderer {
                                 },
                                 water: false,
                                 sway: c.num("sway") as f32,
+                                cutout: c.num("cutout").clamp(0.0, 1.0) as f32,
+                                double_sided: c.bool("double_sided"),
                             },
                             joints.as_deref(),
                         );
@@ -1262,6 +1264,7 @@ impl SceneRenderer {
                             glow: nn_render::d3::Glow::own(glow_of(&c, night)),
                             water: c.str("material") == "agua",
                             sway: c.num("sway") as f32,
+                            ..Default::default()
                         },
                     );
                 }

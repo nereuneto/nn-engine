@@ -755,7 +755,10 @@ uma estrela, uma plataforma que anda e um evento de vitória. O modelo **3D**
 - **Modelo 3D:** um arquivo `.glb` (Blender exporta: *Arquivo > Exportar >
   glTF 2.0*, formato *glb*), parado ou animado. **Cor** tinge o modelo; **Faces retas**
   (no modo Completo) dá a cada face um tom só, o visual low-poly, mesmo que
-  o modelo venha com sombreado suave.
+  o modelo venha com sombreado suave. Folhas e grades: o modo *Alpha Clip*
+  do material no Blender recorta a imagem onde ela é transparente (também na
+  sombra), e sem *Backface Culling* as duas faces aparecem. No Inspetor,
+  **Recorte (folhas)** e **Duas faces** valem por cima do arquivo.
 - **Câmera 3D:** de onde o jogo olha, com o **campo de visão** (60° é o
   normal; menos é zoom). Sem câmera, o jogo olha do alto, de (0, 5, 10) para o centro.
 - **Texto 3D:** um texto no mundo (placas, nomes, avisos), com o tamanho das

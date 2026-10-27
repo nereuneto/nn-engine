@@ -200,6 +200,13 @@ pub enum ActionKind {
     },
     /// Gira a roda do mouse (linhas; positivo sobe a lista, negativo desce).
     Scroll(f32),
+    /// O mouse preso andando `dx, dy` pixels, aos poucos por `seconds`
+    /// (0 = num quadro): gira a câmera em terceira pessoa.
+    MouseMotion {
+        dx: f32,
+        dy: f32,
+        seconds: f32,
+    },
     /// Escreve um texto.
     Type(String),
     /// Captura a tela.
@@ -934,6 +941,12 @@ fn plan_table(lua: &mlua::Lua, plan: &Plan) -> mlua::Result<Table> {
                 x.set("op", "scroll")?;
                 x.set("lines", *lines)?;
             }
+            ActionKind::MouseMotion { dx, dy, seconds } => {
+                x.set("op", "mouse_motion")?;
+                x.set("x", *dx)?;
+                x.set("y", *dy)?;
+                x.set("dur", seconds.max(0.0))?;
+            }
             ActionKind::Type(text) => {
                 x.set("op", "type")?;
                 x.set("text", text.as_str())?;
@@ -988,6 +1001,15 @@ pub(crate) fn install_driver(runtime: &ScriptRuntime) -> mlua::Result<Table> {
                 } else {
                     c.input.release_mouse(b);
                 }
+                Ok(())
+            })
+        })?,
+    )?;
+    driver.set(
+        "mouse_motion",
+        lua.create_function(|lua, (dx, dy): (f32, f32)| {
+            crate::api::with_ctx(lua, |c| {
+                c.input.add_mouse_motion(glam::Vec2::new(dx, dy));
                 Ok(())
             })
         })?,

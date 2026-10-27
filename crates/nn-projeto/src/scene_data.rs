@@ -1283,7 +1283,8 @@ pub fn write(scene: &SceneData) -> String {
 /// Campos que vieram depois da 0.7: no valor padrão, não vão para o
 /// arquivo. Assim um projeto da 0.7 aberto e gravado sai igual, e o arquivo
 /// continua abrindo no `nn` da 0.7. (A largura e o alinhamento do texto e o
-/// Rolar do painel vieram na 0.10.)
+/// Rolar do painel vieram na 0.10; o recorte e as duas faces do Modelo 3D, na
+/// 0.11.)
 const LATE_FIELDS: &[(&str, &str)] = &[
     ("body", "ox"),
     ("body", "oy"),
@@ -1291,6 +1292,8 @@ const LATE_FIELDS: &[(&str, &str)] = &[
     ("text", "width"),
     ("text", "align"),
     ("panel", "scroll"),
+    ("model", "cutout"),
+    ("model", "double_sided"),
 ];
 
 fn late_default(kind: &str, key: &str, v: &Prop) -> bool {
@@ -2280,6 +2283,26 @@ mod tests {
                 .to_string()
         };
         assert_eq!(line(&back), line(text));
+    }
+
+    #[test]
+    fn modelo_da_0_10_regravado_sai_sem_o_recorte() {
+        // O Modelo 3D como a 0.10 gravava: sem o recorte e as duas faces.
+        let line = r##"        { type = "model", file = "arvore.glb", color = "#FFFFFF", flat = false, shadow = true, glow = 0, glow_night = false, sway = 0 },"##;
+        let text = format!(
+            "return {{\n  format = 1, mode = \"3d\",\n  objects = {{\n    {{\n      id = 1, name = \"a\",\n      x = 0, y = 0, rotation = 0, scale_x = 1, scale_y = 1,\n      visible = true, layer = 0,\n      components = {{\n{line}\n      }},\n    }},\n  }},\n}}\n"
+        );
+        let s = read(&text, "a.cena").unwrap();
+        let back = write(&s);
+        assert!(back.contains(line), "{back}");
+        let mut s2 = s.clone();
+        s2.objects[0].components[0].set("cutout", Prop::Num(0.5));
+        s2.objects[0].components[0].set("double_sided", Prop::Bool(true));
+        let out = write(&s2);
+        assert!(
+            out.contains("cutout = 0.5") && out.contains("double_sided = true"),
+            "{out}"
+        );
     }
 
     #[test]

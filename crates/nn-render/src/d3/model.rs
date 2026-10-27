@@ -40,6 +40,14 @@ pub struct ModelPart {
     /// A cor que a parte emite (brilha mesmo no escuro); preto = nada. Vem
     /// do `emissiveFactor` do material.
     pub emissive: Color,
+    /// Recorte por transparência (o `alphaMode` MASK do glTF, no
+    /// `alphaCutoff`): 0 = sem recorte.
+    pub cutout: f32,
+    /// Meio transparente (o `alphaMode` BLEND): desenhada depois das outras,
+    /// como o vidro.
+    pub blend: bool,
+    /// As duas faces (o `doubleSided` do glTF).
+    pub double_sided: bool,
 }
 
 /// Imagem de um modelo, já decodificada (RGBA 8 bits).
@@ -498,14 +506,27 @@ fn add_primitive(
         to_srgb(eb * strength),
     );
 
+    let (cutout, blend) = match material.alpha_mode() {
+        gltf::material::AlphaMode::Mask => (
+            material.alpha_cutoff().unwrap_or(0.5).clamp(0.001, 1.0),
+            false,
+        ),
+        gltf::material::AlphaMode::Blend => (0.0, true),
+        gltf::material::AlphaMode::Opaque => (0.0, false),
+    };
+    let double_sided = material.double_sided();
+
     let normal_matrix = Mat3::from_mat4(world).inverse().transpose();
     // Espelhado (escala negativa): a ordem dos vértices inverte.
     let flip = world.determinant() < 0.0;
 
-    let part = match parts
-        .iter_mut()
-        .find(|p| p.image == image && p.emissive == emissive)
-    {
+    let part = match parts.iter_mut().find(|p| {
+        p.image == image
+            && p.emissive == emissive
+            && p.cutout == cutout
+            && p.blend == blend
+            && p.double_sided == double_sided
+    }) {
         Some(p) => p,
         None => {
             parts.push(ModelPart {
@@ -513,6 +534,9 @@ fn add_primitive(
                 image,
                 skin: Vec::new(),
                 emissive,
+                cutout,
+                blend,
+                double_sided,
             });
             parts.last_mut().expect("parte criada")
         }
@@ -738,11 +762,23 @@ impl ModelData {
     }
 }
 
+/// Uma parte de um [`Model`] na GPU.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct GpuPart {
+    pub mesh: MeshId,
+    pub texture: Option<TextureId>,
+    /// A cor que ela emite.
+    pub emissive: Color,
+    pub cutout: f32,
+    pub blend: bool,
+    pub double_sided: bool,
+}
+
 /// Um modelo na GPU: uma malha por imagem usada.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Model {
-    /// Malha, textura e a cor que ela emite.
-    pub(crate) parts: Vec<(MeshId, Option<TextureId>, Color)>,
+    /// As partes: malha, textura, brilho e como a transparência é desenhada.
+    pub(crate) parts: Vec<GpuPart>,
     /// Caixa que envolve o modelo (mínimo, máximo).
     pub bounds: (Vec3, Vec3),
     pub triangles: usize,

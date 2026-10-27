@@ -495,6 +495,20 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                 }
             };
             let sway = opt::<f32>(o, "sway")?.unwrap_or(0.0).max(0.0);
+            // Recorte por transparência: um número (0 a 1) ou true (0.5).
+            let cutout = match opt::<Value>(o, "cutout")? {
+                None | Some(Value::Nil) | Some(Value::Boolean(false)) => 0.0,
+                Some(Value::Boolean(true)) => 0.5,
+                Some(Value::Integer(n)) => (n as f32).clamp(0.0, 1.0),
+                Some(Value::Number(n)) => (n as f32).clamp(0.0, 1.0),
+                Some(other) => {
+                    return Err(err(format!(
+                        "\"cutout\" é a transparência abaixo da qual a imagem some (0 a 1) ou true (0.5), recebeu {}",
+                        other.type_name()
+                    )));
+                }
+            };
+            let double_sided = opt::<bool>(o, "double_sided")?.unwrap_or(false);
             with_ctx(lua, |c| {
                 match thing {
                     Thing::Mesh(mesh) => c.renderer.draw_mesh_material(
@@ -507,6 +521,8 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                             glow: d3::Glow::own(glow),
                             water,
                             sway,
+                            cutout,
+                            double_sided,
                         },
                     ),
                     Thing::Model(key) => {
@@ -522,6 +538,8 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
                             glow: g,
                             water,
                             sway,
+                            cutout,
+                            double_sided,
                         };
                         c.draw_model_key_material(&key, model, col, shadow, m, joints.as_deref());
                     }
