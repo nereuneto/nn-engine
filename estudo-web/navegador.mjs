@@ -5,12 +5,15 @@ import { writeFileSync } from "node:fs";
 
 const [, , url, nome, pasta] = process.argv;
 const browser = await chromium.launch({
+  // O Chromium inteiro no modo sem tela novo (o "headless shell" não tem WebGPU).
+  channel: "chromium",
   args: [
     "--use-angle=swiftshader",
     "--enable-unsafe-swiftshader",
     "--enable-unsafe-webgpu",
     "--enable-features=Vulkan",
     "--use-webgpu-adapter=swiftshader",
+    "--use-vulkan=swiftshader",
     "--ignore-gpu-blocklist",
     "--autoplay-policy=no-user-gesture-required",
   ],

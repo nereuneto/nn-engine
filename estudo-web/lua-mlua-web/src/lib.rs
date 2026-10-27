@@ -7,6 +7,7 @@ pub extern "C" fn rodar() -> u64 {
     rodar_com(relogio)
 }
 
+#[link(wasm_import_module = "env")]
 unsafe extern "C" {
     /// O relógio da página (performance.now()).
     #[link_name = "agora_ms"]
