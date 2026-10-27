@@ -817,6 +817,11 @@ continua).
 | Vento | A força (0 = parado, 1 = brisa, 3 = ventania) e o lado para onde sopra: balança o que tem **Balança com o vento** e leva as partículas ([Água, vento e halo](#água-vento-e-halo)) |
 | Halo do brilho | O halo suave em volta do que brilha (0 = sem halo, 1 = o normal) |
 
+O **antisserrilhado** (as bordas das malhas lisas) e o **tonemap** (a luz
+forte não estoura em branco) valem para o jogo todo: ficam em **Configurações
+do projeto > 3D** (no modo Completo), e a vista da cena já mostra com eles. Os
+modelos de projeto 3D novos vêm com os dois ligados.
+
 **Pronto:** os botões **Dia**, **Amanhecer**, **Entardecer**, **Noite** e
 **Caverna** trocam o céu, o sol, a luz ambiente e a névoa de uma vez (Ctrl+Z
 desfaz). O Dia e noite, o Vento e o Halo ficam como estão. Na Noite e na Caverna, as [luzes](#luzes-e-brilho) aparecem bem; a

@@ -717,6 +717,16 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Céu em degradê com o sol (opts: top, horizon, bottom, sun_size em graus, stars de 0 a 1: as estrelas). true = o céu padrão, false = sem céu.",
     ),
     d(
+        "nn.d3.antialias",
+        "(ligado)",
+        "Antisserrilhado no 3D (MSAA 4x): as bordas das malhas ficam lisas. true liga, false desliga; sem argumento, diz se está ligado. Padrão: o antialias do config.lua.",
+    ),
+    d(
+        "nn.d3.tonemap",
+        "(ligado)",
+        "Tonemap no 3D: uma luz forte não estoura em branco (as cores acima do branco são comprimidas; as outras quase não mudam). true liga, false desliga; sem argumento, diz se está ligado. Padrão: o tonemap do config.lua.",
+    ),
+    d(
         "nn.d3.shadows",
         "(opts)",
         "Sombras: true, false (todas, também as dos holofotes) ou { distance, quality = \"baixa\"/\"media\"/\"alta\", strength, sun = false: sem a do sol, mas com as dos holofotes }.",

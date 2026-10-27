@@ -763,6 +763,28 @@ pub(crate) fn table(lua: &Lua) -> Result<Table> {
     )?;
 
     t.set(
+        "antialias",
+        lua.create_function(|lua, on: Option<bool>| {
+            with_ctx(lua, |c| {
+                if let Some(on) = on {
+                    c.renderer.set_antialias3d(on);
+                }
+                Ok(c.renderer.antialias3d())
+            })
+        })?,
+    )?;
+    t.set(
+        "tonemap",
+        lua.create_function(|lua, on: Option<bool>| {
+            with_ctx(lua, |c| {
+                if let Some(on) = on {
+                    c.renderer.set_tonemap3d(on);
+                }
+                Ok(c.renderer.tonemap3d())
+            })
+        })?,
+    )?;
+    t.set(
         "bloom",
         lua.create_function(|lua, v: Value| {
             with_ctx(lua, |c| {

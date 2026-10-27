@@ -31,7 +31,7 @@ use nn_core::Color;
 
 pub use bloom::Bloom;
 pub use gpu::Stats3;
-pub(crate) use gpu::{Quad3, Renderer3D};
+pub(crate) use gpu::{DEPTH_FORMAT, GLOW_FORMAT, Quad3, Renderer3D};
 pub use mesh::{Mesh, Vertex3};
 pub(crate) use model::GpuPart;
 pub use model::{CollisionMesh, Model, ModelData, ModelError, ModelImage, ModelPart};

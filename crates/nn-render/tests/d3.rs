@@ -1752,3 +1752,78 @@ fn sombra_longe_usa_as_cascatas_e_chega_longe_sem_perder_a_de_perto() {
     let de_novo = cena(&mut h, 30.0);
     assert_eq!(de_novo, um, "com 30 m, o mapa de um só, como antes");
 }
+
+// --- Antisserrilhado e tonemap (Sprint 80) -------------------------------------
+
+/// Um cubo branco inclinado no fundo azul, com a luz "neutra".
+fn cubo_inclinado(h: &mut Harness, cube: nn_render::d3::MeshId) -> Vec<u8> {
+    h.renderer
+        .set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 0.0, 3.0), Vec3::ZERO));
+    h.renderer.draw_mesh(
+        cube,
+        Mat4::from_rotation_z(0.4) * Mat4::from_rotation_x(0.3),
+        Color::WHITE,
+    );
+    h.render(Color::rgb(0.0, 0.0, 1.0))
+}
+
+#[test]
+fn antisserrilhado_deixa_tons_no_meio_da_borda() {
+    let Some(mut h) = Harness::new() else { return };
+    let cube = h.renderer.create_mesh(&shapes::cube());
+    // Quantos pixels não são nem o cubo (branco) nem o fundo (azul).
+    let meio = |img: &[u8]| {
+        img.chunks(4)
+            .filter(|p| {
+                let (r, b) = (p[0], p[2]);
+                b > 5 && r > 5 && r < 250
+            })
+            .count()
+    };
+    let sem = cubo_inclinado(&mut h, cube);
+    assert_eq!(meio(&sem), 0, "sem antisserrilhado, só as duas cores");
+    h.renderer.set_antialias3d(true);
+    let com = cubo_inclinado(&mut h, cube);
+    assert!(
+        meio(&com) > 20,
+        "com antisserrilhado, a borda tem tons no meio: {}",
+        meio(&com)
+    );
+    // O fundo continua lá (o 3D é juntado por cima dele) e o meio do cubo é
+    // o mesmo branco.
+    assert_color(pixel(&com, 1, 1), pixel(&sem, 1, 1), "o fundo");
+    assert_color(pixel(&com, 32, 32), pixel(&sem, 32, 32), "o meio do cubo");
+    // Desligado de novo: igual a antes.
+    h.renderer.set_antialias3d(false);
+    assert_eq!(cubo_inclinado(&mut h, cube), sem);
+}
+
+#[test]
+fn tonemap_nao_deixa_a_luz_forte_estourar() {
+    let Some(mut h) = Harness::new() else { return };
+    let cena = |h: &mut Harness, tonemap: bool| {
+        h.renderer.set_tonemap3d(tonemap);
+        chao_no_escuro(h);
+        let mut lamp = Lamp3D::at(Vec3::new(0.0, 1.0, 0.0));
+        lamp.intensity = 6.0;
+        lamp.range = 6.0;
+        lamp.color = Color::rgb(1.0, 0.8, 0.5);
+        h.renderer.add_lamp3d(lamp);
+        h.render(Color::BLACK)
+    };
+    let sem = cena(&mut h, false);
+    let com = cena(&mut h, true);
+    let (a, b) = (pixel(&sem, 32, 32), pixel(&com, 32, 32));
+    assert_eq!(
+        &a[..3],
+        &[255, 255, 255],
+        "sem tonemap, estoura em branco: {a:?}"
+    );
+    assert!(
+        b[0] > 200 && b[2] < b[0] - 10,
+        "com tonemap, claro e com a cor da luz: {b:?}"
+    );
+    // Longe, no escuro, quase igual.
+    let (x, y) = (pixel(&sem, 2, 2), pixel(&com, 2, 2));
+    assert!(brightness(x).abs_diff(brightness(y)) < 30, "{x:?} {y:?}");
+}

@@ -27,11 +27,12 @@ pub const CENAS: &[&str] = &[
     "folhagem",
     "holofote",
     "cascatas",
+    "antisserrilhado",
 ];
 
 /// A cor de fundo de cada cena.
 pub fn fundo(cena: usize) -> Color {
-    if cena == 6 || cena == 13 || cena == 15 {
+    if cena == 6 || cena == 13 || cena == 15 || cena == 16 {
         Color::hex(0x87A9D6)
     } else if cena == 14 {
         Color::hex(0x05060B)
@@ -505,6 +506,34 @@ pub fn desenhar(cena: usize, r: &mut Renderer, rec: &Recursos) {
                     Color::hex(0xE5A84D),
                 );
             }
+        }
+        16 => {
+            // Cubos inclinados com antisserrilhado e uma lâmpada forte com
+            // tonemap (sem estourar em branco).
+            r.set_antialias3d(true);
+            r.set_tonemap3d(true);
+            r.set_camera3d(Camera3D::looking_at(Vec3::new(0.0, 2.0, 5.0), Vec3::ZERO));
+            r.set_sky3d(Some(Sky3D::default()));
+            r.draw_mesh(
+                rec.cubo,
+                Mat4::from_translation(Vec3::new(0.0, -0.6, 0.0))
+                    * Mat4::from_scale(Vec3::new(8.0, 0.2, 8.0)),
+                Color::WHITE,
+            );
+            for (k, x) in [-1.6_f32, 0.0, 1.6].into_iter().enumerate() {
+                r.draw_mesh(
+                    rec.cubo,
+                    Mat4::from_translation(Vec3::new(x, 0.2, 0.0))
+                        * Mat4::from_rotation_y(0.4 + k as f32 * 0.5)
+                        * Mat4::from_rotation_x(0.3),
+                    Color::hex(0xE5A84D),
+                );
+            }
+            let mut lamp = nn_render::d3::Lamp3D::at(Vec3::new(0.0, 0.8, 1.2));
+            lamp.intensity = 5.0;
+            lamp.range = 4.0;
+            lamp.color = Color::hex(0xFFD9A0);
+            r.add_lamp3d(lamp);
         }
         _ => {}
     }

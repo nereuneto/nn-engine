@@ -1037,6 +1037,12 @@ impl SceneRenderer {
         self.render3d_with(key, root, scene, view, &[])
     }
 
+    /// O antisserrilhado e o tonemap do 3D (os do config.lua do projeto).
+    pub fn set_quality3d(&mut self, antialias: bool, tonemap: bool) {
+        self.renderer.set_antialias3d(antialias);
+        self.renderer.set_tonemap3d(tonemap);
+    }
+
     /// [`Self::render3d`] com malhas a mais (as peças do modelador).
     pub fn render3d_with(
         &mut self,

@@ -1587,6 +1587,12 @@ impl Project {
                 if let Some(b) = get("resizable")?.as_boolean() {
                     config.resizable = b;
                 }
+                if let Some(b) = get("antialias")?.as_boolean() {
+                    config.antialias = b;
+                }
+                if let Some(b) = get("tonemap")?.as_boolean() {
+                    config.tonemap = b;
+                }
                 if let Some(b) = get("hot_reload")?.as_boolean() {
                     config.hot_reload = b;
                 }

@@ -2377,6 +2377,10 @@ impl ProjectWorkspace {
         {
             self.scene_renderer = Some(SceneRenderer::new(rs));
         }
+        // A cena 3D no editor com o antisserrilhado e o tonemap do projeto.
+        if let Some(sr) = self.scene_renderer.as_mut() {
+            sr.set_quality3d(self.config.antialias, self.config.tonemap);
+        }
         for doc in self.scenes.values_mut() {
             doc.begin_frame();
         }
@@ -4560,6 +4564,16 @@ impl Viewer<'_> {
                     ui.end_row();
                     ui.label("Sincronia vertical:");
                     ui.checkbox(&mut v.vsync, "VSync (evita cortes na imagem)");
+                    ui.end_row();
+                    ui.label("3D:");
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut v.antialias, "Antisserrilhado").on_hover_text(
+                            "As bordas das malhas ficam lisas (MSAA 4x). Pesa um pouco mais na placa de vídeo.",
+                        );
+                        ui.checkbox(&mut v.tonemap, "Tonemap").on_hover_text(
+                            "Uma luz forte não estoura em branco: as cores acima do branco são comprimidas, e as outras quase não mudam.",
+                        );
+                    });
                     ui.end_row();
                     ui.label("Limite de quadros:");
                     ui.horizontal(|ui| {
