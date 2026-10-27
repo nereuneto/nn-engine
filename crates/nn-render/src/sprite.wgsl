@@ -41,6 +41,9 @@ struct VertexOut {
     // (num sprite, edges = 0 e a borda não muda nada).
     @location(6) bary: vec3<f32>,
     @location(7) @interpolate(flat) edges: f32,
+    // A posição dentro do sprite (0 a 1, com 0, 0 no canto de cima à
+    // esquerda da imagem), para os efeitos.
+    @location(8) local: vec2<f32>,
 };
 
 @vertex
@@ -83,6 +86,7 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, inst: Instance) -> VertexOu
         out.offset = vec2<f32>(0.0);
         out.bary = barys[i];
         out.edges = inst.repeat.y;
+        out.local = barys[i].xy;
         return out;
     }
     out.clip_position = view.view_proj * vec4<f32>(world, 0.0, 1.0);
@@ -95,6 +99,7 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, inst: Instance) -> VertexOu
     out.region = inst.region;
     out.repeat = inst.repeat;
     out.offset = inst.offset;
+    out.local = vec2<f32>(corner.x, v);
     return out;
 }
 

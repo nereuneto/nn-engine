@@ -299,6 +299,7 @@ No script, `obj.button`, `obj.bar`, `obj.slider`... são os componentes (`obj.bu
 | `sound` | `sound`, `autoplay` (true), `loop`, `volume` (1), `channel` ("effects" ou "music"), e numa cena 3D `spatial` (true: o som sai do objeto) e `distance` (30 m: mais longe, não se ouve) |
 | `behavior` | `script` (`"nn:plataforma"` para um [pronto](#comportamentos-prontos) ou o caminho de um `.lua`) e as propriedades dele, soltas: `{ type = "behavior", script = "nn:patrulha", velocidade = 60 }` |
 | `particles` | `mode` ("continuo" ou "explosao"), `rate` (20 por segundo), `emitting` (true), `amount` (30, de uma vez), `on_start` (true: solta ao começar), `interval` (0: repetir a explosão a cada N s), `when_done` ("nada" ou "destruir": o objeto some quando as partículas acabam), `lifetime` (1), `lifetime_var` (0 a 1), `speed_min`, `speed_max`, `direction` (90, em graus), `spread` (360), `gravity` (negativa cai), `drag`, `area` ("ponto", "retangulo", "circulo"), `area_w`, `area_h`, `area_radius`, `size_start`, `size_end`, `size_var`, `color_start`, `color_mid` ("" = sem), `color_end`, `image`, `frame`, `frame_w`, `frame_h`, `spin` (graus por segundo), `blend` ("alpha" ou "add"), `follow` (false: as partículas acompanham o objeto), `max` (500), `pixel` (false: quadradinhos de tamanho inteiro, sem girar, para pixel art; só 2D), `wind` (1: no 3D, quanto o vento do ambiente leva as partículas; 0 = nada). Numa cena 3D, os números são em metros, as partículas saem para o "cima" do objeto (gire o objeto para apontar; `direction` não conta), `spread` é um cone em graus e as áreas ficam deitadas (`area_w` × `area_h` no chão, ou um círculo no chão) |
+| `effect` | `effect` ("cinza", "pixelar", "crt", "onda", "contorno", "brilho" ou um arquivo .wgsl), `on` ("objeto": as imagens do objeto; "camada": a camada dele; "tela": a tela inteira), `params` ("forca = 0.5, cor = #FF0000") |
 
 **O script da cena** é um arquivo `.lua` que devolve uma tabela com os callbacks de sempre (`enter`, `fixed_update`, `update`, `draw`, `exit`, `resume`, `reload`), chamados depois do que a engine faz sozinha. Os objetos já existem quando o `enter` roda:
 
@@ -853,6 +854,43 @@ end
 ```
 
 Opções de `draw`: `clear` (a cor para limpar antes; padrão transparente; `false` mantém o que já estava, para rastros), `x`, `y` e `zoom` (a câmera do mundo dentro do canvas; padrão, a do jogo). Ampliado, o canvas fica nítido como pixel art; `nn.canvas(w, h, { smooth = true })` deixa liso (bom para um minimapa reduzido). Um canvas que a cena solta sai da memória na troca de cena, como as imagens. O 3D não vai para o canvas.
+
+#### Efeitos (shaders)
+
+Um efeito muda como uma imagem aparece. Os prontos:
+
+| Nome | Parâmetros (padrão) |
+|---|---|
+| `cinza` | `forca` (1: tudo em tons de cinza; 0.5, pela metade) |
+| `pixelar` | `tamanho` (4: pixels de cada bloco) |
+| `crt` | `curvatura` (0.15), `linhas` (0.35: as linhas da TV), `vinheta` (0.3: os cantos mais escuros) |
+| `onda` | `amplitude` (4 pixels), `frequencia` (3 ondas na altura), `velocidade` (2) |
+| `contorno` | `espessura` (1 pixel), `cor` (#FFFFFF) |
+| `brilho` | `forca` (0.8), `raio` (4 pixels) |
+
+```lua
+local cinza = nn.effect("cinza")
+local borda = nn.effect("contorno", { espessura = 2, cor = "#FFD166" })
+function cena:draw()
+  nn.draw.sprite(heroi, x, y, { effect = borda })   -- num sprite (ou num canvas)
+  nn.screen.effect(cinza)                           -- na tela inteira (nil tira)
+end
+```
+
+Os parâmetros são campos: `borda.espessura = 3`, `borda.cor = "#FF0000"` (uma cor muda `cor_r`, `cor_g`, `cor_b` e `cor_a`). Dois sprites com o mesmo efeito usam os mesmos valores; para valores diferentes, crie outro com `nn.effect`. O contorno fica dentro da imagem: deixe uma margem transparente em volta.
+
+**Um efeito seu** é um arquivo `.wgsl` (a linguagem de shaders do wgpu, que vira GLSL sozinha no navegador) com a função `efeito`, que diz a cor de cada ponto `uv` da imagem (0 a 1, com 0, 0 no canto de cima à esquerda). Ela lê a imagem com `amostra(uv)` (fora dela, transparente), o tamanho em pixels com `tamanho()`, o tempo em segundos com `tempo()` e os parâmetros em `params.nome`, declarados num comentário com os valores padrão:
+
+```wgsl
+// parâmetros: forca = 1, velocidade = 2
+fn efeito(uv: vec2<f32>) -> vec4<f32> {
+    let c = amostra(uv);
+    let pisca = 0.5 + 0.5 * sin(tempo() * params.velocidade);
+    return vec4<f32>(c.rgb * (1.0 + pisca * params.forca), c.a);
+}
+```
+
+`nn.effect("efeitos/pisca.wgsl")` carrega; ao salvar o arquivo, o efeito recarrega com o jogo aberto. Com erro, o jogo segue sem o efeito, e o erro aparece no console em português, com a linha (também em `e.error`): `efeito efeitos/pisca.wgsl, linha 4: "pisxa" não existe aqui`. Nas cenas visuais, o componente **Efeito** põe um efeito nas imagens do objeto, na camada dele ou na tela inteira.
 
 ### nn.input
 

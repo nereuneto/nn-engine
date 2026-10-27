@@ -4,6 +4,15 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Efeitos: shaders prontos e os seus (Sprint 74)
+
+- **Seis efeitos prontos:** `cinza`, `pixelar`, `crt`, `onda`, `contorno` e `brilho`, com `nn.effect(nome, params)`. Valem num sprite (`{ effect = e }`), num canvas e na tela inteira (`nn.screen.effect(e)`, com o HUD). Os parâmetros mudam pelo Lua: `e.forca = 0.5`, `e.cor = "#FF0000"`.
+- **Efeitos seus em WGSL:** um arquivo `.wgsl` com `fn efeito(uv: vec2<f32>) -> vec4<f32>`, que lê a imagem com `amostra(uv)`, o tamanho com `tamanho()`, o tempo com `tempo()` e os parâmetros (declarados num comentário `// parâmetros: forca = 1`) em `params.forca`. O efeito é conferido também como GLSL ES 3.0 (o do navegador) antes de rodar. Ao salvar, ele recarrega com o jogo aberto.
+- **Com erro, o jogo segue sem o efeito,** e o erro vem em português, com a linha do arquivo (no console e em `e.error`): `efeito efeitos/meu.wgsl, linha 4: "forsa" não existe aqui`.
+- **Nas cenas visuais, o componente Efeito:** nas imagens do objeto, na camada dele ou na tela inteira, com os parâmetros num campo de texto.
+- Os efeitos rodam no Chromium do CI (WebGL2), numa cena nova do teste do navegador. As fotos dos 13 jogos e modelos não mudaram.
+- **Para quem usa as crates:** o módulo `nn_render::effects` (`EffectShader`, `EffectId`, `EffectError`, os prontos); `Renderer::compile_effect`, `builtin_effect`, `create_effect`, `set_effect_param`, `set_effect_color`, `replace_effect_shader`, `free_effect`, `set_screen_effect` e `set_time`; `Sprite::effect`; `Context::effect` e `effect_error`.
+
 ### Canvas: desenhar numa imagem (Sprint 73)
 
 - **`nn.canvas(largura, altura)`:** uma imagem em que se desenha com `c:draw(função, opts)` e que depois vale como qualquer outra (num sprite, num painel, numa partícula). Serve para um minimapa, uma transição, rastros ou um jogo inteiro em 320x180 ampliado. A cena desenhada num canvas e mostrada sai igual a desenhada direto.

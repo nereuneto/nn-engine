@@ -675,6 +675,108 @@ fn canvas_pelo_lua() {
 }
 
 #[test]
+fn efeitos_pelo_lua() {
+    let dir = projeto(
+        "efeitos",
+        &[
+            (
+                "main.lua",
+                r##"
+            local c = {}
+            function c:enter()
+              cinza = nn.effect("cinza")
+              meu = nn.effect("efeitos/meu.wgsl", { quanto = 1 })
+              ruim = nn.effect("efeitos/ruim.wgsl")
+              erro_ruim = ruim.error
+              nomes = table.concat(meu.params, ",")
+              ok_param, erro_param = pcall(function() cinza.forsa = 1 end)
+              erro_param = tostring(erro_param)
+              contorno = nn.effect("contorno", { espessura = 2, cor = "#FF0000" })
+              espessura = contorno.espessura
+            end
+            function c:draw()
+              if usar_tela ~= nil then
+                nn.screen.effect(usar_tela and cinza or nil)
+                usar_tela = nil
+              end
+              erro_agora = ruim.error
+              local img = nn.assets.texture("vermelho.png")
+              -- Esquerda: cinza; direita: invertido; embaixo: com erro (normal).
+              nn.screen.sprite(img, 0, 0, { w = 32, h = 32, effect = cinza })
+              nn.screen.sprite(img, 32, 0, { w = 32, h = 32, effect = meu })
+              nn.screen.sprite(img, 0, 32, { w = 32, h = 32, effect = ruim })
+            end
+            return c
+            "##,
+            ),
+            (
+                "efeitos/meu.wgsl",
+                "// parâmetros: quanto = 0\nfn efeito(uv: vec2<f32>) -> vec4<f32> {\n    let c = amostra(uv);\n    return vec4<f32>(mix(c.rgb, 1.0 - c.rgb, params.quanto), c.a);\n}\n",
+            ),
+            (
+                "efeitos/ruim.wgsl",
+                "fn efeito(uv: vec2<f32>) -> vec4<f32> {\n    let c = amostra(uv);\n    return c * sumiu;\n}\n",
+            ),
+        ],
+    );
+    let png = nn_script::game_run::encode_png(2, 2, [255, 0, 0, 255].repeat(4)).unwrap();
+    std::fs::write(dir.join("vermelho.png"), png).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let r = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| {
+        let mut s = r.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    let erro: String = global(&rt, "erro_ruim");
+    assert!(
+        erro.contains("efeitos/ruim.wgsl, linha 3") && erro.contains("\"sumiu\" não existe"),
+        "{erro}"
+    );
+    assert_eq!(global::<String>(&rt, "nomes"), "quanto");
+    assert!(global::<String>(&rt, "erro_param").contains("tem: forca"));
+    assert_eq!(global::<f64>(&rt, "espessura"), 2.0);
+    let p = pixel(&h, 10, 10);
+    assert!(p[0] == p[1] && p[1] == p[2] && p[0] > 0, "cinza: {p:?}");
+    assert_eq!(pixel(&h, 40, 10)[..3], [0, 255, 255], "invertido");
+    assert_eq!(
+        pixel(&h, 10, 40)[..3],
+        [255, 0, 0],
+        "o com erro desenha normal"
+    );
+
+    // Na tela inteira, e tirar.
+    rt.lua().load("usar_tela = true").exec().unwrap();
+    h.run_frames(1);
+    let p = pixel(&h, 10, 40);
+    assert!(p[0] == p[1] && p[1] == p[2], "a tela em cinza: {p:?}");
+    rt.lua().load("usar_tela = false").exec().unwrap();
+    h.run_frames(1);
+    assert_eq!(pixel(&h, 10, 40)[..3], [255, 0, 0]);
+
+    // Consertar o arquivo recarrega o efeito (ao salvar).
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    std::fs::write(
+        dir.join("efeitos/ruim.wgsl"),
+        "fn efeito(uv: vec2<f32>) -> vec4<f32> {\n    return vec4<f32>(0.0, 0.0, 1.0, 1.0);\n}\n",
+    )
+    .unwrap();
+    for _ in 0..40 {
+        h.run_frames(1);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        if pixel(&h, 10, 40)[..3] == [0, 0, 255] {
+            break;
+        }
+    }
+    assert_eq!(pixel(&h, 10, 40)[..3], [0, 0, 255], "recarregou");
+    assert_eq!(global::<Option<String>>(&rt, "erro_agora"), None);
+}
+
+#[test]
 fn nn_fora_da_cena_da_erro_claro() {
     let dir = projeto("fora", &[]);
     let rt = ScriptRuntime::new(&dir).unwrap();

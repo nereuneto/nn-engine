@@ -780,6 +780,7 @@ pub fn schema() -> &'static Schema {
             "camera",
             "sound",
             "particles",
+            "effect",
             "panel",
             "button",
             "bar",
@@ -2051,6 +2052,10 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         "camera" => ("Câmera", "Onde a câmera começa, ou quem ela segue."),
         "sound" => ("Som", "Toca um som ou música quando a cena começa."),
         "particles" => ("Partículas", "Fumaça, faíscas, poeira, chuva..."),
+        "effect" => (
+            "Efeito",
+            "Um shader: tons de cinza, pixelar, CRT, onda, contorno ou brilho, ou um arquivo .wgsl seu. Vale nas imagens do objeto, na camada dele ou na tela inteira. No editor a cena aparece sem o efeito; dê o Play para ver.",
+        ),
         "panel" => (
             "Painel",
             "Fundo de menu ou de HUD: cantos arredondados, borda ou uma moldura.",
@@ -2217,7 +2222,7 @@ mod tests {
     fn esquema_vem_da_engine() {
         let s = schema();
         assert!(s.order.contains(&"sprite".to_string()));
-        assert_eq!(s.order.len(), 25);
+        assert_eq!(s.order.len(), 26);
         assert_eq!(
             s.default_of("text3d", "facing"),
             Some(&Prop::Str("camera".into()))

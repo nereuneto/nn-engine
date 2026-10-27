@@ -23,6 +23,7 @@ pub const CENAS: &[&str] = &[
     "linhas",
     "recorte",
     "canvas",
+    "efeitos",
 ];
 
 /// A cor de fundo de cada cena.
@@ -41,6 +42,8 @@ pub struct Recursos {
     listras: TextureId,
     cubo: MeshId,
     canvas: TextureId,
+    /// Os efeitos prontos, na ordem de nn_render::effects::BUILTIN.
+    efeitos: Vec<nn_render::effects::EffectId>,
 }
 
 /// Um personagem de 8x8 em pixel art.
@@ -87,7 +90,15 @@ impl Recursos {
         let listras = r.create_texture(UVec2::splat(16), &listras, TextureOptions::PIXEL_ART);
         let cubo = r.create_mesh(&shapes::cube());
         let canvas = r.create_canvas(UVec2::new(80, 45), TextureOptions::PIXEL_ART);
+        let efeitos = nn_render::effects::BUILTIN
+            .iter()
+            .map(|(nome, _)| {
+                let shader = r.builtin_effect(nome).expect("efeito pronto");
+                r.create_effect(shader)
+            })
+            .collect();
         Self {
+            efeitos,
             canvas,
             pixel,
             xadrez,
@@ -377,6 +388,20 @@ pub fn desenhar(cena: usize, r: &mut Renderer, rec: &Recursos) {
                 .origin(Vec2::ZERO)
                 .size(Vec2::new(320.0, 180.0)),
         );
+    }
+    if cena == 12 {
+        // Os efeitos prontos, um em cada imagem (o tempo parado).
+        r.set_time(1.0);
+        for (i, e) in rec.efeitos.iter().enumerate() {
+            let (col, row) = ((i % 3) as f32, (i / 3) as f32);
+            r.screen().draw(
+                &Sprite::new(rec.pixel)
+                    .at(Vec2::new(12.0 + col * 100.0, 8.0 + row * 86.0))
+                    .origin(Vec2::ZERO)
+                    .size(Vec2::splat(72.0))
+                    .effect(*e),
+            );
+        }
     }
     // O mundo recortado: um círculo grande, só um quadrado dele.
     if cena == 10 {

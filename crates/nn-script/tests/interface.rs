@@ -586,3 +586,50 @@ fn camada_ordenada_por_y() {
     );
     assert_eq!(h.game.0.error(), None);
 }
+
+/// O componente Efeito: no objeto, na camada e na tela.
+#[test]
+fn componente_efeito_no_objeto_na_camada_e_na_tela() {
+    let cena_de = |on: &str| {
+        format!(
+            r##"return {{ format = 1, background = "#000000", objects = {{
+              {{ id = 1, name = "vermelho", x = -60, y = 0, layer = 1,
+                components = {{ {{ type = "sprite", image = "v.png", w = 40, h = 40 }},
+                                {{ type = "effect", effect = "cinza", on = "{on}" }} }} }},
+              {{ id = 2, name = "outro", x = 60, y = 0, layer = 1,
+                components = {{ {{ type = "sprite", image = "v.png", w = 40, h = 40 }} }} }},
+              {{ id = 3, name = "fundo", x = 0, y = -80, layer = 0,
+                components = {{ {{ type = "sprite", image = "v.png", w = 300, h = 20 }} }} }},
+            }} }}"##
+        )
+    };
+    let png = nn_script::game_run::encode_png(2, 2, [255, 0, 0, 255].repeat(4)).unwrap();
+    let cinza = |p: [u8; 4]| p[0] == p[1] && p[1] == p[2] && p[0] > 0;
+    let verm = |p: [u8; 4]| p[..3] == [255, 0, 0];
+    // (no objeto, no outro da camada, no fundo de outra camada)
+    for (on, esperado) in [
+        ("objeto", [true, false, false]),
+        ("camada", [true, true, false]),
+        ("tela", [true, true, true]),
+    ] {
+        let dir = projeto(
+            &format!("efeito-{on}"),
+            &[("config.lua", CONFIG), ("fase.cena", &cena_de(on))],
+        );
+        std::fs::write(dir.join("v.png"), &png).unwrap();
+        let Some((mut h, _rt)) = cena(&dir, "fase.cena") else {
+            return;
+        };
+        h.run_frames(2);
+        assert_eq!(h.game.0.error(), None);
+        let pontos = [tela(-60.0, 0.0), tela(60.0, 0.0), tela(0.0, -80.0)];
+        for (p, cinza_esperado) in pontos.iter().zip(esperado) {
+            let px = pixel(&h, *p);
+            if cinza_esperado {
+                assert!(cinza(px), "{on} em {p}: {px:?}");
+            } else {
+                assert!(verm(px), "{on} em {p}: {px:?}");
+            }
+        }
+    }
+}

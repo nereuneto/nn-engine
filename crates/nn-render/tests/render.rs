@@ -1063,3 +1063,239 @@ fn canvas_de_pixel_art_ampliado_e_rastros() {
     h.renderer.end_canvas(&Camera2D::default(), None);
     h.render(&Camera2D::default(), Color::BLACK);
 }
+
+// ----------------------------------------------------------------------
+// Efeitos
+// ----------------------------------------------------------------------
+
+/// Uma textura de 64x64 com os pixels de `f(x, y)`.
+fn textura(h: &mut Harness, f: impl Fn(u32, u32) -> [u8; 4]) -> nn_render::TextureId {
+    let mut px = Vec::with_capacity(64 * 64 * 4);
+    for y in 0..64 {
+        for x in 0..64 {
+            px.extend_from_slice(&f(x, y));
+        }
+    }
+    h.renderer
+        .create_texture(UVec2::splat(64), &px, TextureOptions::PIXEL_ART)
+}
+
+/// Desenha a textura na tela inteira com o efeito pronto `nome` e os
+/// parâmetros.
+fn com_efeito(
+    h: &mut Harness,
+    tex: nn_render::TextureId,
+    nome: &str,
+    params: &[(&str, f32)],
+) -> Image {
+    let shader = h.renderer.builtin_effect(nome).unwrap();
+    let e = h.renderer.create_effect(shader);
+    for (k, v) in params {
+        assert!(h.renderer.set_effect_param(e, k, *v), "{nome}: {k}");
+    }
+    h.renderer.screen().draw(
+        &Sprite::new(tex)
+            .at(Vec2::ZERO)
+            .origin(Vec2::ZERO)
+            .size(Vec2::splat(64.0))
+            .effect(e),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    h.renderer.free_effect(e);
+    img
+}
+
+#[test]
+fn efeito_cinza() {
+    let Some(mut h) = Harness::new() else { return };
+    let tex = textura(&mut h, |x, _| {
+        if x < 32 {
+            [255, 0, 0, 255]
+        } else {
+            [0, 0, 255, 255]
+        }
+    });
+    let img = com_efeito(&mut h, tex, "cinza", &[]);
+    for (x, y) in [(10, 10), (50, 50)] {
+        let p = img.pixel(x, y);
+        assert!(p[0] == p[1] && p[1] == p[2] && p[0] > 0, "{x},{y}: {p:?}");
+    }
+    // Pela metade: ainda um pouco vermelho.
+    let img = com_efeito(&mut h, tex, "cinza", &[("forca", 0.5)]);
+    let p = img.pixel(10, 10);
+    assert!(p[0] > p[1] + 20 && p[1] > 0, "{p:?}");
+}
+
+#[test]
+fn efeito_pixelar() {
+    let Some(mut h) = Harness::new() else { return };
+    let tex = textura(&mut h, |x, y| [(x * 4) as u8, (y * 4) as u8, 128, 255]);
+    let img = com_efeito(&mut h, tex, "pixelar", &[("tamanho", 8.0)]);
+    for by in 0..8 {
+        for bx in 0..8 {
+            let first = img.pixel(bx * 8, by * 8);
+            for y in 0..8 {
+                for x in 0..8 {
+                    assert_eq!(img.pixel(bx * 8 + x, by * 8 + y), first, "bloco {bx},{by}");
+                }
+            }
+        }
+    }
+    assert_ne!(img.pixel(0, 0), img.pixel(8, 0));
+}
+
+#[test]
+fn efeito_crt() {
+    let Some(mut h) = Harness::new() else { return };
+    let tex = textura(&mut h, |_, _| [200, 200, 200, 255]);
+    let img = com_efeito(&mut h, tex, "crt", &[("curvatura", 0.6)]);
+    // Os cantos ficam pretos (a tela curva), o meio aceso, com linhas.
+    assert_eq!(img.pixel(0, 0)[..3], [0, 0, 0]);
+    assert_eq!(img.pixel(63, 63)[..3], [0, 0, 0]);
+    let col: Vec<u8> = (24..40).map(|y| img.pixel(32, y)[0]).collect();
+    let (min, max) = (*col.iter().min().unwrap(), *col.iter().max().unwrap());
+    assert!(min > 30 && max - min > 15, "linhas: {col:?}");
+}
+
+#[test]
+fn efeito_onda() {
+    let Some(mut h) = Harness::new() else { return };
+    // Listras verticais de 4 pixels.
+    let tex = textura(&mut h, |x, _| {
+        if (x / 4) % 2 == 0 {
+            [255, 255, 255, 255]
+        } else {
+            [0, 0, 0, 255]
+        }
+    });
+    h.renderer.set_time(0.0);
+    let parada = com_efeito(&mut h, tex, "onda", &[("amplitude", 0.0)]);
+    let onda = com_efeito(
+        &mut h,
+        tex,
+        "onda",
+        &[("amplitude", 2.0), ("frequencia", 1.0)],
+    );
+    // Sem amplitude, igual à imagem; com, as linhas andam para os lados.
+    assert_eq!(parada.pixel(1, 10)[0], 255);
+    assert_eq!(parada.pixel(5, 10)[0], 0);
+    let mudou = (0..64)
+        .filter(|y| onda.pixel(2, *y) != parada.pixel(2, *y))
+        .count();
+    assert!(mudou > 10, "{mudou}");
+    // E andam com o tempo.
+    h.renderer.set_time(0.3);
+    let depois = com_efeito(
+        &mut h,
+        tex,
+        "onda",
+        &[("amplitude", 2.0), ("frequencia", 1.0)],
+    );
+    assert_ne!(onda.0, depois.0);
+}
+
+#[test]
+fn efeito_contorno() {
+    let Some(mut h) = Harness::new() else { return };
+    // Um quadrado opaco no meio, transparente em volta.
+    let tex = textura(&mut h, |x, y| {
+        if (24..40).contains(&x) && (24..40).contains(&y) {
+            [0, 0, 255, 255]
+        } else {
+            [0, 0, 0, 0]
+        }
+    });
+    let shader = h.renderer.builtin_effect("contorno").unwrap();
+    let e = h.renderer.create_effect(shader);
+    assert!(h.renderer.set_effect_param(e, "espessura", 2.0));
+    assert!(
+        h.renderer
+            .set_effect_color(e, "cor", Color::rgb(1.0, 1.0, 0.0))
+    );
+    h.renderer.screen().draw(
+        &Sprite::new(tex)
+            .at(Vec2::ZERO)
+            .origin(Vec2::ZERO)
+            .size(Vec2::splat(64.0))
+            .effect(e),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_eq!(img.pixel(32, 32)[..3], [0, 0, 255], "o quadrado");
+    assert_eq!(img.pixel(23, 32)[..3], [255, 255, 0], "a borda amarela");
+    assert_eq!(img.pixel(32, 41)[..3], [255, 255, 0]);
+    assert_eq!(img.pixel(18, 32)[..3], [0, 0, 0], "longe, nada");
+}
+
+#[test]
+fn efeito_brilho() {
+    let Some(mut h) = Harness::new() else { return };
+    let tex = textura(&mut h, |x, y| {
+        if (30..34).contains(&x) && (30..34).contains(&y) {
+            [255, 255, 255, 255]
+        } else {
+            [0, 0, 0, 255]
+        }
+    });
+    let img = com_efeito(&mut h, tex, "brilho", &[("raio", 6.0), ("forca", 2.0)]);
+    // Em volta do ponto, um halo; longe, preto.
+    assert!(img.pixel(28, 32)[0] > 20, "{:?}", img.pixel(28, 32));
+    assert_eq!(img.pixel(5, 5)[..3], [0, 0, 0]);
+    assert_eq!(img.pixel(32, 32)[..3], [255, 255, 255]);
+}
+
+/// Um efeito próprio e um com erro (que não muda nada).
+#[test]
+fn efeito_proprio_e_com_erro() {
+    let Some(mut h) = Harness::new() else { return };
+    let tex = textura(&mut h, |_, _| [255, 64, 0, 255]);
+    let inverte = h
+        .renderer
+        .compile_effect(
+            "// parâmetros: quanto = 1\nfn efeito(uv: vec2<f32>) -> vec4<f32> {\n    let c = amostra(uv);\n    return vec4<f32>(mix(c.rgb, 1.0 - c.rgb, params.quanto), c.a);\n}\n",
+        )
+        .unwrap();
+    let e = h.renderer.create_effect(inverte);
+    assert_eq!(h.renderer.effect_params(e), [("quanto".to_string(), 1.0)]);
+    h.renderer.screen().draw(
+        &Sprite::new(tex)
+            .at(Vec2::ZERO)
+            .origin(Vec2::ZERO)
+            .size(Vec2::splat(64.0))
+            .effect(e),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    let p = img.pixel(10, 10);
+    assert!(p[0] < 10 && p[2] > 245, "invertido: {p:?}");
+    let erro = h
+        .renderer
+        .compile_effect(
+            "fn efeito(uv: vec2<f32>) -> vec4<f32> {\n    return amostra(uv) * nada;\n}\n",
+        )
+        .unwrap_err();
+    assert_eq!(erro.line, Some(2));
+}
+
+/// O efeito na tela inteira: o quadro todo (o mundo e a tela) em cinza.
+#[test]
+fn efeito_na_tela_inteira() {
+    let Some(mut h) = Harness::new() else { return };
+    let shader = h.renderer.builtin_effect("cinza").unwrap();
+    let e = h.renderer.create_effect(shader);
+    h.renderer.set_screen_effect(Some(e));
+    h.renderer
+        .draw_rect(Vec2::ZERO, Vec2::splat(20.0), Color::rgb(1.0, 0.0, 0.0));
+    h.renderer
+        .screen()
+        .draw_rect(Vec2::ZERO, Vec2::splat(10.0), Color::rgb(0.0, 1.0, 0.0));
+    let img = h.render(&Camera2D::default(), Color::rgb(0.0, 0.0, 1.0));
+    for (x, y) in [(32, 32), (4, 4), (60, 60)] {
+        let p = img.pixel(x, y);
+        assert!(p[0] == p[1] && p[1] == p[2] && p[0] > 0, "{x},{y}: {p:?}");
+    }
+    // Sem o efeito, colorido de novo.
+    h.renderer.set_screen_effect(None);
+    h.renderer
+        .draw_rect(Vec2::ZERO, Vec2::splat(20.0), Color::rgb(1.0, 0.0, 0.0));
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_eq!(img.pixel(32, 32)[..3], [255, 0, 0]);
+}

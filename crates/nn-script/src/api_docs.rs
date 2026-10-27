@@ -119,6 +119,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Largura e altura de um texto, sem desenhar (com width, já quebrado nas linhas).",
     ),
     d(
+        "nn.effect",
+        "(nome, params)",
+        "Um efeito (shader): pronto (\"cinza\", \"pixelar\", \"crt\", \"onda\", \"contorno\", \"brilho\") ou um arquivo .wgsl (recarrega ao salvar). Use no sprite ({ effect = e }) ou na tela (nn.screen.effect(e)); os parâmetros são campos (e.forca = 0.5); e.error diz o erro do arquivo, com a linha.",
+    ),
+    d(
         "nn.canvas",
         "(largura, altura, opts)",
         "Uma imagem em que se desenha: c:draw(função, { clear, x, y, zoom }) e depois use c como qualquer imagem (nn.screen.sprite(c, 0, 0, nil, 4)). Nítida ampliada; opts.smooth = true deixa lisa.",
@@ -208,6 +213,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "nn.screen.clip",
         "(x, y, w, h, função)",
         "Chama a função desenhando só dentro do retângulo da tela (x, y é o canto de cima à esquerda).",
+    ),
+    d(
+        "nn.screen.effect",
+        "(efeito)",
+        "Um efeito (nn.effect) na tela inteira, com o HUD; nil tira.",
     ),
     d(
         "nn.screen.line",

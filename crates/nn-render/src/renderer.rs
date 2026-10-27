@@ -4,6 +4,8 @@ use std::path::Path;
 
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, UVec2, Vec2, Vec3};
+
+use crate::effects::{EffectError, EffectGpu, EffectId, EffectShader};
 use nn_core::Color;
 
 use crate::text::{FontId, Text, TextSystem};
@@ -40,7 +42,7 @@ impl SpriteInstance {
         7 => Float32x2,
     ];
 
-    fn layout() -> wgpu::VertexBufferLayout<'static> {
+    pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
@@ -65,6 +67,7 @@ struct ViewUniform {
 struct Batch {
     texture: TextureId,
     blend: Blend,
+    effect: Option<EffectId>,
     /// O recorte (no espaço da fila), se houver.
     clip: Option<ClipRect>,
     start: u32,
@@ -112,17 +115,31 @@ struct DrawQueue {
 
 impl DrawQueue {
     fn push(&mut self, texture: TextureId, blend: Blend, instance: SpriteInstance) {
+        self.push_with(texture, blend, None, instance);
+    }
+
+    fn push_with(
+        &mut self,
+        texture: TextureId,
+        blend: Blend,
+        effect: Option<EffectId>,
+        instance: SpriteInstance,
+    ) {
         let index = self.instances.len() as u32;
         self.instances.push(instance);
         match self.batches.last_mut() {
             Some(batch)
-                if batch.texture == texture && batch.blend == blend && batch.clip == self.clip =>
+                if batch.texture == texture
+                    && batch.blend == blend
+                    && batch.effect == effect
+                    && batch.clip == self.clip =>
             {
                 batch.end = index + 1;
             }
             _ => self.batches.push(Batch {
                 texture,
                 blend,
+                effect,
                 clip: self.clip,
                 start: index,
                 end: index + 1,
@@ -140,6 +157,31 @@ impl DrawQueue {
 fn color_bits(c: Color) -> [u32; 4] {
     [c.r.to_bits(), c.g.to_bits(), c.b.to_bits(), c.a.to_bits()]
 }
+
+/// Para onde vai um passo de desenho.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Pass {
+    /// O quadro, no alvo dele.
+    Main,
+    /// Um canvas do jogo (só o 2D).
+    Canvas,
+    /// O quadro inteiro num canvas, antes do efeito da tela.
+    Offscreen,
+}
+
+/// Mistura aditiva: soma a cor ao fundo.
+const ADDITIVE_BLEND: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::SrcAlpha,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::Zero,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Add,
+    },
+};
 
 /// O quadro guardado enquanto se desenha num canvas.
 #[derive(Debug)]
@@ -208,6 +250,12 @@ pub struct Renderer {
     canvas_stack: Vec<CanvasFrame>,
     /// O que os canvas desenharam neste quadro (vai para as estatísticas).
     canvas_stats: RenderStats,
+    /// Os efeitos (shaders) e as camadas de que eles precisam.
+    effects: EffectGpu,
+    view_layout: wgpu::BindGroupLayout,
+    /// O efeito na tela inteira e o canvas em que o quadro é desenhado antes.
+    screen_effect: Option<EffectId>,
+    screen_canvas: Option<(TextureId, UVec2)>,
     /// Para montar os sprites de um painel sem alocar a cada um.
     panel_buf: Vec<Sprite>,
     /// A última cor convertida para a GPU (veja `gpu_color`).
@@ -363,25 +411,12 @@ impl Renderer {
         };
         let pipeline = make_pipeline("nn sprite", wgpu::BlendState::ALPHA_BLENDING);
         // Aditiva: soma a cor ao fundo (brilho, fogo, faíscas).
-        let additive_pipeline = make_pipeline(
-            "nn sprite aditivo",
-            wgpu::BlendState {
-                color: wgpu::BlendComponent {
-                    src_factor: wgpu::BlendFactor::SrcAlpha,
-                    dst_factor: wgpu::BlendFactor::One,
-                    operation: wgpu::BlendOperation::Add,
-                },
-                alpha: wgpu::BlendComponent {
-                    src_factor: wgpu::BlendFactor::Zero,
-                    dst_factor: wgpu::BlendFactor::One,
-                    operation: wgpu::BlendOperation::Add,
-                },
-            },
-        );
+        let additive_pipeline = make_pipeline("nn sprite aditivo", ADDITIVE_BLEND);
 
         let instance_buffer = Self::create_instance_buffer(&device, Self::INITIAL_CAPACITY);
 
         let d3 = crate::d3::Renderer3D::new(&device, format, &texture_layout, independent_blend);
+        let effects = EffectGpu::new(&device);
         let mut renderer = Self {
             device,
             queue,
@@ -396,6 +431,10 @@ impl Renderer {
             tri_buf: Vec::new(),
             canvas_stack: Vec::new(),
             canvas_stats: RenderStats::default(),
+            effects,
+            view_layout,
+            screen_effect: None,
+            screen_canvas: None,
             panel_buf: Vec::new(),
             freed: Default::default(),
             last_color: std::cell::Cell::new((color_bits(Color::WHITE), Color::WHITE)),
@@ -919,7 +958,7 @@ impl Renderer {
             offset: sprite.offset.to_array(),
         };
         self.queue_mut(space)
-            .push(sprite.texture, sprite.blend, instance);
+            .push_with(sprite.texture, sprite.blend, sprite.effect, instance);
     }
 
     fn push_text(&mut self, space: Space, text: &Text<'_>) {
@@ -1004,19 +1043,80 @@ impl Renderer {
         camera: &Camera2D,
         clear: Option<Color>,
     ) -> RenderStats {
-        self.render_inner(target, viewport, camera, clear, false)
+        if let Some(effect) = self
+            .screen_effect
+            .filter(|e| self.effects.get(*e).is_some())
+        {
+            return self.render_with_screen_effect(target, viewport, camera, clear, effect);
+        }
+        self.render_inner(target, viewport, camera, clear, Pass::Main)
     }
 
-    /// Desenha o que foi pedido em `target`. Num canvas (`canvas`), sem o
-    /// 3D e sem fechar o quadro (o cache das letras segue até o fim dele).
+    /// O quadro num canvas do tamanho em que ele aparece na janela, e o
+    /// canvas na tela com o efeito.
+    fn render_with_screen_effect(
+        &mut self,
+        target: &wgpu::TextureView,
+        viewport: UVec2,
+        camera: &Camera2D,
+        clear: Option<Color>,
+        effect: EffectId,
+    ) -> RenderStats {
+        let present = self.presentation;
+        let (size, inner) = match present {
+            Some(p) => {
+                let size = p.size.round().max(Vec2::ONE);
+                (
+                    size.as_uvec2(),
+                    Some(crate::Presentation {
+                        logical: p.logical,
+                        origin: Vec2::ZERO,
+                        size,
+                    }),
+                )
+            }
+            None => (viewport.max(UVec2::ONE), None),
+        };
+        let canvas = match self.screen_canvas {
+            Some((id, s)) if s == size => id,
+            other => {
+                if let Some((old, _)) = other {
+                    self.free_texture(old);
+                }
+                let id = self.create_canvas(size, TextureOptions::PIXEL_ART);
+                self.screen_canvas = Some((id, size));
+                id
+            }
+        };
+        let Some(view) = self.textures[canvas.0 as usize].target.clone() else {
+            return self.render_inner(target, viewport, camera, clear, Pass::Main);
+        };
+        self.presentation = inner;
+        self.render_inner(&view, size, camera, clear, Pass::Offscreen);
+        self.presentation = present;
+        let logical = present.map_or(viewport, |p| p.logical).as_vec2();
+        self.screen().draw(
+            &Sprite::new(canvas)
+                .at(Vec2::ZERO)
+                .origin(Vec2::ZERO)
+                .size(logical)
+                .effect(effect),
+        );
+        self.render_inner(target, viewport, &Camera2D::default(), clear, Pass::Main)
+    }
+
+    /// Desenha o que foi pedido em `target`. Num canvas, sem o 3D; fora do
+    /// passo principal, sem fechar o quadro (o cache das letras segue até o
+    /// fim dele).
     fn render_inner(
         &mut self,
         target: &wgpu::TextureView,
         viewport: UVec2,
         camera: &Camera2D,
         clear: Option<Color>,
-        canvas: bool,
+        pass_kind: Pass,
     ) -> RenderStats {
+        self.effects.upload(&self.queue);
         let present = self.presentation;
         let logical = present.map(|p| p.logical).unwrap_or(viewport);
         let world = ViewUniform {
@@ -1102,7 +1202,7 @@ impl Renderer {
             });
         // Com 3D, o quadro vira três passos: limpar (e o fundo do jogo), as
         // malhas com profundidade e por fim o 2D por cima.
-        let has_3d = !canvas && self.d3.has_draws();
+        let has_3d = pass_kind != Pass::Canvas && self.d3.has_draws();
         let mut load = load;
         if has_3d {
             let area = match present {
@@ -1172,7 +1272,7 @@ impl Renderer {
                 multiview_mask: None,
             });
             pass.set_vertex_buffer(0, self.instance_buffer.slice(..));
-            let mut current_blend = None;
+            let mut current_pipeline: Option<(Blend, Option<usize>)> = None;
             if let Some(p) = present {
                 pass.set_viewport(p.origin.x, p.origin.y, p.size.x, p.size.y, 0.0, 1.0);
                 let Some((x, y, w, h)) = scissor(p, viewport) else {
@@ -1186,7 +1286,7 @@ impl Renderer {
                 pass.set_scissor_rect(x, y, w, h);
                 if background.is_some() {
                     pass.set_pipeline(&self.pipeline);
-                    current_blend = Some(Blend::Alpha);
+                    current_pipeline = Some((Blend::Alpha, None));
                     pass.set_bind_group(0, &self.screen_view.bind_group, &[]);
                     let white = &self.textures[self.white.0 as usize];
                     pass.set_bind_group(1, &white.bind_group, &[]);
@@ -1235,12 +1335,21 @@ impl Renderer {
                         pass.set_scissor_rect(x, y, w, h);
                         current = rect;
                     }
-                    if current_blend != Some(batch.blend) {
-                        pass.set_pipeline(match batch.blend {
-                            Blend::Alpha => &self.pipeline,
-                            Blend::Add => &self.additive_pipeline,
-                        });
-                        current_blend = Some(batch.blend);
+                    // Com efeito, o pipeline dele (e os parâmetros no grupo 2).
+                    let effect = batch.effect.and_then(|e| self.effects.get(e));
+                    let key = (batch.blend, effect.map(|i| i as *const _ as usize));
+                    if current_pipeline != Some(key) {
+                        let pipeline = match (effect, batch.blend) {
+                            (Some(i), Blend::Alpha) => &self.effects.shaders[i.shader].alpha,
+                            (Some(i), Blend::Add) => &self.effects.shaders[i.shader].add,
+                            (None, Blend::Alpha) => &self.pipeline,
+                            (None, Blend::Add) => &self.additive_pipeline,
+                        };
+                        pass.set_pipeline(pipeline);
+                        if let Some(i) = effect {
+                            pass.set_bind_group(2, &i.bind_group, &[]);
+                        }
+                        current_pipeline = Some(key);
                     }
                     let texture = &self.textures[batch.texture.0 as usize];
                     pass.set_bind_group(1, &texture.bind_group, &[]);
@@ -1256,7 +1365,7 @@ impl Renderer {
         };
         self.world.clear();
         self.screen.clear();
-        if canvas {
+        if pass_kind != Pass::Main {
             // Somado ao quadro, que mostra o total.
             self.canvas_stats.sprites += stats.sprites;
             self.canvas_stats.draw_calls += stats.draw_calls;
@@ -1336,11 +1445,105 @@ impl Renderer {
             q.batches.retain(|b| b.texture != id);
         }
         if let Some(view) = view {
-            self.render_inner(&view, size, camera, clear, true);
+            self.render_inner(&view, size, camera, clear, Pass::Canvas);
         }
         self.world = frame.world;
         self.screen = frame.screen;
         self.presentation = frame.presentation;
+    }
+
+    // ------------------------------------------------------------------
+    // Efeitos (shaders)
+    // ------------------------------------------------------------------
+
+    /// Compila um efeito em WGSL (veja [`crate::effects`]). O erro diz a
+    /// linha e o que houve, em português; nada muda se der erro.
+    pub fn compile_effect(&mut self, source: &str) -> Result<EffectShader, EffectError> {
+        self.effects.compile(
+            &self.device,
+            source,
+            self.format,
+            &self.view_layout,
+            &self.texture_layout,
+            SpriteInstance::layout(),
+            [wgpu::BlendState::ALPHA_BLENDING, ADDITIVE_BLEND],
+        )
+    }
+
+    /// Um efeito pronto ("cinza", "pixelar", "crt", "onda", "contorno",
+    /// "brilho"), compilado na primeira vez.
+    pub fn builtin_effect(&mut self, name: &str) -> Option<EffectShader> {
+        if let Some(s) = self.effects.builtin(name) {
+            return Some(s);
+        }
+        let source = crate::effects::builtin_source(name)?;
+        let shader = self
+            .compile_effect(source)
+            .unwrap_or_else(|e| panic!("o efeito pronto {name} não compila: {e}"));
+        self.effects.remember_builtin(name, shader);
+        Some(shader)
+    }
+
+    /// Um efeito para usar (num sprite, num canvas, na tela), com os valores
+    /// padrão dos parâmetros.
+    pub fn create_effect(&mut self, shader: EffectShader) -> EffectId {
+        self.effects.create(&self.device, shader)
+    }
+
+    /// Os parâmetros do efeito, com os valores padrão.
+    pub fn effect_params(&self, effect: EffectId) -> &[(String, f32)] {
+        self.effects.params(effect)
+    }
+
+    /// Muda um parâmetro. Devolve `false` se o efeito não tem esse parâmetro.
+    pub fn set_effect_param(&mut self, effect: EffectId, name: &str, value: f32) -> bool {
+        self.effects.set(effect, name, value)
+    }
+
+    /// O valor de um parâmetro.
+    pub fn effect_param(&self, effect: EffectId, name: &str) -> Option<f32> {
+        self.effects.value(effect, name)
+    }
+
+    /// Muda uma cor: os parâmetros `nome_r`, `nome_g`, `nome_b` e `nome_a`
+    /// (em cor linear, como o shader trabalha). Devolve `false` se faltar
+    /// algum.
+    pub fn set_effect_color(&mut self, effect: EffectId, name: &str, color: Color) -> bool {
+        let c = self.gpu_color(color);
+        let mut ok = true;
+        for (suffix, v) in [("r", c.r), ("g", c.g), ("b", c.b), ("a", c.a)] {
+            ok &= self.effects.set(effect, &format!("{name}_{suffix}"), v);
+        }
+        ok
+    }
+
+    /// Troca o shader de um efeito (ao recarregar o arquivo), mantendo os
+    /// valores dos parâmetros de mesmo nome.
+    pub fn replace_effect_shader(&mut self, effect: EffectId, shader: EffectShader) {
+        self.effects.replace_shader(effect, shader);
+    }
+
+    /// Libera o efeito (o id passa a desenhar sem efeito).
+    pub fn free_effect(&mut self, effect: EffectId) {
+        if self.screen_effect == Some(effect) {
+            self.screen_effect = None;
+        }
+        self.effects.free(effect);
+    }
+
+    /// O tempo dos efeitos (`tempo()` no shader), em segundos.
+    pub fn set_time(&mut self, seconds: f32) {
+        self.effects.time = seconds;
+    }
+
+    /// Um efeito na tela inteira (o quadro é desenhado num canvas e mostrado
+    /// com o efeito), ou `None`.
+    pub fn set_screen_effect(&mut self, effect: Option<EffectId>) {
+        self.screen_effect = effect;
+    }
+
+    pub fn screen_effect(&self) -> Option<EffectId> {
+        self.screen_effect
     }
 
     /// Joga fora o que foi pedido neste quadro, sem desenhar nada (para

@@ -14,6 +14,7 @@
 local M = {}
 
 local DEG = math.pi / 180
+local prepare_effect
 
 -- Campos de cada componente, na ordem em que o NN Studio grava, com o valor
 -- padrão. O editor lê esta mesma lista: ela é a única fonte dos padrões.
@@ -71,6 +72,10 @@ M.FIELDS = {
     { "w", 320 }, { "h", 220 }, { "color", "" }, { "radius", 12 }, { "border", 0 },
     { "border_color", "" }, { "image", "" }, { "slice", 4 }, { "slice_scale", 4 },
     { "hud", true }, { "scroll", false },
+  },
+  -- Um shader: no objeto (as imagens dele), na camada dele ou na tela.
+  effect = {
+    { "effect", "cinza" }, { "on", "objeto" }, { "params", "" },
   },
   button = {
     { "text", "Botão" }, { "size", 28 }, { "w", 240 }, { "h", 60 }, { "color", "" },
@@ -315,7 +320,7 @@ local function defaults(kind)
   local list = M.FIELDS[kind]
   if not list then
     error(("componente desconhecido: \"%s\" (use %s)"):format(
-      tostring(kind), "sprite, text, shape, body, map, camera, sound, particles, panel, "
+      tostring(kind), "sprite, text, shape, body, map, camera, sound, particles, effect, panel, "
       .. "button, bar, icons, slider, checkbox, textfield, layout, model, shape3d, light3d, camera3d "
       .. "ou behavior"), 0)
   end
@@ -2458,6 +2463,65 @@ function M.arrange_all(scene)
 end
 
 --- Carrega o que o componente precisa (imagem, corpo, som...).
+-- Efeitos ---------------------------------------------------------------------
+
+-- "forca = 0.5, cor = #FF0000" vira { forca = 0.5, cor = "#FF0000" }.
+local function effect_params(text)
+  local out = {}
+  for item in (text or ""):gmatch("[^,;]+") do
+    local k, v = item:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
+    if k and v ~= "" then out[k] = tonumber(v) or v end
+  end
+  return out
+end
+
+-- Prepara o componente Efeito: o shader e onde ele vale.
+prepare_effect = function(scene, o, c)
+  local name = c.effect ~= "" and c.effect or "cinza"
+  local ok, fx = pcall(nn.effect, name, effect_params(c.params))
+  if not ok then
+    M.warn(("objeto \"%s\" (Efeito): %s"):format(o.name, tostring(fx)))
+    c._fx = nil
+    return
+  end
+  if fx.error then M.warn(("objeto \"%s\" (Efeito): %s"):format(o.name, fx.error)) end
+  c._fx = fx
+  o._has_fx = true
+  scene._effects = scene._effects or {}
+  scene._effects[c] = o
+end
+
+-- Onde estão os efeitos agora: os dos objetos, os das camadas e o da tela.
+local function collect_effects(scene)
+  local list = scene._effects
+  if not list then return nil, nil end
+  local layers, screen = nil, nil
+  for c, o in pairs(list) do
+    if not o.alive then
+      list[c] = nil
+    elseif c._fx and o:shown() then
+      if c.on == "tela" then
+        screen = c._fx
+      elseif c.on == "camada" then
+        layers = layers or {}
+        layers[o.layer] = c._fx
+      end
+    end
+  end
+  return layers, screen
+end
+
+-- O efeito das imagens do próprio objeto.
+local function object_effect(o)
+  local cs = o.components
+  for k = 1, #cs do
+    local c = cs[k]
+    if c.type == "effect" and c.on == "objeto" then return c._fx end
+  end
+  return nil
+end
+M.object_effect = object_effect
+
 function M.prepare(scene, o, c, live)
   local t = c.type
   if t == "sprite" then
@@ -2481,6 +2545,8 @@ function M.prepare(scene, o, c, live)
     end
   elseif t == "body" then
     make_body(scene, o, c)
+  elseif t == "effect" then
+    prepare_effect(scene, o, c)
   elseif t == "map" then
     if c.map ~= "" and not o.map then
       local x, y = o:world_transform()
@@ -3130,6 +3196,11 @@ local function sort_objects(scene)
 end
 
 function M.teardown(scene)
+  -- O efeito da tela era desta cena: sai com ela.
+  if scene._screen_fx_on then
+    scene._screen_fx_on = false
+    pcall(nn.screen.effect, nil)
+  end
   for _, s in ipairs(scene._playing or {}) do
     if s.stop then s:stop() end
   end
@@ -3142,7 +3213,7 @@ function M.teardown(scene)
 end
 
 local PREPARE_ORDER = {
-  "map", "sprite", "body", "sound", "particles", "panel", "button", "bar", "icons",
+  "map", "sprite", "body", "sound", "particles", "effect", "panel", "button", "bar", "icons",
   "slider", "checkbox", "textfield", "camera", "model", "anim3d", "shape3d", "camera3d", "body3d",
   "terrain", "text3d", "bone",
 }
@@ -3769,12 +3840,13 @@ local function draw_object(o, alpha, W, H)
       -- Sem tabela de opções: um sprite por objeto, todo quadro. Repetir:
       -- cada cópia tem o tamanho do componente; a escala do objeto diz
       -- quantas cópias cabem.
+      local fx = o._has_fx and object_effect(o) or nil
       if hud then
         nn._sprite(true, c._img, hx, hy, sx, sy, c.w, c.h, rot, o._tint or c.color,
-          c.flip_x, c.flip_y, c.fill == "repeat", c._sheet and math.floor(c.frame) or nil)
+          c.flip_x, c.flip_y, c.fill == "repeat", c._sheet and math.floor(c.frame) or nil, fx)
       else
         nn._sprite(false, c._img, x, y, sx, sy, c.w, c.h, rot, o._tint or c.color,
-          c.flip_x, c.flip_y, c.fill == "repeat", c._sheet and math.floor(c.frame) or nil)
+          c.flip_x, c.flip_y, c.fill == "repeat", c._sheet and math.floor(c.frame) or nil, fx)
       end
     elseif t == "shape" then
       local draw = hud and nn.screen or nn.draw
@@ -3851,29 +3923,62 @@ function M.draw(scene)
     list = scene._draw_list or {}
   end
   local clipped = scene._scroll_panels and next(scene._scroll_panels) and true
-  local clip = nil
-  local i, o = 1, list[1]
-  while o do
-    if o.alive and o:shown() then
-      if clipped then
-        -- Dentro de um painel que rola: só aparece o que está nele.
-        local p = scroll_parent(o)
-        if p ~= clip then
-          if clip then nn._clip(clip._clip_hud) end
-          if p then
-            local x0, y0, x1, y1, hud = scroll_rect(p)
-            p._clip_hud = hud
-            nn._clip(hud, x0, y0, x1, y1)
-          end
-          clip = p
-        end
-      end
-      draw_object(o, alpha, W, H)
-    end
-    i = i + 1
-    o = list[i]
+  local layer_fx, screen_fx = collect_effects(scene)
+  -- O efeito da tela inteira (e tirar quando não houver mais).
+  if screen_fx or scene._screen_fx_on then
+    nn.screen.effect(screen_fx)
+    scene._screen_fx_on = screen_fx ~= nil
   end
-  if clip then nn._clip(clip._clip_hud) end
+  -- Desenha os objetos de a até b (com o recorte das listas que rolam).
+  local function draw_run(a, b)
+    local clip = nil
+    for k = a, b do
+      local o = list[k]
+      if o.alive and o:shown() then
+        if clipped then
+          -- Dentro de um painel que rola: só aparece o que está nele.
+          local p = scroll_parent(o)
+          if p ~= clip then
+            if clip then nn._clip(clip._clip_hud) end
+            if p then
+              local x0, y0, x1, y1, hud = scroll_rect(p)
+              p._clip_hud = hud
+              nn._clip(hud, x0, y0, x1, y1)
+            end
+            clip = p
+          end
+        end
+        draw_object(o, alpha, W, H)
+      end
+    end
+    if clip then nn._clip(clip._clip_hud) end
+  end
+  if not layer_fx then
+    draw_run(1, #list)
+  else
+    -- Uma camada com efeito: desenhada num canvas do tamanho da tela, que
+    -- aparece com o efeito.
+    local a, n = 1, #list
+    while a <= n do
+      local layer = list[a].layer
+      local b = a
+      while b < n and list[b + 1].layer == layer do b = b + 1 end
+      local fx = layer_fx[layer]
+      if fx then
+        scene._layer_canvas = scene._layer_canvas or {}
+        local cv = scene._layer_canvas[layer]
+        if not cv or cv.width ~= W or cv.height ~= H then
+          cv = nn.canvas(W, H)
+          scene._layer_canvas[layer] = cv
+        end
+        cv:draw(function() draw_run(a, b) end)
+        nn.screen.sprite(cv, 0, 0, { effect = fx })
+      else
+        draw_run(a, b)
+      end
+      a = b + 1
+    end
+  end
   for _, fx in pairs(scene._fx or {}) do fx:draw() end
   -- Os corpos da física por cima (rodar_jogo com ver_corpos).
   if M.show_bodies then
