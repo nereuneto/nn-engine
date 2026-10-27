@@ -1,43 +1,40 @@
 # E1 — prova (com-som)
 
-Compilou em 54 s (sem cache: inclui as dependências).
+Compilou em 20 s (sem cache: inclui as dependências).
 
 | arquivo | tamanho | gzip -9 | brotli 11 |
 |---|---|---|---|
-| wasm (do wasm-bindgen) | 3358 KB | | |
-| wasm (wasm-opt -Oz) | 2076 KB | 845 KB | 669 KB |
+| wasm (do wasm-bindgen) | 3939 KB | | |
+| wasm (wasm-opt -Oz) | 2557 KB | 1054 KB | 841 KB |
 | js | 147 KB | 22 KB | 19 KB |
 
-Os maiores pedaços do wasm (twiggy):
+Os maiores pedaços do wasm final (twiggy; sem nomes, então só os tamanhos por seção e as maiores funções):
 
 ```
  Shallow Bytes │ Shallow % │ Item
-───────────────┼───────────┼───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-       1139606 ┊    23.54% ┊ "function names" subsection
-        749924 ┊    15.49% ┊ custom section '__wasm_bindgen_unstable'
-        346618 ┊     7.16% ┊ data segment ".rodata"
-         47669 ┊     0.98% ┊ <wgpu_core[5e1a0d8057df918d]::command::CommandEncoder>::encode_commands
-         41067 ┊     0.85% ┊ wgpu_core[5e1a0d8057df918d]::command::render::encode_render_pass
-         31214 ┊     0.64% ┊ <naga[8eb75bf1d9ad936c]::valid::Validator>::validate_impl
-         30430 ┊     0.63% ┊ <naga[8eb75bf1d9ad936c]::front::wgsl::lower::Lowerer>::call_builtin
-         28760 ┊     0.59% ┊ <wgpu_hal[922b0f73e8853165]::gles::Device>::create_pipeline
-         28246 ┊     0.58% ┊ <naga[8eb75bf1d9ad936c]::back::glsl::writer::Writer<&mut alloc[42d2b33bd937efdb]::string::String>>::write_expr
-         25480 ┊     0.53% ┊ <naga[8eb75bf1d9ad936c]::front::wgsl::error::Error>::as_parse_error
-         20086 ┊     0.41% ┊ <winit[9e86a71fe5eb6452]::platform_impl::web::event_loop::EventLoop<prova[a1d4ea92127974c3]::Evento>>::spawn::<<winit[9e86a71fe5eb6452]::event_loop::EventLoop<prova[a1d4ea92127974c3]::Evento> as winit[9e86a71fe5eb6452]::platform::web::EventLoopExtWebSys>::spawn_app<prova[a1d4ea92127974c3]::App>::{closure#0}>::{closure#0}
-         19367 ┊     0.40% ┊ <prova[a1d4ea92127974c3]::App as winit[9e86a71fe5eb6452]::application::ApplicationHandler<prova[a1d4ea92127974c3]::Evento>>::resumed::{closure#0}
-         17968 ┊     0.37% ┊ <nn_render[ca5335774ecedc78]::renderer::Renderer>::render
-         17266 ┊     0.36% ┊ <naga[8eb75bf1d9ad936c]::front::wgsl::Frontend>::inner
-         16725 ┊     0.35% ┊ <naga[8eb75bf1d9ad936c]::valid::Validator>::validate_block_impl
-         16148 ┊     0.33% ┊ <wgpu_hal[922b0f73e8853165]::gles::web::Instance as wgpu_hal[922b0f73e8853165]::Instance>::enumerate_adapters
-         15919 ┊     0.33% ┊ <naga[8eb75bf1d9ad936c]::proc::constant_evaluator::ConstantEvaluator>::try_eval_and_append_impl
-         15667 ┊     0.32% ┊ <wgpu_hal[922b0f73e8853165]::gles::Queue>::process
-         15594 ┊     0.32% ┊ <naga[8eb75bf1d9ad936c]::valid::Validator>::validate_function
-         15566 ┊     0.32% ┊ <wgpu_core[5e1a0d8057df918d]::device::queue::Queue>::submit
-         15519 ┊     0.32% ┊ <wgpu_core[5e1a0d8057df918d]::global::Global>::adapter_request_device
-         14698 ┊     0.30% ┊ <wgpu_core[5e1a0d8057df918d]::device::resource::Device>::create_render_pipeline_inner
-         14677 ┊     0.30% ┊ <naga[8eb75bf1d9ad936c]::valid::Validator>::validate_expression
-         14508 ┊     0.30% ┊ naga[8eb75bf1d9ad936c]::compact::compact
-         14334 ┊     0.30% ┊ <naga[8eb75bf1d9ad936c]::back::glsl::writer::Writer<&mut alloc[42d2b33bd937efdb]::string::String>>::write_stmt
-       2127080 ┊    43.95% ┊ ... and 14739 more.
-       4840136 ┊   100.00% ┊ Σ [14764 Total Rows]
+───────────────┼───────────┼─────────────────────
+        129977 ┊     4.96% ┊ data[121]
+         88735 ┊     3.39% ┊ code[30]
+         84639 ┊     3.23% ┊ data[2]
+         61001 ┊     2.33% ┊ code[4]
+         47531 ┊     1.82% ┊ code[5]
+         38922 ┊     1.49% ┊ code[1]
+         31931 ┊     1.22% ┊ data[90]
+         31056 ┊     1.19% ┊ code[0]
+         28734 ┊     1.10% ┊ code[150]
+         27581 ┊     1.05% ┊ code[8]
+         27314 ┊     1.04% ┊ code[2345]
+         27024 ┊     1.03% ┊ data[122]
+       1994144 ┊    76.15% ┊ ... and 7268 more.
+       2618589 ┊   100.00% ┊ Σ [7280 Total Rows]
+```
+
+As maiores crates (twiggy no wasm antes do wasm-opt, que ainda tem os nomes):
+
+```
+Traceback (most recent call last):
+  File "/home/runner/work/nn-engine/nn-engine/estudo-web/crates.py", line 10, in <module>
+    nome, tam = parts[3], int(parts[1])
+                          ^^^^^^^^^^^^^
+ValueError: invalid literal for int() with base 10: ' <kira[f4b5cb610d25b8e3]::backend::cpal::wasm::CpalBackend as kira[f4b5cb610d25b8e3]::backend::Backend>::start::{closure#0}'
 ```

@@ -1,45 +1,4 @@
- Downloading crates ...
-  Downloaded rtrb v0.4.1
-   Compiling num-traits v0.2.19
-   Compiling web-sys v0.3.106
-   Compiling regex-lite v0.1.9
-   Compiling crossbeam-utils v0.8.23
-   Compiling extended v0.1.0
-   Compiling cpal v0.18.2
-   Compiling futures-channel v0.3.34
-   Compiling dasp_sample v0.11.0
-   Compiling num-complex v0.4.6
-   Compiling half v2.7.1
-   Compiling mint v0.5.9
-   Compiling symphonia-core v0.6.1
-   Compiling naga v30.0.1
-   Compiling moxcms v0.8.1
-   Compiling symphonia-metadata v0.6.1
-   Compiling symphonia-common v0.6.1
-   Compiling symphonia-format-ogg v0.6.1
-   Compiling symphonia-codec-vorbis v0.6.1
-   Compiling symphonia-format-riff v0.6.1
-   Compiling symphonia-bundle-mp3 v0.6.1
-   Compiling symphonia-codec-pcm v0.6.1
-   Compiling symphonia v0.6.1
-   Compiling glam v0.33.12
-   Compiling triple_buffer v9.0.0
-   Compiling pastey v0.2.3
-   Compiling send_wrapper v0.6.0
-   Compiling atomic-arena v0.1.2
-   Compiling rtrb v0.4.1
-   Compiling image v0.25.10
-   Compiling wgpu-types v30.0.1
-   Compiling glow v0.17.0
-   Compiling kira v0.12.5
-   Compiling console_log v1.1.0
-   Compiling winit v0.30.13
-   Compiling nn-audio v0.8.0 (/home/runner/work/nn-engine/nn-engine/crates/nn-audio)
-   Compiling wgpu-naga-bridge v30.0.1
-   Compiling wgpu-hal v30.0.1
-   Compiling wgpu-core-deps-wasm v30.0.1
-   Compiling wgpu-core v30.0.1
-   Compiling wgpu v30.0.1
    Compiling nn-render v0.8.0 (/home/runner/work/nn-engine/nn-engine/crates/nn-render)
+   Compiling nn-audio v0.8.0 (/home/runner/work/nn-engine/nn-engine/crates/nn-audio)
    Compiling prova v0.1.0 (/home/runner/work/nn-engine/nn-engine/estudo-web/prova)
-    Finished `release` profile [optimized] target(s) in 54.65s
+    Finished `release` profile [optimized] target(s) in 20.10s

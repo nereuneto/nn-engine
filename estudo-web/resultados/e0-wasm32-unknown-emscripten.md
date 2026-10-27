@@ -2,18 +2,18 @@
 
 | crate | resultado | tempo |
 |---|---|---|
-| nn-core | compila | 0 s |
-| nn-input | **não compila** | 19 s |
-| nn-render | compila | 66 s |
-| nn-audio | compila | 12 s |
+| nn-core | compila | 1 s |
+| nn-input | **não compila** | 0 s |
+| nn-render | compila | 3 s |
+| nn-audio | compila | 1 s |
 | nn-physics | compila | 1 s |
-| nn-physics3d | compila | 37 s |
+| nn-physics3d | compila | 1 s |
 | nn-nav | compila | 0 s |
-| nn-tilemap | compila | 12 s |
-| nn-script | **não compila** | 71 s |
-| nn-app | **não compila** | 25 s |
-| nn-projeto | **não compila** | 8 s |
-| nn-run | **não compila** | 4 s |
+| nn-tilemap | compila | 4 s |
+| nn-script | **não compila** | 4 s |
+| nn-app | **não compila** | 13 s |
+| nn-projeto | **não compila** | 1 s |
+| nn-run | **não compila** | 18 s |
 
 ## nn-input
 
@@ -25,7 +25,6 @@ error: The platform you're compiling for is not supported by winit
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 error: could not compile `winit` (lib) due to 1 previous error
-warning: build failed, waiting for other jobs to finish...
 ```
 
 ## nn-script
@@ -63,7 +62,6 @@ error: The platform you're compiling for is not supported by winit
 78 | compile_error!("The platform you're compiling for is not supported by winit");
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   Compiling mlua-sys v0.13.0
 error: could not compile `winit` (lib) due to 1 previous error
 warning: build failed, waiting for other jobs to finish...
 ```
@@ -77,8 +75,8 @@ error: The platform you're compiling for is not supported by winit
 78 | compile_error!("The platform you're compiling for is not supported by winit");
    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   Compiling symphonia-core v0.6.1
-   Compiling wgpu-types v30.0.1
+   Compiling wgpu-hal v30.0.1
+   Compiling gilrs v0.11.2
 error: could not compile `winit` (lib) due to 1 previous error
 warning: build failed, waiting for other jobs to finish...
 ```

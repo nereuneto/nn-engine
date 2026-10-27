@@ -2,40 +2,24 @@
 
 http://localhost:8000/sem-som/index.html?webgl
 
-- pronto: false (60.09 s desde abrir a página)
+- pronto: true (0.44 s desde abrir a página)
 - canvas: sim
 - AudioContext: nenhum
 
 ```
-0.11 [info] NN gpu ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver) backend Gl driver  WebGL 2.0 (OpenGL ES 3.0 Chromium)
+0.12 [info] NN gpu ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver) backend Gl driver  WebGL 2.0 (OpenGL ES 3.0 Chromium)
 0.12 [info] NN limites da engine servem: false
 0.12 [info] NN formatos [Rgba8UnormSrgb, Rgba8Unorm, Rgba16Float]
 0.12 [info] NN superficie 1x1 Rgba8UnormSrgb
-0.17 [error] Handling wgpu errors as fatal by default
-0.18 [error] panicked at /home/runner/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wgpu-30.0.1/src/backend/wgpu_core.rs:1414:26:
-wgpu error: Validation Error
-
-Caused by:
-  In Device::create_render_pipeline, label = 'nn 3d'
-    Downlevel flags DownlevelFlags(INDEPENDENT_BLEND) are required but not supported on the device.
-This is not an invalid use of WebGPU: the underlying API or device does not support enough features to be a fully compliant implementation. A subset of the features can still be used. If you are running this program on native and not in a browser and wish to work around this issue, call Adapter::downlevel_properties or Device::downlevel_properties to get a listing of the features the current platform supports.
-
-
-
-Stack:
-
-Error
-    at __wbg_new_227d7c05414eb861 (http://localhost:8000/sem-som/prova.js:1131:25)
-    at http://localhost:8000/sem-som/prova_bg.wasm:wasm-function[1629]:0x150086
-    at http://localhost:8000/sem-som/prova_bg.wasm:wasm-function[3448]:0x1897b5
-    at http://localhost:8000/sem-som/prova_bg.wasm:wasm-function[913]:0xf43bf
-    at http://localhost:8000/sem-som/prova_bg.wasm:wasm-function[711]:0x7ecce
-    at http://localhost:8000/sem-som/prova_bg.wasm:wasm-function[5601]:0x1a13cf
-    at http://localhost:8000/sem-som/prova_bg.wasm:wasm-function[690]:0x2c6fe
-    at http://localhost:8000/sem-som/prova_bg.wasm:wasm-function[1369]:0x13707e
-    at http://localhost:8000/sem-som/prova_bg.wasm:wasm-function[2755]:0x17eb15
-    at http://localhost:8000/sem-som/prova_bg.wasm:wasm-function[3997]:0x18f72a
-
-
-0.18 [pageerror] unreachable
+0.38 [info] NN pronto em 310 ms
+1.38 [info] NN quadro 60 pos 100 200 cpu_ms 1.84 pior 29.80 desde_inicio_s 1.00
+2.38 [info] NN quadro 120 pos 100 200 cpu_ms 0.82 pior 4.00 desde_inicio_s 2.00
+2.66 [info] NN clique
+2.66 [info] NN som fora deste build
+2.67 [info] NN tecla ArrowRight
+3.38 [info] NN quadro 180 pos 271 200 cpu_ms 0.85 pior 4.40 desde_inicio_s 3.00
+3.48 [info] NN tecla ArrowDown
+4.38 [info] NN quadro 240 pos 295 296 cpu_ms 0.68 pior 4.00 desde_inicio_s 4.00
+5.38 [info] NN quadro 300 pos 295 296 cpu_ms 0.70 pior 3.60 desde_inicio_s 5.00
+6.38 [info] NN quadro 360 pos 295 296 cpu_ms 0.57 pior 1.20 desde_inicio_s 6.00
 ```
