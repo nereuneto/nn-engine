@@ -57,10 +57,11 @@ mod desktop {
     }
 
     /// Quanto as fotos podem diferir: a placa por software do navegador
-    /// arredonda as bordas e o filtro um pouco diferente da do desktop.
+    /// arredonda as bordas e o filtro um pouco diferente da do desktop, e o
+    /// 3D (o céu, a luz) sai uns tons diferente no WebGL2.
     const PIXEL_DIFERENTE: u8 = 24;
     const MAX_DIFERENTES: f64 = 0.01;
-    const MAX_MEDIA: f64 = 2.0;
+    const MAX_MEDIA: f64 = 4.0;
 
     pub fn comparar(refs: &Path, nav: &Path, prefixo: &str) -> ExitCode {
         let mut ok = true;
