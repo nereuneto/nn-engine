@@ -146,6 +146,7 @@ fn panel_options(opts: Option<&Table>) -> Result<PanelOptions> {
     let mut o = PanelOptions::new();
     o.title = opt::<String>(opts, "title")?;
     o.width = opt::<f32>(opts, "width")?;
+    o.height = opt::<f32>(opts, "height")?.filter(|h| *h > 0.0);
     let x = opt::<f32>(opts, "x")?;
     let y = opt::<f32>(opts, "y")?;
     match (x, y) {

@@ -176,6 +176,7 @@ return {
   background = "#5FB3E0",        -- opcional: cor de fundo (senão, a do config.lua)
   gravity = -1800,               -- gravidade da física (negativa = cai)
   overlay = false,               -- abre por cima de outra cena (pausa, opções)
+  sort_y = { 1 },                -- opcional: camadas em que quem está mais embaixo fica na frente
   objects = {
     {
       id = 4, name = "heroi",
@@ -191,7 +192,7 @@ return {
 }
 ```
 
-Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), `scale_x`, `scale_y`, `visible`, `locked` (só para o editor), `layer` (camada maior é desenhada por cima), `anchor` (num objeto da raiz que fica na tela: o ponto da tela de onde a posição conta: "top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom" ou "bottom_right"; veja "Preso na tela" abaixo), `components` e `children`. Campos que faltam usam o valor padrão. Os componentes:
+Cada objeto tem `id` (único na cena), `name`, `x`, `y`, `rotation` (em graus), `scale_x`, `scale_y`, `visible`, `locked` (só para o editor), `layer` (camada maior é desenhada por cima; numa camada de `sort_y`, quem tem o pé mais embaixo fica na frente, como numa vista de cima: o herói passa atrás e na frente da árvore conforme anda, e os filhos vão junto com o objeto da raiz), `anchor` (num objeto da raiz que fica na tela: o ponto da tela de onde a posição conta: "top_left", "top", "top_right", "left", "center", "right", "bottom_left", "bottom" ou "bottom_right"; veja "Preso na tela" abaixo), `components` e `children`. Campos que faltam usam o valor padrão. Os componentes:
 
 | `type` | Campos (padrão) |
 |---|---|
@@ -276,7 +277,7 @@ Os componentes de interface ficam presos à tela (`hud = true`, o padrão deles)
 
 | `type` | Campos (padrão) |
 |---|---|
-| `panel` | `w` (320), `h` (220), `color` ("": tema `panel`), `radius` (12), `border` (0), `border_color`, `image` (moldura em 9 fatias), `slice` (4: pixels dos cantos da imagem), `slice_scale` (4) |
+| `panel` | `w` (320), `h` (220), `color` ("": tema `panel`), `radius` (12), `border` (0), `border_color`, `image` (moldura em 9 fatias), `slice` (4: pixels dos cantos da imagem), `slice_scale` (4), `scroll` (false: com mais filhos do que cabem, vira uma lista que rola; veja abaixo) |
 | `button` | `text` ("Botão"), `size` (28), `w` (240), `h` (60), `color`, `hover_color`, `press_color`, `text_color`, `radius` (12), `border`, `border_color`, `image`, `slice`, `slice_scale`, `icon`, `font`, `action` ("nada", "cena", "por_cima", "fechar", "reiniciar", "sair"), `scene`, `sound`, `focus` (false: começa com o foco), `enabled` (true) |
 | `bar` | `w` (240), `h` (24), `var` (variável do jogo), `value` (1), `max` (1), `max_var`, `color` ("": tema `accent`), `back_color`, `radius` (6), `border`, `border_color`, `direction` ("right", "left", "up", "down") |
 | `icons` | `image`, `frame`, `frame_w`, `frame_h`, `var`, `count` (3, sem variável), `max` (0: só os que tem; com máximo, os que faltam ficam com `empty_color`; no máximo 100 ícones), `size` (32), `spacing` (6), `color`, `empty_color`, `align` ("left", "center", "right"), `pixel_art` |
@@ -284,6 +285,8 @@ Os componentes de interface ficam presos à tela (`hud = true`, o padrão deles)
 | `checkbox` | `text` ("Opção"), `size` (26), `box` (36), `target` ("variavel" ou "tela_cheia"), `var`, `checked`, `color`, `check_color`, `text_color`, `font` |
 | `textfield` | `text`, `placeholder` ("Digite aqui"), `var` (guarda o texto), `w` (320), `h` (56), `size` (26), `max` (20 letras), `color`, `text_color`, `border` (2), `border_color`, `radius` (8), `font` |
 | `layout` | `arrange` ("vertical", "horizontal", "grid", "none"): arruma os filhos do objeto, com `spacing` (16), `columns` (2, na grade) e `align` ("start", "center", "end") |
+
+**Lista que rola.** Um `panel` com `scroll = true` e filhos que não cabem nele (com um `layout` em coluna, por exemplo) vira uma lista: o primeiro filho encosta no alto do painel, a roda do mouse e o arrastar (com o mouse em cima) rolam, e o foco do teclado ou do controle leva a lista junto. Só aparece o que está dentro do painel (com uma margem de 8 pixels mais a borda), e um botão escondido não responde ao mouse. Arrastar não aperta o botão embaixo; um clique (apertar e soltar sem arrastar) aperta.
 
 **Preso na tela.** A posição de um objeto da raiz que fica na tela conta a partir do ponto `anchor`: `"top_left"`, `"top"`, `"top_right"`, `"left"`, `"center"` (padrão), `"right"`, `"bottom_left"`, `"bottom"` ou `"bottom_right"`, com y para cima. `{ anchor = "top_left", x = 40, y = -40 }` fica a 40 pixels do canto em qualquer tamanho de janela.
 
@@ -794,8 +797,11 @@ As duas tabelas têm as mesmas funções; muda só o espaço.
 | `polyline(pontos, cor, espessura, fechada)` | Linha passando pelos pontos; `fechada = true` volta ao primeiro. |
 | `polygon(pontos, cor, contorno)` | Polígono preenchido, também côncavo (um L, uma estrela). Com `contorno`, só a borda. |
 | `panel(x, y, w, h, opts)` | Painel: retângulo com cantos arredondados e borda, ou uma imagem em 9 fatias. |
+| `clip(x, y, w, h, função)` | Chama a função desenhando só dentro do retângulo (no mundo, `x, y` é o centro; na tela, o canto de cima à esquerda). Um recorte dentro de outro fica com o pedaço em comum. |
 
 Opções de `sprite`: `frame` (para spritesheets), `w`, `h`, `scale`, `rotation`, `origin_x`, `origin_y` (0 a 1; padrão 0.5 no mundo e 0 na tela), `color` (tinge), `alpha`, `flip_x`, `flip_y`, `tile_w`, `tile_h` (repetir em vez de esticar: o tamanho de cada cópia; `{ w = 640, h = 32, tile_w = 32, tile_h = 32 }` desenha 20 blocos), `offset_x`, `offset_y` (desloca a imagem dentro do sprite, em pixels, para +x e +y; somar um pouco a cada quadro faz um fundo ou uma esteira rolar: `{ w = 640, h = 360, tile_w = 64, tile_h = 64, offset_x = nn.time.elapsed() * 30 }`).
+
+**Recorte.** `nn.screen.clip(20, 60, 200, 120, function() ... end)` desenha o que a função desenhar, mas só dentro do retângulo: uma lista que rola, uma janela de diálogo com texto comprido, um minimapa. Cada recorte custa no máximo uma chamada a mais à placa de vídeo.
 
 **Linhas e polígonos.** Os pontos vêm numa lista de números, `{ x1, y1, x2, y2, ... }`, ou de pares, `{ {x1, y1}, {x2, y2}, ... }` (também `{ {x = 1, y = 2}, ... }`). As linhas e as bordas dos polígonos são suaves (sem serrilhado); nas juntas de uma linha, os cantos ficam em ponta, e cortados quando o ângulo é muito fechado. O contorno de um retângulo ou de um círculo fica por dentro dele, como a borda de um painel. Linhas, retângulos e polígonos seguidos são desenhados juntos, numa chamada só para a placa de vídeo: mil linhas por quadro custam como uma.
 
@@ -1750,7 +1756,7 @@ function menu:draw()
 end
 ```
 
-`nn.ui.panel(nome, opts)` abre um painel. O `nome` faz o painel lembrar qual item estava com foco. Opções: `title`, `width`, `x` e `y` (ponto da tela; padrão: centro), `anchor` (que ponto do painel fica em `x, y`; padrão `"center"`), `background` (cor).
+`nn.ui.panel(nome, opts)` abre um painel. O `nome` faz o painel lembrar qual item estava com foco. Opções: `title`, `width`, `x` e `y` (ponto da tela; padrão: centro), `anchor` (que ponto do painel fica em `x, y`; padrão `"center"`), `background` (cor), `height` (altura máxima: com mais itens do que cabem, a lista rola com a roda do mouse, arrastando ou com o foco do teclado e do controle, e só os itens que aparecem são desenhados; numa lista que rola, o clique vale ao soltar, para arrastar sem apertar).
 
 | Método | Devolve |
 |---|---|

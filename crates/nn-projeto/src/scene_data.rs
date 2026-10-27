@@ -434,6 +434,9 @@ pub struct SceneData {
     pub objects: Vec<Object>,
     /// Eventos da cena.
     pub events: Vec<Rule>,
+    /// As camadas em que quem está mais embaixo fica na frente ("ordenar
+    /// por y"), em ordem.
+    pub sort_y: Vec<i64>,
 }
 
 impl Default for SceneData {
@@ -447,6 +450,7 @@ impl Default for SceneData {
             environment: schema().environment.clone(),
             objects: Vec::new(),
             events: Vec::new(),
+            sort_y: Vec::new(),
         }
     }
 }
@@ -912,7 +916,18 @@ pub fn read(text: &str, name: &str) -> Result<SceneData, String> {
         environment: schema().environment.clone(),
         objects: Vec::new(),
         events: Vec::new(),
+        sort_y: Vec::new(),
     };
+    if let Ok(Value::Table(list)) = t.get::<Value>("sort_y") {
+        let mut layers: Vec<i64> = list
+            .sequence_values::<f64>()
+            .filter_map(|v| v.ok())
+            .map(|v| v.floor() as i64)
+            .collect();
+        layers.sort_unstable();
+        layers.dedup();
+        scene.sort_y = layers;
+    }
     if let Ok(Value::Table(env)) = t.get::<Value>("environment") {
         for (key, default) in schema().environment.clone() {
             let v = env
@@ -1244,6 +1259,10 @@ pub fn write(scene: &SceneData) -> String {
     if scene.overlay {
         s.push_str("  overlay = true,\n");
     }
+    if !scene.sort_y.is_empty() {
+        let layers: Vec<String> = scene.sort_y.iter().map(i64::to_string).collect();
+        s.push_str(&format!("  sort_y = {{ {} }},\n", layers.join(", ")));
+    }
     if scene.three_d {
         s.push_str("  mode = \"3d\",\n");
         let fields: Vec<String> = scene
@@ -1262,14 +1281,15 @@ pub fn write(scene: &SceneData) -> String {
 
 /// Campos que vieram depois da 0.7: no valor padrão, não vão para o
 /// arquivo. Assim um projeto da 0.7 aberto e gravado sai igual, e o arquivo
-/// continua abrindo no `nn` da 0.7. (A largura e o alinhamento do texto
-/// vieram na 0.10.)
+/// continua abrindo no `nn` da 0.7. (A largura e o alinhamento do texto e o
+/// Rolar do painel vieram na 0.10.)
 const LATE_FIELDS: &[(&str, &str)] = &[
     ("body", "ox"),
     ("body", "oy"),
     ("particles", "pixel"),
     ("text", "width"),
     ("text", "align"),
+    ("panel", "scroll"),
 ];
 
 fn late_default(kind: &str, key: &str, v: &Prop) -> bool {
@@ -2430,6 +2450,18 @@ mod tests {
         );
         let l = pai.to_local(w);
         assert!((l.x - 3.0).abs() < 1e-9 && l.y.abs() < 1e-9 && (l.rotation - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn camadas_ordenadas_por_y_vao_e_voltam() {
+        let text = "return { format = 1, sort_y = { 2, 1, 2 }, objects = {} }";
+        let scene = read(text, "t").unwrap();
+        assert_eq!(scene.sort_y, [1, 2]);
+        let out = write(&scene);
+        assert!(out.contains("  sort_y = { 1, 2 },\n"), "{out}");
+        assert_eq!(read(&out, "t").unwrap().sort_y, [1, 2]);
+        // Sem nenhuma, nada no arquivo.
+        assert!(!write(&SceneData::default()).contains("sort_y"));
     }
 
     #[test]

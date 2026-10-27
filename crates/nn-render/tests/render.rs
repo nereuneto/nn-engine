@@ -878,3 +878,70 @@ fn formas_no_mundo_com_y_para_cima() {
     assert_eq!(img.pixel(32, 20)[0], 255);
     assert_eq!(img.pixel(32, 44)[0], 0);
 }
+
+/// Nada aparece fora do recorte; o recorte custa uma chamada a mais.
+#[test]
+fn recorte_esconde_o_que_fica_fora() {
+    use nn_render::ClipRect;
+    let Some(mut h) = Harness::new() else { return };
+    {
+        let mut s = h.renderer.screen();
+        s.draw_rect(Vec2::ZERO, Vec2::splat(8.0), Color::rgb(0.0, 0.0, 1.0));
+        s.set_clip(Some(ClipRect::new(
+            Vec2::new(16.0, 16.0),
+            Vec2::new(48.0, 40.0),
+        )));
+        // Um retângulo maior que a tela: só o pedaço do recorte aparece.
+        s.draw_rect(Vec2::ZERO, Vec2::splat(64.0), Color::WHITE);
+        s.draw_text(&Text::new("XXXXXXXX").at(Vec2::ZERO).size(40.0));
+        s.set_clip(None);
+        s.draw_rect(
+            Vec2::new(56.0, 56.0),
+            Vec2::splat(8.0),
+            Color::rgb(0.0, 1.0, 0.0),
+        );
+    }
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    for y in 0..64 {
+        for x in 0..64 {
+            let dentro = (16..48).contains(&x) && (16..40).contains(&y);
+            let p = img.pixel(x, y);
+            if dentro {
+                assert_eq!(p[0], 255, "{x},{y}");
+            } else if x >= 8 && y >= 8 && !(x >= 56 && y >= 56) {
+                assert_eq!(p[..3], [0, 0, 0], "fora do recorte em {x},{y}");
+            }
+        }
+    }
+    assert_eq!(img.pixel(2, 2)[..3], [0, 0, 255], "antes do recorte");
+    assert_eq!(img.pixel(60, 60)[..3], [0, 255, 0], "depois do recorte");
+    // Retângulos (branco), o texto (outra textura) e de novo o branco.
+    assert_eq!(h.renderer.last_stats().draw_calls, 4);
+
+    // No mundo (Y para cima), com a câmera: o recorte anda com o mundo.
+    h.renderer.set_clip(Some(ClipRect::new(
+        Vec2::new(0.0, 0.0),
+        Vec2::new(16.0, 16.0),
+    )));
+    h.renderer
+        .draw_rect(Vec2::ZERO, Vec2::splat(200.0), Color::WHITE);
+    h.renderer.set_clip(None);
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    // O quadrado de cima à direita do centro (y para cima no mundo).
+    assert_eq!(img.pixel(40, 24)[0], 255);
+    assert_eq!(img.pixel(24, 24)[0], 0);
+    assert_eq!(img.pixel(40, 40)[0], 0);
+    let n = img.0.chunks(4).filter(|p| p[0] == 255).count();
+    assert_eq!(n, 16 * 16);
+
+    // Recorte vazio: nada.
+    h.renderer.screen().set_clip(Some(ClipRect::new(
+        Vec2::splat(10.0),
+        Vec2::new(10.0, 50.0),
+    )));
+    h.renderer
+        .screen()
+        .draw_rect(Vec2::ZERO, Vec2::splat(64.0), Color::WHITE);
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert!(img.0.chunks(4).all(|p| p[0] == 0));
+}

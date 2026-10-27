@@ -307,3 +307,109 @@ fn so_a_cena_do_topo_responde() {
     assert!(!h.ctx.ui.is_open());
     assert!(h.ctx.ui.is_interactive());
 }
+
+/// Uma lista de 200 botões num painel de 300 de altura.
+#[derive(Default)]
+struct Lista {
+    log: Vec<usize>,
+}
+
+impl Game for Lista {
+    fn render(&mut self, ctx: &mut Context) {
+        let mut p = ctx.panel("lista", PanelOptions::new().height(300.0));
+        for i in 0..200 {
+            if p.button(&format!("Item {i}")) {
+                self.log.push(i);
+            }
+        }
+        p.finish();
+    }
+}
+
+fn lista() -> Option<Headless<Lista>> {
+    let mut h = comum::headless(config(), |ctx| {
+        ctx.ui.theme_mut().scale = Some(1.0);
+        Lista::default()
+    })?;
+    h.run_frames(2);
+    Some(h)
+}
+
+/// Topo do painel da lista (300 de altura, no centro).
+const LISTA_TOPO: f32 = (H as f32 - 300.0) / 2.0;
+
+#[test]
+fn lista_longa_desenha_so_o_que_aparece() {
+    let Some(h) = lista() else { return };
+    // Uns 5 botões aparecem (cada um: fundo e texto), não 200.
+    let sprites = h.ctx.renderer.last_stats().sprites;
+    assert!(sprites < 200, "{sprites}");
+    // Nada do painel abaixo dele.
+    let fundo = Color::BLACK;
+    assert!(close(
+        pixel(&h, Vec2::new(W as f32 / 2.0, LISTA_TOPO + 304.0)),
+        fundo
+    ));
+    assert!(!close(
+        pixel(&h, Vec2::new(W as f32 / 2.0, LISTA_TOPO + 290.0)),
+        fundo
+    ));
+}
+
+#[test]
+fn lista_rola_com_o_teclado_a_roda_e_o_arrastar() {
+    let Some(mut h) = lista() else { return };
+    // O teclado: descer 10 itens leva a lista junto e o item 10 fica visível.
+    for _ in 0..10 {
+        tap(&mut h, KeyCode::ArrowDown);
+    }
+    assert_eq!(h.ctx.ui.focus("lista"), Some(10));
+    tap(&mut h, KeyCode::Enter);
+    assert_eq!(h.game.log, [10]);
+
+    // A roda: rola para baixo (y negativo) com o mouse em cima.
+    let meio = Vec2::new(W as f32 / 2.0, LISTA_TOPO + 150.0);
+    h.ctx.input.set_cursor(Some(meio));
+    h.run_frames(1);
+    let antes = h.ctx.ui.focus("lista").unwrap();
+    h.ctx.input.add_scroll(Vec2::new(0.0, -10.0));
+    h.run_frames(2);
+    let depois = h.ctx.ui.focus("lista").unwrap();
+    assert!(depois > antes + 5, "{antes} → {depois}");
+
+    // Arrastar para cima rola para baixo, e não aperta o item.
+    h.ctx.input.press_mouse(MouseButton::Left);
+    h.run_frames(1);
+    for k in 1..=10 {
+        h.ctx
+            .input
+            .set_cursor(Some(meio - Vec2::new(0.0, k as f32 * 10.0)));
+        h.run_frames(1);
+    }
+    h.ctx.input.release_mouse(MouseButton::Left);
+    h.run_frames(2);
+    assert_eq!(h.game.log, [10], "arrastar não é clique");
+    // O item embaixo do cursor andou junto com ele; no meio agora há outro.
+    assert_eq!(h.ctx.ui.focus("lista"), Some(depois));
+    h.ctx.input.set_cursor(Some(meio));
+    h.run_frames(1);
+    let embaixo = h.ctx.ui.focus("lista").unwrap();
+    assert!(embaixo > depois, "{depois} → {embaixo}");
+
+    // Um clique (apertar e soltar sem arrastar) aperta o item embaixo.
+    h.ctx.input.press_mouse(MouseButton::Left);
+    h.run_frames(1);
+    assert_eq!(h.game.log, [10], "vale ao soltar");
+    h.ctx.input.release_mouse(MouseButton::Left);
+    h.run_frames(1);
+    assert_eq!(h.game.log, [10, embaixo]);
+
+    // Rolar até o fim para no último.
+    h.ctx.input.add_scroll(Vec2::new(0.0, -1000.0));
+    h.run_frames(2);
+    h.ctx
+        .input
+        .set_cursor(Some(Vec2::new(W as f32 / 2.0, LISTA_TOPO + 260.0)));
+    h.run_frames(1);
+    assert_eq!(h.ctx.ui.focus("lista"), Some(199));
+}

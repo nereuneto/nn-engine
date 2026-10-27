@@ -34,7 +34,7 @@ pub use panel::{Panel, PanelImage};
 pub use parallax::Parallax;
 pub use particles::{EmitArea, ParticleConfig, ParticleEmitter};
 pub use present::{Presentation, ScaleMode};
-pub use renderer::{RenderStats, Renderer, ScreenPainter};
+pub use renderer::{ClipRect, RenderStats, Renderer, ScreenPainter};
 pub use sprite::{Blend, Rect, Sprite};
 pub use text::{Align, Anchor, FontId, Text};
 pub use texture::{Filter, TextureId, TextureOptions};

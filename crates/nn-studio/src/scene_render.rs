@@ -632,12 +632,15 @@ pub fn draw_order_where<'a>(
     scene: &'a SceneData,
     keep: impl Fn(&Object) -> bool,
 ) -> Vec<Placed<'a>> {
+    #[allow(clippy::too_many_arguments)]
     fn walk<'a>(
         scene: &SceneData,
         list: &'a [Object],
         parent: Option<Transform>,
         owner: Option<u32>,
+        root_key: Option<f64>,
         out: &mut Vec<Placed<'a>>,
+        keys: &mut Vec<f64>,
         depth: usize,
     ) {
         if depth > 16 {
@@ -653,28 +656,77 @@ pub fn draw_order_where<'a>(
                 None => scene.root_place(o, local),
             };
             let me = owner.unwrap_or(o.id);
+            // Para "ordenar por y": o pé do objeto da raiz (os filhos vão com
+            // ele), como o jogo faz.
+            let key = root_key.unwrap_or_else(|| world.y - half_height(o) * world.scale_y.abs());
             out.push(Placed {
                 object: o,
                 world,
                 owner: me,
             });
+            keys.push(key);
             walk(
                 scene,
                 o.prefab_children(),
                 Some(world),
                 Some(me),
+                Some(key),
                 out,
+                keys,
                 depth + 1,
             );
-            walk(scene, &o.children, Some(world), owner, out, depth + 1);
+            walk(
+                scene,
+                &o.children,
+                Some(world),
+                owner,
+                Some(key),
+                out,
+                keys,
+                depth + 1,
+            );
         }
     }
-    let mut out = Vec::new();
-    for o in scene.objects.iter().filter(|o| keep(o)) {
-        walk(scene, std::slice::from_ref(o), None, None, &mut out, 0);
+    // A metade da altura do que dá para saber sem abrir arquivos.
+    fn half_height(o: &Object) -> f64 {
+        o.components
+            .iter()
+            .map(|c| match c.kind.as_str() {
+                "shape" if c.str("shape") == "circle" => c.num("radius"),
+                "shape" | "panel" | "button" => c.num("h") / 2.0,
+                "sprite" => c.num("h").max(0.0) / 2.0,
+                _ => 0.0,
+            })
+            .fold(0.0, f64::max)
     }
-    out.sort_by_key(|p| p.object.layer);
-    out
+    let mut out = Vec::new();
+    let mut keys = Vec::new();
+    for o in scene.objects.iter().filter(|o| keep(o)) {
+        walk(
+            scene,
+            std::slice::from_ref(o),
+            None,
+            None,
+            None,
+            &mut out,
+            &mut keys,
+            0,
+        );
+    }
+    let mut idx: Vec<usize> = (0..out.len()).collect();
+    idx.sort_by(|&a, &b| {
+        let (la, lb) = (out[a].object.layer, out[b].object.layer);
+        la.cmp(&lb).then_with(|| {
+            if scene.sort_y.contains(&la) {
+                // Mais embaixo, depois (na frente).
+                keys[b].total_cmp(&keys[a]).then(a.cmp(&b))
+            } else {
+                a.cmp(&b)
+            }
+        })
+    });
+    let mut slots: Vec<Option<Placed<'a>>> = out.into_iter().map(Some).collect();
+    idx.into_iter().filter_map(|i| slots[i].take()).collect()
 }
 
 struct Target {
