@@ -1564,7 +1564,7 @@ end
 | `range` | Até onde a luz chega, em metros (padrão 8): ela some aos poucos até lá. |
 | `direction` | Com uma direção `{x, y, z}`, vira um **holofote**: só ilumina dentro do cone. |
 | `angle`, `soft` | No holofote: metade da abertura, em graus (padrão 30), e quanto da borda apaga aos poucos (0 a 1, padrão 0.25). |
-| `shadow` | No holofote: `true` faz sombra (uma lanterna, um farol, um poste). Valem **4 ao mesmo tempo**, os mais perto da câmera entre os que ela vê; o resto ilumina sem sombra. Cada um desenha a cena mais uma vez, vista dele; `nn.d3.stats().spot_shadows` diz quantos valeram. `nn.d3.shadows(false)` desliga também estas. |
+| `shadow` | No holofote: `true` faz sombra (uma lanterna, um farol, um poste). Valem **4 ao mesmo tempo**, os mais perto da câmera entre os que ela vê; o resto ilumina sem sombra. Quem já tem sombra só perde o lugar para um bem mais perto (uns 3 m), e na troca uma sombra apaga e a outra acende aos poucos, sem piscar. Cada um desenha a cena mais uma vez, vista dele, mas só quando algo muda: com a luz parada e nada mexendo na frente dela, a sombra fica como estava. `nn.d3.stats().spot_shadows` diz quantos valeram e `spot_redrawn`, quantos foram desenhados de novo (também na tela F3). `nn.d3.shadows(false)` desliga também estas. |
 
 O `glow` do `nn.d3.draw` (de 0 a 1) faz a própria cor brilhar: a malha aparece acesa no escuro, mas não ilumina em volta (para isso, uma lâmpada). Um modelo `.glb` com emissão no material (`emissiveFactor`, e a extensão `KHR_materials_emissive_strength`) brilha sozinho nessas partes, como a chama da `tocha.glb` e os cristais da `cristal.glb`. Numa cena do NN Studio, use o componente `light3d` e o `glow` das formas e dos modelos; `nn.d3.stats().lamps` diz quantas luzes valeram no último quadro.
 
@@ -1625,7 +1625,7 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | `nn.d3.ground_point(x, y, altura)` | Onde o ponto da tela toca o chão na `altura` dada (padrão 0): `x, y, z`, ou `nil` se olhar para o céu. |
 | `nn.d3.ray(x, y)` | O raio que sai da câmera pelo ponto da tela: origem e direção (seis números). |
 | `nn.d3.count()` | Quantas malhas foram pedidas no último quadro (com as que ficaram fora da tela). |
-| `nn.d3.stats()` | O que o último quadro 3D desenhou: `meshes` (pedidas), `visible` (na frente da câmera), `shadow` (no mapa de sombras), `draw_calls` (chamadas de desenho), `lamps` (as lâmpadas que valeram) e `halo` (se o halo do brilho foi desenhado: sem nada brilhando na tela, ele é pulado). |
+| `nn.d3.stats()` | O que o último quadro 3D desenhou: `meshes` (pedidas), `visible` (na frente da câmera), `shadow` (no mapa de sombras), `draw_calls` (chamadas de desenho), `lamps` (as lâmpadas que valeram), `halo` (se o halo do brilho foi desenhado: sem nada brilhando na tela, ele é pulado), `spot_shadows` (os holofotes com sombra) e `spot_redrawn` (desses, os que tiveram a sombra desenhada de novo). |
 
 O que fica fora da vista da câmera nem vai para a GPU, e o mapa de sombras só recebe o que o sol "vê" perto da câmera: dá para pedir milhares de coisas por quadro e pagar só pelas que aparecem. Cópias da mesma malha (mil árvores iguais) viram uma chamada de desenho só. Para conferir, mostre `nn.d3.stats()` na tela.
 

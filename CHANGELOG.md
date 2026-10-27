@@ -4,6 +4,14 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Holofotes com sombra no jogo (Sprint 78)
+
+- **Sem trocar por pouco:** quem já tem sombra só perde o lugar para um holofote uns 3 m mais perto. Dois na mesma distância não trocam mais a cada quadro.
+- **Sem piscar na troca:** a sombra do que sai apaga aos poucos (numa camada a mais) enquanto a do que entra acende, em 0,3 s.
+- **Luz parada, sombra guardada:** com o holofote parado e nada mexendo na frente dele, o mapa de sombras não é desenhado de novo. Algo balançando com o vento na frente dele desenha sempre.
+- **Na tela F3,** "sombras: N holofotes, M desenhados neste quadro"; em `nn.d3.stats()`, `spot_redrawn`.
+- **Para quem usa as crates:** `Stats3::spot_redrawn`.
+
 ### Sombra nos holofotes (Sprint 77)
 
 - **Um holofote faz sombra:** `shadow = true` no `nn.d3.lamp` (com `direction`) e "Faz sombra" no componente Luz. O que está na frente da luz projeta sombra, com a borda suave; uma folha recortada projeta os buracos.

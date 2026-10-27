@@ -207,6 +207,12 @@ impl Context {
                 "3D: {} malhas, {} visíveis, {} chamadas",
                 r3.meshes, r3.visible, r3.draw_calls
             ));
+            if r3.spot_shadows > 0 {
+                lines.push(format!(
+                    "sombras: {} holofotes, {} desenhados neste quadro",
+                    r3.spot_shadows, r3.spot_redrawn
+                ));
+            }
         }
         let mut mem = format!(
             "texturas: {} ({:.1} MB)",

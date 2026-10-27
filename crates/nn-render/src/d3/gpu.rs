@@ -64,7 +64,7 @@ struct LampGpu {
 struct LampsUniform {
     count: [u32; 4],
     /// A câmera de cada holofote com sombra (a camada do mapa).
-    shadow_mats: [[f32; 16]; MAX_SHADOW_SPOTS],
+    shadow_mats: [[f32; 16]; SPOT_LAYERS],
     items: [LampGpu; MAX_LAMPS],
 }
 
@@ -228,8 +228,11 @@ pub(crate) struct Renderer3D {
     shadow_sampler: wgpu::Sampler,
     shadow_map: ShadowMap,
     /// A vista de cada holofote com sombra (a mesma do jogo, com a matriz
-    /// da luz trocada) e o grupo dela.
+    /// da luz trocada) e o grupo dela, uma por camada.
     spot_views: Vec<(wgpu::Buffer, wgpu::BindGroup)>,
+    spot_memory: Vec<SpotMemory>,
+    /// Quando foi o quadro anterior (para as trocas de sombra).
+    last_frame: Option<web_time::Instant>,
     meshes: Vec<GpuMesh>,
     /// Malhas liberadas: o lugar é reaproveitado pela próxima criada.
     freed: std::collections::BTreeSet<u32>,
@@ -271,9 +274,51 @@ pub struct Stats3 {
     /// Se o halo do brilho foi desenhado (ligado e com algo brilhando na
     /// tela: sem nada brilhando, o passe do halo é pulado).
     pub halo: bool,
-    /// Mapas de sombra dos holofotes desenhados (até
-    /// [`MAX_SHADOW_SPOTS`](super::MAX_SHADOW_SPOTS)).
+    /// Holofotes com sombra neste quadro (até
+    /// [`MAX_SHADOW_SPOTS`](super::MAX_SHADOW_SPOTS), mais um apagando numa
+    /// troca).
     pub spot_shadows: u32,
+    /// Desses, os que tiveram a sombra desenhada de novo (os outros, com a
+    /// luz parada e nada mexendo na frente, ficaram como estavam).
+    pub spot_redrawn: u32,
+}
+
+/// As camadas do mapa dos holofotes: os que valem e mais uma, para o que
+/// sai do lugar apagar a sombra aos poucos enquanto o novo acende.
+const SPOT_LAYERS: usize = MAX_SHADOW_SPOTS + 1;
+/// Quanto tempo a sombra de um holofote leva para acender ou apagar numa
+/// troca (segundos).
+const SPOT_FADE: f32 = 0.3;
+/// A vantagem (metros) de quem já tem sombra sobre um holofote novo mais
+/// perto: sem ela, dois na mesma distância trocariam a cada quadro.
+const SPOT_STAY: f32 = 3.0;
+
+/// Um holofote com sombra no quadro anterior.
+#[derive(Debug, Clone, Copy)]
+struct SpotMemory {
+    position: Vec3,
+    direction: Vec3,
+    layer: usize,
+    /// Quanto da sombra vale (0 a 1).
+    weight: f32,
+    /// Saiu do lugar: a sombra vai apagando.
+    leaving: bool,
+    /// O que foi desenhado na camada (a câmera da luz e quem faz sombra);
+    /// igual no quadro seguinte, a camada não é redesenhada.
+    drawn: Option<u64>,
+}
+
+/// Um holofote com sombra neste quadro.
+#[derive(Debug, Clone, Copy)]
+struct SpotPick {
+    /// Índice em `lamps`.
+    lamp: usize,
+    /// Índice em `spot_memory`.
+    memory: usize,
+    layer: usize,
+    weight: f32,
+    view_proj: Mat4,
+    texel: f32,
 }
 
 /// Um grupo de desenhos seguidos com a mesma malha, textura, sombra, duas
@@ -451,7 +496,7 @@ impl Renderer3D {
             })
         };
         let view_group = view_group_of(&view_buffer);
-        let spot_views = (0..MAX_SHADOW_SPOTS)
+        let spot_views = (0..SPOT_LAYERS)
             .map(|_| {
                 let b = device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("nn 3d spot view"),
@@ -930,6 +975,8 @@ impl Renderer3D {
             shadow_sampler,
             shadow_map,
             spot_views,
+            spot_memory: Vec::new(),
+            last_frame: None,
             meshes: Vec::new(),
             freed: Default::default(),
             last_stats: Stats3::default(),
@@ -978,16 +1025,12 @@ impl Renderer3D {
         let view = tex.create_view(&Default::default());
         // Os holofotes: mais de uma camada sempre (no WebGL, uma textura de
         // uma camada só não vira um conjunto de camadas).
-        let spots = depth(
-            "nn 3d spot shadows",
-            spot_resolution,
-            MAX_SHADOW_SPOTS as u32,
-        );
+        let spots = depth("nn 3d spot shadows", spot_resolution, SPOT_LAYERS as u32);
         let spot_array = spots.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             ..Default::default()
         });
-        let spot_layers = (0..MAX_SHADOW_SPOTS as u32)
+        let spot_layers = (0..SPOT_LAYERS as u32)
             .map(|layer| {
                 spots.create_view(&wgpu::TextureViewDescriptor {
                     dimension: Some(wgpu::TextureViewDimension::D2),
@@ -1324,30 +1367,176 @@ impl Renderer3D {
 
     /// As lâmpadas que vão para a GPU: as que a câmera pode ver (a esfera
     /// do alcance encosta no que ela vê), as mais perto primeiro.
-    /// Os holofotes com sombra (`spot_shadows`: quantos podem) ganham uma
-    /// camada do mapa, os mais perto primeiro; devolve também a câmera de
-    /// cada um.
-    fn lamps_uniform(
-        &self,
-        camera: &Frustum,
-        srgb: bool,
-        spot_shadows: usize,
-    ) -> (LampsUniform, Vec<Mat4>) {
+    /// As lâmpadas que vão para a GPU: as que a câmera pode ver (a esfera
+    /// do alcance encosta no que ela vê), as mais perto primeiro, até
+    /// [`MAX_LAMPS`]. Devolve os índices em `lamps` e a distância de cada uma.
+    fn lamp_order(&self, camera: &Frustum) -> Vec<(usize, f32)> {
         let eye = self.camera.position;
-        let mut list: Vec<(f32, &Lamp3D)> = self
+        let mut list: Vec<(usize, f32)> = self
             .lamps
             .iter()
-            .filter(|l| camera.touches_sphere(l.position, l.range))
-            .map(|l| ((l.position.distance(eye) - l.range).max(0.0), l))
+            .enumerate()
+            .filter(|(_, l)| camera.touches_sphere(l.position, l.range))
+            .map(|(i, l)| (i, (l.position.distance(eye) - l.range).max(0.0)))
             .collect();
-        list.sort_by(|a, b| a.0.total_cmp(&b.0));
+        list.sort_by(|a, b| a.1.total_cmp(&b.1));
+        list.truncate(MAX_LAMPS);
+        list
+    }
+
+    /// Escolhe os holofotes que fazem sombra neste quadro: os mais perto,
+    /// com vantagem para quem já tinha sombra (não trocam a cada quadro).
+    /// Numa troca, o que sai apaga a sombra aos poucos, numa camada a mais,
+    /// enquanto o novo acende. `dt`: segundos desde o quadro anterior.
+    fn pick_spots(&mut self, order: &[(usize, f32)], dt: f32) -> Vec<SpotPick> {
+        let lamps = &self.lamps;
+        let cone_of = |i: usize| lamps[i].cone.filter(|_| lamps[i].shadow);
+        let same = |m: &SpotMemory, i: usize| {
+            let l = &lamps[i];
+            l.cone.is_some_and(|c| {
+                m.position.distance(l.position) < 0.3
+                    && m.direction.dot(c.direction.normalize_or(Vec3::NEG_Y)) > 0.98
+            })
+        };
+        // Cada lembrança acha a lâmpada dela neste quadro (a mais perto).
+        let mut taken = vec![false; lamps.len()];
+        let mut found: Vec<Option<usize>> = Vec::with_capacity(self.spot_memory.len());
+        for m in &self.spot_memory {
+            let hit = order
+                .iter()
+                .map(|&(i, _)| i)
+                .filter(|&i| !taken[i] && cone_of(i).is_some() && same(m, i))
+                .min_by(|&a, &b| {
+                    m.position
+                        .distance(lamps[a].position)
+                        .total_cmp(&m.position.distance(lamps[b].position))
+                });
+            if let Some(i) = hit {
+                taken[i] = true;
+            }
+            found.push(hit);
+        }
+        // Os que valem: os de menor distância, com a vantagem de quem fica.
+        let mut cands: Vec<(f32, usize)> = order
+            .iter()
+            .filter(|&&(i, _)| cone_of(i).is_some())
+            .map(|&(i, d)| {
+                let stays = self
+                    .spot_memory
+                    .iter()
+                    .zip(&found)
+                    .any(|(m, f)| !m.leaving && *f == Some(i));
+                (if stays { d - SPOT_STAY } else { d }, i)
+            })
+            .collect();
+        cands.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let chosen: Vec<usize> = cands.iter().take(MAX_SHADOW_SPOTS).map(|c| c.1).collect();
+
+        // As lembranças que ficam: acendendo (escolhidas) ou apagando.
+        let mut memory: Vec<(SpotMemory, usize)> = Vec::new();
+        for (m, f) in self.spot_memory.iter().zip(&found) {
+            let Some(i) = *f else { continue };
+            let cone = cone_of(i).expect("holofote com sombra");
+            let mut m = *m;
+            m.position = lamps[i].position;
+            m.direction = cone.direction.normalize_or(Vec3::NEG_Y);
+            if chosen.contains(&i) && !m.leaving {
+                m.weight = (m.weight + dt / SPOT_FADE).min(1.0);
+            } else {
+                m.leaving = true;
+                m.weight -= dt / SPOT_FADE;
+                if m.weight <= 0.0 {
+                    continue;
+                }
+            }
+            memory.push((m, i));
+        }
+        // Só uma camada a mais: das que apagam, fica a mais acesa.
+        let mut leaving: Vec<usize> = (0..memory.len()).filter(|&k| memory[k].0.leaving).collect();
+        leaving.sort_by(|&a, &b| memory[b].0.weight.total_cmp(&memory[a].0.weight));
+        let drop: Vec<usize> = leaving.iter().skip(1).copied().collect();
+        let mut k = 0;
+        memory.retain(|_| {
+            k += 1;
+            !drop.contains(&(k - 1))
+        });
+        // Os novos: numa camada livre; numa troca (com alguém apagando),
+        // acendem aos poucos.
+        let fading = memory.iter().any(|(m, _)| m.leaving);
+        for &i in &chosen {
+            if memory.iter().any(|(m, j)| *j == i && !m.leaving) {
+                continue;
+            }
+            let free = (0..SPOT_LAYERS).find(|l| memory.iter().all(|(m, _)| m.layer != *l));
+            let layer = match free {
+                Some(l) => l,
+                None => {
+                    // Todas ocupadas: tira a que está apagando.
+                    let Some(k) = memory.iter().position(|(m, _)| m.leaving) else {
+                        break;
+                    };
+                    memory.remove(k).0.layer
+                }
+            };
+            let cone = cone_of(i).expect("holofote com sombra");
+            memory.push((
+                SpotMemory {
+                    position: lamps[i].position,
+                    direction: cone.direction.normalize_or(Vec3::NEG_Y),
+                    layer,
+                    weight: if fading {
+                        (dt / SPOT_FADE).min(1.0)
+                    } else {
+                        1.0
+                    },
+                    leaving: false,
+                    drawn: None,
+                },
+                i,
+            ));
+        }
+        let picks = memory
+            .iter()
+            .enumerate()
+            .map(|(k, (m, i))| {
+                let l = &lamps[*i];
+                let (view_proj, texel) = spot_view_proj(
+                    l.position,
+                    l.range,
+                    cone_of(*i).expect("holofote com sombra"),
+                );
+                SpotPick {
+                    lamp: *i,
+                    memory: k,
+                    layer: m.layer,
+                    weight: m.weight,
+                    view_proj,
+                    texel,
+                }
+            })
+            .collect();
+        self.spot_memory = memory.into_iter().map(|(m, _)| m).collect();
+        picks
+    }
+
+    /// As lâmpadas de `order` no formato da GPU, com a camada da sombra dos
+    /// holofotes de `spots`.
+    fn lamps_uniform(
+        &self,
+        order: &[(usize, f32)],
+        srgb: bool,
+        spots: &[SpotPick],
+    ) -> LampsUniform {
         let mut out = LampsUniform {
             count: [0; 4],
-            shadow_mats: [[0.0; 16]; MAX_SHADOW_SPOTS],
+            shadow_mats: [[0.0; 16]; SPOT_LAYERS],
             items: [LampGpu::default(); MAX_LAMPS],
         };
-        let mut mats = Vec::new();
-        for (slot, (_, l)) in out.items.iter_mut().zip(list.iter()) {
+        for p in spots {
+            out.shadow_mats[p.layer] = p.view_proj.to_cols_array();
+        }
+        for (slot, &(i, _)) in out.items.iter_mut().zip(order) {
+            let l = &self.lamps[i];
             let c = if srgb { l.color.to_linear() } else { l.color };
             let k = l.intensity.max(0.0);
             let (dir, cos_out, cos_in, spot) = match l.cone {
@@ -1363,26 +1552,46 @@ impl Renderer3D {
                 }
                 None => (Vec3::NEG_Y, -1.0, -1.0, 0.0),
             };
-            let (mut layer, mut texel) = (0.0, 0.0);
-            if let Some(cone) = l.cone
-                && l.shadow
-                && mats.len() < spot_shadows
-            {
-                let (m, k) = spot_view_proj(l.position, l.range, cone);
-                out.shadow_mats[mats.len()] = m.to_cols_array();
-                mats.push(m);
-                layer = mats.len() as f32;
-                texel = k;
-            }
+            let (layer, texel, weight) = spots
+                .iter()
+                .find(|p| p.lamp == i)
+                .map_or((0.0, 0.0, 0.0), |p| {
+                    ((p.layer + 1) as f32, p.texel, p.weight)
+                });
             *slot = LampGpu {
                 pos_range: l.position.extend(l.range.max(0.01)).to_array(),
-                color: [c.r * k, c.g * k, c.b * k, 1.0],
+                // w: quanto da sombra vale (numa troca, aos poucos).
+                color: [c.r * k, c.g * k, c.b * k, weight],
                 dir_cos: dir.extend(cos_out).to_array(),
                 cone: [cos_in, spot, layer, texel],
             };
         }
-        out.count[0] = list.len().min(MAX_LAMPS) as u32;
-        (out, mats)
+        out.count[0] = order.len() as u32;
+        out
+    }
+
+    /// O que vai num mapa de sombras: a câmera da luz e quem faz sombra (a
+    /// posição, a malha, a imagem, os ossos). `None`: muda sozinho a cada
+    /// quadro (algo balançando com o vento).
+    fn shadow_key(&self, view_proj: Mat4, list: &[usize]) -> Option<u64> {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        bytemuck::bytes_of(&view_proj.to_cols_array()).hash(&mut h);
+        self.shadow_map.spot_resolution.hash(&mut h);
+        let wind = self.wind.strength > 0.0;
+        for &i in list {
+            let d = &self.draws[i];
+            if wind && d.instance.material[1] > 0.0 {
+                return None;
+            }
+            (d.mesh.0, d.texture.0, d.two_sided, d.cutout).hash(&mut h);
+            bytemuck::bytes_of(&d.instance).hash(&mut h);
+            if let Some(slot) = d.joints {
+                let a = slot as usize * MAX_JOINTS;
+                bytemuck::cast_slice::<_, u8>(&self.joint_data[a..a + MAX_JOINTS]).hash(&mut h);
+            }
+        }
+        Some(h.finish())
     }
 
     /// Desenha um mapa de sombras: os grupos e, um por chamada, os com ossos.
@@ -1568,7 +1777,16 @@ impl Renderer3D {
                 resolution,
                 spot_resolution,
             );
+            // Camadas novas: tudo é desenhado de novo.
+            for m in &mut self.spot_memory {
+                m.drawn = None;
+            }
         }
+        let now = web_time::Instant::now();
+        let dt = self
+            .last_frame
+            .map_or(0.0, |t| now.duration_since(t).as_secs_f32().min(0.1));
+        self.last_frame = Some(now);
 
         let l = &self.light;
         let c4 = |c: Color| {
@@ -1636,19 +1854,22 @@ impl Renderer3D {
             },
         };
         queue.write_buffer(&self.view_buffer, 0, bytemuck::bytes_of(&view));
-        let (lamps, spot_mats) = self.lamps_uniform(
-            &Frustum::of(view_proj),
-            srgb,
-            if wants_spots { MAX_SHADOW_SPOTS } else { 0 },
-        );
+        let order = self.lamp_order(&Frustum::of(view_proj));
+        let spots = if wants_spots {
+            self.pick_spots(&order, dt)
+        } else {
+            self.spot_memory.clear();
+            Vec::new()
+        };
+        let lamps = self.lamps_uniform(&order, srgb, &spots);
         queue.write_buffer(&self.lamp_buffer, 0, bytemuck::bytes_of(&lamps));
         // A vista de cada holofote: a do jogo, com a câmera da luz.
-        for (m, (buffer, _)) in spot_mats.iter().zip(&self.spot_views) {
+        for p in &spots {
             let v = ViewUniform3 {
-                light_view_proj: m.to_cols_array(),
+                light_view_proj: p.view_proj.to_cols_array(),
                 ..view
             };
-            queue.write_buffer(buffer, 0, bytemuck::bytes_of(&v));
+            queue.write_buffer(&self.spot_views[p.layer].0, 0, bytemuck::bytes_of(&v));
         }
 
         // Agrupa por malha, textura e sombra (uma chamada por grupo); os com
@@ -1692,16 +1913,23 @@ impl Renderer3D {
         } else {
             Vec::new()
         };
-        // O que cada holofote com sombra vê.
-        let spot_lists: Vec<Vec<usize>> = spot_mats
-            .iter()
-            .map(|m| {
-                let f = Frustum::of(*m);
-                (0..self.draws.len())
-                    .filter(|&i| self.draws[i].cast_shadow && seen(&f, &self.draws[i]))
-                    .collect()
-            })
-            .collect();
+        // O que cada holofote com sombra vê. Se for igual ao do quadro
+        // anterior (a luz parada e nada mexendo na frente dela), a camada
+        // fica como estava.
+        let mut spot_lists: Vec<Vec<usize>> = Vec::new();
+        let mut redraw = Vec::new();
+        for p in &spots {
+            let f = Frustum::of(p.view_proj);
+            let list: Vec<usize> = (0..self.draws.len())
+                .filter(|&i| self.draws[i].cast_shadow && seen(&f, &self.draws[i]))
+                .collect();
+            let key = self.shadow_key(p.view_proj, &list);
+            let memory = &mut self.spot_memory[p.memory];
+            let same = key.is_some() && memory.drawn == key;
+            memory.drawn = key;
+            redraw.push(!same);
+            spot_lists.push(if same { Vec::new() } else { list });
+        }
         let spot_total: usize = spot_lists.iter().map(Vec::len).sum();
         // As transparentes vão depois de todas, de trás para a frente.
         let eye3 = self.camera.position;
@@ -1821,8 +2049,18 @@ impl Renderer3D {
             );
         }
         for (k, (groups, skinned)) in spot_groups.iter().enumerate() {
-            let mut pass = depth_pass(encoder, &self.shadow_map.spot_layers[k]);
-            calls += self.shadow_pass(&mut pass, &self.spot_views[k].1, groups, skinned, textures);
+            if !redraw[k] {
+                continue;
+            }
+            let layer = spots[k].layer;
+            let mut pass = depth_pass(encoder, &self.shadow_map.spot_layers[layer]);
+            calls += self.shadow_pass(
+                &mut pass,
+                &self.spot_views[layer].1,
+                groups,
+                skinned,
+                textures,
+            );
         }
 
         // 2. O céu e as malhas (e, no segundo alvo, o que brilha).
@@ -1985,7 +2223,8 @@ impl Renderer3D {
             draw_calls: calls + self.transparent.len() as u32,
             lamps: lamps.count[0],
             halo,
-            spot_shadows: spot_mats.len() as u32,
+            spot_shadows: spots.len() as u32,
+            spot_redrawn: redraw.iter().filter(|r| **r).count() as u32,
         };
         self.draws.clear();
         self.joint_data.clear();
