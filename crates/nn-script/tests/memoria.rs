@@ -254,3 +254,69 @@ fn base_bytes(h: &Headless<SceneStack>) -> u64 {
     let _ = h;
     h2.ctx.renderer.texture_bytes()
 }
+
+/// Nos testes de jogo (e no `rodar_jogo`): a cena que sai é liberada na
+/// própria troca, e uma tela de carregamento não tira da memória o que a cena
+/// de antes e a nova usam.
+#[test]
+fn nos_testes_a_cena_que_saiu_sai_da_memoria_na_troca() {
+    let cena = |me: &str| {
+        format!(
+            r#"local c = {{ preload = {{ "img/{me}.png", "img/comum.png" }} }}
+function c:enter() self.img = nn.assets.texture("img/{me}.png"); self.comum = nn.assets.texture("img/comum.png") end
+function c:draw() nn.draw.sprite(self.img, 0, 0); nn.draw.sprite(self.comum, 0, 0) end
+return c
+"#
+        )
+        .into_bytes()
+    };
+    let dir = projeto(
+        "troca-nos-testes",
+        &[
+            ("config.lua", b"return { start = \"cenas/a.lua\" }".to_vec()),
+            ("img/a.png", png(64, 64)),
+            ("img/b.png", png(128, 64)),
+            ("img/comum.png", png(16, 16)),
+            ("cenas/a.lua", cena("a")),
+            ("cenas/b.lua", cena("b")),
+            ("cenas/tela.lua", b"return {}".to_vec()),
+            (
+                "testes/troca.lua",
+                br#"local function ir(t, para, opts)
+  local antes = nn.debug.stats().total_loads
+  nn.scene.switch(para, nil, opts)
+  t:wait_until(function() return t:scene_path() == para end, 3)
+  t:frames(1)
+  return nn.debug.stats().total_loads - antes, nn.debug.stats().texture_mb
+end
+test("troca", function(t)
+  t:open("cenas/a.lua")
+  t:frames(1)
+  local base = nn.debug.stats().texture_mb - (64 * 64 + 16 * 16) * 4 / 1048576
+  local function so(w, h) return base + (w * h + 16 * 16) * 4 / 1048576 end
+  local n, mb = ir(t, "cenas/b.lua")
+  t:check(n == 1, "sem tela carregou " .. n)
+  t:check(math.abs(mb - so(128, 64)) < 1e-6, "sem tela: a imagem da cena a ficou")
+  n, mb = ir(t, "cenas/a.lua", { loading = "cenas/tela.lua" })
+  t:check(n == 1, "com tela carregou " .. n .. " (a imagem comum saiu e voltou?)")
+  t:check(math.abs(mb - so(64, 64)) < 1e-6, "com tela: a imagem da cena b ficou")
+end)
+"#
+                .to_vec(),
+            ),
+        ],
+    );
+    let project = nn_script::Project::open(&dir).unwrap();
+    let summary = match nn_script::testing::run_tests(&project, &Default::default(), |_| {}) {
+        Ok(s) => s,
+        Err(e) => {
+            if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+                panic!("GPU obrigatória mas indisponível: {e}");
+            }
+            return;
+        }
+    };
+    assert!(summary.file_errors.is_empty(), "{:?}", summary.file_errors);
+    assert_eq!(summary.results.len(), 1);
+    assert!(summary.ok(), "{:?}", summary.results[0].failure);
+}

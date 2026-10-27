@@ -262,3 +262,103 @@ fn o_config_lua_tambem_roda_sem_o_os() {
     let e = Project::open(&dir).unwrap_err().to_string();
     assert!(e.contains("os.execute não existe"), "{e}");
 }
+
+/// Ler um arquivo fora da pasta do jogo dá o mesmo erro no desenvolvimento
+/// e no jogo exportado (que só leva a pasta): antes, no desenvolvimento, lia.
+#[test]
+fn arquivos_so_da_pasta_do_jogo() {
+    let dir = projeto(
+        "fora",
+        &[
+            ("dados/fases.txt", "três fases"),
+            (
+                "main.lua",
+                r#"local c = {}
+function c:enter()
+  dentro = nn.assets.read("dados/fases.txt")
+  voltando = nn.assets.read("dados/../dados/fases.txt")
+  local ok, e = pcall(nn.assets.read, "/etc/hostname")
+  absoluto = (not ok) and tostring(e) or "leu"
+  ok, e = pcall(nn.assets.read, "../fora.txt")
+  subindo = (not ok) and tostring(e) or "leu"
+  ok, e = pcall(nn.assets.texture, "/tmp/x.png")
+  imagem = (not ok) and tostring(e) or "leu"
+  existe = nn.assets.exists("/etc/passwd") or nn.assets.exists("../fora.txt")
+end
+return c
+"#,
+            ),
+        ],
+    );
+    std::fs::write(dir.parent().unwrap().join("fora.txt"), "segredo").unwrap();
+    let Some((_h, rt)) = cena(&dir, "main.lua") else {
+        return;
+    };
+    assert_eq!(lua::<String>(&rt, "dentro"), "três fases");
+    assert_eq!(lua::<String>(&rt, "voltando"), "três fases");
+    // (As imagens já não saíam da pasta: o caminho delas é normalizado.)
+    assert_ne!(lua::<String>(&rt, "imagem"), "leu");
+    for var in ["absoluto", "subindo"] {
+        let e: String = lua(&rt, var);
+        assert!(e.contains("fora da pasta do jogo"), "{var}: {e}");
+    }
+    assert!(!lua::<bool>(&rt, "existe"));
+}
+
+/// Sem janela (`rodar_jogo`): o erro de um comportamento aparece uma vez
+/// (não uma por cópia) e o jogo segue; nos testes de jogo, ele para.
+#[test]
+fn sem_janela_o_erro_de_um_comportamento_nao_para_o_jogo() {
+    use nn_script::game_run::{GameRun, RunOptions};
+    let mut objs = String::new();
+    for i in 0..30 {
+        objs.push_str(&format!(
+            "{{ id = {}, name = \"b{i}\", components = {{ {{ type = \"behavior\", script = \"comps/quebra.lua\" }} }} }},\n",
+            i + 1
+        ));
+    }
+    let cena = format!("return {{ script = \"cenas/fase.lua\", objects = {{\n{objs}}} }}");
+    let dir = projeto(
+        "sem-janela",
+        &[
+            (
+                "config.lua",
+                r#"return { title = "x", start = "cenas/fase.cena" }"#,
+            ),
+            (
+                "comps/quebra.lua",
+                "local B = {}\nfunction B:update() local t = nil; return t.campo end\nreturn B\n",
+            ),
+            (
+                "cenas/fase.lua",
+                "local c = {}\nfunction c:update() quadros = (quadros or 0) + 1 end\nreturn c\n",
+            ),
+            ("cenas/fase.cena", &cena),
+        ],
+    );
+    let mut run = match GameRun::open(&dir, RunOptions::default()) {
+        Ok(r) => r,
+        Err(e) => {
+            if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+                panic!("GPU obrigatória mas indisponível: {e}");
+            }
+            return;
+        }
+    };
+    assert_eq!(run.run_frames(20), 20);
+    assert!(!run.has_error());
+    let quadros: i64 = run.runtime().lua().load("return quadros").eval().unwrap();
+    assert!(quadros >= 19, "{quadros}");
+    let report = run.take_report();
+    assert_eq!(report.errors.len(), 1, "{:?}", report.errors);
+    assert!(report.errors[0].error.isolated);
+
+    // Nos testes, o mesmo erro para o jogo.
+    let opts = RunOptions {
+        stop_on_behavior_errors: true,
+        ..RunOptions::default()
+    };
+    let mut run = GameRun::open(&dir, opts).unwrap();
+    assert!(run.run_frames(20) < 20);
+    assert!(run.has_error());
+}

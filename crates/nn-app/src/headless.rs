@@ -51,6 +51,7 @@ impl<G: Game> Headless<G> {
             None => crate::Storage::in_memory(),
         };
         let mut ctx = Context::new(&config, renderer, Audio::disabled(), size, save);
+        ctx.perf.simulated = true;
         let game = create(&mut ctx);
         Ok(Self {
             ctx,

@@ -175,6 +175,8 @@ pub fn run_test(
     let started = Instant::now();
     let mut run_opts = opts.run.clone();
     run_opts.scene = None;
+    // Num teste, o erro de um comportamento é uma falha (o jogo seguiria).
+    run_opts.stop_on_behavior_errors = true;
     let mut run = GameRun::new(project.clone(), run_opts)?;
     let limits = opts.limits.unwrap_or_default();
     let failure = match prepare(&mut run, case) {

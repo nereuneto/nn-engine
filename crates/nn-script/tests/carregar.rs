@@ -125,6 +125,11 @@ return c
     // O quadro da troca carrega tudo: 21 imagens e 5 sons.
     h.run_frames(1);
     assert!(rt.lua().load("return entrou").eval::<bool>().unwrap());
+    let atual: String = rt.lua().load("return nn.scene.current()").eval().unwrap();
+    assert_eq!(atual, "cenas/fase.cena");
+    // Os nomes do que carregou (até 16).
+    assert_eq!(h.ctx.perf.last_loaded.len(), 16);
+    assert!(h.ctx.perf.last_loaded.iter().all(|f| f.starts_with("imgs/") || f.starts_with("sons/")));
     // Exatamente uma vez cada: o pré-carregamento usa as mesmas opções que
     // a cena (senão a mesma imagem carregaria duas vezes).
     let troca = h.ctx.perf.last.loads;
@@ -234,4 +239,135 @@ return c
     h.run_frames(10);
     assert!(rt.lua().load("return entrou").eval::<bool>().unwrap());
     assert!(rt.take_errors().is_empty());
+}
+
+/// O que as regras usam (tocar um som, a música, mudar a imagem, criar um
+/// prefab) e os prefabs de um gerador também carregam antes.
+#[test]
+fn as_regras_e_os_prefabs_tambem_carregam_antes() {
+    let mut files = vec![
+        ("imgs/heroi.png".to_string(), png(16, 16, 3)),
+        ("imgs/heroi2.png".to_string(), png(16, 16, 5)),
+        ("imgs/moeda.png".to_string(), png(8, 8, 7)),
+        ("imgs/gema.png".to_string(), png(8, 8, 9)),
+        ("sons/pling.wav".to_string(), wav(300)),
+        ("sons/tema.wav".to_string(), wav(400)),
+        ("sons/brilho.wav".to_string(), wav(200)),
+        (
+            "prefabs/moeda.prefab".to_string(),
+            br#"return { format = 1, object = { id = 1, name = "moeda", components = { { type = "sprite", image = "imgs/moeda.png" } } } }"#.to_vec(),
+        ),
+        (
+            "prefabs/gema.prefab".to_string(),
+            br#"return { format = 1, object = { id = 1, name = "gema", components = { { type = "sprite", image = "imgs/gema.png" }, { type = "sound", sound = "sons/brilho.wav", autoplay = false } } } }"#.to_vec(),
+        ),
+        (
+            "cenas/menu.lua".to_string(),
+            br#"local c = {}
+function c:update() if not foi then foi = true nn.scene.switch("cenas/fase.cena") end end
+return c
+"#
+            .to_vec(),
+        ),
+        (
+            "cenas/fase.cena".to_string(),
+            br#"return { vars = { disparou = 0 }, objects = {
+  { id = 1, name = "heroi",
+    components = {
+      { type = "sprite", image = "imgs/heroi.png", pixel_art = true },
+      { type = "behavior", script = "nn:gerador", prefab = "prefabs/gema.prefab", intervalo = 0.2 },
+    },
+    events = {
+      { when = { { cond = "depois_de", segundos = 0.2 } }, actions = {
+        { act = "som", som = "sons/pling.wav" },
+        { act = "musica", acao = "tocar", som = "sons/tema.wav" },
+        { act = "imagem", alvo = "@este", imagem = "imgs/heroi2.png" },
+        { act = "criar", prefab = "prefabs/moeda.prefab", onde = "@este" },
+        { act = "variavel", var = "disparou", op = "somar", valor = 1 },
+      } },
+    } },
+} }"#
+            .to_vec(),
+        ),
+    ];
+    let dir = projeto("regras", &files);
+    files.clear();
+    let Some((mut h, rt)) = pilha(&dir, "cenas/menu.lua") else {
+        return;
+    };
+    h.run_frames(1);
+    // 4 imagens e 3 sons, todos no quadro da troca.
+    assert_eq!(h.ctx.perf.last.loads, 7, "carregados na troca");
+    // As regras disparam, o gerador cria gemas: nada carrega no meio.
+    for _ in 0..40 {
+        h.run_frames(1);
+        assert_eq!(h.ctx.perf.last.loads, 0);
+    }
+    assert!(rt.take_errors().is_empty(), "{:?}", rt.take_errors());
+    // E tudo aconteceu: a regra disparou, a moeda e as gemas nasceram.
+    let disparou: i64 = rt.lua().load("return nn.vars.disparou").eval().unwrap();
+    assert_eq!(disparou, 1);
+    let (_, cena) = rt.front();
+    let nomes: Vec<String> = rt
+        .lua()
+        .load("local c = ... local out = {} for _, o in ipairs(c.object_list) do if o.alive then out[#out + 1] = o.name end end return out")
+        .call(cena.unwrap())
+        .unwrap();
+    assert!(nomes.iter().any(|n| n == "moeda"), "{nomes:?}");
+    assert!(
+        nomes.iter().filter(|n| *n == "gema").count() >= 2,
+        "{nomes:?}"
+    );
+}
+
+/// Sem janela (`rodar_jogo`): um arquivo carregado no meio da cena aparece
+/// no relatório com o nome, e o tempo do quadro é o trabalho dele.
+#[test]
+fn sem_janela_o_relatorio_diz_o_que_carregou_no_meio() {
+    use nn_script::game_run::{GameRun, RunOptions};
+    let dir = projeto(
+        "no-meio",
+        &[
+            (
+                "config.lua".to_string(),
+                br#"return { title = "x", start = "cenas/lazy.lua" }"#.to_vec(),
+            ),
+            ("imgs/tarde.png".to_string(), png(32, 32, 3)),
+            (
+                "cenas/lazy.lua".to_string(),
+                br#"local c = {}
+function c:enter() self.n = 0 end
+function c:update()
+  self.n = self.n + 1
+  if self.n == 10 then self.img = nn.assets.texture("imgs/tarde.png") end
+  local s = nn.debug.stats()
+  coerente = s.frame_ms + 1e-6 >= s.update_ms
+end
+return c
+"#
+                .to_vec(),
+            ),
+        ],
+    );
+    let mut run = match GameRun::open(&dir, RunOptions::default()) {
+        Ok(r) => r,
+        Err(e) => {
+            if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+                panic!("GPU obrigatória mas indisponível: {e}");
+            }
+            return;
+        }
+    };
+    run.run_frames(30);
+    assert!(!run.has_error(), "{:?}", run.first_error());
+    let coerente: bool = run.runtime().lua().load("return coerente").eval().unwrap();
+    assert!(coerente, "frame_ms menor que update_ms sem janela");
+    let report = run.take_report();
+    assert_eq!(report.mid_loads.len(), 1, "{:?}", report.mid_loads);
+    assert_eq!(
+        report.mid_loads[0].files,
+        vec!["imgs/tarde.png".to_string()]
+    );
+    assert_eq!(report.mid_loads[0].scene, "cenas/lazy.lua");
+    assert!(report.perf.textures.0 > 0);
 }

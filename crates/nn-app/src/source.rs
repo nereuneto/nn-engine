@@ -43,6 +43,26 @@ pub fn normalize(path: &Path) -> String {
     parts.join("/")
 }
 
+/// O caminho fica dentro da pasta do jogo? Não vale caminho absoluto (`/x`,
+/// `C:\\x`) nem um que suba além dela (`../x`, `a/../../x`).
+pub fn inside_game(path: &Path) -> bool {
+    let mut depth = 0i32;
+    for c in path.components() {
+        match c {
+            Component::Normal(_) => depth += 1,
+            Component::ParentDir => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            Component::CurDir => {}
+            Component::RootDir | Component::Prefix(_) => return false,
+        }
+    }
+    true
+}
+
 /// Arquivos numa pasta do disco.
 #[derive(Debug, Clone)]
 pub struct DiskSource {

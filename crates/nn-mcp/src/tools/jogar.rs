@@ -372,8 +372,13 @@ fn write_report(out: &mut String, report: &Report) {
         out.push_str("\nErros:\n");
         for e in &report.errors {
             let msg = e.error.message.replace('\n', "\n    ");
+            let seguiu = if e.error.isolated {
+                " (só esse comportamento foi desligado, e o jogo seguiu)"
+            } else {
+                ""
+            };
             out.push_str(&format!(
-                "  {:.2} s  em {}:\n    {msg}\n",
+                "  {:.2} s  em {}{seguiu}:\n    {msg}\n",
                 e.time, e.error.scene
             ));
         }
@@ -418,6 +423,36 @@ fn write_report(out: &mut String, report: &Report) {
             p.worst.0,
             p.worst.1
         ));
+        out.push_str(&format!(
+            "No fim: {} texturas na memória ({:.1} MB){}. Sem placa de vídeo, as imagens não são desenhadas de verdade: o tempo do desenho na placa e o número de chamadas de desenho só aparecem no jogo aberto (F3).\n",
+            p.textures.0,
+            p.textures.1 as f64 / (1024.0 * 1024.0),
+            if p.objects > 0 {
+                format!(", {} objetos na cena", p.objects)
+            } else {
+                String::new()
+            }
+        ));
+    }
+    if !report.mid_loads.is_empty() {
+        out.push_str("\nCarregou no meio da cena (uma travada para quem joga; o que a cena vai usar pode ir na lista `preload` dela, ou num componente):\n");
+        for m in report.mid_loads.iter().take(10) {
+            let files = if m.files.is_empty() {
+                "(arquivos sem nome)".to_string()
+            } else {
+                m.files.join(", ")
+            };
+            out.push_str(&format!(
+                "  {:.2} s em {} ({:.1} ms): {files}\n",
+                m.time, m.scene, m.ms
+            ));
+        }
+        if report.mid_loads.len() > 10 {
+            out.push_str(&format!(
+                "  ... e mais {} vezes\n",
+                report.mid_loads.len() - 10
+            ));
+        }
     }
     if !report.animations.is_empty() {
         // Por modelo: as animações na ordem em que começaram.

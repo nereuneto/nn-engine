@@ -185,7 +185,7 @@ impl LoadingScene {
     pub(crate) fn new(next: LuaScene, screen: &LoadingScreen) -> Self {
         let screen = match screen {
             LoadingScreen::Default => None,
-            LoadingScreen::Scene(path) => Some(next.runtime().scene(path.clone())),
+            LoadingScreen::Scene(path) => Some(next.runtime().scene(path.clone()).keep_on_enter()),
         };
         Self {
             runtime: next.runtime().clone(),

@@ -173,3 +173,84 @@ fn a_cena_visual_quase_nao_aloca_memoria_a_cada_quadro() {
         "{por_quadro} bytes alocados pelo Lua por quadro (o limite é {limite})"
     );
 }
+
+/// Uma regra "encostar" em cada uma de muitas cópias (os inimigos de uma
+/// horda olhando os tiros) não confere todos com todos: só os que estão perto.
+#[test]
+fn encostar_em_muitas_copias_so_confere_os_de_perto() {
+    const BICHOS: usize = 400;
+    const TIROS: usize = 100;
+    let dir = std::env::temp_dir().join(format!("nn-desempenho-encostar-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("cenas")).unwrap();
+    std::fs::write(
+        dir.join("config.lua"),
+        r#"return { title = "Encostar", width = 640, height = 360, start = "cenas/fase.cena" }"#,
+    )
+    .unwrap();
+    let mut objs = String::new();
+    let regra = r#"events = { { when = { { cond = "encostar", quem = "@este", em = "tiro" } }, actions = { { act = "variavel", var = "toques", op = "somar", valor = 1 } } } }"#;
+    for i in 0..BICHOS {
+        objs.push_str(&format!(
+            "{{ id = {}, name = \"bicho\", x = {}, y = {}, components = {{ {{ type = \"shape\", w = 8, h = 8 }} }}, {regra} }},\n",
+            i + 1,
+            (i % 40) as i32 * 40 - 800,
+            (i / 40) as i32 * 40 - 200
+        ));
+    }
+    // Os tiros longe dos bichos, menos o primeiro, em cima do bicho 1.
+    for i in 0..TIROS {
+        let (x, y) = if i == 0 {
+            (-800, -200)
+        } else {
+            ((i % 20) as i32 * 40 - 800, 600 + (i / 20) as i32 * 40)
+        };
+        objs.push_str(&format!(
+            "{{ id = {}, name = \"tiro\", x = {x}, y = {y}, components = {{ {{ type = \"shape\", w = 4, h = 4 }} }} }},\n",
+            1000 + i
+        ));
+    }
+    std::fs::write(
+        dir.join("cenas/fase.cena"),
+        format!("return {{ vars = {{ toques = 0 }}, objects = {{\n{objs}}} }}"),
+    )
+    .unwrap();
+    let mut run = match GameRun::open(dir, RunOptions::default()) {
+        Ok(r) => r,
+        Err(e) => {
+            if std::env::var("NN_REQUIRE_GPU").is_ok_and(|v| v == "1") {
+                panic!("GPU obrigatória mas indisponível: {e}");
+            }
+            return;
+        }
+    };
+    run.run_frames(2);
+    assert!(!run.has_error(), "{:?}", run.first_error());
+    let lua = run.runtime().lua().clone();
+    let (_, scene) = run.runtime().front();
+    lua.globals().set("cena_da_frente", scene).unwrap();
+    lua.load(
+        r#"
+        local Object = getmetatable(cena_da_frente.object_list[1]).__index
+        local original = Object.touching
+        conferidos = 0
+        Object.touching = function(...) conferidos = conferidos + 1 return original(...) end
+        cena_da_frente = nil
+        "#,
+    )
+    .exec()
+    .unwrap();
+    const QUADROS: u64 = 5;
+    run.run_frames(QUADROS);
+    assert!(!run.has_error(), "{:?}", run.first_error());
+    let por_quadro = lua.globals().get::<u64>("conferidos").unwrap() / QUADROS;
+    eprintln!("{por_quadro} conferências por quadro");
+    // Todos com todos seriam 40 mil por quadro.
+    assert!(
+        por_quadro < (BICHOS * TIROS / 20) as u64,
+        "{por_quadro} conferências de toque por quadro"
+    );
+    // E o toque de verdade (o tiro em cima do bicho 1) contou uma vez.
+    let toques: i64 = lua.load("return nn.vars.toques").eval().unwrap();
+    assert_eq!(toques, 1);
+}
