@@ -28,5 +28,5 @@ FALHA rawget/rawset/rawequal/rawlen: type error, expected function, found nil
 
 ```
 
-bench: 1095.4 ms (resultado 163919)
+bench: 1029.3 ms (resultado 163919)
 

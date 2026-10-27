@@ -1,6 +1,6 @@
 # E1 — prova (com-som)
 
-Compilou em 21 s (sem cache: inclui as dependências).
+Compilou em 20 s (sem cache: inclui as dependências).
 
 | arquivo | tamanho | gzip -9 | brotli 11 |
 |---|---|---|---|
@@ -25,8 +25,8 @@ Os maiores pedaços do wasm final (twiggy; sem nomes, então só os tamanhos por
          27581 ┊     1.05% ┊ code[8]
          27314 ┊     1.04% ┊ code[2352]
          27020 ┊     1.03% ┊ data[125]
-       1995922 ┊    76.01% ┊ ... and 7283 more.
-       2625793 ┊   100.00% ┊ Σ [7295 Total Rows]
+       1996002 ┊    76.01% ┊ ... and 7283 more.
+       2625873 ┊   100.00% ┊ Σ [7295 Total Rows]
 ```
 
 As maiores crates (twiggy no wasm antes do wasm-opt, que ainda tem os nomes):
@@ -35,7 +35,7 @@ As maiores crates (twiggy no wasm antes do wasm-opt, que ainda tem os nomes):
      1190 KB  (seção) "function names" subsection
       732 KB  (seção) custom section '__wasm_bindgen_unstable'
       611 KB  naga
-      547 KB  (seção) data segment ".rodata"
+      548 KB  (seção) data segment ".rodata"
       345 KB  wgpu_core
       263 KB  core
       143 KB  wgpu

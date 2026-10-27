@@ -1,6 +1,6 @@
 # E1 — prova (sem-som)
 
-Compilou em 19 s (sem cache: inclui as dependências).
+Compilou em 20 s (sem cache: inclui as dependências).
 
 | arquivo | tamanho | gzip -9 | brotli 11 |
 |---|---|---|---|
@@ -25,8 +25,8 @@ Os maiores pedaços do wasm final (twiggy; sem nomes, então só os tamanhos por
          27581 ┊     1.08% ┊ code[7]
          27314 ┊     1.07% ┊ code[2253]
          27020 ┊     1.06% ┊ data[116]
-       1942454 ┊    75.92% ┊ ... and 6962 more.
-       2558454 ┊   100.00% ┊ Σ [6974 Total Rows]
+       1942534 ┊    75.92% ┊ ... and 6962 more.
+       2558534 ┊   100.00% ┊ Σ [6974 Total Rows]
 ```
 
 As maiores crates (twiggy no wasm antes do wasm-opt, que ainda tem os nomes):

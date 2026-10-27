@@ -26,7 +26,7 @@ ok    rawget/rawset/rawequal/rawlen
 
 ```
 
-bench: 47.1 ms (resultado 163919)
+bench: 47.4 ms (resultado 163919)
 
 ## piccolo 0.3
 
@@ -54,5 +54,5 @@ FALHA rawget/rawset/rawequal/rawlen: type error, expected function, found nil
 
 ```
 
-bench: 432.5 ms (resultado 163919)
+bench: 402.8 ms (resultado 163919)
 

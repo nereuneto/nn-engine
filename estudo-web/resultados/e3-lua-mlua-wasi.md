@@ -28,4 +28,4 @@ ok    rawget/rawset/rawequal/rawlen
 
 ```
 
-bench: 75.4 ms (resultado 163919)
+bench: 81.8 ms (resultado 163919)

@@ -1,4 +1,4 @@
    Compiling nn-core v0.8.0 (/home/runner/work/nn-engine/nn-engine/crates/nn-core)
    Compiling nn-render v0.8.0 (/home/runner/work/nn-engine/nn-engine/crates/nn-render)
    Compiling prova v0.1.0 (/home/runner/work/nn-engine/nn-engine/estudo-web/prova)
-    Finished `release` profile [optimized] target(s) in 19.18s
+    Finished `release` profile [optimized] target(s) in 19.60s
