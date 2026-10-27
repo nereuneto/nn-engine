@@ -354,7 +354,7 @@ fn fs_sky(in: SkyOut) -> FragOut {
         let r = star_hash(cell);
         if (r > 0.993) {
             let f = fract(g) - vec3<f32>(0.5);
-            let k = smoothstep(0.45, 0.0, length(f)) * (0.55 + 0.45 * star_hash(cell + vec3<f32>(1.7, 3.1, 5.3)));
+            let k = (1.0 - smoothstep(0.0, 0.45, length(f))) * (0.55 + 0.45 * star_hash(cell + vec3<f32>(1.7, 3.1, 5.3)));
             c = c + vec3<f32>(0.9, 0.95, 1.0) * (k * stars * smoothstep(0.0, 0.12, h));
         }
     }
