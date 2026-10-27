@@ -105,6 +105,8 @@ pub(crate) struct Shared {
     /// Quanto da cena nova já carregou (de 0 a 1), enquanto uma tela de
     /// carregamento aparece.
     pub progress: Option<f32>,
+    /// O arquivo da cena da frente.
+    pub current: String,
 }
 
 /// Acessa o contexto da engine. Só funciona dentro dos callbacks da cena.
@@ -668,7 +670,10 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
                 t.set("lua_mb", c.perf.lua_kb / 1024.0)?;
                 t.set("objects", c.perf.objects)?;
                 t.set("loads", c.perf.last.loads)?;
+                t.set("loaded", c.perf.last_loaded.clone())?;
                 t.set("total_loads", c.perf.total_loads)?;
+                t.set("sounds", c.audio.sound_count())?;
+                t.set("meshes", c.renderer.mesh_count())?;
                 Ok(t)
             })
         })?,
@@ -1112,6 +1117,15 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
         })?,
     )?;
     scene.set(
+        "current",
+        lua.create_function(|lua, ()| {
+            Ok(lua
+                .app_data_ref::<Shared>()
+                .map(|s| s.current.clone())
+                .filter(|c| !c.is_empty()))
+        })?,
+    )?;
+    scene.set(
         "progress",
         lua.create_function(|lua, ()| Ok(lua.app_data_ref::<Shared>().and_then(|s| s.progress)))?,
     )?;
@@ -1143,7 +1157,16 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
                 _ => match v {
                     Value::Nil => "nil".into(),
                     Value::Boolean(b) => b.to_string(),
-                    other => format!("{}: {:p}", other.type_name(), other.to_pointer()),
+                    // Um erro pego com pcall: a mensagem, em português.
+                    Value::Error(e) => crate::translate_error(&e.to_string()),
+                    // Como o tostring (que respeita o __tostring da tabela).
+                    other => lua
+                        .globals()
+                        .get::<Function>("tostring")
+                        .and_then(|f| f.call::<String>(other.clone()))
+                        .unwrap_or_else(|_| {
+                            format!("{}: {:p}", other.type_name(), other.to_pointer())
+                        }),
                 },
             })
             .collect();

@@ -297,6 +297,10 @@ struct Inner {
     errors: RefCell<Vec<SceneError>>,
     /// O módulo do jogo sem janela e do jogo aberto (`testes.lua`).
     driver: RefCell<Option<Table>>,
+    /// Jogo sem janela: as regras que dispararam nas cenas que saíram (a
+    /// cena, a lista), guardadas ao sair para ninguém segurar o `self` dela
+    /// (senão o que só ela usava não sai da memória na troca).
+    exited_fired: RefCell<Option<Vec<(String, Table)>>>,
     /// Jogo exportado: onde escrever os erros (e a tela simples para quem
     /// joga). `None` no jogo em desenvolvimento.
     report: RefCell<Option<Arc<report::ErrorReport>>>,
@@ -305,6 +309,8 @@ struct Inner {
     /// Erros de comportamentos que foram desligados (a cena seguiu): a cena
     /// e a mensagem, para a tela do jogo em desenvolvimento.
     behavior_errors: RefCell<Vec<(String, String)>>,
+    /// Os erros de comportamento já mostrados nesta cena.
+    behavior_seen: RefCell<HashSet<(String, String)>>,
 }
 
 /// Um erro de script que parou uma cena.
@@ -314,6 +320,8 @@ pub struct SceneError {
     pub scene: String,
     /// A mensagem, já traduzida, com o arquivo e a linha.
     pub message: String,
+    /// Erro num comportamento: só ele foi desligado, e o jogo seguiu.
+    pub isolated: bool,
 }
 
 /// Alvo do log dos erros que param uma cena (o [`game_run`] os pega direto
@@ -399,9 +407,11 @@ impl ScriptRuntime {
                 front: RefCell::new((String::new(), None)),
                 errors: RefCell::new(Vec::new()),
                 driver: RefCell::new(None),
+                exited_fired: RefCell::new(None),
                 report: RefCell::new(None),
                 watchdog: RefCell::new(None),
                 behavior_errors: RefCell::new(Vec::new()),
+                behavior_seen: RefCell::new(HashSet::new()),
             }),
         };
         runtime.install_behavior_errors()?;
@@ -454,8 +464,48 @@ impl ScriptRuntime {
         Ok(d)
     }
 
+    /// Jogo sem janela: começa (ou para) a guardar as regras que dispararam
+    /// nas cenas que saem.
+    pub(crate) fn watch_exited_fired(&self, on: bool) {
+        *self.inner.exited_fired.borrow_mut() = on.then(Vec::new);
+    }
+
+    /// As regras das cenas que saíram desde a última chamada.
+    pub(crate) fn take_exited_fired(&self) -> Vec<(String, Table)> {
+        self.inner
+            .exited_fired
+            .borrow_mut()
+            .as_mut()
+            .map(std::mem::take)
+            .unwrap_or_default()
+    }
+
+    fn keep_exited_fired(&self, path: &str, instance: Option<&Table>) {
+        let (Some(instance), Some(driver)) = (instance, self.inner.driver.borrow().clone()) else {
+            return;
+        };
+        if self.inner.exited_fired.borrow().is_none() {
+            return;
+        }
+        let Ok(f) = driver.get::<Function>("fired") else {
+            return;
+        };
+        if let Ok(Some(list)) = f.call::<Option<Table>>(instance.clone())
+            && let Some(v) = self.inner.exited_fired.borrow_mut().as_mut()
+        {
+            v.push((path.to_string(), list));
+        }
+    }
+
     fn set_front(&self, path: &str, instance: Option<Table>) {
+        if instance.is_none() {
+            // Uma cena começando: os erros dela aparecem de novo.
+            self.inner.behavior_seen.borrow_mut().clear();
+        }
         *self.inner.front.borrow_mut() = (path.to_string(), instance);
+        if let Some(mut shared) = self.inner.lua.app_data_mut::<api::Shared>() {
+            shared.current = path.to_string();
+        }
         if let Some(w) = &*self.inner.watchdog.borrow() {
             w.set_scene(path);
         }
@@ -487,6 +537,16 @@ impl ScriptRuntime {
     fn behavior_error(&self, text: &str) {
         let msg = translate_error(text);
         let scene = self.inner.front.borrow().0.clone();
+        // O mesmo erro em cada cópia de um prefab (800 inimigos) aparece uma
+        // vez só, por cena.
+        if !self
+            .inner
+            .behavior_seen
+            .borrow_mut()
+            .insert((scene.clone(), without_object(&msg)))
+        {
+            return;
+        }
         log::error!(target: SCENE_ERROR_TARGET, "erro em {scene}:\n{msg}");
         let mut errors = self.inner.errors.borrow_mut();
         if errors.len() >= MAX_ERRORS {
@@ -495,6 +555,7 @@ impl ScriptRuntime {
         errors.push(SceneError {
             scene: scene.clone(),
             message: msg.clone(),
+            isolated: true,
         });
         drop(errors);
         if let Some(report) = self.inner.report.borrow().clone() {
@@ -859,6 +920,22 @@ load = function(chunk, name, mode, ...)
 end
 "##;
 
+/// A mensagem do erro de um comportamento sem o nome do objeto (para o
+/// mesmo erro em várias cópias aparecer uma vez).
+fn without_object(msg: &str) -> String {
+    const MARK: &str = " do objeto \"";
+    match msg.find(MARK) {
+        Some(i) => {
+            let rest = &msg[i + MARK.len()..];
+            match rest.find('"') {
+                Some(j) => format!("{}{}", &msg[..i], &rest[j + 1..]),
+                None => msg.to_string(),
+            }
+        }
+        None => msg.to_string(),
+    }
+}
+
 /// Uma cena escrita em Lua.
 pub struct LuaScene {
     runtime: ScriptRuntime,
@@ -877,6 +954,10 @@ pub struct LuaScene {
     prepared: bool,
     /// O que a cena carregou antes de começar (e segura enquanto existir).
     preloaded: preload::Preloaded,
+    /// Ao começar, libera o que nenhuma cena usa mais. A tela de
+    /// carregamento não libera: o que a cena de antes e a nova usam fica, e
+    /// quem libera é a nova, depois de carregar.
+    unload_on_enter: bool,
 }
 
 impl std::fmt::Debug for LuaScene {
@@ -903,6 +984,7 @@ impl LuaScene {
             module: None,
             prepared: false,
             preloaded: preload::Preloaded::default(),
+            unload_on_enter: true,
         }
     }
 
@@ -934,6 +1016,12 @@ impl LuaScene {
 
     pub(crate) fn preloaded(&self) -> &preload::Preloaded {
         &self.preloaded
+    }
+
+    /// Não libera nada ao começar (a tela de carregamento).
+    pub(crate) fn keep_on_enter(mut self) -> Self {
+        self.unload_on_enter = false;
+        self
     }
 
     pub(crate) fn preload_next(&mut self, ctx: &mut Context) {
@@ -975,6 +1063,7 @@ impl LuaScene {
         errors.push(SceneError {
             scene: self.path.clone(),
             message: msg.clone(),
+            isolated: false,
         });
         drop(errors);
         let report = self.runtime.inner.report.borrow().clone();
@@ -1243,6 +1332,8 @@ impl LuaScene {
 
 impl Scene for LuaScene {
     fn enter(&mut self, ctx: &mut Context) {
+        // Os arquivos só da pasta do jogo, como no jogo exportado.
+        ctx.assets.set_confined(true);
         // Com erro ao carregar, a cena da frente fica sem `self`.
         self.runtime.set_front(&self.path, None);
         // O que a cena vai usar carrega antes de ela montar os objetos (o
@@ -1253,11 +1344,15 @@ impl Scene for LuaScene {
         }
         self.load(ctx);
         // A cena de antes já saiu: o que só ela usava sai da memória.
-        self.runtime.unload_unused(ctx);
+        if self.unload_on_enter {
+            self.runtime.unload_unused(ctx);
+        }
     }
 
     fn exit(&mut self, ctx: &mut Context) {
         self.call(ctx, "exit", ());
+        self.runtime
+            .keep_exited_fired(&self.path, self.instance.as_ref());
     }
 
     fn resume(&mut self, ctx: &mut Context) {

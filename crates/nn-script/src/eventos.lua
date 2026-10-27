@@ -89,18 +89,99 @@ end
 --- Objetos que um campo "quem/alvo" quer dizer, para a ligação `b`.
 local function resolve(scene, sel, b, keep_dead)
   if sel == nil or sel == "" or sel == "@jogador" then
-    return M.targets(scene, "")
+    return M.targets_ref(scene, "")
   elseif sel == "@este" then
     if b.este then
       if b.este.alive or keep_dead then return { b.este } end
       return {}
     end
-    return M.targets(scene, "")
+    return M.targets_ref(scene, "")
   elseif sel == "@outro" then
     if b.outro and (b.outro.alive or keep_dead) then return { b.outro } end
     return {}
   end
-  return alive_list(scene:find_all(sel))
+  -- A lista do quadro, guardada (não copiar: quem chama só lê).
+  return M.targets_ref(scene, sel)
+end
+
+-- Toques entre duas listas -----------------------------------------------------
+--
+-- Uma regra "encostar" num prefab roda em cada cópia: 800 inimigos olhando
+-- 100 tiros são 80 mil conferências por quadro. Com muitos em `bs` (no 2D), uma
+-- grade do quadro deixa conferir só os que estão perto.
+
+local GRID_MIN = 24
+
+local function touch_grid(scene, list)
+  local step = scene._ev_step or 0
+  local cache = scene._touch_grid
+  if not cache or cache.step ~= step then
+    cache = { step = step, grids = {} }
+    scene._touch_grid = cache
+  end
+  local g = cache.grids[list]
+  if g then return g end
+  local xs, ys = {}, {}
+  local maxw, maxh = 0, 0
+  for i, o in ipairs(list) do
+    local x, y = o:world_transform()
+    local w, h = o:bounds()
+    xs[i], ys[i] = x, y
+    if w > maxw then maxw = w end
+    if h > maxh then maxh = h end
+  end
+  local cs = math.max(32, 2 * math.max(maxw, maxh) + 8)
+  local cells = {}
+  for i, o in ipairs(list) do
+    local key = math.floor(xs[i] / cs) * 1048576 + math.floor(ys[i] / cs)
+    local c = cells[key]
+    if c then c[#c + 1] = o else cells[key] = { o } end
+  end
+  g = { cs = cs, cells = cells, maxw = maxw, maxh = maxh }
+  cache.grids[list] = g
+  return g
+end
+
+--- Chama `fn(a, o)` para cada par (a de `as`, o de `bs`) que se toca.
+local function each_touching(scene, as, bs, fn)
+  if scene._3d or #bs < GRID_MIN then
+    for _, a in ipairs(as) do
+      for _, o in ipairs(bs) do
+        if a:touching(o) then fn(a, o) end
+      end
+    end
+    return
+  end
+  local g = touch_grid(scene, bs)
+  local cs = g.cs
+  for _, a in ipairs(as) do
+    if a.alive then
+      local ax, ay = a:world_transform()
+      local aw, ah = a:bounds()
+      -- A margem do touching (2) e uma folga para o que andou neste quadro.
+      local rx, ry = aw + g.maxw + 2 + cs * 0.25, ah + g.maxh + 2 + cs * 0.25
+      local x0, x1 = math.floor((ax - rx) / cs), math.floor((ax + rx) / cs)
+      local y0, y1 = math.floor((ay - ry) / cs), math.floor((ay + ry) / cs)
+      if (x1 - x0 + 1) * (y1 - y0 + 1) > #bs then
+        -- Um objeto enorme: mais rápido olhar todos.
+        for _, o in ipairs(bs) do
+          if a:touching(o) then fn(a, o) end
+        end
+      else
+        local cells = g.cells
+        for cx = x0, x1 do
+          for cy = y0, y1 do
+            local c = cells[cx * 1048576 + cy]
+            if c then
+              for _, o in ipairs(c) do
+                if a:touching(o) then fn(a, o) end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
 end
 
 -- Texto com {variavel} trocado pelo valor.
@@ -325,15 +406,12 @@ E.CONDITIONS = {
     tick = function(ctx, p, st)
       local b0 = ctx.base
       local cur, new = {}, {}
-      for _, a in ipairs(resolve(ctx.scene, p.quem, b0)) do
-        for _, o in ipairs(resolve(ctx.scene, p.em, b0)) do
-          if a:touching(o) then
-            local k = pair_key(a, o)
-            cur[k] = true
-            if not (st.prev and st.prev[k]) then table.insert(new, { este = a, outro = o }) end
-          end
-        end
-      end
+      local prev = st.prev
+      each_touching(ctx.scene, resolve(ctx.scene, p.quem, b0), resolve(ctx.scene, p.em, b0), function(a, o)
+        local k = pair_key(a, o)
+        cur[k] = true
+        if not (prev and prev[k]) then table.insert(new, { este = a, outro = o }) end
+      end)
       st.prev, st.new = cur, new
     end,
     test = function(ctx, p, st) return st.new or {} end,
@@ -346,15 +424,11 @@ E.CONDITIONS = {
     tick = function(ctx, p, st)
       local b0 = ctx.base
       local cur, pairs_now = {}, {}
-      for _, a in ipairs(resolve(ctx.scene, p.quem, b0)) do
-        for _, o in ipairs(resolve(ctx.scene, p.em, b0)) do
-          if a:touching(o) then
-            local k = pair_key(a, o)
-            cur[k] = true
-            pairs_now[k] = { este = a, outro = o }
-          end
-        end
-      end
+      each_touching(ctx.scene, resolve(ctx.scene, p.quem, b0), resolve(ctx.scene, p.em, b0), function(a, o)
+        local k = pair_key(a, o)
+        cur[k] = true
+        pairs_now[k] = { este = a, outro = o }
+      end)
       local left = {}
       for k, m in pairs(st.prev_pairs or {}) do
         if not cur[k] and m.este.alive and m.outro.alive then table.insert(left, m) end
@@ -370,11 +444,9 @@ E.CONDITIONS = {
     lua = "{quem}:touching({em})",
     test = function(ctx, p, st, b)
       local out = {}
-      for _, a in ipairs(resolve(ctx.scene, p.quem, b)) do
-        for _, o in ipairs(resolve(ctx.scene, p.em, b)) do
-          if a:touching(o) then table.insert(out, { este = a, outro = o }) end
-        end
-      end
+      each_touching(ctx.scene, resolve(ctx.scene, p.quem, b), resolve(ctx.scene, p.em, b), function(a, o)
+        table.insert(out, { este = a, outro = o })
+      end)
       return out
     end,
   },
@@ -1702,6 +1774,7 @@ end
 function E.step(scene, dt)
   local list = scene._event_ctx
   if not list then return end
+  scene._ev_step = (scene._ev_step or 0) + 1
   -- Os sinais deste quadro; os que chegarem enquanto as ações rodam ficam
   -- para o próximo.
   scene._cur_signals = scene._signals or {}

@@ -33,7 +33,7 @@ pub use context::{Context, Game, Screenshot};
 pub use headless::Headless;
 pub use perf::{FrameTimes, Perf};
 pub use scene::{Fade, Scene, SceneStack, Transition};
-pub use source::{AssetSource, DiskSource, Pack, PackError, list_dir, normalize};
+pub use source::{AssetSource, DiskSource, Pack, PackError, inside_game, list_dir, normalize};
 pub use storage::{SAVE_FILE, Storage, data_dir, slug};
 pub use ui::{Panel, PanelOptions, Theme, Ui};
 pub use window::{AppError, run};

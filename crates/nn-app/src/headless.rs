@@ -51,6 +51,7 @@ impl<G: Game> Headless<G> {
             None => crate::Storage::in_memory(),
         };
         let mut ctx = Context::new(&config, renderer, Audio::disabled(), size, save);
+        ctx.perf.simulated = true;
         let game = create(&mut ctx);
         Ok(Self {
             ctx,
@@ -117,9 +118,12 @@ impl<G: Game> Headless<G> {
         self.ctx.input.end_frame();
     }
 
-    /// Roda `n` frames de 1/60 s.
+    /// Roda `n` frames de 1/60 s (para antes se o jogo pedir para fechar).
     pub fn run_frames(&mut self, n: u32) {
         for _ in 0..n {
+            if self.ctx.exit_requested {
+                return;
+            }
             self.frame(Self::FRAME);
         }
     }

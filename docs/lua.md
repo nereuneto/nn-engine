@@ -313,7 +313,7 @@ No script, `obj.button`, `obj.bar`, `obj.slider`... são os componentes (`obj.bu
 | `obj:world_transform()` | Posição, rotação e escala no mundo (somando os pais). |
 | `obj:destroy()` | Tira o objeto (e os filhos) da cena. |
 | `obj.parent`, `obj.children`, `obj.name`, `obj.id` | A árvore de objetos. |
-| `obj.vx`, `obj.vy` | Num objeto **sem** corpo físico, velocidade: ele anda sozinho (tiros, enfeites). |
+| `obj.vx`, `obj.vy` | Num objeto **sem** corpo físico, velocidade: ele anda sozinho (tiros, enfeites). Com corpo, eles não fazem nada: use `obj.body.vx` ou `obj.body:set_velocity(x, y)`. |
 | `obj:behavior(nome)` | O comportamento (`"plataforma"`, `"nn:plataforma"` ou `"scripts/x.lua"`), ou `nil`. |
 | `obj:send(msg, ...)` | Chama `msg(...)` em todos os comportamentos do objeto que tiverem essa função: `heroi:send("dano", 1)`. |
 | `obj:bounds()` | Metade da largura e da altura (do corpo, da imagem ou da forma). |
@@ -728,7 +728,7 @@ nn testar
 2 testes: 1 passou, 1 falhou (2,30 s)
 ```
 
-Um teste que falha diz a linha e o motivo; se o jogo deu erro, o teste mostra o erro do jogo. `nn testar` sai com erro quando algum teste falha, então dá para usar num CI. Opções: `--filtro <texto>` (só os testes com o texto no nome), `--capturas <pasta>` (grava a tela de quem falhou e as capturas de `t:screenshot`) e `--tamanho 640x360` (a tela do jogo sem janela; menor roda mais rápido num computador sem placa de vídeo). No NN Studio, **Jogo > Conferir com os testes (Ctrl+F5)** mostra o resultado no Console, com link para a linha de cada falha. Pelo [servidor MCP](mcp.md), um agente de IA roda os mesmos testes com `rodar_testes`. Os modelos `visual`, `aventura`, `nave`, `visual3d` e `padrao` já vêm com `testes/jogo.lua`.
+Um teste que falha diz a linha e o motivo; se o jogo deu erro, o teste mostra o erro do jogo. `nn testar` sai com erro quando algum teste falha, então dá para usar num CI. Opções: `--filtro <texto>` (só os testes com o texto no nome), `--capturas <pasta>` (grava a tela de quem falhou e as capturas de `t:screenshot`), `--prints` (mostra os `print` também dos testes que passaram, para medir alguma coisa) e `--tamanho 640x360` (a tela do jogo sem janela; menor roda mais rápido num computador sem placa de vídeo). No NN Studio, **Jogo > Conferir com os testes (Ctrl+F5)** mostra o resultado no Console, com link para a linha de cada falha. Pelo [servidor MCP](mcp.md), um agente de IA roda os mesmos testes com `rodar_testes`. Os modelos `visual`, `aventura`, `nave`, `visual3d` e `padrao` já vêm com `testes/jogo.lua`.
 
 **Como os testes rodam.** Cada teste roda num jogo novo, que começa na cena inicial do `config.lua` já rodando (as regras "Quando começar" e o `enter` já rodaram). O jogo anda a 60 quadros por segundo de jogo, o mais rápido que der, sem som, com o `math.random` sempre na mesma sequência (o teste dá o mesmo resultado toda vez) e com o `nn.save` só na memória: os testes não mexem nos recordes de quem joga. O código do teste é Lua do próprio jogo: as funções `nn.*`, `nn.vars` e os objetos funcionam como num script, então dá para preparar a situação (`heroi:move_to(...)`, `nn.vars.vidas = 1`) antes de conferir. Um laço sem fim no jogo vira erro depois de 5 segundos, em vez de travar.
 
@@ -892,7 +892,9 @@ Usar uma ação que não foi criada com `bind` é um erro (para pegar erros de d
 | `animations(imagem)` | As [animações](#animações-anim) do `.anim` da imagem, por nome: `nn.assets.animations("assets/imagens/heroi.png").andar` (prontas para `nn.animator`). |
 | `keep(asset)` | Guarda uma imagem, spritesheet, som, modelo ou malha para sempre (a troca de cena não a descarrega) e devolve o mesmo asset. |
 
-Cada arquivo é carregado uma vez; pedir de novo devolve o mesmo. Imagens e sons alterados no disco são recarregados sozinhos.
+Cada arquivo é carregado uma vez; pedir de novo devolve o mesmo. Uma imagem pedida com outras opções (com e sem `pixel_art`) é outra textura na memória: use as mesmas opções em todo lugar. Imagens e sons alterados no disco são recarregados sozinhos.
+
+Os caminhos são a partir da pasta do jogo (`"imagens/heroi.png"`). Um caminho absoluto (`/home/...`, `C:\...`) ou que sai da pasta (`../`) dá erro, igual no jogo exportado, que só leva a pasta do jogo.
 
 **Memória ao trocar de cena.** Ao entrar numa cena, o que nenhuma cena usa mais sai da memória: as imagens, os sons, os modelos e as malhas 3D que só a cena anterior guardava (nos objetos dela, no `self` do script). O que outra cena ainda aberta usa (o jogo embaixo de uma pausa, por exemplo) fica, e o que um módulo do `require` guarda também. Para algo que toda cena usa e que não vale a pena carregar de novo a cada troca, como a música, use `nn.assets.keep`:
 
@@ -1009,10 +1011,10 @@ Opções de `mundo:body`:
 | `sensor` | Não colide, só avisa quando algo entra ou sai (moedas, espinhos, portas). |
 | `one_way` | Plataforma de mão única: só bloqueia quem vem de cima. |
 | `bounce` | 0 = para ao bater, 1 = quica sem perder velocidade. |
-| `layer`, `mask` | Camadas (bits): dois corpos interagem se a camada de um estiver na máscara do outro. |
+| `layer`, `mask` | Camadas (bits): dois corpos interagem se a camada de cada um estiver na máscara do outro (os dois lados; se só um tiver a camada do outro na máscara, eles se atravessam sem evento). |
 | `tag` | Rótulo livre. |
 
-O corpo tem os campos `x`, `y`, `vx`, `vy`, `gravity_scale`, `bounce`, `sensor`, `layer`, `mask` e `tag` (leitura e escrita), `id`, `type`, `width`, `height`, `radius`, `alive`, `on_ground`, `touching_left`, `touching_right`, `touching_top`, `touching_bottom` e `ground` (o corpo em que está apoiado). Métodos: `:set_position(x, y)`, `:set_velocity(x, y)`, `:overlaps()` (corpos encostando agora, respeitando camadas e máscaras), `:intersects(outro)` (os dois se sobrepõem? ignora camadas) e `:remove()`. Dá para comparar corpos com `==`.
+O corpo tem os campos `x`, `y`, `vx`, `vy`, `gravity_scale`, `bounce`, `sensor`, `layer`, `mask` e `tag` (leitura e escrita), `id`, `type`, `width`, `height`, `radius`, `alive`, `on_ground`, `touching_left`, `touching_right`, `touching_top`, `touching_bottom` e `ground` (o corpo em que está apoiado). Métodos: `:set_position(x, y)`, `:set_velocity(x, y)`, `:overlaps()` (corpos encostando agora, respeitando camadas e máscaras), `:intersects(outro)` (os dois se sobrepõem? ignora camadas) e `:remove()`. Dá para comparar corpos com `==`. Depois do `:remove()`, só `alive` (false) e `id` podem ser lidos: os outros campos dão erro. Num laço pelos eventos do passo, confira `alive` antes de ler um corpo que um evento anterior pode ter removido.
 
 **Inimigos que atravessam o jogador:** para o jogador e os inimigos não se empurrarem, ponha-os em camadas que não interagem e confira o contato com `:intersects`. Pisar em cima é o jogador caindo com os pés acima do centro do inimigo:
 
@@ -1034,7 +1036,7 @@ end
 
 O jogo de plataforma (`jogos/plataforma/lib/inimigos.lua`) tem uma lesma que patrulha (vira na parede com `touching_left`/`touching_right` e na beirada com `mapa:solid`) e um morcego que persegue o jogador quando ele chega perto.
 
-O mundo tem `:step(dt)` (chame em `fixed_update`), `:body(opts)`, `:add_tilemap(mapa)`, `:raycast(x, y, dx, dy, distancia, mascara)` (devolve `{ x, y, nx, ny, distance, body }` ou `nil`), `:query_point(x, y)`, `:query_rect(x, y, w, h)`, `:bodies(tag)`, `:debug_draw()`, `:nav({ cell = 16, radius = 12, area = { x1, y1, x2, y2 } })` (a [grade de caminhos](#caminhos-inimigos-que-contornam-paredes)) e os campos `gravity_x`, `gravity_y` e `count`.
+O mundo tem `:step(dt)` (chame em `fixed_update`), `:body(opts)`, `:add_tilemap(mapa)`, `:raycast(x, y, dx, dy, distancia, mascara)` (devolve `{ x, y, nx, ny, distance, body }` ou `nil`), `:query_point(x, y)`, `:query_rect(x, y, w, h)` (o retângulo centrado em `x, y`), `:bodies(tag)`, `:debug_draw()`, `:nav({ cell = 16, radius = 12, area = { x1, y1, x2, y2 } })` (a [grade de caminhos](#caminhos-inimigos-que-contornam-paredes)) e os campos `gravity_x`, `gravity_y` e `count`.
 
 Os eventos de `step` são tabelas `{ type = "enter" | "exit", a = corpo, b = corpo }`. Pelo menos um dos dois é sensor; se só um for, ele vem em `a`.
 
@@ -1827,6 +1829,7 @@ nn.camera.follow(jogador.x, jogador.y, {
 | `pop(opts)` | Fecha a cena atual e volta para a de baixo. |
 | `replace(caminho, args, opts)` | Troca a cena atual. |
 | `switch(caminho, args, opts)` | Fecha todas e abre esta (ex.: voltar ao menu). |
+| `current()` | O arquivo da cena da frente (`"cenas/fase.cena"`). Numa tela de carregamento padrão, ainda a cena de antes. |
 | `nn.quit(opts)` | Fecha o jogo. |
 
 A troca acontece ao final do `update`. Pedidos feitos no `draw` (como num botão de menu) valem no frame seguinte.
@@ -1842,7 +1845,7 @@ nn.quit({ fade = 0.4 })
 Enquanto a tela escurece, a cena que está saindo continua desenhada mas fica parada (sem `update`) e os menus não respondem, então um segundo aperto não dispara outra troca. A cena nova já roda enquanto a tela clareia.
 
 **Pré-carregar.** Ao começar, a cena carrega antes o que vai usar, para o jogo não travar no meio, no primeiro uso de uma imagem ou de um som:
-- **numa cena visual,** a lista sai sozinha dos componentes: as imagens, os sons, os modelos, as fontes e os mapas (também os de dentro dos prefabs e os sons das propriedades dos comportamentos);
+- **numa cena visual,** a lista sai sozinha dos componentes: as imagens, os sons, os modelos, as fontes e os mapas. Também entram os de dentro dos prefabs (os da cena e os que um comportamento ou uma regra cria, como o do Gerador), os sons das propriedades dos comportamentos e o que as regras usam (Tocar som, Música, Mudar imagem, Criar prefab);
 - **numa cena em Lua** (ou no script de uma cena visual), liste no campo `preload`. Um caminho basta: o tipo sai da extensão. Para uma imagem de pixel art, `{ "caminho", pixel_art = true }`; para um modelo achatado, `{ "caminho", flat = true }`.
 
 ```lua
@@ -1861,7 +1864,7 @@ nn.scene.switch("cenas/fase2.cena", nil, { loading = true })
 -- cenas/carregando.lua
 local c = {}
 function c:draw()
-  nn.screen.text(("Carregando %d%%"):format(nn.scene.progress() * 100), 20, 20)
+  nn.screen.text(("Carregando %d%%"):format(math.floor(nn.scene.progress() * 100)), 20, 20)
 end
 return c
 ```
@@ -1890,7 +1893,9 @@ Quem usar o que saiu recebe um erro que diz o que usar no lugar. O `config.lua` 
 
 ### Desempenho (nn.debug)
 
-`nn.debug.stats()` devolve a média dos últimos quadros, a mesma da tela F3: `fps`, `frame_ms` (o quadro inteiro), `worst_ms` (o pior dos últimos 2 segundos), `fixed_ms` (os passos fixos), `physics_ms` (a física, dentro dos passos fixos), `update_ms`, `draw_ms` (o `draw` e o envio para a placa de vídeo), `sprites` e `draw_calls` do último quadro, `textures` e `texture_mb` (a memória das texturas), `lua_mb` (a memória do Lua), `objects` (os objetos de uma cena visual), `loads` (os arquivos carregados no último quadro) e `total_loads` (desde o começo).
+`nn.debug.stats()` devolve a média dos últimos quadros, a mesma da tela F3: `fps`, `frame_ms` (o quadro inteiro), `worst_ms` (o pior dos últimos 2 segundos), `fixed_ms` (os passos fixos), `physics_ms` (a física, dentro dos passos fixos), `update_ms`, `draw_ms` (o `draw` e o envio para a placa de vídeo), `sprites` e `draw_calls` do último quadro, `textures` e `texture_mb` (a memória das texturas), `sounds` e `meshes` (quantos sons e malhas 3D estão na memória), `lua_mb` (a memória do Lua), `objects` (os objetos de uma cena visual), `loads` (os arquivos carregados no último quadro), `loaded` (os nomes deles, até 16) e `total_loads` (desde o começo).
+
+Sem janela (nos testes de jogo e no `rodar_jogo`), nada é desenhado na placa de vídeo: `frame_ms` e `worst_ms` são o trabalho do quadro (passos fixos, `update` e `draw`), o `fps` é quantos quadros por segundo esse trabalho daria, e `sprites` e `draw_calls` ficam em 0.
 
 `nn.debug.overlay(true)` abre a tela de desempenho e `nn.debug.overlay(false)` fecha; sem argumento, diz se está aberta. Também vale no jogo exportado, para quem quiser um "modo de diagnóstico" num menu de opções.
 

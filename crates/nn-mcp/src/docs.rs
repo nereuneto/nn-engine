@@ -155,6 +155,7 @@ pub fn instructions(server: &Server) -> String {
          - Testes de jogo: arquivos Lua em testes/ com test(\"nome\", function(t) ... end); rodar_testes roda todos. Rode antes e depois de mudar.\n\
          - Jogo aberto numa janela (abrir_jogo, ou o ▶ Jogar do NN Studio): ver_jogo_aberto mostra o que acontece enquanto a pessoa joga; mexer_no_jogo muda valores na hora (sem gravar), aperta teclas, pausa e avança quadros. Bom para ajustar números junto com a pessoa; o que ficar, grave nos arquivos.\n\
          - Algo não encosta ou fica no ar? rodar_jogo com ver_corpos desenha os corpos da física.\n\
+         - Desempenho: rodar_jogo diz quanto cada quadro gastou e o que carregou no meio de uma cena (uma travada); nn.debug.stats() dá os números ao Lua. Muitas cópias de um prefab: prefira um corpo sensor e o contact() de um comportamento a uma regra por cópia.\n\
          - Com o NN Studio aberto no projeto, ver_editor mostra a aba e os objetos escolhidos (\"este\" que a pessoa fala) e o que não foi gravado: o servidor não grava por cima disso.\n\
          - 2D: pixels, y para cima, (0,0) no meio da tela. 3D: metros, y é a altura.",
     );

@@ -1211,6 +1211,14 @@ end
 --- A lista é guardada até o próximo passo (ou até um objeto surgir ou ser
 --- destruído): muitos comportamentos perguntam a mesma coisa a cada passo.
 function M.targets(scene, who)
+  local found = M.targets_ref(scene, who)
+  local out = {}
+  for i = 1, #found do out[i] = found[i] end
+  return out
+end
+
+--- Como `M.targets`, mas a lista guardada do quadro (sem copiar): só ler.
+function M.targets_ref(scene, who)
   who = who or ""
   local cache = scene._targets
   if not cache then
@@ -1233,9 +1241,7 @@ function M.targets(scene, who)
     end
     cache[who] = found
   end
-  local out = {}
-  for i = 1, #found do out[i] = found[i] end
-  return out
+  return found
 end
 
 -- Combate --------------------------------------------------------------------
@@ -3876,6 +3882,7 @@ function M.assets_of(data)
     end
     return false
   end
+  local prefab
   local function component(c)
     local t = c.type
     if t == "sprite" then
@@ -3893,7 +3900,10 @@ function M.assets_of(data)
       add("map", value(c, "map"))
     elseif t == M.BEHAVIOR then
       for _, v in pairs(c) do
-        if type(v) == "string" and AUDIO_EXT[(v:match("%.(%w+)$") or ""):lower()] then add("sound", v) end
+        if type(v) == "string" then
+          local ext = (v:match("%.(%w+)$") or ""):lower()
+          if AUDIO_EXT[ext] then add("sound", v) elseif ext == "prefab" then prefab(v) end
+        end
       end
     end
     if has_field(t, "font") then
@@ -3902,13 +3912,48 @@ function M.assets_of(data)
       add("font", f)
     end
   end
-  local function object(o, depth)
+  local object
+  -- Os prefabs que a cena cria (um comportamento ou uma regra), uma vez cada.
+  local prefabs = {}
+  function prefab(path)
+    if prefabs[path] then return end
+    prefabs[path] = true
+    local ok, p = pcall(M.load_prefab, cache, path)
+    if ok then object(p, 1) end
+  end
+  -- O que as ações das regras usam: sons, músicas, imagens e prefabs.
+  local function rules(full)
+    local pixel_art
+    for _, c in ipairs(full.components or {}) do
+      if type(c) == "table" and c.type == "sprite" then pixel_art = value(c, "pixel_art") end
+    end
+    local function walk(t, key, depth)
+      if depth > 8 then return end
+      for k, v in pairs(t) do
+        if type(v) == "table" then
+          walk(v, k, depth + 1)
+        elseif type(v) == "string" then
+          local ext = (v:match("%.(%w+)$") or ""):lower()
+          if AUDIO_EXT[ext] then
+            add("sound", v)
+          elseif ext == "prefab" then
+            prefab(v)
+          elseif k == "imagem" and (ext == "png" or ext == "jpg" or ext == "jpeg") then
+            add("texture", v, pixel_art)
+          end
+        end
+      end
+    end
+    if type(full.events) == "table" then walk(full.events, nil, 0) end
+  end
+  function object(o, depth)
     if type(o) ~= "table" or depth > 16 then return end
     local ok, full = pcall(M.expand, cache, o)
     if not ok then full = o end
     for _, c in ipairs(full.components or {}) do
       if type(c) == "table" then component(c) end
     end
+    rules(full)
     for _, ch in ipairs(full.children or {}) do object(ch, depth + 1) end
   end
   for _, o in ipairs(data.objects or {}) do object(o, 0) end

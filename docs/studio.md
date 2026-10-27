@@ -1811,6 +1811,17 @@ quase não usa o processador.
 
 ## O que vem depois
 
+A **v0.9** deixou os jogos **mais rápidos, mais robustos e mais leves na
+memória**:
+- a física 2D com grade espacial;
+- o **Limite de quadros** nas configurações do projeto e a tela de
+  desempenho (F3);
+- as cenas visuais gastando bem menos por quadro;
+- um comportamento com erro desliga só ele, sem parar o jogo;
+- o jogo exportado mostra uma tela simples quando dá erro;
+- trocar de cena libera o que não se usa mais e carrega antes o que a cena
+  nova vai usar.
+
 A **v0.8** trouxe **a arte, a modelagem e a animação pelo agente**: pelo
 [servidor MCP](mcp.md), um agente de IA desenha a pixel art e as animações
 dos sprites, pinta os mapas, faz as partículas, os efeitos sonoros (também
@@ -1827,7 +1838,9 @@ Ainda não tem, e são ideias para depois:
 - no animador: copiar animações de um modelo para outro, e pontos que
   entortam suave nas juntas (pesos), além das peças que seguem um osso;
 - texturas pintadas nas faces do modelador;
-- exportar para a web e para outros sistemas além de Windows e Linux;
+- exportar para o macOS e para a web. Um estudo na v0.9 mostrou que a
+  engine roda no navegador ([o relatório](estudo-web.md)); os dois estão
+  planejados para a v0.13;
 - assinatura digital do instalador do Windows.
 
 Sugestões e problemas: [issues do repositório](https://github.com/nereuneto/nn-engine/issues).

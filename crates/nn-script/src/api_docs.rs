@@ -427,6 +427,11 @@ pub const API_DOCS: &[ApiDoc] = &[
         "Fecha a cena atual e volta para a de baixo.",
     ),
     d(
+        "nn.scene.current",
+        "()",
+        "O arquivo da cena da frente (\"cenas/fase.cena\"). Numa tela de carregamento padrão, ainda a cena de antes.",
+    ),
+    d(
         "nn.scene.progress",
         "()",
         "Numa tela de carregamento (a opção loading da troca de cena), quanto da cena nova já carregou, de 0 a 1; fora dela, nil.",
@@ -480,7 +485,7 @@ pub const API_DOCS: &[ApiDoc] = &[
     d(
         "nn.debug.stats",
         "()",
-        "Tabela com a média dos últimos quadros: fps, frame_ms, worst_ms, fixed_ms, physics_ms, update_ms, draw_ms, sprites, draw_calls, textures, texture_mb, lua_mb, objects; e loads (arquivos carregados no último quadro) e total_loads (desde o começo).",
+        "Tabela com a média dos últimos quadros: fps, frame_ms, worst_ms, fixed_ms, physics_ms, update_ms, draw_ms, sprites, draw_calls, textures, texture_mb, sounds, meshes, lua_mb, objects; e loads (arquivos carregados no último quadro), loaded (os nomes deles) e total_loads (desde o começo). Sem janela (testes, rodar_jogo), frame_ms é o trabalho do quadro, e sprites e draw_calls ficam em 0 (nada é desenhado na placa).",
     ),
     d(
         "nn.debug.overlay",

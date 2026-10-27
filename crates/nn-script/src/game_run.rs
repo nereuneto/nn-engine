@@ -53,6 +53,9 @@ pub struct RunOptions {
     pub frame_limit: Duration,
     /// Semente do `math.random`.
     pub seed: i64,
+    /// Parar também no erro de um comportamento (que só desliga ele, e o
+    /// jogo segue). Os testes de jogo param; o `rodar_jogo` segue.
+    pub stop_on_behavior_errors: bool,
 }
 
 impl Default for RunOptions {
@@ -62,6 +65,7 @@ impl Default for RunOptions {
             size: None,
             frame_limit: Duration::from_secs(5),
             seed: 1,
+            stop_on_behavior_errors: false,
         }
     }
 }
@@ -131,6 +135,19 @@ pub struct Report {
     pub perf: Perf,
     /// O jogo fechou (`nn.quit`) neste tempo.
     pub quit: Option<f64>,
+    /// Arquivos carregados no meio de uma cena (não na troca): uma travada
+    /// para quem joga.
+    pub mid_loads: Vec<MidLoad>,
+}
+
+/// Um quadro que carregou arquivos no meio da cena.
+#[derive(Debug, Clone)]
+pub struct MidLoad {
+    pub time: f64,
+    pub scene: String,
+    pub files: Vec<String>,
+    /// Quanto levou, em ms.
+    pub ms: f32,
 }
 
 /// Quanto o jogo gastou, somando os quadros rodados (sem desenhar na placa
@@ -142,6 +159,9 @@ pub struct Perf {
     pub total: nn_app::FrameTimes,
     /// O quadro mais pesado (passos fixos + update + desenho), em ms, e quando.
     pub worst: (f32, f64),
+    /// No último quadro: as texturas (quantas, bytes) e os objetos da cena.
+    pub textures: (u32, u64),
+    pub objects: u32,
 }
 
 /// Uma ação do roteiro de [`GameRun::run_plan`].
@@ -257,6 +277,7 @@ pub struct GameRun {
     front_ptr: usize,
     fired_index: HashMap<(String, String), usize>,
     ended: bool,
+    stop_on_behavior_errors: bool,
 }
 
 impl std::fmt::Debug for GameRun {
@@ -332,6 +353,7 @@ impl GameRun {
         .map_err(|e| e.to_string())?;
 
         let driver = runtime.driver().map_err(|e| format_error(&e))?;
+        runtime.watch_exited_fired(true);
 
         let mut config = project.config.clone();
         config.hot_reload = false;
@@ -361,6 +383,7 @@ impl GameRun {
             front: String::new(),
             front_ptr: 0,
             fired_index: HashMap::new(),
+            stop_on_behavior_errors: opts.stop_on_behavior_errors,
             ended: false,
         };
         run.after_frame(0.0);
@@ -394,13 +417,23 @@ impl GameRun {
 
     /// Alguma cena parou com erro?
     pub fn has_error(&self) -> bool {
-        !self.report.errors.is_empty()
+        self.first_error().is_some()
     }
 
     /// O primeiro erro que parou uma cena (desde o último
-    /// [`GameRun::take_report`]).
+    /// [`GameRun::take_report`]). O erro de um comportamento só conta com
+    /// [`RunOptions::stop_on_behavior_errors`].
     pub fn first_error(&self) -> Option<&RunError> {
-        self.report.errors.first()
+        self.report.errors.iter().find(|e| self.stops(e))
+    }
+
+    fn stops(&self, e: &RunError) -> bool {
+        !e.error.isolated || self.stop_on_behavior_errors
+    }
+
+    /// Quantos erros que param o jogo já houve.
+    fn stopping_errors(&self) -> usize {
+        self.report.errors.iter().filter(|e| self.stops(e)).count()
     }
 
     /// A cena da frente (o arquivo).
@@ -423,9 +456,6 @@ impl GameRun {
         if self.ended {
             return;
         }
-        // A cena que sai neste quadro ainda pode ter regras que dispararam
-        // (a que trocou de cena, por exemplo).
-        let before = self.runtime.front();
         let t = self.time();
         self.sink.set_time(t);
         self.arm();
@@ -433,10 +463,10 @@ impl GameRun {
         self.headless.frame_undrawn(Headless::<SceneStack>::FRAME);
         self.disarm();
         self.frames += 1;
-        if let (path, Some(scene)) = before
-            && path != self.runtime.front().0
-        {
-            self.collect_fired(&path, scene, t);
+        // A cena que saiu neste quadro ainda pode ter regras que dispararam
+        // (a que trocou de cena, por exemplo): ela as deixou ao sair.
+        for (path, list) in self.runtime.take_exited_fired() {
+            self.add_fired(&path, list, t);
         }
         self.after_frame(t);
     }
@@ -444,9 +474,9 @@ impl GameRun {
     /// Roda `n` quadros; para antes se o jogo fechar ou der erro. Devolve
     /// quantos rodou.
     pub fn run_frames(&mut self, n: u64) -> u64 {
-        let errors = self.report.errors.len();
+        let errors = self.stopping_errors();
         let mut ran = 0;
-        while ran < n && !self.ended && self.report.errors.len() == errors {
+        while ran < n && !self.ended && self.stopping_errors() == errors {
             self.frame();
             ran += 1;
         }
@@ -473,6 +503,27 @@ impl GameRun {
         }
         let (path, scene) = self.runtime.front();
         let ptr = scene.as_ref().map_or(0, |s| s.to_pointer() as usize);
+        let ctx = &self.headless.ctx;
+        p.textures = (
+            ctx.renderer.texture_count() as u32,
+            ctx.renderer.texture_bytes(),
+        );
+        p.objects = ctx.perf.objects;
+        // Carregou sem trocar de cena nem estar numa tela de carregamento: o
+        // jogo travou um pouco no meio.
+        let loading = self
+            .runtime
+            .lua()
+            .app_data_ref::<crate::api::Shared>()
+            .is_some_and(|s| s.progress.is_some());
+        if last.loads > 0 && path == self.front && !loading && self.frames > 1 {
+            self.report.mid_loads.push(MidLoad {
+                time: t,
+                scene: path.clone(),
+                files: ctx.perf.last_loaded.clone(),
+                ms: last.load,
+            });
+        }
         if path != self.front {
             self.report.scenes.push(SceneChange {
                 time: t,
@@ -534,6 +585,10 @@ impl GameRun {
         let Ok(Some(list)) = list else {
             return;
         };
+        self.add_fired(path, list, t);
+    }
+
+    fn add_fired(&mut self, path: &str, list: Table, t: f64) {
         for item in list.sequence_values::<Table>().flatten() {
             // Pelo texto: a mesma regra de várias cópias de um prefab (as
             // moedas, os tiros) é uma linha só.
@@ -640,7 +695,7 @@ impl GameRun {
     /// antes se o jogo der erro ou fechar.
     pub fn run_plan(&mut self, plan: &Plan) -> Result<Outcome, String> {
         // A cena já começou com erro: não há o que rodar.
-        if let Some(e) = self.report.errors.first() {
+        if let Some(e) = self.first_error() {
             return Ok(Outcome::GameError(e.clone()));
         }
         let lua = self.runtime.lua().clone();
@@ -685,7 +740,7 @@ impl GameRun {
         let lua = self.runtime.lua().clone();
         let started = Instant::now();
         let last_frame = self.frames + (limits.game * FPS).ceil() as u64;
-        let errors_before = self.report.errors.len();
+        let errors_before = self.stopping_errors();
         let mut args = first.into_lua_multi(&lua).map_err(|e| e.to_string())?;
         loop {
             self.sink.set_time(self.time());
@@ -739,8 +794,15 @@ impl GameRun {
                             )));
                         }
                         self.frame();
-                        if self.report.errors.len() > errors_before {
-                            let e = self.report.errors[errors_before].clone();
+                        if self.stopping_errors() > errors_before {
+                            let e = self
+                                .report
+                                .errors
+                                .iter()
+                                .filter(|e| self.stops(e))
+                                .nth(errors_before)
+                                .cloned()
+                                .expect("um erro novo");
                             return Ok(Outcome::GameError(e));
                         }
                     }

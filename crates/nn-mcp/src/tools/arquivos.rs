@@ -178,8 +178,10 @@ fn escrever_arquivo(s: &mut Server, a: &Value) -> Result<Output, String> {
     );
     if rel.ends_with(".lua") && !rel.ends_with("config.lua") {
         msg.push_str(" Sintaxe ok.");
-        // Um comportamento: confere o que ele declara.
-        if text.contains("props") || text.contains("title") {
+        // Um comportamento: confere o que ele declara (uma cena em Lua, com
+        // um `title` qualquer, não é).
+        let scene = rel.starts_with("cenas/") || rel == "main.lua";
+        if !scene && (text.contains("props") || text.contains("title")) {
             let info = s.catalog.get(&s.root.clone(), &rel);
             match &info.error {
                 None if !info.title.is_empty() => msg.push_str(&format!(

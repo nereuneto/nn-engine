@@ -32,7 +32,10 @@ opções de novo:
                        aventura: aventura vista de cima (NN Studio)
                        nave: jogo de nave (NN Studio)
                        3d: plataforma 3D em terceira pessoa (código Lua)
+                       visual3d: a mesma ilha 3D montada no NN Studio
+                       vale3d: um vale pintado num terreno (NN Studio)
                        vazio: cena vazia com imagens e sons
+                       vazio3d: mundo 3D com chão, modelos e sons
                        minimo: só uma cena com um quadrado que anda
 
 opções de exportar:
@@ -44,6 +47,7 @@ opções de exportar:
 opções de testar:
   --filtro <texto>     só os testes cujo nome (ou arquivo) tem o texto
   --capturas <pasta>   grava a tela de quem falhar e as capturas dos testes
+  --prints             mostra os prints também dos testes que passaram
   --tamanho <LxA>      tamanho da tela do jogo sem janela (ex.: 640x360; menor
                        roda mais rápido sem placa de vídeo)";
 
@@ -290,6 +294,7 @@ fn testar(args: &[String]) -> ExitCode {
         ..Default::default()
     };
     let mut captures: Option<PathBuf> = None;
+    let mut prints = false;
     let mut it = args.iter();
     while let Some(arg) = it.next() {
         let mut value = |flag: &str| {
@@ -299,6 +304,10 @@ fn testar(args: &[String]) -> ExitCode {
         };
         let result = match arg.as_str() {
             "--filtro" => value("--filtro").map(|v| opts.filter = Some(v)),
+            "--prints" => {
+                prints = true;
+                Ok(())
+            }
             "--capturas" => value("--capturas").map(|v| captures = Some(v.into())),
             "--tamanho" => value("--tamanho").and_then(|v| {
                 let size = v
@@ -349,12 +358,21 @@ fn testar(args: &[String]) -> ExitCode {
     };
     let result = nn_script::testing::run_tests(&project, &opts, |r| {
         match &r.failure {
-            None => println!(
-                "  ✓ {} › {} ({})",
-                r.case.file,
-                r.case.name,
-                segundos(r.time)
-            ),
+            None => {
+                println!(
+                    "  ✓ {} › {} ({})",
+                    r.case.file,
+                    r.case.name,
+                    segundos(r.time)
+                );
+                if prints {
+                    for l in &r.report.lines {
+                        if l.kind == nn_script::capture::LineKind::Print {
+                            println!("      print em {}: {}", segundos(l.time), l.text);
+                        }
+                    }
+                }
+            }
             Some(f) => {
                 println!(
                     "  ✗ {} › {} (falhou em {})",

@@ -19,6 +19,10 @@ use crate::source::{AssetSource, DiskSource, normalize};
 pub enum AssetError {
     #[error("asset não encontrado: {0}")]
     NotFound(PathBuf),
+    #[error(
+        "{0}: fica fora da pasta do jogo (use um caminho a partir dela, como \"imagens/heroi.png\"; o jogo exportado só leva o que está nela)"
+    )]
+    Outside(PathBuf),
     #[error("falha ao ler {path}: {source}")]
     Io {
         path: PathBuf,
@@ -112,6 +116,8 @@ pub struct Assets {
     models: HashMap<String, Tracked<nn_render::d3::Model>>,
     last_poll: Option<Instant>,
     reloaded: Vec<PathBuf>,
+    /// Só caminhos dentro da pasta do jogo (veja [`Assets::set_confined`]).
+    confined: bool,
 }
 
 impl Assets {
@@ -130,7 +136,20 @@ impl Assets {
             models: HashMap::new(),
             last_poll: None,
             reloaded: Vec::new(),
+            confined: false,
         }
+    }
+
+    /// Só aceita caminhos dentro da pasta do jogo: um caminho absoluto ou que
+    /// sai dela (`../`) dá [`AssetError::Outside`], igual no desenvolvimento e
+    /// no jogo exportado (que só leva o que está na pasta). Os jogos em Lua
+    /// ligam isto.
+    pub fn set_confined(&mut self, confined: bool) {
+        self.confined = confined;
+    }
+
+    fn outside(&self, path: &Path) -> bool {
+        self.confined && !crate::source::inside_game(path)
     }
 
     /// Assets lidos de uma pasta do disco.
@@ -187,6 +206,9 @@ impl Assets {
     /// Lê os bytes de um arquivo dos assets.
     pub fn read(&self, path: impl AsRef<Path>) -> Result<Vec<u8>, AssetError> {
         let path = path.as_ref();
+        if self.outside(path) {
+            return Err(AssetError::Outside(path.to_path_buf()));
+        }
         self.source.read(path).map_err(|source| {
             let path = self.source.describe(path);
             if source.kind() == std::io::ErrorKind::NotFound {
@@ -199,7 +221,7 @@ impl Assets {
 
     /// O arquivo existe nos assets?
     pub fn exists(&self, path: impl AsRef<Path>) -> bool {
-        self.source.read(path.as_ref()).is_ok()
+        !self.outside(path.as_ref()) && self.source.read(path.as_ref()).is_ok()
     }
 
     /// Lê um arquivo de texto (UTF-8) dos assets.
@@ -269,7 +291,7 @@ impl Context {
             let t = Instant::now();
             let file = normalize(path.as_ref());
             let model = self.read_model(&file, flat)?;
-            self.perf.add_load(t.elapsed());
+            self.perf.add_load_file(t.elapsed(), &file);
             let modified = self.assets.source.modified(Path::new(&file));
             self.assets
                 .models
@@ -433,7 +455,7 @@ impl Context {
             self.assets
                 .textures
                 .insert(key.clone(), Tracked::new(id, modified));
-            self.perf.add_load(t.elapsed());
+            self.perf.add_load_file(t.elapsed(), &key.0);
         }
         Ok(self.assets.textures.get_mut(&key).expect("inserido acima"))
     }
@@ -471,7 +493,7 @@ impl Context {
             self.assets
                 .sounds
                 .insert(key.clone(), Tracked::new(id, modified));
-            self.perf.add_load(t.elapsed());
+            self.perf.add_load_file(t.elapsed(), &key);
         }
         Ok(self.assets.sounds.get_mut(&key).expect("inserido acima"))
     }
@@ -569,8 +591,8 @@ impl Context {
                 path: self.assets.resolve(&key),
                 source,
             })?;
+        self.perf.add_load_file(t.elapsed(), &key);
         self.assets.fonts.insert(key, id);
-        self.perf.add_load(t.elapsed());
         Ok(id)
     }
 

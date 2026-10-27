@@ -70,6 +70,12 @@ pub struct Perf {
     /// Arquivos carregados desde o começo, e o último quadro que carregou.
     pub total_loads: u64,
     pub last_load: FrameTimes,
+    /// Os arquivos que o último quadro carregou (até 16).
+    pub last_loaded: Vec<String>,
+    loaded_now: Vec<String>,
+    /// Sem janela (testes, `rodar_jogo`): o tempo do quadro é o trabalho
+    /// dele (passos fixos, `update` e desenho), não o relógio simulado.
+    pub(crate) simulated: bool,
 }
 
 impl Perf {
@@ -83,9 +89,23 @@ impl Perf {
     /// Conta um arquivo carregado (imagem, som, modelo, fonte) no quadro de
     /// agora, com o tempo que levou.
     pub fn add_load(&mut self, d: Duration) {
-        self.current.loads += 1;
-        self.current.load += ms(d);
         self.total_loads += 1;
+        if self.open {
+            self.current.loads += 1;
+            self.current.load += ms(d);
+        } else {
+            // Fora de um quadro (a primeira cena, ao abrir o jogo).
+            self.last_load.loads += 1;
+            self.last_load.load += ms(d);
+        }
+    }
+
+    /// Como [`Perf::add_load`], guardando o nome do arquivo.
+    pub fn add_load_file(&mut self, d: Duration, file: &str) {
+        self.add_load(d);
+        if self.open && self.loaded_now.len() < 16 {
+            self.loaded_now.push(file.to_string());
+        }
     }
 
     /// Soma um tempo de física ao quadro de agora.
@@ -99,6 +119,7 @@ impl Perf {
             frame: ms(frame),
             ..FrameTimes::default()
         };
+        self.loaded_now.clear();
     }
 
     pub(crate) fn fixed(&mut self, d: Duration, steps: u32) {
@@ -119,7 +140,12 @@ impl Perf {
 
     fn end(&mut self) {
         self.open = false;
+        if self.simulated {
+            let c = &mut self.current;
+            c.frame = c.fixed + c.update + c.draw;
+        }
         self.last = self.current;
+        std::mem::swap(&mut self.last_loaded, &mut self.loaded_now);
         if self.last.loads > 0 {
             self.last_load = self.last;
         }

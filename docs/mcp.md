@@ -102,7 +102,7 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `buscar_documentacao` | A API Lua `nn.*` e os guias (este, o de Lua, o de 3D e o do NN Studio): os trechos que citam as palavras, ou uma seção inteira (`secao`). |
 | `conferir_lua` | A sintaxe de um trecho de Lua, sem gravar. |
 | `rodar_jogo` | Roda o jogo **sem janela**, com teclas e cliques simulados, e mostra os erros (com arquivo e linha), avisos, prints, as regras que dispararam, as trocas de cena, o que mudou nos objetos e variáveis, e **capturas da tela** (com `ver_corpos`, os corpos da física desenhados por cima). Veja [Rodar e ver](#rodar-e-ver). |
-| `rodar_testes` | Roda os [testes de jogo](lua.md#testes-de-jogo) do projeto (`testes/*.lua`) e mostra quem falhou, a linha, os prints e a tela na hora da falha. |
+| `rodar_testes` | Roda os [testes de jogo](lua.md#testes-de-jogo) do projeto (`testes/*.lua`) e mostra quem falhou, a linha, os prints e a tela na hora da falha. Com `prints`, mostra os prints também de quem passou. |
 | `abrir_jogo` | Abre o jogo **numa janela** no seu computador (você vê e pode jogar junto) e liga nele. Veja [O jogo aberto](#o-jogo-aberto). |
 | `ver_jogo_aberto` | Olha o jogo aberto (por `abrir_jogo`, pelo ▶ Jogar do NN Studio ou por `nn .`) enquanto alguém joga: a cena, os erros, prints e regras desde a última olhada, o que mudou e a tela. |
 | `mexer_no_jogo` | Muda o jogo aberto **na hora, sem gravar**: campos de objetos e comportamentos, variáveis, Lua, teclas como se alguém jogasse; pausa, avança quadros e fecha. |
@@ -193,6 +193,11 @@ O que mudou em cenas/fase.cena do começo ao fim:
   moedas (15): text.text "Moedas: 0" → "Moedas: 1"
 Variáveis que mudaram: moedas 0 → 1
 ```
+
+Mais coisas que a resposta traz:
+- **Erros de comportamento:** um comportamento com erro é desligado e o jogo segue. O erro aparece em Erros, uma vez para todas as cópias de um prefab, mas o roteiro continua. Já um erro no script da cena para o jogo, e o roteiro para ali.
+- **Desempenho:** a média por quadro dos passos fixos, da física, do `update` e do `draw` do jogo, o quadro mais pesado e, no fim, as texturas na memória e os objetos da cena. Sem placa de vídeo, nada é desenhado de verdade: o tempo na placa e as chamadas de desenho só aparecem no jogo aberto (F3).
+- **Carregou no meio da cena:** um quadro que carregou uma imagem ou um som fora de uma troca de cena (uma travada para quem joga), com os nomes dos arquivos. Para não travar, ponha o arquivo na lista `preload` da cena ou num componente.
 
 e traz as capturas (a do fim e as pedidas) como imagens. Se um script dá erro, o jogo para ali, e a resposta mostra o erro com o arquivo e a linha. Um laço sem fim (`while true do end`) vira erro depois de 5 segundos, em vez de travar o servidor.
 
@@ -354,6 +359,11 @@ Um modelo 3D (`.modelo`) ganha ossos com `esqueleto` e animações com `animar_m
 No jogo, o **Jogador 3D** toca sozinho parado, andar, correr, pular e cair (e o Golpe, golpe), e o **Inimigo 3D**, parado e andar. Outra animação toca com a ação **Tocar animação** numa regra ou com o componente `anim3d`. O `rodar_jogo` diz que animações 3D começaram a tocar em cada modelo, e quando.
 
 ## O que vem depois
+
+A v0.9 trouxe **desempenho, robustez e memória**, e o agente vê mais do jogo:
+- o `rodar_jogo` diz quanto cada quadro gastou (passos fixos, física, `update` e desenho) e o quadro mais pesado;
+- o erro de um comportamento aparece como erro, mas o jogo segue;
+- `nn.debug.stats()` dá ao Lua os números da tela de desempenho (F3).
 
 A v0.8 trouxe **a arte, a modelagem e a animação pelo agente**: pixel art e animações de sprite, mapas, partículas, sons, diálogos, modelos 3D, esqueletos e animações, tudo com prévias em imagem. Na revisão, dois agentes fizeram cada um um jogo do zero com toda a arte feita por eles, um de plataforma 2D em pixel art e uma aventura 3D.
 

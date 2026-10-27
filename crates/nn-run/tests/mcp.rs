@@ -567,7 +567,8 @@ fn agente_roda_o_jogo_e_os_testes() {
     assert_eq!(pngs.len(), 2);
     assert!(pngs.iter().all(|p| p.starts_with(b"\x89PNG")));
 
-    // Um erro no script de um comportamento: o jogo para e diz onde.
+    // Um erro no script de um comportamento: ele é desligado, o jogo segue
+    // e o relatório diz onde.
     ok(
         &mut s,
         "escrever_arquivo",
@@ -583,10 +584,15 @@ fn agente_roda_o_jogo_e_os_testes() {
         "rodar_jogo",
         json!({ "cena": "cenas/fase.cena", "segundos": 2, "acoes": [ { "em": 0.5, "apertar": "x" } ], "captura_final": false }),
     );
-    assert!(text.contains("O JOGO PAROU COM ERRO"), "{text}");
-    assert!(text.contains("0.50 s  em cenas/fase.cena:"), "{text}");
+    assert!(!text.contains("O JOGO PAROU COM ERRO"), "{text}");
+    assert!(
+        text.contains(
+            "0.50 s  em cenas/fase.cena (só esse comportamento foi desligado, e o jogo seguiu):"
+        ),
+        "{text}"
+    );
     assert!(text.contains("scripts/quebra.lua:3"), "{text}");
-    assert!(text.starts_with("Rodou 0.52 s"), "{text}");
+    assert!(text.starts_with("Rodou 2.00 s"), "{text}");
     ok(&mut s, "desfazer", json!({}));
     ok(&mut s, "desfazer", json!({}));
 

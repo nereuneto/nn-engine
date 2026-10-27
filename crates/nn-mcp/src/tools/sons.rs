@@ -223,7 +223,7 @@ fn criar_som(s: &mut Server, a: &Value) -> Result<Output, String> {
     text.push(' ');
     text.push_str(&pitch_text(&fx));
     text.push_str(&format!(
-        "\nPara tocar: nos eventos, a ação \"Tocar som\"; no componente sound (\"sound\": \"{rel}\"); em Lua, nn.audio.play(\"{rel}\").\n\
+        "\nPara tocar: nos eventos, a ação \"Tocar som\"; no componente sound (\"sound\": \"{rel}\"); em Lua, nn.audio.play(nn.assets.sound(\"{rel}\")).\n\
          Outra versão do mesmo tipo: \"variacao\" com outro número. Ajuste fino: \"mudar\".\n\
          A imagem: a onda (em cima, verde; a altura é o volume; uma linha a cada 0,1 s) e a nota ao longo do tempo (embaixo, amarelo; mais alto = mais agudo, na faixa de notas deste som)."
     ));
