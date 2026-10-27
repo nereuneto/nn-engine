@@ -14,7 +14,11 @@ A versão do **render 2D**. O que se desenha num jogo 2D ganhou o que faltava pa
 
 ### Para quem vem da 0.9
 
-- **Os projetos da 0.9 abrem e rodam.** COMPAT_AQUI
+- **Os projetos da 0.9 abrem e rodam.** Conferido com os modelos de projeto e os jogos da 0.9, e com os dois jogos que os agentes fizeram na revisão da 0.9:
+  - abertos e gravados pelo editor, 96 dos 102 arquivos saem iguais, byte a byte, como na 0.9. Os outros seis já saíam assim na 0.9: três mapas e tilesets do Tiled, que o editor regrava no formato dele, e três linhas escritas à mão, que o editor completa com os campos no valor padrão;
+  - os testes dos modelos e dos jogos passam no `nn` novo. Falha só um teste da revisão da 0.9, que conferia um contorno para um problema que a própria 0.9 resolveu;
+  - as fotos dos 13 jogos e modelos não mudaram.
+- **As preferências da 0.9 abrem na 0.10** como estão.
 - **O que muda sem você mexer:**
   - **As imagens reduzidas usam mipmaps:** uma imagem lisa desenhada bem menor que o arquivo não serrilha. Custa um terço a mais de memória por imagem; `nn.assets.texture(caminho, { mipmaps = false })` volta ao de antes. A pixel art segue igual.
   - **Um erro pego com `pcall` vem em português e limpo** (sem o "runtime error" e sem o caminho das chamadas), como na tela de erro. Quem comparava o texto da mensagem em inglês precisa ajustar.
