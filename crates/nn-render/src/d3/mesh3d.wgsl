@@ -189,11 +189,13 @@ fn fog_amount(world: vec3<f32>) -> f32 {
 
 @fragment
 fn fs_main(in: VertexOut) -> FragOut {
+    // A amostra antes do `if`: o WGSL só deixa amostrar fora de desvios que
+    // variam de pixel para pixel.
+    let albedo = in.color * textureSample(tex, samp, in.uv);
     if (in.material.x > 0.5) {
-        return water(in);
+        return water(in, albedo);
     }
     let n = normalize(in.normal);
-    let albedo = in.color * textureSample(tex, samp, in.uv);
     let f = fog_amount(in.world);
     var out: FragOut;
     if (f > 0.995) {
@@ -220,8 +222,7 @@ fn fs_main(in: VertexOut) -> FragOut {
 
 // A água: a cor dela com a luz, o céu refletido (mais forte olhando de
 // lado, pela direção da onda) e o brilho do sol ou da lua.
-fn water(in: VertexOut) -> FragOut {
-    let albedo = in.color * textureSample(tex, samp, in.uv);
+fn water(in: VertexOut, albedo: vec4<f32>) -> FragOut {
     let f = fog_amount(in.world);
     var out: FragOut;
     if (f > 0.995) {
