@@ -178,6 +178,9 @@ pub(crate) struct Renderer3D {
     shadow_pipeline: wgpu::RenderPipeline,
     skinned_pipeline: wgpu::RenderPipeline,
     skinned_shadow_pipeline: wgpu::RenderPipeline,
+    /// Grupo vazio para as posições 1 e 2 da sombra com ossos (navegadores
+    /// que não aceitam buracos na lista de grupos).
+    empty_group: wgpu::BindGroup,
     billboard_pipeline: wgpu::RenderPipeline,
     /// Malhas meio transparentes (água, vidro): depois das outras, de trás
     /// para a frente, sem escrever a profundidade.
@@ -609,10 +612,26 @@ impl Renderer3D {
             multiview_mask: None,
             cache: None,
         });
+        // A sombra com ossos só usa os grupos 0 e 3; no meio vão grupos vazios
+        // (o WebGPU de alguns navegadores não aceita buracos na lista).
+        let empty_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("nn 3d empty"),
+            entries: &[],
+        });
+        let empty_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nn 3d empty"),
+            layout: &empty_layout,
+            entries: &[],
+        });
         let skinned_shadow_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("nn 3d skinned shadow"),
-                bind_group_layouts: &[Some(&view_layout), None, None, Some(&joint_layout)],
+                bind_group_layouts: &[
+                    Some(&view_layout),
+                    Some(&empty_layout),
+                    Some(&empty_layout),
+                    Some(&joint_layout),
+                ],
                 immediate_size: 0,
             });
         let skinned_shadow_pipeline =
@@ -778,6 +797,7 @@ impl Renderer3D {
             shadow_pipeline,
             skinned_pipeline,
             skinned_shadow_pipeline,
+            empty_group,
             billboard_pipeline,
             billboard_add_pipeline,
             transparent_pipeline,
@@ -1504,6 +1524,8 @@ impl Renderer3D {
                 }
             }
             pass.set_pipeline(&self.skinned_shadow_pipeline);
+            pass.set_bind_group(1, &self.empty_group, &[]);
+            pass.set_bind_group(2, &self.empty_group, &[]);
             for &(i, at) in &shadow_skinned {
                 let d = &self.draws[i];
                 let m = &self.meshes[d.mesh.0 as usize];
