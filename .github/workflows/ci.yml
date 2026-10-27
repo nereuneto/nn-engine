@@ -65,6 +65,65 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
+  # O render no navegador: as cenas de teste (teste-web/) desenhadas no
+  # desktop e no Chromium sem tela (WebGL2, por software) precisam bater.
+  # Tudo o que entra no render tem de rodar na web (veja docs/estudo-web.md).
+  web:
+    name: Render no navegador (WebGL2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: teste-web -> target
+      - name: Driver de GPU por software e wasm-bindgen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers
+          echo "WB=$(grep -A1 '^name = "wasm-bindgen"$' teste-web/Cargo.lock | sed -n 's/version = "\(.*\)"/\1/p')" >> "$GITHUB_ENV"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ env.WB }}
+      - name: As cenas no desktop (referência)
+        working-directory: teste-web
+        run: cargo run --release --color never -- referencias fotos/desktop
+      - name: A página
+        working-directory: teste-web
+        run: |
+          cargo build --release --color never --target wasm32-unknown-unknown
+          wasm-bindgen --target web --no-typescript --out-dir site target/wasm32-unknown-unknown/release/render-web.wasm
+          cp index.html site/
+      - name: As cenas no Chromium
+        working-directory: teste-web
+        run: |
+          npm i --no-save --silent playwright@1.49.1
+          npx playwright install --with-deps chromium > /dev/null
+          python3 -m http.server 8000 --directory site > /dev/null 2>&1 &
+          sleep 1
+          mkdir -p fotos/navegador
+          CENAS=$(cargo run --release --color never -q -- cenas)
+          N=$(echo "$CENAS" | tr ',' '\n' | wc -l)
+          node fotos.mjs http://localhost:8000 "$N" fotos/navegador webgl "$CENAS" | tee webgl.txt
+          node fotos.mjs http://localhost:8000 "$N" fotos/navegador webgpu "$CENAS" | tee webgpu.txt || echo "::warning title=WebGPU::$(grep FALHA webgpu.txt | head -3)"
+      - name: Comparar
+        working-directory: teste-web
+        shell: bash
+        run: |
+          cargo run --release --color never -q -- comparar fotos/desktop fotos/navegador webgl- | tee comparar.txt || {
+            echo "::error title=Render no navegador::$(grep -v '^ok' comparar.txt | sed ':a;N;$!ba;s/\n/%0A/g')"
+            exit 1
+          }
+          echo "::notice title=Render no navegador::$(sed ':a;N;$!ba;s/\n/%0A/g' comparar.txt)"
+          cargo run --release --color never -q -- comparar fotos/desktop fotos/navegador webgpu- > webgpu-comparar.txt || echo "::warning title=WebGPU::$(sed ':a;N;$!ba;s/\n/%0A/g' webgpu-comparar.txt)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render-no-navegador
+          path: teste-web/fotos
+
   msrv:
     name: Versão mínima do Rust (1.89)
     runs-on: ubuntu-latest

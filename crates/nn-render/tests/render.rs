@@ -556,3 +556,115 @@ fn o_atlas_de_letras_reaproveita_as_paginas_menos_usadas() {
         .count();
     assert!(lit > 50, "{lit} pixels acesos");
 }
+
+/// Um xadrez de 1 pixel (256x256) desenhado em 37x37 na tela (uma escala
+/// quebrada: sem mipmaps, cada pixel da tela cai num lugar do xadrez).
+fn xadrez_reduzido(h: &mut Harness, options: TextureOptions) -> Vec<u8> {
+    let n = 256u32;
+    let pixels: Vec<u8> = (0..n * n)
+        .flat_map(|i| {
+            let v = if (i % n + i / n).is_multiple_of(2) { 255 } else { 0 };
+            [v, v, v, 255]
+        })
+        .collect();
+    let tex = h.renderer.create_texture(UVec2::splat(n), &pixels, options);
+    h.renderer.screen().draw(
+        &Sprite::new(tex)
+            .at(Vec2::new(16.0, 16.0))
+            .origin(Vec2::ZERO)
+            .size(Vec2::splat(37.0)),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    let mut out = Vec::new();
+    for y in 20..48 {
+        for x in 20..48 {
+            out.push(img.pixel(x, y)[0]);
+        }
+    }
+    out
+}
+
+/// Com mipmaps, uma imagem desenhada bem menor fica lisa (um cinza parelho);
+/// sem, ela serrilha (cada pixel pega um quadrado preto ou branco).
+#[test]
+fn mipmaps_deixam_a_imagem_reduzida_lisa() {
+    let Some(mut h) = Harness::new() else {
+        return;
+    };
+    let lisa = xadrez_reduzido(&mut h, TextureOptions::SMOOTH);
+    let (min, max) = (lisa.iter().min().unwrap(), lisa.iter().max().unwrap());
+    // Metade preto e metade branco, em cor linear: uns 188 em sRGB.
+    assert!(max - min <= 6, "lisa: de {min} a {max}");
+    assert!((175..=200).contains(min), "lisa: {min}");
+    let serrilhada = xadrez_reduzido(&mut h, TextureOptions::default());
+    let (min, max) = (
+        serrilhada.iter().min().unwrap(),
+        serrilhada.iter().max().unwrap(),
+    );
+    assert!(max - min > 100, "sem mipmaps: de {min} a {max}");
+}
+
+#[test]
+fn mipmaps_contam_na_memoria_e_pixel_art_nao_tem() {
+    let Some(mut h) = Harness::new() else {
+        return;
+    };
+    let antes = h.renderer.texture_bytes();
+    h.renderer.create_texture(
+        UVec2::new(64, 32),
+        &[0; 64 * 32 * 4],
+        TextureOptions::SMOOTH,
+    );
+    // 64x32 + 32x16 + 16x8 + 8x4 + 4x2 + 2x1 + 1x1, 4 bytes cada.
+    let niveis = (2048 + 512 + 128 + 32 + 8 + 2 + 1) * 4;
+    assert_eq!(h.renderer.texture_bytes() - antes, niveis);
+    let antes = h.renderer.texture_bytes();
+    h.renderer.create_texture(
+        UVec2::new(64, 32),
+        &[0; 64 * 32 * 4],
+        TextureOptions::PIXEL_ART,
+    );
+    assert_eq!(h.renderer.texture_bytes() - antes, 64 * 32 * 4);
+}
+
+/// O deslocamento anda a imagem repetida: metade vermelha e metade azul,
+/// deslocada meia imagem, troca de lado.
+#[test]
+fn deslocar_a_imagem_repetida() {
+    let Some(mut h) = Harness::new() else {
+        return;
+    };
+    let pixels: Vec<u8> = (0..8 * 8)
+        .flat_map(|i| {
+            if i % 8 < 4 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 0, 255, 255]
+            }
+        })
+        .collect();
+    let tex = h
+        .renderer
+        .create_texture(UVec2::splat(8), &pixels, TextureOptions::PIXEL_ART);
+    let sprite = Sprite::new(tex)
+        .at(Vec2::ZERO)
+        .origin(Vec2::ZERO)
+        .size(Vec2::new(64.0, 32.0));
+    h.renderer.screen().draw(&sprite);
+    h.renderer
+        .screen()
+        .draw(&sprite.at(Vec2::new(0.0, 32.0)).offset(Vec2::new(0.5, 0.0)));
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    assert_color(
+        img.pixel(8, 16),
+        [255, 0, 0, 255],
+        "sem deslocar, à esquerda",
+    );
+    assert_color(
+        img.pixel(56, 16),
+        [0, 0, 255, 255],
+        "sem deslocar, à direita",
+    );
+    assert_color(img.pixel(8, 48), [0, 0, 255, 255], "deslocada, à esquerda");
+    assert_color(img.pixel(56, 48), [255, 0, 0, 255], "deslocada, à direita");
+}

@@ -1,0 +1,6 @@
+# O render no navegador: as mesmas cenas desenhadas no desktop e no Chromium
+# (WebGL2), comparadas pelo CI (job "Render no navegador"). Fica fora do
+# workspace da engine, porque roda também em wasm32-unknown-unknown.
+[workspace]
+members = ["render"]
+resolver = "3"

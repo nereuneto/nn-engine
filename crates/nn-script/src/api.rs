@@ -257,6 +257,25 @@ fn build_sprite(
         tile_w.map_or(1.0, |t| size.x.abs() / t),
         tile_h.map_or(1.0, |t| size.y.abs() / t),
     );
+    // Deslocar a imagem dentro do sprite (em pixels do desenho; uma
+    // repetição é `tile_w`, ou o sprite inteiro): positivo anda para +x e +y
+    // do espaço (na tela, y é para baixo).
+    let tile = Vec2::new(
+        tile_w.unwrap_or(size.x.abs()),
+        tile_h.unwrap_or(size.y.abs()),
+    )
+    .max(Vec2::splat(1e-3));
+    let shift = Vec2::new(
+        opt::<f32>(opts, "offset_x")?.unwrap_or(0.0),
+        opt::<f32>(opts, "offset_y")?.unwrap_or(0.0),
+    );
+    let offset = Vec2::new(
+        -shift.x / tile.x,
+        match space {
+            Space::World => shift.y / tile.y,
+            Space::Screen => -shift.y / tile.y,
+        },
+    );
     if opt::<bool>(opts, "flip_x")?.unwrap_or(false) {
         size.x = -size.x;
     }
@@ -280,7 +299,8 @@ fn build_sprite(
         ))
         .rotation(opt::<f32>(opts, "rotation")?.unwrap_or(0.0))
         .color(tint)
-        .repeat(repeat);
+        .repeat(repeat)
+        .offset(offset);
     Ok(sprite)
 }
 
@@ -1221,9 +1241,20 @@ fn bounds(v: &Value) -> Result<nn_render::Bounds> {
 }
 
 fn texture_options(opts: Option<&Table>) -> Result<TextureOptions> {
-    Ok(if opt::<bool>(opts, "pixel_art")?.unwrap_or(false) {
+    Ok(image_options(
+        opt::<bool>(opts, "pixel_art")?.unwrap_or(false),
+        opt::<bool>(opts, "mipmaps")?.unwrap_or(true),
+    ))
+}
+
+/// As opções de uma imagem de jogo em Lua: pixel art nítida, ou lisa com
+/// mipmaps (desenhada menor, não serrilha), que `mipmaps = false` tira.
+pub(crate) fn image_options(pixel_art: bool, mipmaps: bool) -> TextureOptions {
+    if pixel_art {
         TextureOptions::PIXEL_ART
+    } else if mipmaps {
+        TextureOptions::SMOOTH
     } else {
         TextureOptions::default()
-    })
+    }
 }

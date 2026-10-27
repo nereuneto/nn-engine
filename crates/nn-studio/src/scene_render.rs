@@ -1880,10 +1880,11 @@ impl SceneRenderer {
             let mut keep = [None, None];
             for (i, slot) in entry.into_iter().enumerate() {
                 if let Some(Some(id)) = slot {
+                    // As mesmas opções do jogo: lisa com mipmaps.
                     let opts = if i == 1 {
                         TextureOptions::PIXEL_ART
                     } else {
-                        TextureOptions::default()
+                        TextureOptions::SMOOTH
                     };
                     if let Ok(bytes) = std::fs::read(root.join(rel))
                         && self
@@ -1927,7 +1928,7 @@ impl SceneRenderer {
         let opts = if pixel_art {
             TextureOptions::PIXEL_ART
         } else {
-            TextureOptions::default()
+            TextureOptions::SMOOTH
         };
         let t = self.renderer.load_texture(root.join(rel), opts).ok();
         self.textures.entry(rel.to_string()).or_default()[i] = Some(t);

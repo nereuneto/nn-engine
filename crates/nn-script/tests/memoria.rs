@@ -289,11 +289,20 @@ return c
   t:frames(1)
   return nn.debug.stats().total_loads - antes, nn.debug.stats().texture_mb
 end
+-- Bytes de uma imagem com os mipmaps (as imagens lisas tem).
+local function mip(w, h)
+  local total = 0
+  while true do
+    total = total + w * h * 4
+    if w == 1 and h == 1 then return total end
+    w, h = math.max(1, w // 2), math.max(1, h // 2)
+  end
+end
 test("troca", function(t)
   t:open("cenas/a.lua")
   t:frames(1)
-  local base = nn.debug.stats().texture_mb - (64 * 64 + 16 * 16) * 4 / 1048576
-  local function so(w, h) return base + (w * h + 16 * 16) * 4 / 1048576 end
+  local base = nn.debug.stats().texture_mb - (mip(64, 64) + mip(16, 16)) / 1048576
+  local function so(w, h) return base + (mip(w, h) + mip(16, 16)) / 1048576 end
   local n, mb = ir(t, "cenas/b.lua")
   t:check(n == 1, "sem tela carregou " .. n)
   t:check(math.abs(mb - so(128, 64)) < 1e-6, "sem tela: a imagem da cena a ficou")
