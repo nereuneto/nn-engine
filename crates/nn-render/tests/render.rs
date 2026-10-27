@@ -563,7 +563,11 @@ fn xadrez_reduzido(h: &mut Harness, options: TextureOptions) -> Vec<u8> {
     let n = 256u32;
     let pixels: Vec<u8> = (0..n * n)
         .flat_map(|i| {
-            let v = if (i % n + i / n).is_multiple_of(2) { 255 } else { 0 };
+            let v = if (i % n + i / n).is_multiple_of(2) {
+                255
+            } else {
+                0
+            };
             [v, v, v, 255]
         })
         .collect();
