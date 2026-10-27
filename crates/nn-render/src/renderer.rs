@@ -625,7 +625,7 @@ impl Renderer {
         );
         assert_eq!(rgba.len(), (size.x * size.y * 4) as usize);
         texture.write(&self.queue, origin, size, rgba);
-        if rgba.chunks_exact(4).any(|p| p[3] < 255) {
+        if rgba.as_chunks::<4>().0.iter().any(|p| p[3] < 255) {
             self.textures[id.0 as usize].has_alpha = true;
         }
     }
