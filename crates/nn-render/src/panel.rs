@@ -91,7 +91,24 @@ pub(crate) const MAX_ROUND: u32 = 96;
 
 /// Margem (em pixels da textura) das texturas de canto arredondado.
 pub(crate) fn round_margin(radius: f32, border: f32) -> u32 {
+    base_margin(radius, border) + extra_margin(radius, border)
+}
+
+/// A margem que vale o raio (ou a borda) no desenho.
+fn base_margin(radius: f32, border: f32) -> u32 {
     (radius.max(border).ceil() as u32).clamp(1, MAX_ROUND)
+}
+
+/// Com a borda tão grossa quanto o raio, os vizinhos do pixel do meio seriam
+/// borda: esticado, o meio pegaria um pouco dela (uma mancha). Um pixel a
+/// mais de margem deixa o meio cercado de fundo.
+fn extra_margin(radius: f32, border: f32) -> u32 {
+    u32::from(border > 0.0 && border >= radius)
+}
+
+/// Quanto a margem desenhada vale, para uma margem de textura de `m`.
+pub(crate) fn margin_scale(radius: f32, border: f32) -> f32 {
+    round_margin(radius, border) as f32 / base_margin(radius, border) as f32
 }
 
 /// Texturas de um retângulo arredondado com raio `radius` e borda `border`
@@ -102,7 +119,7 @@ pub(crate) fn round_margin(radius: f32, border: f32) -> u32 {
 pub(crate) fn rounded_pixels(radius: f32, border: f32) -> (UVec2, Vec<u8>, Vec<u8>) {
     let m = round_margin(radius, border);
     // Raio e borda na escala da textura.
-    let k = m as f32 / radius.max(border).max(1.0);
+    let k = base_margin(radius, border) as f32 / radius.max(border).max(1.0);
     let (r, b) = ((radius * k).min(m as f32), border * k);
     let side = 2 * m + 1;
     let half = side as f32 / 2.0;
@@ -233,7 +250,7 @@ pub(crate) fn panel_sprites(
     let side = (2 * m + 1) as f32;
     let margin = Vec2::splat(m as f32 / side);
     // A margem da textura (m pixels) vale o raio (ou a borda) no desenho.
-    let dest = Vec2::splat(radius.max(border).max(1.0));
+    let dest = Vec2::splat(radius.max(border).max(1.0) * margin_scale(radius, border));
     let pieces = nine_slice(panel.center, panel.size, Rect::FULL, margin, dest, y_up);
     for &piece in pieces.as_slice() {
         out.push(sprite(fill, piece, panel.color));
@@ -261,6 +278,18 @@ mod tests {
         for i in 0..(17 * 17) as usize {
             assert!(fill[i * 4 + 3] as u32 + ring[i * 4 + 3] as u32 <= 256);
         }
+    }
+
+    #[test]
+    fn borda_grossa_sem_raio_tem_o_meio_cheio() {
+        // Raio 0 e borda 1: o pixel do meio e os vizinhos dele são fundo.
+        let (size, fill, _) = rounded_pixels(0.0, 1.0);
+        assert_eq!(size, UVec2::splat(5));
+        let a = |x: u32, y: u32| fill[((y * 5 + x) * 4 + 3) as usize];
+        for (x, y) in [(2, 2), (1, 2), (3, 2), (2, 1), (2, 3)] {
+            assert_eq!(a(x, y), 255, "{x},{y}");
+        }
+        assert_eq!(a(0, 2), 0, "a borda");
     }
 
     #[test]

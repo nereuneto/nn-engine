@@ -28,10 +28,13 @@ struct SpriteInstance {
     repeat: [f32; 2],
     /// O deslocamento dentro das repetições.
     offset: [f32; 2],
+    /// 1 = a textura é um canvas (as cores guardadas com o alpha já
+    /// multiplicado): o shader divide pelo alpha ao ler.
+    flags: f32,
 }
 
 impl SpriteInstance {
-    const ATTRIBUTES: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
+    const ATTRIBUTES: [wgpu::VertexAttribute; 9] = wgpu::vertex_attr_array![
         0 => Float32x2,
         1 => Float32x2,
         2 => Float32x2,
@@ -40,6 +43,7 @@ impl SpriteInstance {
         5 => Float32x4,
         6 => Float32x2,
         7 => Float32x2,
+        8 => Float32,
     ];
 
     pub(crate) fn layout() -> wgpu::VertexBufferLayout<'static> {
@@ -183,6 +187,36 @@ const ADDITIVE_BLEND: wgpu::BlendState = wgpu::BlendState {
     },
 };
 
+/// Num canvas: a cor como na mistura normal (com o alpha multiplicado, sobre
+/// o transparente) e o alpha somado, para guardar a cor com o alpha já
+/// multiplicado.
+const CANVAS_BLEND: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::SrcAlpha,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    },
+};
+
+/// Aditiva num canvas: soma a cor e o alpha.
+const CANVAS_ADDITIVE_BLEND: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::SrcAlpha,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Add,
+    },
+};
+
 /// O quadro guardado enquanto se desenha num canvas.
 #[derive(Debug)]
 struct CanvasFrame {
@@ -234,6 +268,9 @@ pub struct Renderer {
     queue: wgpu::Queue,
     format: wgpu::TextureFormat,
     pipeline: wgpu::RenderPipeline,
+    /// Os mesmos, para desenhar num canvas (veja [`CANVAS_BLEND`]).
+    canvas_pipeline: wgpu::RenderPipeline,
+    canvas_additive_pipeline: wgpu::RenderPipeline,
     additive_pipeline: wgpu::RenderPipeline,
     world_view: View,
     screen_view: View,
@@ -256,6 +293,7 @@ pub struct Renderer {
     /// O efeito na tela inteira e o canvas em que o quadro é desenhado antes.
     screen_effect: Option<EffectId>,
     screen_canvas: Option<(TextureId, UVec2)>,
+    screen_effect_skipped: bool,
     /// Para montar os sprites de um painel sem alocar a cada um.
     panel_buf: Vec<Sprite>,
     /// A última cor convertida para a GPU (veja `gpu_color`).
@@ -412,6 +450,10 @@ impl Renderer {
         let pipeline = make_pipeline("nn sprite", wgpu::BlendState::ALPHA_BLENDING);
         // Aditiva: soma a cor ao fundo (brilho, fogo, faíscas).
         let additive_pipeline = make_pipeline("nn sprite aditivo", ADDITIVE_BLEND);
+        // Num canvas, a cor fica com o alpha multiplicado (o translúcido
+        // sobre o transparente sai certo depois).
+        let canvas_pipeline = make_pipeline("nn sprite canvas", CANVAS_BLEND);
+        let canvas_additive_pipeline = make_pipeline("nn sprite canvas aditivo", CANVAS_ADDITIVE_BLEND);
 
         let instance_buffer = Self::create_instance_buffer(&device, Self::INITIAL_CAPACITY);
 
@@ -423,6 +465,8 @@ impl Renderer {
             format,
             pipeline,
             additive_pipeline,
+            canvas_pipeline,
+            canvas_additive_pipeline,
             world_view,
             screen_view,
             texture_layout,
@@ -435,6 +479,7 @@ impl Renderer {
             view_layout,
             screen_effect: None,
             screen_canvas: None,
+            screen_effect_skipped: false,
             panel_buf: Vec::new(),
             freed: Default::default(),
             last_color: std::cell::Cell::new((color_bits(Color::WHITE), Color::WHITE)),
@@ -866,6 +911,7 @@ impl Renderer {
                     color,
                     repeat: [-1.0, f32::from(t.edges)],
                     offset: [0.0, 0.0],
+                    flags: 0.0,
                 },
             );
         }
@@ -956,6 +1002,7 @@ impl Renderer {
             color: self.gpu_color(sprite.color).to_array(),
             repeat: sprite.repeat.max(Vec2::splat(0.001)).to_array(),
             offset: sprite.offset.to_array(),
+            flags: if texture.target.is_some() { 1.0 } else { 0.0 },
         };
         self.queue_mut(space)
             .push_with(sprite.texture, sprite.blend, sprite.effect, instance);
@@ -1001,6 +1048,7 @@ impl Renderer {
                 color,
                 repeat: [1.0, 1.0],
                 offset: [0.0, 0.0],
+                flags: 0.0,
             };
             self.queue_mut(space)
                 .push(glyph.texture, Blend::Alpha, instance);
@@ -1043,9 +1091,10 @@ impl Renderer {
         camera: &Camera2D,
         clear: Option<Color>,
     ) -> RenderStats {
+        let skipped = std::mem::take(&mut self.screen_effect_skipped);
         if let Some(effect) = self
             .screen_effect
-            .filter(|e| self.effects.get(*e).is_some())
+            .filter(|e| !skipped && self.effects.get(*e).is_some())
         {
             return self.render_with_screen_effect(target, viewport, camera, clear, effect);
         }
@@ -1149,6 +1198,7 @@ impl Renderer {
                 color: self.gpu_color(c).to_array(),
                 repeat: [1.0, 1.0],
                 offset: [0.0, 0.0],
+                flags: 0.0,
             }),
             _ => None,
         };
@@ -1339,11 +1389,18 @@ impl Renderer {
                     let effect = batch.effect.and_then(|e| self.effects.get(e));
                     let key = (batch.blend, effect.map(|i| i as *const _ as usize));
                     if current_pipeline != Some(key) {
-                        let pipeline = match (effect, batch.blend) {
-                            (Some(i), Blend::Alpha) => &self.effects.shaders[i.shader].alpha,
-                            (Some(i), Blend::Add) => &self.effects.shaders[i.shader].add,
-                            (None, Blend::Alpha) => &self.pipeline,
-                            (None, Blend::Add) => &self.additive_pipeline,
+                        let canvas = pass_kind != Pass::Main;
+                        let pipeline = match (effect, batch.blend, canvas) {
+                            (Some(i), Blend::Alpha, false) => &self.effects.shaders[i.shader].alpha,
+                            (Some(i), Blend::Add, false) => &self.effects.shaders[i.shader].add,
+                            (Some(i), Blend::Alpha, true) => {
+                                &self.effects.shaders[i.shader].canvas_alpha
+                            }
+                            (Some(i), Blend::Add, true) => &self.effects.shaders[i.shader].canvas_add,
+                            (None, Blend::Alpha, false) => &self.pipeline,
+                            (None, Blend::Add, false) => &self.additive_pipeline,
+                            (None, Blend::Alpha, true) => &self.canvas_pipeline,
+                            (None, Blend::Add, true) => &self.canvas_additive_pipeline,
                         };
                         pass.set_pipeline(pipeline);
                         if let Some(i) = effect {
@@ -1466,7 +1523,12 @@ impl Renderer {
             &self.view_layout,
             &self.texture_layout,
             SpriteInstance::layout(),
-            [wgpu::BlendState::ALPHA_BLENDING, ADDITIVE_BLEND],
+            [
+                wgpu::BlendState::ALPHA_BLENDING,
+                ADDITIVE_BLEND,
+                CANVAS_BLEND,
+                CANVAS_ADDITIVE_BLEND,
+            ],
         )
     }
 
@@ -1505,16 +1567,53 @@ impl Renderer {
         self.effects.value(effect, name)
     }
 
-    /// Muda uma cor: os parâmetros `nome_r`, `nome_g`, `nome_b` e `nome_a`
-    /// (em cor linear, como o shader trabalha). Devolve `false` se faltar
-    /// algum.
+    /// Muda uma cor: os parâmetros `nome_r`, `nome_g`, `nome_b` (e `nome_a`,
+    /// se houver), em cor linear, como o shader trabalha. Devolve `false`
+    /// (sem mudar nada) se faltar algum.
     pub fn set_effect_color(&mut self, effect: EffectId, name: &str, color: Color) -> bool {
-        let c = self.gpu_color(color);
-        let mut ok = true;
-        for (suffix, v) in [("r", c.r), ("g", c.g), ("b", c.b), ("a", c.a)] {
-            ok &= self.effects.set(effect, &format!("{name}_{suffix}"), v);
+        let has = |s: &Self, k: &str| s.effects.value(effect, &format!("{name}_{k}")).is_some();
+        if !(has(self, "r") && has(self, "g") && has(self, "b")) {
+            return false;
         }
-        ok
+        let c = self.gpu_color(color);
+        for (suffix, v) in [("r", c.r), ("g", c.g), ("b", c.b), ("a", c.a)] {
+            self.effects.set(effect, &format!("{name}_{suffix}"), v);
+        }
+        true
+    }
+
+    /// A cor `nome` do efeito (de `nome_r`, `nome_g`, `nome_b` e `nome_a`),
+    /// de volta em sRGB.
+    pub fn effect_color(&self, effect: EffectId, name: &str) -> Option<Color> {
+        let v = |k: &str| self.effects.value(effect, &format!("{name}_{k}"));
+        let (r, g, b) = (v("r")?, v("g")?, v("b")?);
+        let a = v("a").unwrap_or(1.0);
+        let to_srgb = |x: f32| {
+            let x = x.clamp(0.0, 1.0);
+            if !self.format.is_srgb() {
+                x
+            } else if x <= 0.003_130_8 {
+                x * 12.92
+            } else {
+                1.055 * x.powf(1.0 / 2.4) - 0.055
+            }
+        };
+        Some(Color::rgba(to_srgb(r), to_srgb(g), to_srgb(b), a))
+    }
+
+    /// As cores do efeito (os nomes com `_r`, `_g` e `_b`).
+    pub fn effect_colors(&self, effect: EffectId) -> Vec<String> {
+        let params = self.effects.params(effect);
+        params
+            .iter()
+            .filter_map(|(n, _)| n.strip_suffix("_r"))
+            .filter(|base| {
+                ["g", "b"]
+                    .iter()
+                    .all(|k| params.iter().any(|(n, _)| *n == format!("{base}_{k}")))
+            })
+            .map(str::to_string)
+            .collect()
     }
 
     /// Troca o shader de um efeito (ao recarregar o arquivo), mantendo os
@@ -1546,9 +1645,16 @@ impl Renderer {
         self.screen_effect
     }
 
+    /// Mostra este quadro sem o efeito da tela (a tela de erro precisa ser
+    /// lida, com qualquer efeito).
+    pub fn skip_screen_effect_this_frame(&mut self) {
+        self.screen_effect_skipped = true;
+    }
+
     /// Joga fora o que foi pedido neste quadro, sem desenhar nada (para
     /// rodar a lógica sem gastar a GPU, como nos testes sem janela).
     pub fn discard_frame(&mut self) {
+        self.screen_effect_skipped = false;
         self.world.clear();
         self.screen.clear();
         self.canvas_stats = RenderStats::default();

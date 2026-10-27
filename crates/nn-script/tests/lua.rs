@@ -687,12 +687,19 @@ fn efeitos_pelo_lua() {
               cinza = nn.effect("cinza")
               meu = nn.effect("efeitos/meu.wgsl", { quanto = 1 })
               ruim = nn.effect("efeitos/ruim.wgsl")
+              qp = nn.effect("efeitos/quebrado_param.wgsl")
               erro_ruim = ruim.error
               nomes = table.concat(meu.params, ",")
               ok_param, erro_param = pcall(function() cinza.forsa = 1 end)
               erro_param = tostring(erro_param)
               contorno = nn.effect("contorno", { espessura = 2, cor = "#FF0000" })
               espessura = contorno.espessura
+              cor_lida = contorno.cor
+              erro_nome = nn.effect("brilhoo").error
+              local _, e_cor = pcall(function() contorno.corr = "#00FF00" end)
+              erro_cor = tostring(e_cor)
+              local _, e_cor2 = pcall(function() contorno.cor = "vermelho" end)
+              erro_cor2 = tostring(e_cor2)
             end
             function c:draw()
               if usar_tela ~= nil then
@@ -700,6 +707,11 @@ fn efeitos_pelo_lua() {
                 usar_tela = nil
               end
               erro_agora = ruim.error
+              -- Com erro no arquivo, mudar um parâmetro não derruba a cena.
+              if ruim.error then ruim.quanto = 0.5 end
+              -- O que tem erro guarda os parâmetros do arquivo.
+              qp.forca = 0.3
+              forca_lida = qp.forca
               local img = nn.assets.texture("vermelho.png")
               -- Esquerda: cinza; direita: invertido; embaixo: com erro (normal).
               nn.screen.sprite(img, 0, 0, { w = 32, h = 32, effect = cinza })
@@ -712,6 +724,10 @@ fn efeitos_pelo_lua() {
             (
                 "efeitos/meu.wgsl",
                 "// parâmetros: quanto = 0\nfn efeito(uv: vec2<f32>) -> vec4<f32> {\n    let c = amostra(uv);\n    return vec4<f32>(mix(c.rgb, 1.0 - c.rgb, params.quanto), c.a);\n}\n",
+            ),
+            (
+                "efeitos/quebrado_param.wgsl",
+                "// parâmetros: forca = 1\nfn efeito(uv: vec2<f32>) -> vec4<f32> {\n    return amostra(uv) * pisxa;\n}\n",
             ),
             (
                 "efeitos/ruim.wgsl",
@@ -740,6 +756,12 @@ fn efeitos_pelo_lua() {
     assert_eq!(global::<String>(&rt, "nomes"), "quanto");
     assert!(global::<String>(&rt, "erro_param").contains("tem: forca"));
     assert_eq!(global::<f64>(&rt, "espessura"), 2.0);
+    assert_eq!(global::<String>(&rt, "cor_lida"), "#FF0000FF");
+    assert!((global::<f64>(&rt, "forca_lida") - 0.3).abs() < 1e-6);
+    let erro_nome: String = global(&rt, "erro_nome");
+    assert!(erro_nome.contains("\"brilhoo\" não existe (os prontos: cinza"), "{erro_nome}");
+    assert!(global::<String>(&rt, "erro_cor").contains("não tem a cor \"corr\" (tem: cor)"));
+    assert!(global::<String>(&rt, "erro_cor2").contains("cor inválida"));
     let p = pixel(&h, 10, 10);
     assert!(p[0] == p[1] && p[1] == p[2] && p[0] > 0, "cinza: {p:?}");
     assert_eq!(pixel(&h, 40, 10)[..3], [0, 255, 255], "invertido");
@@ -796,6 +818,10 @@ fn pcall_em_portugues() {
               local _, e4 = pcall(nn.assets.texture, "nao_existe.png")
               m4 = tostring(e4)
               ok5, v5, w5 = pcall(function(a, b) return a + b, "extra" end, 2, 3)
+              local _, e6 = pcall(nn.screen.rect, 10, 10, nil, 20)
+              m6 = tostring(e6)
+              local _, e7 = xpcall(function() error("socorro") end, debug.traceback)
+              m7 = e7
               local co = coroutine.wrap(function()
                 local ok, v = pcall(function() return coroutine.yield(1) + 1 end)
                 return v
@@ -824,7 +850,12 @@ fn pcall_em_portugues() {
     assert!(m2.starts_with("pego: ") && m2.contains("tentou fazer uma conta"), "{m2}");
     assert_eq!(global::<i64>(&rt, "codigo"), 7);
     let m4: String = global(&rt, "m4");
-    assert!(m4.contains("nao_existe.png"), "{m4}");
+    assert_eq!(m4, "o arquivo nao_existe.png não existe");
+    let m6: String = global(&rt, "m6");
+    assert!(m6.contains("argumento nº 3 inválido") && m6.contains("esperava um número"), "{m6}");
+    assert!(!m6.contains("stack traceback") && !m6.contains("runtime error"), "{m6}");
+    let m7: String = global(&rt, "m7");
+    assert!(m7.contains("socorro") && m7.contains("caminho até o erro"), "{m7}");
     assert!(global::<bool>(&rt, "ok5"));
     assert_eq!(global::<i64>(&rt, "v5"), 5);
     assert_eq!(global::<String>(&rt, "w5"), "extra");

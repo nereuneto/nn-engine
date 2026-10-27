@@ -6,6 +6,67 @@
 //! for reconhecido fica como está. As posições (`arquivo.lua:12:`) não mudam,
 //! então editores e o console continuam achando a linha.
 
+/// O porquê de um argumento inválido, em português.
+fn argument_detail(d: &str) -> String {
+    if let Some((exp, got)) = d.split_once(" expected, got ") {
+        return format!("esperava {}, recebeu {}", type_name(exp), type_name(got));
+    }
+    if d == "number has no integer representation" {
+        return "o número não é inteiro; use math.floor".to_string();
+    }
+    if let Some(conv) = d.strip_prefix("error converting Lua ") {
+        // "nil to f32 (expected number)", "integer to u32 (out of range)".
+        let (conv, why) = match conv.split_once(" (") {
+            Some((c, w)) => (c, Some(w.trim_end_matches(')'))),
+            None => (conv, None),
+        };
+        if let Some((from, to)) = conv.split_once(" to ") {
+            let want = match to {
+                "f32" | "f64" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "usize" | "isize" => {
+                    "um número"
+                }
+                "String" | "string" => "um texto",
+                "bool" | "boolean" => "true ou false",
+                "table" | "Table" => "uma tabela",
+                "function" | "Function" => "uma função",
+                "userdata" | "AnyUserData" => "um objeto da engine (imagem, efeito, som...)",
+                other => other,
+            };
+            return match why {
+                Some("out of range") => format!("o número {} está fora do que vale aqui", type_name(from)),
+                _ => format!("esperava {want}, recebeu {}", type_name(from)),
+            };
+        }
+    }
+    d.to_string()
+}
+
+/// A mensagem de um erro pego com `pcall`, limpa: só o que houve (sem
+/// "runtime error:", sem o caminho até o erro e sem o começo da pasta do jogo
+/// nos nomes dos arquivos), em português.
+pub fn clean_error(message: &str, root: Option<&str>) -> String {
+    let mut m = message;
+    if let Some(i) = m.rfind("caused by: ") {
+        m = &m[i + "caused by: ".len()..];
+    }
+    if let Some(i) = m.find("stack traceback:") {
+        m = &m[..i];
+    }
+    let m = m.trim_end();
+    let m = m.strip_prefix("runtime error: ").unwrap_or(m);
+    let mut m = m.to_string();
+    if let Some(root) = root.filter(|r| !r.is_empty()) {
+        for sep in ["/", "\\"] {
+            m = m.replace(&format!("{}{sep}", root.trim_end_matches(['/', '\\'])), "");
+        }
+    }
+    // "asset não encontrado: x.png" vira "o arquivo x.png não existe".
+    if let Some(rest) = m.strip_prefix("asset não encontrado: ") {
+        m = format!("o arquivo {rest} não existe");
+    }
+    translate_error(&m)
+}
+
 /// Traduz uma mensagem de erro do Lua (pode ter várias linhas).
 pub fn translate_error(message: &str) -> String {
     message
@@ -207,6 +268,12 @@ fn translate_message(msg: &str) -> Option<String> {
     }
     if let Some(rest) = msg.strip_prefix("bad argument #") {
         // "bad argument #1 to 'insert' (table expected, got nil)"
+        // "bad argument #3: error converting..." (sem o nome da função).
+        if let Some((n, detail)) = rest.split_once(": ")
+            && !n.contains(' ')
+        {
+            return Some(format!("argumento nº {n} inválido ({})", argument_detail(detail)));
+        }
         let (n, rest) = rest.split_once(' ')?;
         let rest = rest.strip_prefix("to ")?;
         let (func, detail) = match rest.find(" (") {
@@ -216,22 +283,7 @@ fn translate_message(msg: &str) -> Option<String> {
                 None => (rest, None),
             },
         };
-        let detail = detail.map(|d| {
-            if let Some((exp, got)) = d.split_once(" expected, got ") {
-                format!("esperava {}, recebeu {}", type_name(exp), type_name(got))
-            } else if d == "number has no integer representation" {
-                "o número não é inteiro; use math.floor".to_string()
-            } else if let Some(conv) = d.strip_prefix("error converting Lua ") {
-                match conv.split_once(" to ") {
-                    Some((from, to)) => {
-                        format!("não deu para converter {} em {to}", type_name(from))
-                    }
-                    None => d.to_string(),
-                }
-            } else {
-                d.to_string()
-            }
-        });
+        let detail = detail.map(argument_detail);
         return Some(match detail {
             Some(d) => format!("argumento nº {n} inválido em {func} ({d})"),
             None => format!("argumento nº {n} inválido em {func}"),

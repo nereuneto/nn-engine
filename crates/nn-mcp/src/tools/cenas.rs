@@ -198,6 +198,14 @@ pub fn find_object(data: &SceneData, r: &Value) -> Result<u32, String> {
     }
 }
 
+#[allow(non_snake_case)]
+fn SORT_Y() -> Value {
+    s_list(
+        "Camadas (números) em que quem está mais embaixo (o pé, a base do corpo) fica na frente, para jogos vistos de cima: [1]. [] tira",
+        json!({ "type": "number" }),
+    )
+}
+
 fn header(doc: &Doc) -> String {
     let d = &doc.data;
     let mut count = 0;
@@ -224,6 +232,10 @@ fn header(doc: &Doc) -> String {
         );
         if !d.script.is_empty() {
             s.push_str(&format!(", script = {}", d.script));
+        }
+        if !d.sort_y.is_empty() {
+            let l: Vec<String> = d.sort_y.iter().map(i64::to_string).collect();
+            s.push_str(&format!(", ordenar por y nas camadas {}", l.join(", ")));
         }
         s.push('.');
         s
@@ -297,6 +309,27 @@ fn ver_cena(s: &mut Server, a: &Value) -> Result<Output, String> {
 
 // criar_cena -------------------------------------------------------------
 
+/// "ordenar_por_y": a lista das camadas (números) em que quem está mais
+/// embaixo fica na frente.
+fn sort_y_arg(a: &Value) -> Result<Option<Vec<i64>>, String> {
+    let Some(v) = a.get("ordenar_por_y") else {
+        return Ok(None);
+    };
+    let list = v
+        .as_array()
+        .ok_or("\"ordenar_por_y\" é a lista das camadas, ex.: [1] ([] tira)")?;
+    let mut out = Vec::new();
+    for x in list {
+        let n = x
+            .as_f64()
+            .ok_or("\"ordenar_por_y\" é uma lista de números de camada, ex.: [1, 2]")?;
+        out.push(n.floor() as i64);
+    }
+    out.sort_unstable();
+    out.dedup();
+    Ok(Some(out))
+}
+
 fn criar_cena(s: &mut Server, a: &Value) -> Result<Output, String> {
     let rel = crate::paths::clean(arg_str(a, "caminho")?)?;
     if !rel.ends_with(".cena") {
@@ -325,6 +358,9 @@ fn criar_cena(s: &mut Server, a: &Value) -> Result<Output, String> {
         data.background = bg.to_string();
     }
     data.overlay = opt_bool(a, "por_cima")?.unwrap_or(false);
+    if let Some(l) = sort_y_arg(a)? {
+        data.sort_y = l;
+    }
     if data.overlay && data.background.is_empty() {
         data.background = "#00000099".into();
     }
@@ -368,6 +404,9 @@ fn mudar_cena(s: &mut Server, a: &Value) -> Result<Output, String> {
     }
     if let Some(o) = opt_bool(a, "por_cima")? {
         d.overlay = o;
+    }
+    if let Some(l) = sort_y_arg(a)? {
+        d.sort_y = l;
     }
     if let Some(script) = opt_str(a, "script")? {
         if !script.is_empty() {
@@ -1016,6 +1055,7 @@ pub static TOOLS: &[&Tool] = &[
                     s_bool("Vira a cena inicial do jogo (start no config.lua)"),
                     false,
                 ),
+                ("ordenar_por_y", SORT_Y(), false),
             ]
         },
         read_only: false,
@@ -1036,6 +1076,7 @@ pub static TOOLS: &[&Tool] = &[
                     false,
                 ),
                 ("por_cima", s_bool("Abre por cima de outra cena"), false),
+                ("ordenar_por_y", SORT_Y(), false),
                 ("script", s_str("Script Lua da cena (\"\" tira)"), false),
                 (
                     "environment",

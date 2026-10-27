@@ -394,6 +394,15 @@ function T:mouse(x, y)
   driver.mouse_move(x, y)
 end
 
+--- Gira a roda do mouse: `linhas` positivas sobem (a lista volta),
+--- negativas descem. Com x, y, põe o mouse ali antes.
+function T:scroll(linhas, x, y)
+  if type(linhas) ~= "number" then error("t:scroll precisa das linhas (um número)", 2) end
+  if x and y then driver.mouse_move(x, y) end
+  driver.scroll(linhas)
+  self:frames(1)
+end
+
 --- Guarda uma captura da tela agora.
 function T:screenshot(name)
   coroutine.yield("capture", name and tostring(name) or ("captura em " .. num(self:time()) .. " s"))
@@ -583,6 +592,8 @@ function D.plan(t, plan)
       if a.name then t:click(a.name, a.button) else t:click(a.x, a.y, a.button) end
     elseif op == "move" then
       t:mouse(a.x, a.y)
+    elseif op == "scroll" then
+      t:scroll(a.lines)
     elseif op == "type" then
       t:type(a.text)
     elseif op == "capture" then

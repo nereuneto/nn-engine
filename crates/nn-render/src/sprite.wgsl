@@ -25,6 +25,7 @@ struct Instance {
     @location(5) color: vec4<f32>,  // linear
     @location(6) repeat: vec2<f32>, // repetições lado a lado (1, 1 = esticar)
     @location(7) offset: vec2<f32>, // deslocamento dentro das repetições
+    @location(8) flags: f32,        // 1 = canvas (alpha já multiplicado)
 };
 
 struct VertexOut {
@@ -44,6 +45,7 @@ struct VertexOut {
     // A posição dentro do sprite (0 a 1, com 0, 0 no canto de cima à
     // esquerda da imagem), para os efeitos.
     @location(8) local: vec2<f32>,
+    @location(9) @interpolate(flat) flags: f32,
 };
 
 @vertex
@@ -68,6 +70,7 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, inst: Instance) -> VertexOu
     var out: VertexOut;
     out.bary = vec3<f32>(0.0);
     out.edges = 0.0;
+    out.flags = inst.flags;
     if (inst.repeat.x < 0.0) {
         // Triângulo de forma: os vértices 3 a 5 ficam no canto 2 (sem área).
         let i = min(vertex_index, 2u);
@@ -122,6 +125,9 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     if ((bits & 1u) != 0u) { cover = min(cover, d.z); }
     if ((bits & 2u) != 0u) { cover = min(cover, d.x); }
     if ((bits & 4u) != 0u) { cover = min(cover, d.y); }
-    let color = textureSampleGrad(sprite_texture, sprite_sampler, uv, gx, gy) * in.color;
+    // Um canvas guarda a cor com o alpha já multiplicado: volta ao normal.
+    let s = textureSampleGrad(sprite_texture, sprite_sampler, uv, gx, gy);
+    let normal = vec4<f32>(s.rgb / max(s.a, 0.0039), s.a);
+    let color = select(s, normal, in.flags > 0.5) * in.color;
     return vec4<f32>(color.rgb, color.a * clamp(cover, 0.0, 1.0));
 }

@@ -658,7 +658,7 @@ pub fn draw_order_where<'a>(
             let me = owner.unwrap_or(o.id);
             // Para "ordenar por y": o pé do objeto da raiz (os filhos vão com
             // ele), como o jogo faz.
-            let key = root_key.unwrap_or_else(|| world.y - half_height(o) * world.scale_y.abs());
+            let key = root_key.unwrap_or_else(|| world.y + foot(o) * world.scale_y.abs());
             out.push(Placed {
                 object: o,
                 world,
@@ -687,7 +687,20 @@ pub fn draw_order_where<'a>(
             );
         }
     }
-    // A metade da altura do que dá para saber sem abrir arquivos.
+    // Onde fica o pé, a partir do centro: a base do corpo (com o
+    // deslocamento oy), ou a metade da altura do que dá para saber sem
+    // abrir arquivos.
+    fn foot(o: &Object) -> f64 {
+        if let Some(b) = o.component("body") {
+            let half = if b.str("shape") == "circle" {
+                b.num("radius")
+            } else {
+                b.num("h") / 2.0
+            };
+            return b.num("oy") - half;
+        }
+        -half_height(o)
+    }
     fn half_height(o: &Object) -> f64 {
         o.components
             .iter()

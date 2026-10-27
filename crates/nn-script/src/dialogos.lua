@@ -110,6 +110,7 @@ local function go(d, id)
   d.choice = 1
   d.choices = visible_choices(node)
   d.lines = nil
+  d.page, d.page_end, d.next_page = 1, nil, nil
   set_var(node.var, node.value)
   if node.item and node.item ~= "" then nn.inventory.add(node.item, 1) end
   send(d, "fala", node.id)
@@ -158,16 +159,21 @@ function D.update(scene, dt)
   end
   local speed = tonumber(d.data.speed) or 40
   local before = math.floor(d.shown)
-  if d.shown < d.len then
-    d.shown = speed <= 0 and d.len or math.min(d.len, d.shown + speed * dt)
+  -- Aparece letra por letra até o fim da página.
+  local limit = d.page_end or d.len
+  if d.shown < limit then
+    d.shown = speed <= 0 and limit or math.min(limit, d.shown + speed * dt)
     local who = d.data.by_name[d.node.who or ""]
     if who and who.sound and who.sound ~= "" and math.floor(d.shown) ~= before
         and math.floor(d.shown) % 3 == 0 then
       sound(who.sound)
     end
   end
-  local typing = d.shown < d.len
-  local n = #d.choices
+  -- Texto comprido: em páginas; as escolhas só na última.
+  local page_end = d.page_end or d.len
+  local typing = d.shown < page_end
+  local more = d.next_page ~= nil
+  local n = more and 0 or #d.choices
   if not typing and n > 0 then
     local up = nn.input.pressed("up") or nn.input.pressed("w") or nn.input.pad_pressed("up")
     local down = nn.input.pressed("down") or nn.input.pressed("s") or nn.input.pad_pressed("down")
@@ -191,7 +197,13 @@ function D.update(scene, dt)
   if confirm_pressed() or d.pick then
     d.pick = false
     if typing then
-      d.shown = d.len
+      d.shown = page_end
+    elseif more then
+      -- A próxima página.
+      sound(cena.theme("sound"))
+      d.page = d.page + 1
+      d.shown = d.next_page
+      d.page_end, d.next_page = nil, nil
     elseif n > 0 then
       local c = d.choices[d.choice]
       sound(cena.theme("sound"))
@@ -277,20 +289,37 @@ function D.draw(scene)
     d.lines = wrap(d.text, tw, opts)
     d.lines_w = tw
   end
-  local left = math.floor(d.shown)
+  -- Quantas linhas cabem; mais que isso vira outra página.
+  local step = size * 1.35
+  local per_page = math.max(1, math.floor((bh - pad * 0.9) / step))
+  local page = d.page or 1
+  local first = (page - 1) * per_page + 1
+  local last = math.min(#d.lines, first + per_page - 1)
+  local start = 0
+  for i = 1, first - 1 do start = start + (utf8.len(d.lines[i]) or #d.lines[i]) + 1 end
+  local page_end = start
+  for i = first, last do page_end = page_end + (utf8.len(d.lines[i]) or #d.lines[i]) + 1 end
+  if last < #d.lines then
+    d.page_end, d.next_page = page_end - 1, page_end
+  else
+    d.page_end, d.next_page = d.len, nil
+  end
+  if d.shown > d.page_end then d.shown = d.page_end end
+  local left = math.floor(d.shown) - start
   local ty = by + pad * 0.9
-  for _, line in ipairs(d.lines) do
+  for i = first, last do
+    local line = d.lines[i]
     if left <= 0 then break end
     local n = utf8.len(line) or #line
     local part = line
     if left < n then part = line:sub(1, (utf8.offset(line, left + 1) or (#line + 1)) - 1) end
     nn.screen.text(part, tx, ty, { size = size, color = text_color, anchor = "topleft", font = font })
     left = left - n - 1
-    ty = ty + size * 1.35
+    ty = ty + step
   end
-  local typing = d.shown < d.len
+  local typing = d.shown < d.page_end
   if typing then return end
-  if #d.choices == 0 then
+  if #d.choices == 0 or d.next_page then
     -- Pronto: um quadradinho piscando no canto (passa para a próxima).
     if (d.t * 2) % 2 < 1.3 then
       local s = math.floor(size * 0.5)

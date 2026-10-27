@@ -90,33 +90,15 @@ pub(crate) fn polyline(points: &[Vec2], width: f32, closed: bool, out: &mut Vec<
             ends[a] = [left, right];
             starts[b] = [left, right];
         } else {
-            // Cortada: o lado de dentro se encontra, o de fora ganha um
-            // triângulo entre as duas pontas.
+            // Cortada: cada segmento fica com a ponta reta dele, e o lado de
+            // fora ganha um triângulo entre as duas pontas (o de dentro se
+            // sobrepõe; nos ângulos fechados, juntar os dois deixa lascas).
             let turn = na.perp_dot(nb);
-            let inner_len = (hw / miter.dot(nb).abs().max(1e-4)).min(
-                (pts[j] - pts[a])
-                    .length()
-                    .min((pts[(j + 1) % n] - pts[j]).length())
-                    + hw,
-            );
-            if turn > 0.0 || (turn == 0.0 && cos < 0.0) {
-                // Vira para a esquerda: o lado de fora é o da direita.
-                let inner = pts[j] + miter * inner_len;
-                ends[a][0] = inner;
-                starts[b][0] = inner;
-                bevels.push(Tri {
-                    points: [pts[j], ends[a][1], starts[b][1]],
-                    edges: 2,
-                });
-            } else {
-                let inner = pts[j] - miter * inner_len;
-                ends[a][1] = inner;
-                starts[b][1] = inner;
-                bevels.push(Tri {
-                    points: [pts[j], ends[a][0], starts[b][0]],
-                    edges: 2,
-                });
-            }
+            let outer = if turn > 0.0 || (turn == 0.0 && cos < 0.0) { 1 } else { 0 };
+            bevels.push(Tri {
+                points: [pts[j], ends[a][outer], starts[b][outer]],
+                edges: 2,
+            });
         }
     }
     for s in 0..segments {

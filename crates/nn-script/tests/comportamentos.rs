@@ -875,6 +875,71 @@ fn dialogo_abre_com_e_escolhe_e_termina() {
     assert_eq!(h.game.0.error(), None);
 }
 
+/// Uma fala comprida vira páginas: Enter passa a página, e só na última
+/// vai para a próxima fala.
+#[test]
+fn dialogo_com_texto_comprido_em_paginas() {
+    let longo = "Era uma vez um reino muito distante, onde as florestas cobriam as montanhas e os rios desciam até o mar. ".repeat(4);
+    let conversa = format!(
+        r##"return {{
+  format = 1, start = 1, speed = 0,
+  characters = {{ {{ name = "Ana" }} }},
+  nodes = {{
+    {{ id = 1, who = "Ana", text = "{longo}", next = 2 }},
+    {{ id = 2, who = "Ana", text = "Fim.", next = 0 }},
+  }},
+}}"##
+    );
+    let dir = projeto(
+        "dialogo-longo",
+        &[
+            (
+                "cenas/obs.lua",
+                "local c = {} function c:enter() C = self end return c",
+            ),
+            ("dialogos/ana.dialogo", &conversa),
+            (
+                "cenas/fase.cena",
+                r##"return { script = "cenas/obs.lua", objects = {
+  { id = 1, name = "heroi", x = 0, y = 0, components = {
+    { type = "shape", w = 10, h = 10, color = "#FF0000" },
+    { type = "behavior", script = "nn:topdown", velocidade = 300 },
+  } },
+  { id = 2, name = "ana", x = 30, y = 0, components = {
+    { type = "shape", w = 10, h = 20, color = "#FFD166" },
+    { type = "behavior", script = "nn:dialogo", arquivo = "dialogos/ana.dialogo", distancia = 30 },
+  } },
+} }"##,
+            ),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/fase.cena") else {
+        return;
+    };
+    let apertar = |h: &mut Headless<Uma>, k: KeyCode| {
+        h.ctx.input.press_key(k);
+        h.run_frames(1);
+        h.ctx.input.release_key(k);
+        h.run_frames(2);
+    };
+    h.run_frames(3);
+    apertar(&mut h, KeyCode::KeyE);
+    assert_eq!(h.game.0.error(), None);
+    let linhas: i64 = lua(&rt, "#C._dlg.lines");
+    assert!(linhas > 3, "{linhas} linhas");
+    // Cada página mostra até 3 linhas; Enter passa as páginas.
+    let mut paginas = 1;
+    while lua::<i64>(&rt, "C._dlg.node.id") == 1 {
+        assert!(lua::<i64>(&rt, "C._dlg.page") == paginas);
+        apertar(&mut h, KeyCode::Enter);
+        paginas += 1;
+        assert!(paginas < 20);
+    }
+    assert_eq!(paginas - 1, (linhas + 2) / 3, "uma página a cada 3 linhas");
+    assert_eq!(lua::<String>(&rt, "C._dlg.text"), "Fim.");
+    assert_eq!(h.game.0.error(), None);
+}
+
 /// O pulo avisa os eventos ("Pular"), um toque dá um pulo baixo (mas um
 /// pulo), e a Animação automática no padrão usa as animações da imagem
 /// chamadas parado, andar e pular.

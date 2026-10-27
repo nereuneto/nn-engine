@@ -204,6 +204,11 @@ impl Log for Logger {
     }
 
     fn log(&self, record: &Record) {
+        // O validador de shaders avisa os erros dos efeitos em inglês; a
+        // engine já mostra o erro em português, com a linha.
+        if record.target().starts_with("naga::") {
+            return;
+        }
         if let Some(inner) = &self.inner
             && inner.enabled(record.metadata())
         {

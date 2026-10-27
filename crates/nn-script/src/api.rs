@@ -571,13 +571,35 @@ fn draw_table(lua: &Lua, space: Space) -> Result<Table> {
                         .unwrap_or_else(|| format!("{other:?}")),
                 };
                 let text = build_text(&content, x, y, opts.as_ref())?;
+                // Contorno: o texto na cor dele, em volta (lê bem em cima de
+                // qualquer fundo), como o do componente Texto.
+                let outline = opt_color(opts.as_ref(), "outline")?;
                 with_ctx(lua, |c| {
-                    match space {
-                        Space::World => c.renderer.draw_text(&text),
+                    let mut draw = |t: &nn_render::Text<'_>| match space {
+                        Space::World => c.renderer.draw_text(t),
                         Space::Screen => {
-                            c.renderer.screen().draw_text(&text);
+                            c.renderer.screen().draw_text(t);
+                        }
+                    };
+                    if let Some(col) = outline {
+                        let d = (text.size / 16.0).max(1.0);
+                        let mut o = text;
+                        o.color = col.with_alpha(col.a * text.color.a);
+                        for (dx, dy) in [
+                            (-1.0, -1.0),
+                            (0.0, -1.0),
+                            (1.0, -1.0),
+                            (-1.0, 0.0),
+                            (1.0, 0.0),
+                            (-1.0, 1.0),
+                            (0.0, 1.0),
+                            (1.0, 1.0),
+                        ] {
+                            o.position = text.position + Vec2::new(dx, dy) * d;
+                            draw(&o);
                         }
                     }
+                    draw(&text);
                     Ok(())
                 })
             },
@@ -904,16 +926,23 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     // O efeito na tela inteira (nil tira).
     screen.set(
         "effect",
-        lua.create_function(|lua, e: Option<mlua::AnyUserData>| {
+        lua.create_function(|lua, e: Value| {
             let id = match &e {
-                None => None,
-                Some(ud) => Some(
-                    ud.borrow::<LEffect>()
-                        .map_err(|_| {
-                            err("nn.screen.effect: esperava um efeito (nn.effect) ou nil")
-                        })?
-                        .0,
-                ),
+                Value::Nil => None,
+                Value::UserData(ud) if ud.is::<LEffect>() => Some(ud.borrow::<LEffect>()?.0),
+                Value::String(name) => {
+                    return Err(err(format!(
+                        "nn.screen.effect: esperava um efeito, recebeu o texto \"{}\"; crie com nn.effect: nn.screen.effect(nn.effect(\"{}\"))",
+                        name.to_string_lossy(),
+                        name.to_string_lossy()
+                    )));
+                }
+                other => {
+                    return Err(err(format!(
+                        "nn.screen.effect: esperava um efeito (nn.effect) ou nil, recebeu {}",
+                        other.type_name()
+                    )));
+                }
             };
             // Guarda o efeito enquanto ele estiver na tela.
             lua.set_named_registry_value("nn_efeito_tela", e)?;
@@ -1577,12 +1606,20 @@ pub(crate) fn install(lua: &Lua) -> Result<()> {
     // (coroutine.yield) dentro.
     let nn_table: Table = lua.globals().get("nn")?;
     nn_table.set(
-        "_translate_error",
+        "_translate_only",
         lua.create_function(|_, msg: String| Ok(crate::translate_error(&msg)))?,
+    )?;
+    nn_table.set(
+        "_translate_error",
+        lua.create_function(|lua, msg: String| {
+            // O começo da pasta do jogo sai dos nomes dos arquivos.
+            let root = with_ctx(lua, |c| Ok(c.assets.root().to_string_lossy().into_owned())).ok();
+            Ok(crate::clean_error(&msg, root.as_deref()))
+        })?,
     )?;
     lua.load(
         r#"
-local raw_pcall, raw_xpcall, tr = pcall, xpcall, nn._translate_error
+local raw_pcall, raw_xpcall, tr, tr_only = pcall, xpcall, nn._translate_error, nn._translate_only
 local type, tostring, select = type, tostring, select
 local function pt(e)
   local t = type(e)
@@ -1600,9 +1637,27 @@ end
 function pcall(f, ...)
   return fix(raw_pcall(f, ...))
 end
-function xpcall(f, handler, ...)
-  return fix(raw_xpcall(f, handler, ...))
+-- No xpcall, o que a função de tratar devolveu (pode ter o caminho até o
+-- erro): só traduzido.
+local function fix_x(ok, ...)
+  if ok then return ok, ... end
+  local e = ...
+  if type(e) == "string" then e = tr_only(e) end
+  return false, e, select(2, ...)
 end
+function xpcall(f, handler, ...)
+  return fix_x(raw_xpcall(f, handler, ...))
+end
+-- O Lua dos jogos não tem a biblioteca debug; fica o traceback, que é o que
+-- se usa com o xpcall: xpcall(f, debug.traceback).
+debug = {
+  traceback = function(msg)
+    if type(msg) ~= "string" and msg ~= nil and type(msg) ~= "userdata" then return msg end
+    local tb = rawget(nn, "_traceback")
+    if not tb then return msg end
+    return tb(msg == nil and "" or msg)
+  end,
+}
 "#,
     )
     .set_name("=nn")
