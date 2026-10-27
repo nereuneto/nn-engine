@@ -355,6 +355,11 @@ No jogo, o **Jogador 3D** toca sozinho parado, andar, correr, pular e cair (e o 
 
 ## O que vem depois
 
+A v0.9 trouxe **desempenho, robustez e memória**, e o agente vê mais do jogo:
+- o `rodar_jogo` diz quanto cada quadro gastou (passos fixos, física, `update` e desenho) e o quadro mais pesado;
+- o erro de um comportamento aparece como erro, mas o jogo segue;
+- `nn.debug.stats()` dá ao Lua os números da tela de desempenho (F3).
+
 A v0.8 trouxe **a arte, a modelagem e a animação pelo agente**: pixel art e animações de sprite, mapas, partículas, sons, diálogos, modelos 3D, esqueletos e animações, tudo com prévias em imagem. Na revisão, dois agentes fizeram cada um um jogo do zero com toda a arte feita por eles, um de plataforma 2D em pixel art e uma aventura 3D.
 
 Ideias para depois, do que os agentes da revisão sentiram falta:

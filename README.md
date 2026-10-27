@@ -431,7 +431,7 @@ let heroi = ctx.load_texture("imagens/heroi.png", TextureOptions::PIXEL_ART)?;
 let pulo = ctx.load_sound("sons/pulo.ogg")?;
 ```
 
-Cada arquivo é carregado uma vez (pedir de novo devolve o mesmo id). Num jogo exportado, os mesmos caminhos são lidos do pacote dentro do executável, sem mudar nada no código. Em builds de desenvolvimento, imagens, sons e scripts Lua alterados no disco são recarregados sozinhos, mantendo os ids. Para desligar: `AppConfig::hot_reload(false)`.
+Cada arquivo é carregado uma vez (pedir de novo devolve o mesmo id). Nos jogos em Lua, a cena carrega antes de começar o que vai usar e, ao trocar de cena, o que nenhuma cena usa mais sai da memória (veja [docs/lua.md](docs/lua.md)). Num jogo exportado, os mesmos caminhos são lidos do pacote dentro do executável, sem mudar nada no código. Em builds de desenvolvimento, imagens, sons e scripts Lua alterados no disco são recarregados sozinhos, mantendo os ids. Para desligar: `AppConfig::hot_reload(false)`.
 
 ## Áudio
 
