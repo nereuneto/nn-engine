@@ -206,7 +206,11 @@ pub fn parse_params(source: &str) -> Result<Vec<(String, f32)>, EffectError> {
                             message: format!("o parâmetro \"{full}\" aparece duas vezes"),
                         });
                     }
-                    let v = if k < 3 { srgb_to_linear(rgba[k]) } else { rgba[k] };
+                    let v = if k < 3 {
+                        srgb_to_linear(rgba[k])
+                    } else {
+                        rgba[k]
+                    };
                     out.push((full, v));
                 }
                 continue;
@@ -246,8 +250,17 @@ fn parse_hex(hex: &str) -> Option<[f32; 4]> {
     if !(hex.len() == 6 || hex.len() == 8) || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
     }
-    let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok().map(|b| f32::from(b) / 255.0);
-    Some([byte(0)?, byte(2)?, byte(4)?, if hex.len() == 8 { byte(6)? } else { 1.0 }])
+    let byte = |i: usize| {
+        u8::from_str_radix(&hex[i..i + 2], 16)
+            .ok()
+            .map(|b| f32::from(b) / 255.0)
+    };
+    Some([
+        byte(0)?,
+        byte(2)?,
+        byte(4)?,
+        if hex.len() == 8 { byte(6)? } else { 1.0 },
+    ])
 }
 
 fn srgb_to_linear(c: f32) -> f32 {
@@ -349,11 +362,15 @@ fn translate(message: &str, params: &[(String, f32)]) -> String {
         return if names.is_empty() {
             format!("\"{field}\" não existe aqui (o efeito não tem parâmetros)")
         } else {
-            format!("\"{field}\" não existe aqui (os parâmetros são: {})", names.join(", "))
+            format!(
+                "\"{field}\" não existe aqui (os parâmetros são: {})",
+                names.join(", ")
+            )
         };
     }
     if m.contains("does not match the declared return type") {
-        return "o return não devolve o tipo que a função promete (o efeito devolve vec4<f32>)".into();
+        return "o return não devolve o tipo que a função promete (o efeito devolve vec4<f32>)"
+            .into();
     }
     if m.starts_with("no definition in scope for identifier") {
         return format!("\"{}\" não existe aqui", quoted(m));
@@ -788,7 +805,11 @@ mod tests {
             "// parâmetros: forca = 1\nfn efeito(uv: vec2<f32>) -> vec4<f32> {\n    let c = amostra(uv);\n    return c * params.forsa;\n}\n",
         )
         .unwrap_err();
-        assert!(e.message.contains("\"forsa\" não existe aqui (os parâmetros são: forca)"), "{e}");
+        assert!(
+            e.message
+                .contains("\"forsa\" não existe aqui (os parâmetros são: forca)"),
+            "{e}"
+        );
         assert_eq!(e.line, Some(4), "{e}");
         let e = check("fn efeito(uv: vec2<f32>) -> vec4<f32> {\n    let x = 1.0;\n    return vec3<f32>(x);\n}\n").unwrap_err();
         assert!(e.message.contains("o return não devolve o tipo"), "{e}");

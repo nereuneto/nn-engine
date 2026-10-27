@@ -759,7 +759,10 @@ fn efeitos_pelo_lua() {
     assert_eq!(global::<String>(&rt, "cor_lida"), "#FF0000FF");
     assert!((global::<f64>(&rt, "forca_lida") - 0.3).abs() < 1e-6);
     let erro_nome: String = global(&rt, "erro_nome");
-    assert!(erro_nome.contains("\"brilhoo\" não existe (os prontos: cinza"), "{erro_nome}");
+    assert!(
+        erro_nome.contains("\"brilhoo\" não existe (os prontos: cinza"),
+        "{erro_nome}"
+    );
     assert!(global::<String>(&rt, "erro_cor").contains("não tem a cor \"corr\" (tem: cor)"));
     assert!(global::<String>(&rt, "erro_cor2").contains("cor inválida"));
     let p = pixel(&h, 10, 10);
@@ -845,17 +848,32 @@ fn pcall_em_portugues() {
     h.run_frames(1);
     assert_eq!(h.game.0.error(), None);
     let m1: String = global(&rt, "m1");
-    assert!(m1.contains("tentou acessar um campo de um valor nil"), "{m1}");
+    assert!(
+        m1.contains("tentou acessar um campo de um valor nil"),
+        "{m1}"
+    );
     let m2: String = global(&rt, "m2");
-    assert!(m2.starts_with("pego: ") && m2.contains("tentou fazer uma conta"), "{m2}");
+    assert!(
+        m2.starts_with("pego: ") && m2.contains("tentou fazer uma conta"),
+        "{m2}"
+    );
     assert_eq!(global::<i64>(&rt, "codigo"), 7);
     let m4: String = global(&rt, "m4");
     assert_eq!(m4, "o arquivo nao_existe.png não existe");
     let m6: String = global(&rt, "m6");
-    assert!(m6.contains("argumento nº 3 inválido") && m6.contains("esperava um número"), "{m6}");
-    assert!(!m6.contains("stack traceback") && !m6.contains("runtime error"), "{m6}");
+    assert!(
+        m6.contains("argumento nº 3 inválido") && m6.contains("esperava um número"),
+        "{m6}"
+    );
+    assert!(
+        !m6.contains("stack traceback") && !m6.contains("runtime error"),
+        "{m6}"
+    );
     let m7: String = global(&rt, "m7");
-    assert!(m7.contains("socorro") && m7.contains("caminho até o erro"), "{m7}");
+    assert!(
+        m7.contains("socorro") && m7.contains("caminho até o erro"),
+        "{m7}"
+    );
     assert!(global::<bool>(&rt, "ok5"));
     assert_eq!(global::<i64>(&rt, "v5"), 5);
     assert_eq!(global::<String>(&rt, "w5"), "extra");

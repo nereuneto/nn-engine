@@ -586,8 +586,10 @@ impl Context {
                         }
                     } else {
                         // Nem um pronto, nem um arquivo .wgsl.
-                        let names: Vec<&str> =
-                            nn_render::effects::BUILTIN.iter().map(|(n, _)| *n).collect();
+                        let names: Vec<&str> = nn_render::effects::BUILTIN
+                            .iter()
+                            .map(|(n, _)| *n)
+                            .collect();
                         let msg = format!(
                             "efeito \"{name}\" não existe (os prontos: {}; um efeito seu é um arquivo .wgsl)",
                             names.join(", ")

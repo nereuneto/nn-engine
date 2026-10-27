@@ -94,7 +94,11 @@ pub(crate) fn polyline(points: &[Vec2], width: f32, closed: bool, out: &mut Vec<
             // fora ganha um triângulo entre as duas pontas (o de dentro se
             // sobrepõe; nos ângulos fechados, juntar os dois deixa lascas).
             let turn = na.perp_dot(nb);
-            let outer = if turn > 0.0 || (turn == 0.0 && cos < 0.0) { 1 } else { 0 };
+            let outer = if turn > 0.0 || (turn == 0.0 && cos < 0.0) {
+                1
+            } else {
+                0
+            };
             bevels.push(Tri {
                 points: [pts[j], ends[a][outer], starts[b][outer]],
                 edges: 2,

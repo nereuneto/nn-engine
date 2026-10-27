@@ -22,9 +22,8 @@ fn argument_detail(d: &str) -> String {
         };
         if let Some((from, to)) = conv.split_once(" to ") {
             let want = match to {
-                "f32" | "f64" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "usize" | "isize" => {
-                    "um número"
-                }
+                "f32" | "f64" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "usize"
+                | "isize" => "um número",
                 "String" | "string" => "um texto",
                 "bool" | "boolean" => "true ou false",
                 "table" | "Table" => "uma tabela",
@@ -33,7 +32,9 @@ fn argument_detail(d: &str) -> String {
                 other => other,
             };
             return match why {
-                Some("out of range") => format!("o número {} está fora do que vale aqui", type_name(from)),
+                Some("out of range") => {
+                    format!("o número {} está fora do que vale aqui", type_name(from))
+                }
                 _ => format!("esperava {want}, recebeu {}", type_name(from)),
             };
         }
@@ -272,7 +273,10 @@ fn translate_message(msg: &str) -> Option<String> {
         if let Some((n, detail)) = rest.split_once(": ")
             && !n.contains(' ')
         {
-            return Some(format!("argumento nº {n} inválido ({})", argument_detail(detail)));
+            return Some(format!(
+                "argumento nº {n} inválido ({})",
+                argument_detail(detail)
+            ));
         }
         let (n, rest) = rest.split_once(' ')?;
         let rest = rest.strip_prefix("to ")?;

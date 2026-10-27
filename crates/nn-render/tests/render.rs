@@ -1306,8 +1306,16 @@ fn efeito_na_tela_inteira() {
 fn canvas_transparente_com_translucido() {
     let Some(mut h) = Harness::new() else { return };
     let cena = |s: &mut nn_render::ScreenPainter<'_>| {
-        s.draw_rect(Vec2::new(8.0, 8.0), Vec2::splat(40.0), Color::rgba(1.0, 1.0, 1.0, 0.5));
-        s.draw_rect(Vec2::new(24.0, 24.0), Vec2::splat(30.0), Color::rgba(1.0, 0.0, 0.0, 0.5));
+        s.draw_rect(
+            Vec2::new(8.0, 8.0),
+            Vec2::splat(40.0),
+            Color::rgba(1.0, 1.0, 1.0, 0.5),
+        );
+        s.draw_rect(
+            Vec2::new(24.0, 24.0),
+            Vec2::splat(30.0),
+            Color::rgba(1.0, 0.0, 0.0, 0.5),
+        );
     };
     for fundo in [Color::BLACK, Color::rgb(0.5, 0.5, 0.5)] {
         cena(&mut h.renderer.screen());
@@ -1315,7 +1323,8 @@ fn canvas_transparente_com_translucido() {
         let canvas = h.renderer.create_canvas(SIZE, TextureOptions::PIXEL_ART);
         h.renderer.begin_canvas(canvas);
         cena(&mut h.renderer.screen());
-        h.renderer.end_canvas(&Camera2D::default(), Some(Color::rgba(0.0, 0.0, 0.0, 0.0)));
+        h.renderer
+            .end_canvas(&Camera2D::default(), Some(Color::rgba(0.0, 0.0, 0.0, 0.0)));
         h.renderer.screen().draw(
             &Sprite::new(canvas)
                 .at(Vec2::ZERO)

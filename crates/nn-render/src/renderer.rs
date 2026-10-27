@@ -453,7 +453,8 @@ impl Renderer {
         // Num canvas, a cor fica com o alpha multiplicado (o translúcido
         // sobre o transparente sai certo depois).
         let canvas_pipeline = make_pipeline("nn sprite canvas", CANVAS_BLEND);
-        let canvas_additive_pipeline = make_pipeline("nn sprite canvas aditivo", CANVAS_ADDITIVE_BLEND);
+        let canvas_additive_pipeline =
+            make_pipeline("nn sprite canvas aditivo", CANVAS_ADDITIVE_BLEND);
 
         let instance_buffer = Self::create_instance_buffer(&device, Self::INITIAL_CAPACITY);
 
@@ -1396,7 +1397,9 @@ impl Renderer {
                             (Some(i), Blend::Alpha, true) => {
                                 &self.effects.shaders[i.shader].canvas_alpha
                             }
-                            (Some(i), Blend::Add, true) => &self.effects.shaders[i.shader].canvas_add,
+                            (Some(i), Blend::Add, true) => {
+                                &self.effects.shaders[i.shader].canvas_add
+                            }
                             (None, Blend::Alpha, false) => &self.pipeline,
                             (None, Blend::Add, false) => &self.additive_pipeline,
                             (None, Blend::Alpha, true) => &self.canvas_pipeline,

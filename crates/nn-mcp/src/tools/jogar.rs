@@ -127,7 +127,9 @@ fn parse_actions(list: &Value, duration: f64) -> Result<Vec<Action>, String> {
                 ActionKind::Move { x, y }
             }
             ["rolar"] => ActionKind::Scroll(obj["rolar"].as_f64().ok_or_else(|| {
-                format!("ação {n}: \"rolar\" são as linhas da roda do mouse (negativo desce a lista)")
+                format!(
+                    "ação {n}: \"rolar\" são as linhas da roda do mouse (negativo desce a lista)"
+                )
             })? as f32),
             ["digitar"] => ActionKind::Type(
                 obj["digitar"]

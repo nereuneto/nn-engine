@@ -86,7 +86,7 @@ No Claude Code eles aparecem como `/mcp__nn__criar_jogo` e `/mcp__nn__melhorar_j
 | `escrever_arquivo`, `apagar_arquivo` | Scripts, mapas, diálogos. Um Lua com erro de sintaxe **não é gravado**: volta a linha e o erro em português. |
 | `desfazer` | Volta as últimas mudanças feitas pelo agente. |
 | `ver_cena` | Uma cena ou um prefab em JSON, no formato do arquivo, com as regras de eventos em frases. |
-| `criar_cena`, `mudar_cena` | Cenas 2D ou 3D, a cor do fundo, a gravidade, o ambiente 3D (céu, sol, névoa). |
+| `criar_cena`, `mudar_cena` | Cenas 2D ou 3D, a cor do fundo, a gravidade, o ambiente 3D (céu, sol, névoa), e `ordenar_por_y`: as camadas em que quem está mais embaixo fica na frente (numa vista de cima). |
 | `criar_objeto`, `mudar_objeto`, `copiar_objeto`, `apagar_objeto` | Objetos com componentes e comportamentos, cada campo conferido. Também filhos, fileiras de cópias e trocar de pai. |
 | `criar_prefab` | Transforma um objeto num prefab. Mudar o prefab muda todas as cópias. |
 | `listar_componentes`, `listar_comportamentos` | Os componentes (com os campos e padrões) e os comportamentos prontos e do projeto (com as propriedades, opções e ajuda). |
@@ -168,6 +168,7 @@ O jogador é simulado com **ações**, cada uma no seu tempo (`em`, em segundos 
 | `"clicar": [x, y]` | Clica num ponto da tela (pixels, y para baixo). Com `"botao": "right"`, o botão direito. |
 | `"clicar": "jogar"` | Clica no objeto com esse nome (um botão do menu, por exemplo). |
 | `"mouse": [x, y]` | Põe o mouse num ponto, sem clicar. |
+| `"rolar": 3` | Gira a roda do mouse, em linhas (negativo desce uma lista). Com `"mouse": [x, y]` na mesma ação, no ponto. |
 | `"digitar": "Nereu"` | Escreve num campo de texto. |
 | `"capturar": true` ou `"capturar": "nome"` | Guarda uma captura da tela agora. |
 | `"lua": "self.objects.heroi:move_to(0, 0)"` | Roda código com `self` = a cena da frente: para preparar a situação (levar o herói até a porta, mudar uma variável). |
@@ -360,6 +361,8 @@ No jogo, o **Jogador 3D** toca sozinho parado, andar, correr, pular e cair (e o 
 
 ## O que vem depois
 
+A v0.10 trouxe **o render 2D**: formas (linhas, polígonos, contornos), painéis, recortes, texto com quebra e contorno, a fonte de pixel art, canvas (desenhar numa imagem) e efeitos (shaders prontos e em WGSL). Na revisão, dois agentes fizeram um RPG de vista de cima e um arcade cheio de efeitos.
+
 A v0.9 trouxe **desempenho, robustez e memória**, e o agente vê mais do jogo:
 - o `rodar_jogo` diz quanto cada quadro gastou (passos fixos, física, `update` e desenho) e o quadro mais pesado;
 - o erro de um comportamento aparece como erro, mas o jogo segue;
@@ -369,6 +372,7 @@ A v0.8 trouxe **a arte, a modelagem e a animação pelo agente**: pixel art e an
 
 Ideias para depois, do que os agentes da revisão sentiram falta:
 
-- uma fonte de pixel art para os textos pequenos de uma tela pequena (hoje, a letra é lisa e fica borrada ampliada);
+- mais fontes de pixel art prontas (a de hoje tem as maiúsculas com acento achatadas, para caber em 8 pixels);
+- rastros num canvas que somem de todo com transparência baixa (hoje, fica uma sombra fraca);
 - portas e janelas com paredes retas no `recuar` (hoje, a borda vira um chanfro);
 - no `rodar_jogo`, o mouse girando a câmera do Jogador 3D.

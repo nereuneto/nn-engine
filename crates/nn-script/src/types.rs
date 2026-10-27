@@ -21,7 +21,12 @@ impl LEffect {
     /// Muda um parâmetro: um número, ou uma cor para `nome_r`... `nome_a`.
     /// Com o arquivo do efeito com erro, não reclama (o jogo segue sem o
     /// efeito).
-    pub(crate) fn set(lua: &Lua, id: nn_render::effects::EffectId, name: &str, value: &Value) -> Result<()> {
+    pub(crate) fn set(
+        lua: &Lua,
+        id: nn_render::effects::EffectId,
+        name: &str,
+        value: &Value,
+    ) -> Result<()> {
         match value {
             Value::Integer(_) | Value::Number(_) => {
                 let v: f32 = lua.unpack(value.clone())?;
