@@ -417,6 +417,44 @@ fn mudar_cena(s: &mut Server, a: &Value) -> Result<Output, String> {
         }
         d.script = script.to_string();
     }
+    if let Some(name) = opt_str(a, "ambiente_pronto")? {
+        if !d.three_d {
+            return Err("\"ambiente_pronto\" (céu, sol, névoa) é só de cenas 3D".into());
+        }
+        let schema = scene_data::schema();
+        let Some((_, _, values)) = schema
+            .environment_presets
+            .iter()
+            .find(|(id, label, _)| id == name || label.eq_ignore_ascii_case(name))
+        else {
+            let ids: Vec<&str> = schema
+                .environment_presets
+                .iter()
+                .map(|p| p.0.as_str())
+                .collect();
+            return Err(format!(
+                "não há o ambiente pronto \"{name}\". Os prontos: {}",
+                names(&ids)
+            ));
+        };
+        // Como o botão do NN Studio: o tempo, o vento e o halo ficam.
+        const KEEP: [&str; 6] = [
+            "cycle",
+            "day_length",
+            "start_hour",
+            "wind",
+            "wind_turn",
+            "bloom",
+        ];
+        for (k, v) in values {
+            if !KEEP.contains(&k.as_str()) {
+                d.set_env(k, v.clone());
+            }
+        }
+        if d.env("sky").num() == 0.0 {
+            d.background = "#0A0A0E".to_string();
+        }
+    }
     if let Some(env) = a.get("environment") {
         let env = env
             .as_object()
@@ -1078,6 +1116,13 @@ pub static TOOLS: &[&Tool] = &[
                 ("por_cima", s_bool("Abre por cima de outra cena"), false),
                 ("ordenar_por_y", SORT_Y(), false),
                 ("script", s_str("Script Lua da cena (\"\" tira)"), false),
+                (
+                    "ambiente_pronto",
+                    s_str(
+                        "3D: um ambiente pronto de uma vez (céu, sol, luz ambiente e névoa): dia, amanhecer, entardecer, noite ou caverna. O dia e noite, o vento e o halo ficam como estão; \"environment\" vale por cima dele",
+                    ),
+                    false,
+                ),
                 (
                     "environment",
                     s_obj(

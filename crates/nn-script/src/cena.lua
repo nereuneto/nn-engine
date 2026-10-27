@@ -129,6 +129,9 @@ M.FIELDS = {
   shape3d = {
     { "shape", "cube" }, { "color", "#7BC86C" }, { "shadow", true }, { "glow", 0 },
     { "glow_night", false }, { "material", "normal" }, { "sway", 0 },
+    -- image: uma imagem nas faces (num Plano, uma folha ou uma grade);
+    -- cutout: o recorte por transparência; double_sided: as duas faces.
+    { "image", "" }, { "pixel_art", true }, { "cutout", 0 }, { "double_sided", false },
   },
   -- Luz: uma lâmpada (ilumina em volta, até o alcance) ou um holofote
   -- (ilumina num cone, para a frente do objeto, -Z). "flicker" faz a luz
@@ -2634,6 +2637,10 @@ function M.prepare(scene, o, c, live)
         o.name, tostring(c.shape), table.concat(M.SHAPES3D, ", ")), 0)
     end
     c._mesh = make()
+    c._img = nil
+    if c.image ~= "" then
+      c._img = nn.assets.texture(c.image, { pixel_art = c.pixel_art })
+    end
   elseif t == "bone" then
     o._bone = nil
     if c.bone ~= "" then
@@ -2855,7 +2862,11 @@ M.draw_paths = draw_paths
 
 --- Aplica o ambiente de uma cena 3D (céu, sol, luz, névoa e sombras) e
 --- devolve os valores usados.
-function M.apply_environment(env)
+-- `scene` (opcional) guarda o que foi aplicado: as sombras, o vento e o
+-- halo só são aplicados quando mudam (com o dia e noite, o ambiente é
+-- aplicado a cada quadro, e um nn.d3.shadows(false) do jogo, de uma opção do
+-- menu, não pode voltar sozinho).
+function M.apply_environment(env, scene)
   local e = {}
   for _, f in ipairs(M.ENVIRONMENT) do
     local v = env and env[f[1]]
@@ -2875,11 +2886,31 @@ function M.apply_environment(env)
     sun_color = e.sun_color, sky = e.ambient_sky, ground = e.ambient_ground,
     fog = e.fog and { near = e.fog_near, far = e.fog_far } or false,
   })
+  local last = scene and scene._env_applied
+  local function changed(keys)
+    if not last then return true end
+    for _, k in ipairs(keys) do
+      if last[k] ~= e[k] then return true end
+    end
+    return false
+  end
   -- As sombras do ambiente são as do sol: os holofotes com sombra valem mesmo
   -- sem elas (uma lanterna numa caverna).
-  nn.d3.shadows({ sun = e.shadows, distance = e.shadow_distance })
-  nn.d3.wind({ strength = e.wind, turn = e.wind_turn })
-  nn.d3.bloom({ strength = e.bloom })
+  if changed({ "shadows", "shadow_distance" }) then
+    nn.d3.shadows({ sun = e.shadows, distance = e.shadow_distance })
+  end
+  if changed({ "wind", "wind_turn" }) then
+    nn.d3.wind({ strength = e.wind, turn = e.wind_turn })
+  end
+  if changed({ "bloom" }) then
+    nn.d3.bloom({ strength = e.bloom })
+  end
+  if scene then
+    scene._env_applied = {
+      shadows = e.shadows, shadow_distance = e.shadow_distance, wind = e.wind,
+      wind_turn = e.wind_turn, bloom = e.bloom,
+    }
+  end
   return e
 end
 
@@ -3017,7 +3048,7 @@ function M.refresh_environment(scene)
     local b = scene._env_blend
     e = M.mix_environment(b.from, e, math.min(1, b.t / b.dur))
   end
-  scene._environment = M.apply_environment(e)
+  scene._environment = M.apply_environment(e, scene)
   -- "De noite" vale também sem o ciclo, num ambiente escuro (noite, caverna).
   if scene._cycle and not scene._env_now then
     scene._night = M.is_night_hour(scene._hour)
@@ -3297,6 +3328,8 @@ function M.setup(scene, data, path)
   scene._3d = data.mode == "3d"
   scene._prefabs, scene._defs, scene._fx, scene._next_id = nil, nil, nil, nil
   scene._anims = nil
+  -- O ambiente é aplicado inteiro de novo (as sombras, o vento e o halo).
+  scene._env_applied = nil
   scene._gravity = data.gravity or (scene._3d and -20 or -1800)
   scene._world3, scene._by_body3, scene._player_cam = nil, {}, nil
   apply_options()
@@ -3823,6 +3856,7 @@ local function draw_object(o, alpha, W, H)
       d.material = c.material == "agua" and "water" or nil
       d.cutout = c.cutout
       d.double_sided = c.double_sided
+      d.image = c._img
       nn.d3.draw(c._model or c._mesh, d)
     elseif c.type == "light3d" and o.scene and o.scene._3d then
       m3 = m3 or o:matrix3d(alpha)
@@ -4275,6 +4309,8 @@ function M.assets_of(data)
       add("sound", value(c, "sound"))
     elseif t == "model" then
       add("model", value(c, "file"), value(c, "flat"))
+    elseif t == "shape3d" then
+      add("texture", value(c, "image"), value(c, "pixel_art"))
     elseif t == "map" then
       add("map", value(c, "map"))
     elseif t == M.BEHAVIOR then
@@ -4397,7 +4433,10 @@ function M.new(data, path)
     if self.background and not self.overlay then nn.window.set_clear_color(self.background) end
     -- 3D: o céu, o sol e a névoa desta cena de novo (a de cima pode ter
     -- trocado, como uma caverna escura).
-    if self._3d and self._data and not self.overlay then M.refresh_environment(self) end
+    if self._3d and self._data and not self.overlay then
+      self._env_applied = nil
+      M.refresh_environment(self)
+    end
     call("resume", self)
   end
 

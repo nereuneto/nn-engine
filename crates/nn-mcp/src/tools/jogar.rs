@@ -452,7 +452,7 @@ fn write_report(out: &mut String, report: &Report) {
             p.worst.1
         ));
         out.push_str(&format!(
-            "No fim: {} texturas na memória ({:.1} MB){}. Sem placa de vídeo, as imagens não são desenhadas de verdade: o tempo do desenho na placa e o número de chamadas de desenho só aparecem no jogo aberto (F3).\n",
+            "No fim: {} texturas na memória ({:.1} MB){}. Sem janela, o jogo só é desenhado de verdade nas capturas (e nn.d3.stats() tem os números da última captura): o tempo do desenho na placa e o número de chamadas de desenho só aparecem no jogo aberto (F3).\n",
             p.textures.0,
             p.textures.1 as f64 / (1024.0 * 1024.0),
             if p.objects > 0 {
@@ -777,11 +777,12 @@ fn rodar_testes(s: &mut Server, a: &Value) -> Result<Output, String> {
         );
         return Ok(Output::text(out));
     }
+    let (total, passed, failed) = (summary.results.len(), summary.passed(), summary.failed());
     out.push_str(&format!(
-        "{} testes: {} passaram, {} falharam ({:.1} s).\n",
-        summary.results.len(),
-        summary.passed(),
-        summary.failed(),
+        "{total} {}: {passed} {}, {failed} {} ({:.1} s).\n",
+        if total == 1 { "teste" } else { "testes" },
+        if passed == 1 { "passou" } else { "passaram" },
+        if failed == 1 { "falhou" } else { "falharam" },
         summary.wall.as_secs_f64()
     ));
     for e in &summary.file_errors {

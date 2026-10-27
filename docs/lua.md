@@ -85,7 +85,7 @@ Todas as opções são opcionais. As `vars` viram as [variáveis do jogo](#vari�
 
 **Limite de quadros** (`fps_max`): sem ele, o jogo segue o monitor com `vsync = true` e fica em até 240 quadros por segundo com `vsync = false`. Um número limita (60, 120...), o que poupa a bateria e o processador; `0` tira o limite (o jogo roda o mais rápido que der e ocupa um núcleo inteiro). Com a janela minimizada, o jogo para de simular e de desenhar (a música continua) e segue de onde estava quando ela volta.
 
-**O 3D mais bonito** (`antialias` e `tonemap`, os dois desligados por padrão; os modelos de projeto 3D novos já vêm com os dois ligados). `antialias = true` deixa as bordas das malhas lisas, sem os degraus (MSAA: 4 amostras por pixel). Pesa um pouco mais na placa de vídeo e na memória; numa placa que não consegue, não faz nada. `tonemap = true` comprime as cores acima do branco: uma lâmpada forte, o sol na água ou muitas luzes juntas não estouram num branco chapado, e as cores do meio quase não mudam (é o *PBR Neutral* da Khronos). Os dois mudam também pelo código: `nn.d3.antialias(false)` (uma opção "gráficos" no menu) e `nn.d3.tonemap(true)`.
+**O 3D mais bonito** (`antialias` e `tonemap`, os dois desligados por padrão; os modelos de projeto 3D novos já vêm com os dois ligados). `antialias = true` deixa as bordas das malhas lisas, sem os degraus (MSAA: 4 amostras por pixel). Pesa um pouco mais na placa de vídeo e na memória; numa placa que não consegue, não faz nada. `tonemap = true` comprime as cores acima do branco: uma lâmpada forte, o sol na água ou muitas luzes juntas não estouram num branco chapado. As cores até uns três quartos do branco não mudam (os escuros de uma noite ficam iguais); é a compressão do *PBR Neutral* da Khronos. Os dois mudam também pelo código: `nn.d3.antialias(false)` (uma opção "gráficos" no menu) e `nn.d3.tonemap(true)`.
 
 **Desempenho (F3).** No jogo aberto da pasta do projeto (`nn` ou ▶ Jogar no NN Studio), F3 abre uma tela no canto com os quadros por segundo, o tempo dos passos fixos, da física, do `update` e do desenho, os sprites e as chamadas de desenho, a memória das texturas e do Lua, os objetos da cena e quantos arquivos o jogo já carregou (com o último quadro que carregou alguma coisa: um quadro que carrega no meio do jogo é uma travada). No jogo exportado, F3 não faz nada. Os mesmos números estão em [`nn.debug.stats()`](#desempenho-nndebug).
 
@@ -249,8 +249,8 @@ Os componentes 3D:
 | `type` | Campos (padrão) |
 |---|---|
 | `model` | `file` (um `.glb` ou `.gltf`), `color` ("#FFFFFF": multiplica as cores do modelo), `flat` (false: cada face com um tom só), `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; as partes que o `.glb` faz brilhar, com `emissiveFactor`, brilham sempre), `glow_night` (false: o brilho, e o do arquivo, só de noite), `sway` (0: quanto balança com o vento; 1 = uma árvore), `cutout` (0: o recorte por transparência, como no `nn.d3.draw`; 0 = o que o arquivo diz), `double_sided` (false: as duas faces, além das que o arquivo já marca) |
-| `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; não ilumina em volta), `glow_night` (false: só de noite), `material` ("normal" ou "agua": ondinhas, o céu refletido e o brilho do sol), `sway` (0: quanto balança com o vento) |
-| `light3d` | Uma luz: `kind` ("point": ilumina em volta; "spot": um holofote, num cone para a frente do objeto, −Z), `color`, `intensity` (1.5), `range` (8 m: até onde chega), `angle` (30°: metade da abertura do holofote), `soft` (0.3: a borda do cone que apaga aos poucos), `flicker` (0 a 1: tremula como fogo), `on` (true), `night` (false: acesa só de noite), `shadow` (false: o holofote faz sombra; valem 4 ao mesmo tempo, os mais perto da câmera). Valem as 32 mais perto da câmera; as lâmpadas (sem cone) não fazem sombra. `obj.light3d.on = false` apaga. |
+| `shape3d` | `shape` ("cube", "sphere", "cylinder", "cone", "capsule" ou "plane"), `color`, `shadow` (true), `glow` (0 a 1: a própria cor brilha, mesmo no escuro; não ilumina em volta), `glow_night` (false: só de noite), `material` ("normal" ou "agua": ondinhas, o céu refletido e o brilho do sol), `sway` (0: quanto balança com o vento), `image` (uma imagem nas faces; num `plane` em pé vira uma folha, uma grade ou uma cerca), `pixel_art` (true: a imagem sem suavizar), `cutout` (0: o recorte por transparência, como no `nn.d3.draw`), `double_sided` (false: as duas faces) |
+| `light3d` | Uma luz: `kind` ("point": ilumina em volta; "spot": um holofote, num cone para a frente do objeto, −Z), `color`, `intensity` (1.5), `range` (8 m: até onde chega), `angle` (30°: metade da abertura do holofote), `soft` (0.3: a borda do cone que apaga aos poucos), `flicker` (0 a 1: tremula como fogo), `on` (true), `night` (false: acesa só de noite), `shadow` (false: o holofote faz sombra; valem 4 ao mesmo tempo, os mais perto da câmera). Valem as 32 mais perto da câmera; as lâmpadas (sem cone) não fazem sombra. `obj.light3d.on = false` apaga; um objeto escondido (`visible = false`, ou o pai dele) também apaga a luz dele. |
 | `camera3d` | `fov` (60): o jogo olha de onde este objeto está, para onde ele aponta (−Z). Sem câmera, de (0, 5, 10) para o centro. |
 | `anim3d` | `animation` ("": nenhuma), `speed` (1), `loop` (true): a animação que o `model` do objeto toca desde o começo |
 | `bone` | `bone` (""): preso a um osso do modelo do pai (uma espada na mão do herói: o osso `mao_d`). O objeto acompanha o osso quando o pai anima; a posição, a rotação e a escala dele contam a partir do osso. Um osso que não existe dá um aviso com a lista dos que existem. |
@@ -1236,60 +1236,6 @@ function cena:draw() brilho:draw(); fumaca:draw() end
 
 O emissor tem `x`, `y`, `emitting` e `rate` (leitura e escrita), `count` e `finished`, e os métodos `:burst(n, x, y)`, `:set_position(x, y)`, `:update(dt)`, `:draw()`, `:draw_screen()` e `:clear()`.
 
-#### Terreno
-
-`nn.d3.terrain(opts)` cria um terreno: uma grade de alturas com quatro cores pintadas por cima (o componente `terrain` das cenas usa o mesmo). Ele fica centrado na posição em que é desenhado: vai de `-width/2` a `width/2` em X e de `-depth/2` a `depth/2` em Z.
-
-```lua
-local chao = nn.d3.terrain({ width = 64, depth = 64, cells = 64, height = 20 })
-for i = 1, 20 do chao:brush("subir", 10, -5, 8, 0.5) end   -- um morro
-chao:paint(3, 10, -5, 3)                                    -- pedra no topo
-local mundo = nn.physics3d.world()
-mundo:body({ terrain = chao })                              -- o chão da física
-
-function cena:draw() nn.d3.draw(chao) end
-```
-
-| Opção | Descrição |
-|---|---|
-| `width`, `depth` | Tamanho em metros (padrão 64). |
-| `cells` | Quadrados de cada lado (padrão 64; até 256). |
-| `height` | As alturas vão de `-height` a `height` (padrão 20). |
-| `data` | As alturas e as cores guardadas por `:encode()` (o NN Studio grava assim). Vazio: plano. |
-| `colors` | As quatro cores: `{ grama, terra, pedra, areia }`. |
-
-| No terreno | O que faz |
-|---|---|
-| `t:height_at(x, z)` | A altura do chão (nil fora). |
-| `t:brush(pincel, x, z, raio, força, altura)` | `"subir"`, `"descer"`, `"alisar"`, `"aplainar"` (até `altura`; sem ela, a do ponto) ou `"ruido"`. A força é em metros no meio do pincel (alisar e aplainar: 0 a 1). |
-| `t:paint(camada, x, z, raio, força)` | Pinta a camada 1 a 4 (força 0 a 1, padrão 1). |
-| `t:raycast(ox, oy, oz, dx, dy, dz, max)` | Onde um raio bate no chão: `x, y, z`. |
-| `t:set_colors({...})`, `t:encode()` | Troca as cores / guarda tudo num texto. |
-| `t.width`, `t.depth`, `t.cells`, `t.max_height`, `t.version` | `version` conta as mudanças. |
-
-`nn.d3.draw(t, opts)` desenha (low-poly: cada triângulo com a sua cor) e `world:body({ terrain = t, x, y, z })` cria o chão exato da física (parado). Nas cenas, o componente `terrain` tem `data`, `cells`, `width`, `depth`, `height`, `color1` a `color4`, `water` (false), `water_level` (-1, em relação ao terreno) e `water_color` ("#3FA7D6B4", meio transparente); o terreno usa só a posição do objeto, `obj.terrain` é o terreno (mudar ele pelo script refaz o chão da física) e `self:water_level(x, z)` diz a altura da água ali (ou nil). Malhas com cor meio transparente (como a água) são desenhadas depois das outras, de trás para a frente.
-
-#### Partículas 3D
-
-`nn.particles3d(opts)` faz o mesmo no mundo 3D, em metros: cada partícula é um quadrado sempre virado para a câmera, que aparece na frente e atrás dos objetos certos e pega a névoa (sem sombra).
-
-```lua
-local fogo = nn.particles3d({
-  x = 0, y = 0.2, z = -3,
-  rate = 60, lifetime = { 0.4, 0.8 }, speed = { 0.6, 1.6 },
-  direction = { 0, 1, 0 }, spread = 25,     -- para cima, num cone de 25°
-  gravity = 1.5,                            -- sobe (número = y; ou {x, y, z})
-  area = { radius = 0.25 },                 -- num círculo deitado
-  size = { 0.5, 0.1 },
-  colors = { "#FFE066", "#FF7A1A", "#B0201000" }, blend = "add",
-})
-
-function cena:update(dt) fogo:update(dt) end
-function cena:draw() fogo:draw() end
-```
-
-As opções são as do 2D, com estas diferenças: `direction` é `{x, y, z}` (padrão: para cima), `spread` e `spin` são em **graus** (`spread = 360`: todos os lados), `gravity` é um número (o y) ou `{x, y, z}`, e `area` é `{ radius = }` (um círculo deitado), `{ radius = , sphere = true }` (uma esfera) ou `{ w = , h = , d = }` (uma caixa). O emissor tem também `z`, `:burst(n, x, y, z)`, `:set_position(x, y, z)` e `:set_direction(x, y, z)`.
-
 ### nn.d3 (3D)
 
 > Começando no 3D? O guia [Comece aqui no 3D](3d.md) mostra os caminhos (sem código no NN Studio ou em Lua), os tutoriais e onde está cada peça.
@@ -1465,7 +1411,7 @@ Os modelos dos exemplos e dos modelos de projeto 3D trazem o `heroi.glb` (as ani
 | `glow` | De 0 a 1: a própria cor brilha, mesmo no escuro ([brilho](#lâmpadas-holofotes-e-brilho)). `emissive = false` apaga o brilho que vem no arquivo do modelo. |
 | `material` | `"water"` (ou `"agua"`): ondinhas que se mexem, o céu refletido (mais forte olhando de lado) e o brilho do sol. Fica bonito num plano com uma cor um pouco transparente. Padrão `"normal"`. |
 | `sway` | Quanto balança com o [vento](#vento-e-halo) (0 = nada; 1 = uma árvore; 1.5 = grama). Embaixo (o y 0 da malha) fica parado e, quanto mais alto, mais balança. |
-| `cutout` | Recorte por transparência, de 0 a 1 (`true` = 0.5): onde a transparência da imagem (vezes a da cor) é menor que isso, nada é desenhado; o resto fica opaco. Para folhas, grades, cercas e grama numa imagem com buracos. A sombra fica com os mesmos buracos. Padrão 0 (sem recorte). |
+| `cutout` | Recorte por transparência, de 0 a 1 (`true` = 0.5): onde a transparência da imagem (vezes a da cor) é menor que isso, nada é desenhado; o resto fica opaco. Para folhas, grades, cercas e grama numa imagem com buracos. A sombra fica com os mesmos buracos. Padrão 0: sem recorte, a imagem fica com a transparência dela, os pixels de todo transparentes não tampam o que está atrás e a sombra fura onde ela é mais que meio transparente. |
 | `double_sided` | `true`: as duas faces aparecem (uma folha ou um pano feito de um plano só), cada uma com a luz do lado dela, e as duas fazem sombra. |
 
 **Folhas e transparência nos modelos.** Um `.glb` traz isso no material: no Blender, o modo *Alpha Clip* vira o recorte (`alphaMode` MASK, no `alphaCutoff`), *Alpha Blend* vira meio transparente (BLEND: desenhado depois do resto, como o vidro, e sem sombra) e o material sem *Backface Culling* desenha as duas faces (`doubleSided`). O `cutout` e o `double_sided` do `nn.d3.draw` valem por cima do arquivo.
@@ -1620,7 +1566,7 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | Chamada | Descrição |
 |---|---|
 | `nn.d3.shadows(false)` / `nn.d3.shadows(true)` | Desliga ou liga todas as sombras (bom para uma opção "sombras" no menu, para computadores mais fracos). |
-| `nn.d3.shadows({ distance =, quality =, strength =, sun = })` | `distance`: até onde há sombra (padrão 30). Até 30 m, um mapa só, em volta do ponto para onde a câmera olha; acima, três mapas (as **cascatas**: perto, meio e longe da câmera), e a sombra chega a 100 m ou mais sem perder a nitidez de perto (`nn.d3.shadows({ distance = 120 })` num mapa grande). As cascatas desenham a cena mais duas vezes vista do sol. `quality`: `"baixa"`, `"media"` (padrão) ou `"alta"` (os holofotes usam metade). `strength`: de 0 a 1, quanto a sombra escurece (padrão 1). `sun = false` tira só a sombra do sol: os holofotes com sombra continuam (é o que o `shadows = false` do ambiente de uma cena faz, como na Caverna). |
+| `nn.d3.shadows({ distance =, quality =, strength =, sun = })` | `distance`: até onde há sombra (padrão 30). Até 30 m, um mapa só, em volta do ponto para onde a câmera olha; acima, três mapas (as **cascatas**: perto, meio e longe da câmera), e a sombra chega a 100 m ou mais sem perder a nitidez de perto (`nn.d3.shadows({ distance = 120 })` num mapa grande). As cascatas desenham a cena mais duas vezes vista do sol. `quality`: `"baixa"`, `"media"` (padrão) ou `"alta"` (os holofotes usam metade). `strength`: de 0 a 1, quanto a sombra escurece (padrão 1). `sun = false` tira só a sombra do sol: os holofotes com sombra continuam (é o que o `shadows = false` do ambiente de uma cena faz, como na Caverna). Sem a sombra do sol, o sol ilumina tudo, também dentro de uma casa: num lugar fechado, troque para um ambiente escuro (`scene:environment("caverna", 1)` ao entrar). Numa cena com Dia e noite, o ambiente não desfaz um `nn.d3.shadows` do jogo (uma opção "sombras" no menu): ele só mexe nas sombras quando as dele mudam. |
 
 #### Da tela para o 3D e de volta
 
@@ -1630,11 +1576,65 @@ O sol faz sombras sozinho: tudo projeta e recebe sombra. Para uma coisa não pro
 | `nn.d3.ground_point(x, y, altura)` | Onde o ponto da tela toca o chão na `altura` dada (padrão 0): `x, y, z`, ou `nil` se olhar para o céu. |
 | `nn.d3.ray(x, y)` | O raio que sai da câmera pelo ponto da tela: origem e direção (seis números). |
 | `nn.d3.count()` | Quantas malhas foram pedidas no último quadro (com as que ficaram fora da tela). |
-| `nn.d3.stats()` | O que o último quadro 3D desenhou: `meshes` (pedidas), `visible` (na frente da câmera), `shadow` (no mapa de sombras), `draw_calls` (chamadas de desenho), `lamps` (as lâmpadas que valeram), `halo` (se o halo do brilho foi desenhado: sem nada brilhando na tela, ele é pulado), `spot_shadows` (os holofotes com sombra) e `spot_redrawn` (desses, os que tiveram a sombra desenhada de novo). |
+| `nn.d3.stats()` | O que o último quadro 3D desenhou: `meshes` (pedidas), `visible` (na frente da câmera), `shadow` (no mapa de sombras), `draw_calls` (chamadas de desenho), `lamps` (as lâmpadas que valeram), `halo` (se o halo do brilho foi desenhado: sem nada brilhando na tela, ele é pulado), `spot_shadows` (os holofotes com sombra) e `spot_redrawn` (desses, os que tiveram a sombra desenhada de novo). Sem janela (nos testes de jogo e no `rodar_jogo`), o 3D só é desenhado de verdade nas capturas: os números são os da última captura (0 antes da primeira). |
 
 O que fica fora da vista da câmera nem vai para a GPU, e o mapa de sombras só recebe o que o sol "vê" perto da câmera: dá para pedir milhares de coisas por quadro e pagar só pelas que aparecem. Cópias da mesma malha (mil árvores iguais) viram uma chamada de desenho só. Para conferir, mostre `nn.d3.stats()` na tela.
 
 Para montar o mundo com o mouse, use uma [cena 3D](#cenas-3d) no NN Studio.
+
+#### Terreno
+
+`nn.d3.terrain(opts)` cria um terreno: uma grade de alturas com quatro cores pintadas por cima (o componente `terrain` das cenas usa o mesmo). Ele fica centrado na posição em que é desenhado: vai de `-width/2` a `width/2` em X e de `-depth/2` a `depth/2` em Z.
+
+```lua
+local chao = nn.d3.terrain({ width = 64, depth = 64, cells = 64, height = 20 })
+for i = 1, 20 do chao:brush("subir", 10, -5, 8, 0.5) end   -- um morro
+chao:paint(3, 10, -5, 3)                                    -- pedra no topo
+local mundo = nn.physics3d.world()
+mundo:body({ terrain = chao })                              -- o chão da física
+
+function cena:draw() nn.d3.draw(chao) end
+```
+
+| Opção | Descrição |
+|---|---|
+| `width`, `depth` | Tamanho em metros (padrão 64). |
+| `cells` | Quadrados de cada lado (padrão 64; até 256). |
+| `height` | As alturas vão de `-height` a `height` (padrão 20). |
+| `data` | As alturas e as cores guardadas por `:encode()` (o NN Studio grava assim). Vazio: plano. |
+| `colors` | As quatro cores: `{ grama, terra, pedra, areia }`. |
+
+| No terreno | O que faz |
+|---|---|
+| `t:height_at(x, z)` | A altura do chão (nil fora). |
+| `t:brush(pincel, x, z, raio, força, altura)` | `"subir"`, `"descer"`, `"alisar"`, `"aplainar"` (até `altura`; sem ela, a do ponto) ou `"ruido"`. A força é em metros no meio do pincel (alisar e aplainar: 0 a 1). |
+| `t:paint(camada, x, z, raio, força)` | Pinta a camada 1 a 4 (força 0 a 1, padrão 1). |
+| `t:raycast(ox, oy, oz, dx, dy, dz, max)` | Onde um raio bate no chão: `x, y, z`. |
+| `t:set_colors({...})`, `t:encode()` | Troca as cores / guarda tudo num texto. |
+| `t.width`, `t.depth`, `t.cells`, `t.max_height`, `t.version` | `version` conta as mudanças. |
+
+`nn.d3.draw(t, opts)` desenha (low-poly: cada triângulo com a sua cor) e `world:body({ terrain = t, x, y, z })` cria o chão exato da física (parado). Nas cenas, o componente `terrain` tem `data`, `cells`, `width`, `depth`, `height`, `color1` a `color4`, `water` (false), `water_level` (-1, em relação ao terreno) e `water_color` ("#3FA7D6B4", meio transparente); o terreno usa só a posição do objeto, `obj.terrain` é o terreno (mudar ele pelo script refaz o chão da física) e `self:water_level(x, z)` diz a altura da água ali (ou nil). Malhas com cor meio transparente (como a água) são desenhadas depois das outras, de trás para a frente.
+
+#### Partículas 3D
+
+`nn.particles3d(opts)` faz o mesmo no mundo 3D, em metros: cada partícula é um quadrado sempre virado para a câmera, que aparece na frente e atrás dos objetos certos e pega a névoa (sem sombra).
+
+```lua
+local fogo = nn.particles3d({
+  x = 0, y = 0.2, z = -3,
+  rate = 60, lifetime = { 0.4, 0.8 }, speed = { 0.6, 1.6 },
+  direction = { 0, 1, 0 }, spread = 25,     -- para cima, num cone de 25°
+  gravity = 1.5,                            -- sobe (número = y; ou {x, y, z})
+  area = { radius = 0.25 },                 -- num círculo deitado
+  size = { 0.5, 0.1 },
+  colors = { "#FFE066", "#FF7A1A", "#B0201000" }, blend = "add",
+})
+
+function cena:update(dt) fogo:update(dt) end
+function cena:draw() fogo:draw() end
+```
+
+As opções são as do 2D, com estas diferenças: `direction` é `{x, y, z}` (padrão: para cima), `spread` e `spin` são em **graus** (`spread = 360`: todos os lados), `gravity` é um número (o y) ou `{x, y, z}`, e `area` é `{ radius = }` (um círculo deitado), `{ radius = , sphere = true }` (uma esfera) ou `{ w = , h = , d = }` (uma caixa). O emissor tem também `z`, `:burst(n, x, y, z)`, `:set_position(x, y, z)` e `:set_direction(x, y, z)`.
 
 ### Seu primeiro jogo 3D
 

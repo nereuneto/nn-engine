@@ -623,10 +623,7 @@ fn agente_roda_o_jogo_e_os_testes() {
         "rodar_testes",
         json!({ "arquivo": "testes/vidas.lua" }),
     );
-    assert!(
-        text.starts_with("1 testes: 0 passaram, 1 falharam"),
-        "{text}"
-    );
+    assert!(text.starts_with("1 teste: 0 passaram, 1 falhou"), "{text}");
     assert!(
         text.contains("✗ testes/vidas.lua › o herói começa com 5 vidas"),
         "{text}"

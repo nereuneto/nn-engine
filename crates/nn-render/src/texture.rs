@@ -136,6 +136,8 @@ pub(crate) struct GpuTexture {
     pub(crate) levels: u32,
     /// Num canvas, a vista em que se desenha.
     pub(crate) target: Option<wgpu::TextureView>,
+    /// Tem pixels transparentes (ou pode ter, num canvas).
+    pub(crate) has_alpha: bool,
 }
 
 impl GpuTexture {
@@ -242,6 +244,7 @@ impl GpuTexture {
             texture,
             levels,
             target: None,
+            has_alpha: rgba.chunks_exact(4).any(|p| p[3] < 255),
         }
     }
 
@@ -301,6 +304,7 @@ impl GpuTexture {
             texture,
             levels: 1,
             target: Some(view),
+            has_alpha: true,
         }
     }
 

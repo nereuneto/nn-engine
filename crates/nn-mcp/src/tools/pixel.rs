@@ -283,7 +283,13 @@ fn criar_imagem(s: &mut Server, a: &Value) -> Result<Output, String> {
         },
         if frames > 1 { ", em cada quadro" } else { "" }
     );
-    if w <= 32 && h <= 32 {
+    let three_d = s.project_is_3d();
+    if three_d {
+        msg.push_str(&format!(
+            "\nNum projeto 3D, a imagem vai nas faces de uma Forma 3D (\"image\"; num Plano em pé, com \"cutout\": 0.5 e \"double_sided\": true, vira uma folha ou uma grade), no nn.d3.draw ({{ image = nn.assets.texture(\"{rel}\"), cutout = 0.5 }}) ou na interface (HUD)."
+        ));
+    }
+    if w <= 32 && h <= 32 && !three_d {
         let res = s.config().and_then(|(_, c)| c.resolution);
         if res.is_none_or(|(rw, _)| rw > 640) {
             msg.push_str(

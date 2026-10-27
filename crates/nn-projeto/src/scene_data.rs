@@ -1295,6 +1295,10 @@ const LATE_FIELDS: &[(&str, &str)] = &[
     ("model", "cutout"),
     ("model", "double_sided"),
     ("light3d", "shadow"),
+    ("shape3d", "image"),
+    ("shape3d", "pixel_art"),
+    ("shape3d", "cutout"),
+    ("shape3d", "double_sided"),
 ];
 
 fn late_default(kind: &str, key: &str, v: &Prop) -> bool {
