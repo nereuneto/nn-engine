@@ -1283,8 +1283,8 @@ pub fn write(scene: &SceneData) -> String {
 /// Campos que vieram depois da 0.7: no valor padrão, não vão para o
 /// arquivo. Assim um projeto da 0.7 aberto e gravado sai igual, e o arquivo
 /// continua abrindo no `nn` da 0.7. (A largura e o alinhamento do texto e o
-/// Rolar do painel vieram na 0.10; o recorte e as duas faces do Modelo 3D, na
-/// 0.11.)
+/// Rolar do painel vieram na 0.10; o recorte e as duas faces do Modelo 3D e a sombra
+/// da Luz, na 0.11.)
 const LATE_FIELDS: &[(&str, &str)] = &[
     ("body", "ox"),
     ("body", "oy"),
@@ -1294,6 +1294,7 @@ const LATE_FIELDS: &[(&str, &str)] = &[
     ("panel", "scroll"),
     ("model", "cutout"),
     ("model", "double_sided"),
+    ("light3d", "shadow"),
 ];
 
 fn late_default(kind: &str, key: &str, v: &Prop) -> bool {
@@ -2101,7 +2102,7 @@ pub fn component_info(kind: &str) -> (&'static str, &'static str) {
         ),
         "light3d" => (
             "Luz",
-            "Uma lâmpada, uma tocha ou um holofote: ilumina o que está em volta (as luzes não fazem sombra; só o sol).",
+            "Uma lâmpada, uma tocha ou um holofote: ilumina o que está em volta (um holofote com \"Faz sombra\" projeta sombra; as lâmpadas, não).",
         ),
         "camera3d" => (
             "Câmera 3D",

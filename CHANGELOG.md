@@ -4,6 +4,14 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Sombra nos holofotes (Sprint 77)
+
+- **Um holofote faz sombra:** `shadow = true` no `nn.d3.lamp` (com `direction`) e "Faz sombra" no componente Luz. O que está na frente da luz projeta sombra, com a borda suave; uma folha recortada projeta os buracos.
+- **Até 4 ao mesmo tempo,** os mais perto da câmera entre os que ela vê; os outros iluminam sem sombra. Cada um desenha a cena mais uma vez, vista dele, num mapa de metade da resolução do sol. `nn.d3.stats().spot_shadows` diz quantos valeram.
+- **A sombra do sol e as dos holofotes separadas:** `nn.d3.shadows({ sun = false })` tira só a do sol, e o `shadows = false` do ambiente de uma cena (como na Caverna) agora faz isso: uma lanterna numa caverna faz sombra. `nn.d3.shadows(false)` continua desligando todas.
+- Uma cena nova no teste do navegador, "holofote", confere a sombra de dois holofotes no Chromium (WebGL2). As fotos dos 13 jogos e modelos não mudaram.
+- **Para quem usa as crates:** `Lamp3D::shadow`, `Shadows::sun`, `MAX_SHADOW_SPOTS` e `Stats3::spot_shadows`.
+
 ### Folhagem: recorte por transparência e duas faces (Sprint 76)
 
 - **Folhas, grades e cercas recortadas:** `cutout` no `nn.d3.draw` (de 0 a 1, ou `true` = 0.5) não desenha onde a imagem é mais transparente que isso, e o resto fica opaco. A sombra fica com os mesmos buracos.

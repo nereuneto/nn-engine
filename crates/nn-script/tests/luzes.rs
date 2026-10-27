@@ -244,3 +244,42 @@ fn tremular_muda_a_luz_e_brilho_aparece_no_escuro() {
     drop(h);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn holofote_com_sombra_vale_mesmo_sem_a_sombra_do_sol() {
+    // Escuro como uma caverna (sem a sombra do sol), um holofote com sombra
+    // a 4 m apontando para baixo e um cubo ao lado, no ar: atrás do cubo, o
+    // chão fica escuro; o mesmo holofote sem sombra acende ali.
+    let objetos = r##"{ id = 10, name = "Holofote", y = 4, rx = -90,
+      components = { { type = "light3d", kind = "spot", angle = 40, range = 12, intensity = 2, shadow = true } } },
+    { id = 11, name = "Cubo", x = 1, y = 1, scale_x = 0.6, scale_y = 0.6, scale_z = 0.6,
+      components = { { type = "shape3d", shape = "cube", color = "#FFFFFF" } } },"##;
+    let dir = projeto(
+        "sombra",
+        &[
+            ("cenas/obs.lua", OBSERVA),
+            ("cenas/c.cena", &escuro(objetos, "")),
+        ],
+    );
+    let Some((mut h, rt)) = cena(&dir, "cenas/c.cena") else {
+        return;
+    };
+    h.run_frames(3);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(lua::<u32>(&rt, "STATS.spot_shadows"), 1);
+    let (sx, sy) = na_tela(&mut h, &rt, 1.65, 0.0);
+    let (lx, ly) = na_tela(&mut h, &rt, -1.65, 0.0);
+    let img = h.pixels().unwrap();
+    let (sombra, luz) = (pixel(&img, sx, sy), pixel(&img, lx, ly));
+    assert!(
+        brilho(sombra) * 3 < brilho(luz),
+        "sombra {sombra:?} em {sx}, {sy}; luz {luz:?}"
+    );
+    exec(&rt, "C.objects.Holofote.light3d.shadow = false");
+    h.run_frames(2);
+    let img = h.pixels().unwrap();
+    assert!(brilho(pixel(&img, sx, sy)) * 4 > brilho(luz) * 3);
+    assert_eq!(lua::<u32>(&rt, "STATS.spot_shadows"), 0);
+    drop(h);
+    let _ = std::fs::remove_dir_all(&dir);
+}

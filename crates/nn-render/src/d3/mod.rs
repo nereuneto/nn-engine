@@ -226,7 +226,9 @@ impl Default for Sky3D {
 /// Uma luz no mundo 3D, além do sol: uma lâmpada (ilumina em volta) ou, com
 /// [`Lamp3D::cone`], um holofote (ilumina num cone). Vale para um frame
 /// (veja [`Renderer::add_lamp3d`](crate::Renderer::add_lamp3d)); com muitas,
-/// valem as [`MAX_LAMPS`] mais perto da câmera. As lâmpadas não fazem sombra.
+/// valem as [`MAX_LAMPS`] mais perto da câmera. Um holofote com
+/// [`Lamp3D::shadow`] faz sombra (até [`MAX_SHADOW_SPOTS`] por quadro); as
+/// lâmpadas sem cone não fazem.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Lamp3D {
     pub position: Vec3,
@@ -237,6 +239,8 @@ pub struct Lamp3D {
     pub range: f32,
     /// Holofote: ilumina só dentro do cone.
     pub cone: Option<Cone3D>,
+    /// Faz sombra (só num holofote).
+    pub shadow: bool,
 }
 
 impl Lamp3D {
@@ -248,6 +252,7 @@ impl Lamp3D {
             intensity: 1.0,
             range: 8.0,
             cone: None,
+            shadow: false,
         }
     }
 }
@@ -265,6 +270,10 @@ pub struct Cone3D {
 
 /// Quantas lâmpadas valem num frame (as mais perto da câmera).
 pub const MAX_LAMPS: usize = 32;
+
+/// Quantos holofotes fazem sombra ao mesmo tempo (os mais perto da câmera
+/// entre os que ela vê).
+pub const MAX_SHADOW_SPOTS: usize = 4;
 
 /// O brilho próprio de uma malha: aparece acesa mesmo no escuro (sem halo
 /// em volta).
@@ -351,10 +360,14 @@ impl Default for Wind3D {
     }
 }
 
-/// Sombras do sol.
+/// As sombras: do sol e dos holofotes com sombra.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Shadows {
+    /// Todas as sombras (uma opção "sombras" no menu de um jogo).
     pub enabled: bool,
+    /// A sombra do sol (sem ela, os holofotes ainda fazem sombra: uma
+    /// caverna escura com uma lanterna).
+    pub sun: bool,
     /// Até que distância do ponto para onde a câmera olha há sombra.
     pub distance: f32,
     /// Tamanho do mapa de sombras (mais = sombras mais nítidas, mais lento).
@@ -367,6 +380,7 @@ impl Default for Shadows {
     fn default() -> Self {
         Self {
             enabled: true,
+            sun: true,
             distance: 30.0,
             resolution: 2048,
             strength: 1.0,

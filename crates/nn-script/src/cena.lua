@@ -136,6 +136,8 @@ M.FIELDS = {
   light3d = {
     { "kind", "point" }, { "color", "#FFD9A0" }, { "intensity", 1.5 }, { "range", 8 },
     { "angle", 30 }, { "soft", 0.3 }, { "flicker", 0 }, { "on", true }, { "night", false },
+    -- shadow: o holofote faz sombra (até 4 ao mesmo tempo, os mais perto).
+    { "shadow", false },
   },
   camera3d = {
     { "fov", 60 },
@@ -2873,7 +2875,9 @@ function M.apply_environment(env)
     sun_color = e.sun_color, sky = e.ambient_sky, ground = e.ambient_ground,
     fog = e.fog and { near = e.fog_near, far = e.fog_far } or false,
   })
-  nn.d3.shadows(e.shadows and { distance = e.shadow_distance } or false)
+  -- As sombras do ambiente são as do sol: os holofotes com sombra valem mesmo
+  -- sem elas (uma lanterna numa caverna).
+  nn.d3.shadows({ sun = e.shadows, distance = e.shadow_distance })
   nn.d3.wind({ strength = e.wind, turn = e.wind_turn })
   nn.d3.bloom({ strength = e.bloom })
   return e
@@ -3780,8 +3784,10 @@ function M.draw_light(o, c, m)
     d.direction = d.direction or {}
     d.direction[1], d.direction[2], d.direction[3] = fx, fy, fz
     d.angle, d.soft = c.angle, c.soft
+    d.shadow = c.shadow
   else
     d.direction = nil
+    d.shadow = nil
   end
   nn.d3.lamp(d)
 end

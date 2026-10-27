@@ -29,11 +29,13 @@ struct Lamp {
     pos_range: vec4<f32>,   // posição, alcance
     color: vec4<f32>,       // cor × força
     dir_cos: vec4<f32>,     // holofote: direção, cosseno da borda de fora
-    cone: vec4<f32>,        // x = cosseno de onde começa a apagar, y = 1 num holofote
+    cone: vec4<f32>,        // x = cosseno de onde começa a apagar, y = 1 num holofote,
+                            // z = camada da sombra + 1 (0 = sem), w = 2 tan(meia abertura)
 };
 
 struct Lamps {
     count: vec4<u32>,
+    shadow_mats: array<mat4x4<f32>, 4>,
     items: array<Lamp, 32>,
 };
 
@@ -42,6 +44,7 @@ struct Lamps {
 @group(1) @binding(1) var samp: sampler;
 @group(2) @binding(0) var shadow_map: texture_depth_2d;
 @group(2) @binding(1) var shadow_samp: sampler_comparison;
+@group(2) @binding(2) var spot_shadow: texture_depth_2d_array;
 
 struct VertexIn {
     @location(0) position: vec3<f32>,
@@ -113,24 +116,71 @@ fn lamp_light(world: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
     var sum = vec3<f32>(0.0);
     let count = min(lamps.count.x, 32u);
     for (var i = 0u; i < count; i++) {
-        let lamp = lamps.items[i];
-        let to = lamp.pos_range.xyz - world;
-        let d2 = dot(to, to);
-        let range = lamp.pos_range.w;
-        if (d2 >= range * range) {
-            continue;
-        }
-        let l = to * inverseSqrt(max(d2, 1e-8));
-        let k = 1.0 - d2 / (range * range);
-        var a = k * k;
-        if (lamp.cone.y > 0.5) {
-            let c = dot(-l, lamp.dir_cos.xyz);
-            a = a * smoothstep(lamp.dir_cos.w, lamp.cone.x, c);
-        }
-        let diffuse = max(dot(n, l), 0.0) * 0.85 + 0.15;
-        sum = sum + lamp.color.rgb * (diffuse * a);
+        sum = sum + lamp_part(lamps.items[i], world, n).rgb;
     }
     return sum;
+}
+
+// Como `lamp_light`, com a sombra dos holofotes que fazem sombra (as
+// partículas usam a sem sombra: o mapa não está no grupo delas).
+fn lamp_light_shadowed(world: vec3<f32>, n: vec3<f32>) -> vec3<f32> {
+    var sum = vec3<f32>(0.0);
+    let count = min(lamps.count.x, 32u);
+    for (var i = 0u; i < count; i++) {
+        let lamp = lamps.items[i];
+        var part = lamp_part(lamp, world, n);
+        if (lamp.cone.z > 0.5 && part.w > 0.0) {
+            let d = distance(lamp.pos_range.xyz, world);
+            part = part * spot_lit(u32(lamp.cone.z + 0.5) - 1u, world, n, d, lamp.cone.w);
+        }
+        sum = sum + part.rgb;
+    }
+    return sum;
+}
+
+// A luz de uma lâmpada num ponto (rgb) e quanto dela chega antes da
+// sombra (a; 0 = fora do alcance ou do cone).
+fn lamp_part(lamp: Lamp, world: vec3<f32>, n: vec3<f32>) -> vec4<f32> {
+    let to = lamp.pos_range.xyz - world;
+    let d2 = dot(to, to);
+    let range = lamp.pos_range.w;
+    if (d2 >= range * range) {
+        return vec4<f32>(0.0);
+    }
+    let l = to * inverseSqrt(max(d2, 1e-8));
+    let k = 1.0 - d2 / (range * range);
+    var a = k * k;
+    if (lamp.cone.y > 0.5) {
+        let c = dot(-l, lamp.dir_cos.xyz);
+        a = a * smoothstep(lamp.dir_cos.w, lamp.cone.x, c);
+    }
+    let diffuse = max(dot(n, l), 0.0) * 0.85 + 0.15;
+    return vec4<f32>(lamp.color.rgb * (diffuse * a), a);
+}
+
+// 1 = a luz do holofote `i` chega, 0 = na sombra (bordas suavizadas).
+// `dist` é a distância até ele e `k` o tamanho de um texel por metro.
+fn spot_lit(i: u32, world: vec3<f32>, n: vec3<f32>, dist: f32, k: f32) -> f32 {
+    let size = vec2<f32>(textureDimensions(spot_shadow).xy);
+    // Um pouco para fora da superfície (mais longe, um texel maior).
+    let texel = k * dist / size.x;
+    let p = lamps.shadow_mats[i] * vec4<f32>(world + n * texel * 1.5, 1.0);
+    if (p.w <= 0.0) {
+        return 1.0;
+    }
+    let ndc = p.xyz / p.w;
+    let uv = vec2<f32>(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || ndc.z > 1.0 || ndc.z < 0.0) {
+        return 1.0;
+    }
+    let depth = ndc.z - 0.00002;
+    var lit = 0.0;
+    for (var y = -1; y <= 1; y++) {
+        for (var x = -1; x <= 1; x++) {
+            lit += textureSampleCompareLevel(spot_shadow, shadow_samp, uv + vec2<f32>(f32(x), f32(y)) / size, i32(i), depth);
+        }
+    }
+    return mix(1.0, lit / 9.0, view.shadow.z);
 }
 
 // 1 = no sol, 0 = na sombra (com as bordas suavizadas).
@@ -222,7 +272,7 @@ fn fs_main(in: VertexOut, @builtin(front_facing) front: bool) -> FragOut {
     }
     let up = n.y * 0.5 + 0.5;
     let ambient = mix(view.ground.rgb, view.sky.rgb, up);
-    var rgb = albedo.rgb * (ambient + view.sun_color.rgb * sun + lamp_light(in.world, n));
+    var rgb = albedo.rgb * (ambient + view.sun_color.rgb * sun + lamp_light_shadowed(in.world, n));
     // O brilho próprio: aparece mesmo no escuro.
     let own = albedo.rgb * in.glow.a + in.glow.rgb;
     rgb = rgb + own;
@@ -248,7 +298,7 @@ fn water(in: VertexOut, albedo: vec4<f32>) -> FragOut {
     let lit = sunlit(in.world, vec3<f32>(0.0, 1.0, 0.0));
     let sun = max(dot(n, -view.sun_dir.xyz), 0.0) * lit;
     let ambient = mix(view.ground.rgb, view.sky.rgb, 0.85);
-    var rgb = albedo.rgb * (ambient + view.sun_color.rgb * sun * 0.8 + lamp_light(in.world, n));
+    var rgb = albedo.rgb * (ambient + view.sun_color.rgb * sun * 0.8 + lamp_light_shadowed(in.world, n));
     let r = reflect(-v, n);
     let fresnel = 0.1 + 0.55 * pow(1.0 - max(dot(n, v), 0.0), 3.0);
     // O céu refletido puxa um pouco para a cor de cima (a água não fica

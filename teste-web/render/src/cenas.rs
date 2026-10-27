@@ -25,12 +25,15 @@ pub const CENAS: &[&str] = &[
     "canvas",
     "efeitos",
     "folhagem",
+    "holofote",
 ];
 
 /// A cor de fundo de cada cena.
 pub fn fundo(cena: usize) -> Color {
     if cena == 6 || cena == 13 {
         Color::hex(0x87A9D6)
+    } else if cena == 14 {
+        Color::hex(0x05060B)
     } else {
         Color::hex(0x1B2233)
     }
@@ -398,6 +401,70 @@ pub fn desenhar(cena: usize, r: &mut Renderer, rec: &Recursos) {
                     * Mat4::from_rotation_x(std::f32::consts::FRAC_PI_2)
                     * Mat4::from_scale(Vec3::splat(1.4));
                 r.draw_mesh_material(rec.plano, m, Color::WHITE, Some(rec.folha), true, folha);
+            }
+        }
+        14 => {
+            // No escuro, sem o sol: dois holofotes com sombra (um deles
+            // colorido) sobre cubos e uma folha recortada.
+            r.set_camera3d(Camera3D::looking_at(
+                Vec3::new(0.0, 4.5, 5.0),
+                Vec3::new(0.0, 0.0, 0.5),
+            ));
+            r.set_sky3d(None);
+            r.set_light3d(nn_render::d3::Light3D {
+                sun_color: Color::BLACK,
+                sky: Color::hex(0x101018),
+                ground: Color::hex(0x080808),
+                fog: None,
+                ..Default::default()
+            });
+            r.set_shadows3d(nn_render::d3::Shadows {
+                sun: false,
+                ..Default::default()
+            });
+            r.draw_mesh(
+                rec.cubo,
+                Mat4::from_translation(Vec3::new(0.0, -0.1, 0.0))
+                    * Mat4::from_scale(Vec3::new(10.0, 0.2, 10.0)),
+                Color::WHITE,
+            );
+            for x in [-1.3_f32, 0.9] {
+                r.draw_mesh(
+                    rec.cubo,
+                    Mat4::from_translation(Vec3::new(x, 0.6, 0.3))
+                        * Mat4::from_rotation_y(0.5)
+                        * Mat4::from_scale(Vec3::splat(0.6)),
+                    Color::hex(0xE5A84D),
+                );
+            }
+            r.draw_mesh_material(
+                rec.plano,
+                Mat4::from_translation(Vec3::new(0.0, 1.4, -0.3))
+                    * Mat4::from_scale(Vec3::splat(1.2)),
+                Color::WHITE,
+                Some(rec.folha),
+                true,
+                nn_render::d3::Material3D {
+                    cutout: 0.5,
+                    double_sided: true,
+                    ..Default::default()
+                },
+            );
+            for (pos, cor) in [
+                (Vec3::new(-1.0, 3.5, 1.5), Color::WHITE),
+                (Vec3::new(1.5, 3.0, 1.0), Color::hex(0x7BC8FF)),
+            ] {
+                let mut lamp = nn_render::d3::Lamp3D::at(pos);
+                lamp.color = cor;
+                lamp.intensity = 1.6;
+                lamp.range = 10.0;
+                lamp.shadow = true;
+                lamp.cone = Some(nn_render::d3::Cone3D {
+                    direction: (Vec3::new(0.0, 0.0, 0.0) - pos).normalize(),
+                    angle: 35.0,
+                    softness: 0.3,
+                });
+                r.add_lamp3d(lamp);
             }
         }
         _ => {}
