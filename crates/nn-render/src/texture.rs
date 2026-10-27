@@ -134,6 +134,8 @@ pub(crate) struct GpuTexture {
     texture: wgpu::Texture,
     /// Níveis de mipmap (1 = sem).
     pub(crate) levels: u32,
+    /// Num canvas, a vista em que se desenha.
+    pub(crate) target: Option<wgpu::TextureView>,
 }
 
 impl GpuTexture {
@@ -239,6 +241,66 @@ impl GpuTexture {
             bind_group,
             texture,
             levels,
+            target: None,
+        }
+    }
+
+    /// Um canvas: uma textura em que o renderer desenha (no formato dele) e
+    /// que se usa como imagem. Começa transparente.
+    pub(crate) fn render_target(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        size: UVec2,
+        format: wgpu::TextureFormat,
+        filter: Filter,
+    ) -> Self {
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("nn canvas"),
+            size: wgpu::Extent3d {
+                width: size.x,
+                height: size.y,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let filter = filter.into();
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("nn canvas"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            mag_filter: filter,
+            min_filter: filter,
+            ..Default::default()
+        });
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("nn canvas"),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+        Self {
+            size,
+            bind_group,
+            texture,
+            levels: 1,
+            target: Some(view),
         }
     }
 

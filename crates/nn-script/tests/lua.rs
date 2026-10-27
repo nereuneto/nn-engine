@@ -622,6 +622,59 @@ fn sprite_sem_tabela_nao_cria_lixo() {
 }
 
 #[test]
+fn canvas_pelo_lua() {
+    let dir = projeto(
+        "canvas",
+        &[(
+            "main.lua",
+            r##"
+            local c = {}
+            function c:enter()
+              tela = nn.canvas(16, 16)
+              largura = tela.width
+            end
+            function c:draw()
+              -- Um jogo em 16x16 ampliado 4 vezes.
+              tela:draw(function()
+                nn.screen.rect(0, 0, 8, 8, "#FFFFFF")
+                nn.draw.rect(4, -4, 8, 8, "#FF0000")
+              end, { clear = "#000000", x = 0, y = 0 })
+              nn.screen.sprite(tela, 0, 0, nil, 4)
+              ok, erro = pcall(function()
+                nn.assets.texture("bloco.png"):draw(function() end)
+              end)
+              erro = tostring(erro)
+            end
+            return c
+            "##,
+        )],
+    );
+    let png = nn_script::game_run::encode_png(2, 2, vec![255; 16]).unwrap();
+    std::fs::write(dir.join("bloco.png"), png).unwrap();
+    let rt = ScriptRuntime::new(&dir).unwrap();
+    let r = rt.clone();
+    let Some(mut h) = headless(&dir, move |ctx| {
+        let mut s = r.scene("main.lua");
+        s.enter(ctx);
+        Uma(s)
+    }) else {
+        return;
+    };
+    h.run_frames(1);
+    assert_eq!(h.game.0.error(), None);
+    assert_eq!(global::<f64>(&rt, "largura"), 16.0);
+    // O branco no canto (8x8 virou 32x32); o vermelho do mundo à direita e
+    // embaixo do centro (a câmera do canvas em 0, 0).
+    assert_eq!(pixel(&h, 4, 4)[..3], [255, 255, 255]);
+    assert_eq!(pixel(&h, 40, 40)[..3], [255, 0, 0]);
+    assert_eq!(pixel(&h, 60, 4)[..3], [0, 0, 0]);
+    let ok: bool = global(&rt, "ok");
+    assert!(!ok);
+    let erro: String = global(&rt, "erro");
+    assert!(erro.contains("não é um canvas"), "{erro}");
+}
+
+#[test]
 fn nn_fora_da_cena_da_erro_claro() {
     let dir = projeto("fora", &[]);
     let rt = ScriptRuntime::new(&dir).unwrap();

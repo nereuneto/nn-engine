@@ -141,6 +141,15 @@ fn color_bits(c: Color) -> [u32; 4] {
     [c.r.to_bits(), c.g.to_bits(), c.b.to_bits(), c.a.to_bits()]
 }
 
+/// O quadro guardado enquanto se desenha num canvas.
+#[derive(Debug)]
+struct CanvasFrame {
+    canvas: TextureId,
+    world: DrawQueue,
+    screen: DrawQueue,
+    presentation: Option<crate::Presentation>,
+}
+
 /// Espaço de coordenadas em que algo é desenhado.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Space {
@@ -194,6 +203,11 @@ pub struct Renderer {
     white: TextureId,
     /// Os triângulos de uma forma, reaproveitados de uma para outra.
     tri_buf: Vec<crate::shapes2d::Tri>,
+    /// Os canvas sendo desenhados (o de cima é o atual), com o que foi
+    /// guardado do quadro.
+    canvas_stack: Vec<CanvasFrame>,
+    /// O que os canvas desenharam neste quadro (vai para as estatísticas).
+    canvas_stats: RenderStats,
     /// Para montar os sprites de um painel sem alocar a cada um.
     panel_buf: Vec<Sprite>,
     /// A última cor convertida para a GPU (veja `gpu_color`).
@@ -380,6 +394,8 @@ impl Renderer {
             textures: Vec::new(),
             white: TextureId(0),
             tri_buf: Vec::new(),
+            canvas_stack: Vec::new(),
+            canvas_stats: RenderStats::default(),
             panel_buf: Vec::new(),
             freed: Default::default(),
             last_color: std::cell::Cell::new((color_bits(Color::WHITE), Color::WHITE)),
@@ -988,6 +1004,19 @@ impl Renderer {
         camera: &Camera2D,
         clear: Option<Color>,
     ) -> RenderStats {
+        self.render_inner(target, viewport, camera, clear, false)
+    }
+
+    /// Desenha o que foi pedido em `target`. Num canvas (`canvas`), sem o
+    /// 3D e sem fechar o quadro (o cache das letras segue até o fim dele).
+    fn render_inner(
+        &mut self,
+        target: &wgpu::TextureView,
+        viewport: UVec2,
+        camera: &Camera2D,
+        clear: Option<Color>,
+        canvas: bool,
+    ) -> RenderStats {
         let present = self.presentation;
         let logical = present.map(|p| p.logical).unwrap_or(viewport);
         let world = ViewUniform {
@@ -1073,7 +1102,7 @@ impl Renderer {
             });
         // Com 3D, o quadro vira três passos: limpar (e o fundo do jogo), as
         // malhas com profundidade e por fim o 2D por cima.
-        let has_3d = self.d3.has_draws();
+        let has_3d = !canvas && self.d3.has_draws();
         let mut load = load;
         if has_3d {
             let area = match present {
@@ -1221,14 +1250,97 @@ impl Renderer {
         }
         self.queue.submit([encoder.finish()]);
 
-        self.last_stats = RenderStats {
+        let stats = RenderStats {
             sprites: total as u32,
             draw_calls: (self.world.batches.len() + self.screen.batches.len()) as u32,
         };
         self.world.clear();
         self.screen.clear();
+        if canvas {
+            // Somado ao quadro, que mostra o total.
+            self.canvas_stats.sprites += stats.sprites;
+            self.canvas_stats.draw_calls += stats.draw_calls;
+            return stats;
+        }
+        self.last_stats = RenderStats {
+            sprites: stats.sprites + self.canvas_stats.sprites,
+            draw_calls: stats.draw_calls + self.canvas_stats.draw_calls,
+        };
+        self.canvas_stats = RenderStats::default();
         self.text.end_frame();
         self.last_stats
+    }
+
+    // ------------------------------------------------------------------
+    // Canvas: desenhar numa imagem
+    // ------------------------------------------------------------------
+
+    /// Uma imagem em que se desenha ([`Renderer::begin_canvas`]) e que se
+    /// usa como qualquer outra (num sprite, num painel...). Começa
+    /// transparente.
+    pub fn create_canvas(&mut self, size: UVec2, options: TextureOptions) -> TextureId {
+        let size = size.max(UVec2::ONE);
+        let texture = GpuTexture::render_target(
+            &self.device,
+            &self.texture_layout,
+            size,
+            self.format,
+            options.filter,
+        );
+        if let Some(i) = self.freed.pop_first() {
+            self.textures[i as usize] = texture;
+            return TextureId(i);
+        }
+        self.textures.push(texture);
+        TextureId(self.textures.len() as u32 - 1)
+    }
+
+    /// É um canvas (de [`Renderer::create_canvas`])?
+    pub fn is_canvas(&self, id: TextureId) -> bool {
+        self.textures
+            .get(id.0 as usize)
+            .is_some_and(|t| t.target.is_some())
+    }
+
+    /// Começa a desenhar no canvas: o que for pedido até
+    /// [`Renderer::end_canvas`] vai para ele (o mundo e a tela, em pixels do
+    /// canvas), não para o quadro. Pode ficar um dentro do outro. Devolve
+    /// `false` (e nada muda) se `id` não for um canvas.
+    pub fn begin_canvas(&mut self, id: TextureId) -> bool {
+        if !self.is_canvas(id) {
+            return false;
+        }
+        let frame = CanvasFrame {
+            canvas: id,
+            world: std::mem::take(&mut self.world),
+            screen: std::mem::take(&mut self.screen),
+            presentation: self.presentation.take(),
+        };
+        self.canvas_stack.push(frame);
+        true
+    }
+
+    /// Desenha no canvas o que foi pedido desde [`Renderer::begin_canvas`],
+    /// com a câmera dada (o mundo) e, com `clear`, limpando antes (`None`
+    /// mantém o que já estava: rastros). Volta a desenhar onde estava.
+    pub fn end_canvas(&mut self, camera: &Camera2D, clear: Option<Color>) {
+        let Some(frame) = self.canvas_stack.pop() else {
+            return;
+        };
+        let id = frame.canvas;
+        let texture = &self.textures[id.0 as usize];
+        let (view, size) = (texture.target.clone(), texture.size);
+        // Um canvas não pode se desenhar nele mesmo: essas partes ficam de
+        // fora.
+        for q in [&mut self.world, &mut self.screen] {
+            q.batches.retain(|b| b.texture != id);
+        }
+        if let Some(view) = view {
+            self.render_inner(&view, size, camera, clear, true);
+        }
+        self.world = frame.world;
+        self.screen = frame.screen;
+        self.presentation = frame.presentation;
     }
 
     /// Joga fora o que foi pedido neste quadro, sem desenhar nada (para
@@ -1236,6 +1348,7 @@ impl Renderer {
     pub fn discard_frame(&mut self) {
         self.world.clear();
         self.screen.clear();
+        self.canvas_stats = RenderStats::default();
         self.text.end_frame();
         self.d3.discard();
     }

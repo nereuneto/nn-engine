@@ -4,6 +4,14 @@ As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/).
 
 ## Não lançado
 
+### Canvas: desenhar numa imagem (Sprint 73)
+
+- **`nn.canvas(largura, altura)`:** uma imagem em que se desenha com `c:draw(função, opts)` e que depois vale como qualquer outra (num sprite, num painel, numa partícula). Serve para um minimapa, uma transição, rastros ou um jogo inteiro em 320x180 ampliado. A cena desenhada num canvas e mostrada sai igual a desenhada direto.
+- Ampliado, fica nítido como pixel art; `{ smooth = true }` deixa liso. `clear` escolhe a cor de limpar (`false` mantém o que já estava, para rastros), e `x`, `y` e `zoom` a câmera do mundo dentro dele (padrão: a do jogo).
+- Um canvas que a cena solta sai da memória na troca de cena, como as imagens. Um canvas não se desenha nele mesmo (essa parte fica de fora, sem travar), e o 3D não vai para o canvas.
+- As estatísticas do quadro (F3) somam o que os canvas desenharam.
+- **Para quem usa as crates:** `Renderer::create_canvas`, `is_canvas`, `begin_canvas` e `end_canvas`; `Context::create_canvas` (com o `AssetHandle` que o mantém).
+
 ### Recorte, listas que rolam e ordenar por y (Sprint 72)
 
 - **Recorte:** `nn.draw.clip(x, y, w, h, função)` e `nn.screen.clip(...)` desenham o que a função desenhar só dentro do retângulo (uma lista, uma janela com texto comprido, um minimapa). Um recorte dentro de outro fica com o pedaço em comum, e cada recorte custa no máximo uma chamada a mais à placa de vídeo.

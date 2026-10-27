@@ -945,3 +945,121 @@ fn recorte_esconde_o_que_fica_fora() {
     let img = h.render(&Camera2D::default(), Color::BLACK);
     assert!(img.0.chunks(4).all(|p| p[0] == 0));
 }
+
+/// Uma cena desenhada num canvas e mostrada dá a mesma imagem que desenhada
+/// direto.
+#[test]
+fn canvas_mostra_o_mesmo_que_desenhar_direto() {
+    let Some(mut h) = Harness::new() else { return };
+    let tex = checker(&mut h);
+    let cena = |r: &mut Renderer| {
+        r.draw_rect(
+            Vec2::new(-10.0, 8.0),
+            Vec2::new(20.0, 12.0),
+            Color::rgb(0.9, 0.4, 0.1),
+        );
+        r.draw(
+            &Sprite::new(tex)
+                .at(Vec2::new(12.0, -10.0))
+                .size(Vec2::splat(16.0)),
+        );
+        r.draw_polygon(
+            &[
+                Vec2::new(-28.0, -28.0),
+                Vec2::new(-8.0, -28.0),
+                Vec2::new(-18.0, -10.0),
+            ],
+            Color::rgba(0.2, 0.8, 0.4, 0.7),
+        );
+        let mut s = r.screen();
+        s.draw_text(&Text::new("Oi").at(Vec2::new(2.0, 2.0)).size(14.0));
+        s.draw_circle(Vec2::new(54.0, 54.0), 8.0, Color::rgb(0.3, 0.5, 1.0));
+    };
+    let camera = Camera2D {
+        position: Vec2::new(3.0, -2.0),
+        ..Default::default()
+    };
+    cena(&mut h.renderer);
+    let direto = h.render(&camera, Color::rgb(0.1, 0.1, 0.15));
+
+    let canvas = h.renderer.create_canvas(SIZE, TextureOptions::PIXEL_ART);
+    assert!(h.renderer.is_canvas(canvas));
+    assert!(h.renderer.begin_canvas(canvas));
+    cena(&mut h.renderer);
+    h.renderer
+        .end_canvas(&camera, Some(Color::rgb(0.1, 0.1, 0.15)));
+    h.renderer.screen().draw(
+        &Sprite::new(canvas)
+            .at(Vec2::ZERO)
+            .origin(Vec2::ZERO)
+            .size(SIZE.as_vec2()),
+    );
+    let pelo_canvas = h.render(&Camera2D::default(), Color::BLACK);
+    let diferentes = direto
+        .0
+        .chunks(4)
+        .zip(pelo_canvas.0.chunks(4))
+        .filter(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| x.abs_diff(*y) > 1))
+        .count();
+    assert_eq!(diferentes, 0);
+    // As estatísticas somam o canvas.
+    assert!(h.renderer.last_stats().draw_calls >= 4);
+}
+
+/// Um canvas pequeno de pixel art ampliado fica nítido; sem limpar, o que
+/// já estava fica (rastros).
+#[test]
+fn canvas_de_pixel_art_ampliado_e_rastros() {
+    let Some(mut h) = Harness::new() else { return };
+    let canvas = h
+        .renderer
+        .create_canvas(UVec2::splat(16), TextureOptions::PIXEL_ART);
+    h.renderer.begin_canvas(canvas);
+    h.renderer
+        .screen()
+        .draw_rect(Vec2::new(0.0, 0.0), Vec2::splat(8.0), Color::WHITE)
+        .draw_rect(
+            Vec2::new(8.0, 8.0),
+            Vec2::splat(8.0),
+            Color::rgb(1.0, 0.0, 0.0),
+        );
+    h.renderer
+        .end_canvas(&Camera2D::default(), Some(Color::BLACK));
+    // Outra vez sem limpar: um quadrado verde a mais.
+    h.renderer.begin_canvas(canvas);
+    h.renderer.screen().draw_rect(
+        Vec2::new(8.0, 0.0),
+        Vec2::splat(8.0),
+        Color::rgb(0.0, 1.0, 0.0),
+    );
+    h.renderer.end_canvas(&Camera2D::default(), None);
+    // Ampliado 4x: só as quatro cores, sem meio-termo.
+    h.renderer.screen().draw(
+        &Sprite::new(canvas)
+            .at(Vec2::ZERO)
+            .origin(Vec2::ZERO)
+            .size(Vec2::splat(64.0)),
+    );
+    let img = h.render(&Camera2D::default(), Color::BLACK);
+    for p in img.0.chunks(4) {
+        assert!(
+            [[255, 255, 255], [255, 0, 0], [0, 255, 0], [0, 0, 0]].contains(&[p[0], p[1], p[2]]),
+            "{p:?}"
+        );
+    }
+    assert_eq!(img.pixel(10, 10)[..3], [255, 255, 255]);
+    assert_eq!(img.pixel(50, 50)[..3], [255, 0, 0]);
+    assert_eq!(
+        img.pixel(50, 10)[..3],
+        [0, 255, 0],
+        "o que veio depois, sem limpar"
+    );
+    assert_eq!(img.pixel(10, 50)[..3], [0, 0, 0]);
+    // Desenhar o canvas nele mesmo fica de fora (sem travar).
+    h.renderer.begin_canvas(canvas);
+    h.renderer
+        .screen()
+        .draw(&Sprite::new(canvas).at(Vec2::ZERO));
+    h.renderer.end_canvas(&Camera2D::default(), None);
+    h.render(&Camera2D::default(), Color::BLACK);
+}

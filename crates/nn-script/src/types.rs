@@ -22,6 +22,54 @@ impl UserData for LTexture {
             with_ctx(lua, |c| Ok(c.renderer.texture_size(this.0).y))
         });
     }
+
+    fn add_methods<M: UserDataMethods<Self>>(m: &mut M) {
+        // Num canvas: desenha nele o que a função desenhar.
+        m.add_method(
+            "draw",
+            |lua, this, (f, opts): (mlua::Function, Option<Table>)| {
+                let o = opts.as_ref();
+                // Limpa antes (transparente, ou a cor pedida); false mantém
+                // o que já estava (rastros).
+                let clear = match opt::<Value>(o, "clear")? {
+                    None => Some(nn_core::Color::rgba(0.0, 0.0, 0.0, 0.0)),
+                    Some(Value::Boolean(false)) => None,
+                    Some(v) => Some(crate::convert::color(&v)?),
+                };
+                let (x, y, zoom) = (
+                    opt::<f32>(o, "x")?,
+                    opt::<f32>(o, "y")?,
+                    opt::<f32>(o, "zoom")?,
+                );
+                let id = this.0;
+                let camera = with_ctx(lua, |c| {
+                    if !c.renderer.begin_canvas(id) {
+                        return Err(err(
+                            "esta imagem não é um canvas: crie com nn.canvas(largura, altura)",
+                        ));
+                    }
+                    // O mundo, pela câmera do jogo (ou a pedida).
+                    let mut cam = c.camera;
+                    if let Some(x) = x {
+                        cam.position.x = x;
+                    }
+                    if let Some(y) = y {
+                        cam.position.y = y;
+                    }
+                    if let Some(z) = zoom.filter(|z| *z > 0.0) {
+                        cam.zoom = z;
+                    }
+                    Ok(cam)
+                })?;
+                let result = f.call::<()>(());
+                with_ctx(lua, |c| {
+                    c.renderer.end_canvas(&camera, clear);
+                    Ok(())
+                })?;
+                result
+            },
+        );
+    }
 }
 
 /// Spritesheet: imagem dividida em quadros. Quadros numerados a partir de 1.
